@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+
+# Benchmark build outputs and local inputs
+bench/hayro-wasm/target/
+bench/hayro-wasm/pkg/
+bench/corpus/generated/
+bench/vendor/
+bench/results/raw/
+test-results/
+playwright-report/
+bench/public/

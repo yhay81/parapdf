@@ -1,0 +1,23 @@
+{
+  "name": "@parapdf/bench",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:hayro": "RUSTFLAGS='-C target-feature=+simd128' wasm-pack build hayro-wasm --target web --release --out-dir pkg --no-pack",
+    "build": "pnpm run build:hayro && vite build",
+    "corpus": "node scripts/gen-synthetic.ts",
+    "bench": "node scripts/run.ts",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "@embedpdf/pdfium": "2.15.1",
+    "pdfjs-dist": "6.4.299"
+  },
+  "devDependencies": {
+    "@types/emscripten": "^1.41.6",
+    "@types/node": "^26.6.5",
+    "pdf-lib": "^1.17.1",
+    "playwright": "^1.64.1",
+    "vite": "^8.3.4"
+  }
+}
