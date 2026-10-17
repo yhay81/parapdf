@@ -6,6 +6,7 @@
     "dev": "vite",
     "build": "vite build",
     "bench": "node scripts/scroll-bench.ts",
+    "check:text": "node scripts/check-text.ts",
     "typecheck": "tsc -p ."
   },
   "dependencies": {

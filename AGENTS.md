@@ -60,10 +60,14 @@ until the benchmark results justify the architecture.
 - `pnpm bench` — run the engine benchmark; results go to `bench/results/`.
   `ENGINES`, `FILES`, `RUNS`, `PAGES`, and `SCALE` narrow a run.
 - `pnpm --filter @parapdf/prototype dev` — run the demo; query parameters
-  select `engine` (`pdfjs` or `pdfjs-next`), `hwa`, `file`, and `preload`.
+  select `engine` (`pdfjs` or `pdfjs-next`), `hwa`, `text`, `file`, and
+  `preload`.
 - `pnpm --filter @parapdf/prototype build && pnpm --filter @parapdf/prototype bench`
-  — scripted scroll benchmark; `VARIANTS`, `FILES`, `SPEEDS`, `RUNS`,
+  — scripted scroll benchmark; `VARIANTS`, `TEXT`, `FILES`, `SPEEDS`, `RUNS`,
   `DURATION`, `PRELOAD`, and `OUTPUT` narrow or rename a run.
+- `pnpm --filter @parapdf/prototype check:text` — functional checks for text
+  selection, search highlights, normalization, and accessibility semantics
+  (run after `build`).
 - `pnpm check` — Biome lint and format check. `pnpm format` applies fixes.
 - `pnpm typecheck` — TypeScript checks for every workspace package.
 
@@ -86,8 +90,28 @@ until the benchmark results justify the architecture.
 - The pdf.js adapter starts its parsing worker when the engine is created, and
   the demo preloads the PDF with React's `preload()`, matching the CORS mode
   pdf.js fetches with.
-- Not yet implemented: text and annotation layers, region rendering above the
-  pixel cap, keyboard navigation, and accessibility semantics.
+- Text layers use pdf.js's core `TextLayer` inside `.parapdf-text-layer`, styled
+  by rules derived from pdf.js's viewer CSS (attributed in `NOTICE.md`). Pages
+  set `--total-scale-factor` and `--scale-round-x/y`, which `TextLayer` sizes
+  against. The scheduler builds one text layer at a time, only after scrolling
+  settles, during idle periods; zoom re-measures one page per idle period.
+  Text layer items and the search index read text content with identical
+  options so element order matches item order.
+- Search indexes each page with per-character NFKC normalization, case folding,
+  and whitespace collapsing, mapped back to UTF-16 offsets in text items.
+  Results stream page by page; the first match at or after the current page is
+  selected. Scrolling to a match uses text item boxes, so it works before the
+  page's text layer exists. Highlights use the CSS Custom Highlight API
+  (`::highlight(parapdf-search)` and `parapdf-search-current`) and never
+  modify the text layer DOM.
+- Accessibility: the viewport is a focusable, labelled `role="document"`;
+  pages are labelled sections (region landmarks, as in pdf.js); canvases sit in
+  an `aria-hidden` wrapper so assistive technology reads the text layer. The
+  demo announces result counts through an `aria-live` `<output>`.
+- Not yet implemented: annotation layer, structure tree (tagged PDF)
+  semantics, text for pages outside the mounted window, highlight fallback for
+  browsers without the CSS Custom Highlight API, and region rendering above the
+  pixel cap.
 
 ## Benchmark methodology
 

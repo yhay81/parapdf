@@ -1,9 +1,12 @@
 import { type CSSProperties, memo, type ReactNode, useLayoutEffect, useRef } from "react";
 import { usePdfState, usePdfViewer } from "./context.ts";
+import { VIEWER_CSS } from "./styles.ts";
 
 export interface PdfViewportProps {
   className?: string;
   style?: CSSProperties;
+  /** Accessible name of the scroll container. */
+  label?: string;
   /** Content drawn over a page, positioned with `<PdfPageRect>`. */
   renderOverlay?: (pageIndex: number) => ReactNode;
 }
@@ -11,14 +14,21 @@ export interface PdfViewportProps {
 /**
  * The scroll container. Only the pages in the runtime's window are mounted,
  * and scrolling re-renders this component only when that window changes.
+ * It is focusable, so the browser's own keys scroll it.
  */
-export function PdfViewport({ className, style, renderOverlay }: PdfViewportProps) {
+export function PdfViewport({
+  className,
+  style,
+  label = "PDF document",
+  renderOverlay,
+}: PdfViewportProps) {
   const runtime = usePdfViewer();
   const scrollerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const layout = usePdfState((state) => state.layout);
   const first = usePdfState((state) => state.first);
   const last = usePdfState((state) => state.last);
+  const pageCount = usePdfState((state) => state.pageCount);
 
   useLayoutEffect(() => {
     const scroller = scrollerRef.current;
@@ -34,9 +44,12 @@ export function PdfViewport({ className, style, renderOverlay }: PdfViewportProp
         <PdfPage
           key={index}
           index={index}
+          pageCount={pageCount}
           top={layout.tops[index] ?? 0}
           width={layout.widths[index] ?? 0}
           height={layout.heights[index] ?? 0}
+          scale={layout.scale}
+          textLayer={runtime.textLayer}
           overlay={renderOverlay?.(index)}
         />,
       );
@@ -46,9 +59,17 @@ export function PdfViewport({ className, style, renderOverlay }: PdfViewportProp
   return (
     <div
       ref={scrollerRef}
-      className={className}
+      className={className ? `parapdf-viewport ${className}` : "parapdf-viewport"}
       style={{ overflow: "auto", contain: "strict", ...style }}
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: a focusable scroll container is what lets keyboard users scroll it.
+      tabIndex={0}
+      role="document"
+      aria-label={label}
     >
+      {/* React hoists and deduplicates this into <head>. */}
+      <style href="parapdf-viewer" precedence="parapdf">
+        {VIEWER_CSS}
+      </style>
       {/* The runtime sizes this element imperatively so zoom can restore the scroll position first. */}
       <div ref={contentRef} style={{ position: "relative" }}>
         {pages}
@@ -59,9 +80,13 @@ export function PdfViewport({ className, style, renderOverlay }: PdfViewportProp
 
 interface PdfPageProps {
   index: number;
+  pageCount: number;
   top: number;
   width: number;
   height: number;
+  /** CSS pixels per PDF point; pdf.js's text layer reads it as `--total-scale-factor`. */
+  scale: number;
+  textLayer: boolean;
   overlay: ReactNode;
 }
 
@@ -72,37 +97,60 @@ const layerStyle: CSSProperties = {
   height: "100%",
 };
 
-const PdfPage = memo(function PdfPage({ index, top, width, height, overlay }: PdfPageProps) {
+const PdfPage = memo(function PdfPage({
+  index,
+  pageCount,
+  top,
+  width,
+  height,
+  scale,
+  textLayer,
+  overlay,
+}: PdfPageProps) {
   const runtime = usePdfViewer();
   const baseRef = useRef<HTMLCanvasElement>(null);
   const detailRef = useRef<HTMLCanvasElement>(null);
+  const textRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
     const base = baseRef.current;
     const detail = detailRef.current;
     if (!base || !detail) return;
-    return runtime.attachPage(index, base, detail);
+    return runtime.attachPage(index, base, detail, textRef.current);
   }, [runtime, index]);
 
   return (
-    <div
+    // A labelled section is a region landmark, the role pdf.js gives its pages.
+    <section
       data-page={index + 1}
-      style={{
-        position: "absolute",
-        top,
-        left: 0,
-        right: 0,
-        margin: "0 auto",
-        width,
-        height,
-        background: "#fff",
-        boxShadow: "0 1px 3px rgb(0 0 0 / 0.3)",
-        contain: "strict",
-      }}
+      aria-label={`Page ${index + 1} of ${pageCount}`}
+      style={
+        {
+          position: "absolute",
+          top,
+          left: 0,
+          right: 0,
+          margin: "0 auto",
+          width,
+          height,
+          background: "#fff",
+          boxShadow: "0 1px 3px rgb(0 0 0 / 0.3)",
+          contain: "strict",
+          "--total-scale-factor": scale,
+          "--scale-round-x": "1px",
+          "--scale-round-y": "1px",
+        } as CSSProperties
+      }
     >
-      <canvas ref={baseRef} style={layerStyle} />
-      <canvas ref={detailRef} style={layerStyle} />
-      {overlay ? <div style={{ ...layerStyle, pointerEvents: "none" }}>{overlay}</div> : null}
-    </div>
+      {/* Pixels only; the text layer carries the content for assistive technology. */}
+      <div aria-hidden="true" style={layerStyle}>
+        <canvas ref={baseRef} style={layerStyle} />
+        <canvas ref={detailRef} style={layerStyle} />
+      </div>
+      {textLayer ? <div ref={textRef} className="parapdf-text-layer" /> : null}
+      {overlay ? (
+        <div style={{ ...layerStyle, pointerEvents: "none", zIndex: 2 }}>{overlay}</div>
+      ) : null}
+    </section>
   );
 });

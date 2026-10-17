@@ -1,7 +1,31 @@
-import type { PageSize, PdfEngine, PdfEngineDocument, PdfSource } from "../engine/types.ts";
+import type {
+  PageSize,
+  PdfEngine,
+  PdfEngineDocument,
+  PdfSource,
+  TextLayerHandle,
+} from "../engine/types.ts";
+import { SearchHighlights } from "./highlights.ts";
 import { computeLayout, type Layout, pageAt, visibleRange } from "./layout.ts";
 import { RenderScheduler, type SchedulerStats } from "./scheduler.ts";
 import { Store } from "./store.ts";
+import {
+  buildPageIndex,
+  findMatches,
+  normalizeQuery,
+  type PageIndex,
+  type SearchMatch,
+} from "./text-search.ts";
+
+export interface SearchState {
+  query: string;
+  status: "idle" | "searching" | "done";
+  /** Matches in page order. */
+  matches: readonly SearchMatch[];
+  /** Index into `matches` of the selected result, -1 when none. */
+  current: number;
+  pagesSearched: number;
+}
 
 export interface ViewerState {
   status: "idle" | "loading" | "ready" | "error";
@@ -15,6 +39,7 @@ export interface ViewerState {
   currentPage: number;
   /** CSS pixels per PDF point. */
   scale: number;
+  search: SearchState;
 }
 
 export interface ViewerOptions {
@@ -26,6 +51,8 @@ export interface ViewerOptions {
   initialScale?: number | "fit-width";
   minScale?: number;
   maxScale?: number;
+  /** Build selectable, searchable text layers (default true). */
+  textLayer?: boolean;
 }
 
 /** Scrolling faster than this (CSS px/ms) defers full-resolution renders. */
@@ -34,13 +61,30 @@ const SETTLE_VELOCITY = 2;
 const SETTLE_DELAY = 120;
 /** A ctrl/pinch wheel gesture commits this long after its last event. */
 const ZOOM_COMMIT_DELAY = 150;
+/** Search publishes partial results at most this often. */
+const SEARCH_PUBLISH_INTERVAL = 100;
+
+const IDLE_SEARCH: SearchState = {
+  query: "",
+  status: "idle",
+  matches: [],
+  current: -1,
+  pagesSearched: 0,
+};
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
+const yieldToMain = (): Promise<void> => {
+  const scheduler = (globalThis as { scheduler?: { yield?: () => Promise<void> } }).scheduler;
+  return scheduler?.yield ? scheduler.yield() : new Promise((resolve) => setTimeout(resolve, 0));
+};
+
+type PageElements = [HTMLCanvasElement, HTMLCanvasElement, HTMLElement | null];
+
 /**
  * The imperative core behind the React components. It owns scrolling, layout,
- * zoom, and the render scheduler; React only re-renders when the published
- * store fields change.
+ * zoom, search, and the render scheduler; React only re-renders when the
+ * published store fields change.
  */
 export class PdfViewerRuntime {
   readonly store = new Store<ViewerState>({
@@ -52,6 +96,7 @@ export class PdfViewerRuntime {
     last: -1,
     currentPage: 0,
     scale: 1,
+    search: IDLE_SEARCH,
   });
   readonly #engine: PdfEngine;
   readonly #gap: number;
@@ -60,10 +105,16 @@ export class PdfViewerRuntime {
   readonly #initialScale: number | "fit-width";
   readonly #minScale: number;
   readonly #maxScale: number;
+  readonly #textLayer: boolean;
+  readonly #highlights = new SearchHighlights();
   #generation = 0;
+  #doc: PdfEngineDocument | null = null;
   #scheduler: RenderScheduler | null = null;
   #sizes: PageSize[] = [];
-  #pendingPages = new Map<number, [HTMLCanvasElement, HTMLCanvasElement]>();
+  #pendingPages = new Map<number, PageElements>();
+  #textPages = new Map<number, TextLayerHandle>();
+  #indexes = new Map<number, Promise<PageIndex>>();
+  #searchGeneration = 0;
   #scroller: HTMLElement | null = null;
   #content: HTMLElement | null = null;
   #frame = 0;
@@ -82,10 +133,15 @@ export class PdfViewerRuntime {
     this.#initialScale = options.initialScale ?? "fit-width";
     this.#minScale = options.minScale ?? 0.25;
     this.#maxScale = options.maxScale ?? 6;
+    this.#textLayer = options.textLayer ?? true;
   }
 
   get engineName(): string {
     return this.#engine.name;
+  }
+
+  get textLayer(): boolean {
+    return this.#textLayer;
   }
 
   get scroller(): HTMLElement | null {
@@ -108,7 +164,7 @@ export class PdfViewerRuntime {
     let doc: PdfEngineDocument | null = null;
     let closed = false;
     this.#firstPaintAt = null;
-    this.store.set({ status: "loading", error: null });
+    this.store.set({ status: "loading", error: null, search: IDLE_SEARCH });
 
     void (async () => {
       try {
@@ -121,17 +177,27 @@ export class PdfViewerRuntime {
         doc = opened;
         const firstSize = await doc.pageSize(0);
         if (closed) return;
+        this.#doc = doc;
         // Assume every page matches the first until the background pass knows better.
         this.#sizes = Array.from({ length: doc.pageCount }, () => firstSize);
         this.#scheduler = new RenderScheduler(doc, {
           maxConcurrent: this.#maxConcurrentRenders,
           onPainted: (pageIndex) => {
-            if (pageIndex === 0 && this.#firstPaintAt === null)
+            if (pageIndex === 0 && this.#firstPaintAt === null) {
               this.#firstPaintAt = performance.now();
+            }
+          },
+          onTextReady: (pageIndex, handle) => {
+            this.#textPages.set(pageIndex, handle);
+            this.#highlightPage(pageIndex);
+          },
+          onTextRemoved: (pageIndex) => {
+            this.#textPages.delete(pageIndex);
+            this.#highlights.clearPage(pageIndex);
           },
         });
-        for (const [index, [base, detail]] of this.#pendingPages) {
-          this.#scheduler.attach(index, base, detail);
+        for (const [index, [base, detail, text]] of this.#pendingPages) {
+          this.#scheduler.attach(index, base, detail, text);
         }
         this.#pendingPages.clear();
         const scale = this.#resolveInitialScale(firstSize);
@@ -147,8 +213,20 @@ export class PdfViewerRuntime {
     return () => {
       closed = true;
       if (this.#generation === generation) {
+        this.#searchGeneration++;
+        this.#highlights.clear();
+        this.#textPages.clear();
+        this.#indexes.clear();
+        this.#doc = null;
         this.#scheduler = null;
-        this.store.set({ status: "idle", pageCount: 0, layout: null, first: 0, last: -1 });
+        this.store.set({
+          status: "idle",
+          pageCount: 0,
+          layout: null,
+          first: 0,
+          last: -1,
+          search: IDLE_SEARCH,
+        });
       }
       // A document still loading is destroyed by the loader once it resolves.
       void doc?.destroy();
@@ -161,14 +239,31 @@ export class PdfViewerRuntime {
     this.#content = content;
     const layout = this.store.get().layout;
     if (layout) this.#sizeContent(layout);
+    // While a pointer drags inside a text layer, pdf.js's CSS stretches the
+    // layer's end element over the page so the selection does not jump.
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      target?.closest(".parapdf-text-layer")?.classList.add("selecting");
+    };
+    const onPointerUp = () => {
+      for (const layer of scroller.querySelectorAll(".parapdf-text-layer.selecting")) {
+        layer.classList.remove("selecting");
+      }
+    };
     scroller.addEventListener("scroll", this.#onScroll, { passive: true });
     scroller.addEventListener("wheel", this.#onWheel, { passive: false });
+    scroller.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp);
     const resize = new ResizeObserver(() => this.#requestUpdate());
     resize.observe(scroller);
     this.#requestUpdate();
     return () => {
       scroller.removeEventListener("scroll", this.#onScroll);
       scroller.removeEventListener("wheel", this.#onWheel);
+      scroller.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
       resize.disconnect();
       if (this.#frame) cancelAnimationFrame(this.#frame);
       this.#frame = 0;
@@ -179,11 +274,17 @@ export class PdfViewerRuntime {
     };
   }
 
-  /** Register a mounted page's canvases; returns the function that releases them. */
-  attachPage(index: number, base: HTMLCanvasElement, detail: HTMLCanvasElement): () => void {
+  /** Register a mounted page's layers; returns the function that releases them. */
+  attachPage(
+    index: number,
+    base: HTMLCanvasElement,
+    detail: HTMLCanvasElement,
+    text: HTMLElement | null,
+  ): () => void {
+    const layer = this.#textLayer ? text : null;
     const scheduler = this.#scheduler;
-    if (scheduler) scheduler.attach(index, base, detail);
-    else this.#pendingPages.set(index, [base, detail]);
+    if (scheduler) scheduler.attach(index, base, detail, layer);
+    else this.#pendingPages.set(index, [base, detail, layer]);
     return () => {
       this.#pendingPages.delete(index);
       if (this.#scheduler === scheduler) scheduler?.detach(index);
@@ -252,6 +353,136 @@ export class PdfViewerRuntime {
     scroller.scrollLeft = ratioX * scroller.scrollWidth - x;
     this.store.set({ scale });
     this.#update();
+  }
+
+  /**
+   * Search the whole document. Results arrive progressively; the first match
+   * at or after the current page is selected and scrolled into view.
+   */
+  search(query: string): void {
+    const generation = ++this.#searchGeneration;
+    this.#highlights.clear();
+    const normalized = normalizeQuery(query);
+    const doc = this.#doc;
+    if (!normalized || !doc) {
+      this.store.set({ search: { ...IDLE_SEARCH, query } });
+      return;
+    }
+    this.store.set({
+      search: { query, status: "searching", matches: [], current: -1, pagesSearched: 0 },
+    });
+    void this.#runSearch(doc, query, normalized, generation);
+  }
+
+  nextMatch(): void {
+    const { matches, current } = this.store.get().search;
+    if (matches.length > 0) this.#selectMatch((current + 1) % matches.length);
+  }
+
+  previousMatch(): void {
+    const { matches, current } = this.store.get().search;
+    if (matches.length > 0) this.#selectMatch((current - 1 + matches.length) % matches.length);
+  }
+
+  clearSearch(): void {
+    this.#searchGeneration++;
+    this.#highlights.clear();
+    this.store.set({ search: IDLE_SEARCH });
+  }
+
+  async #runSearch(
+    doc: PdfEngineDocument,
+    query: string,
+    normalized: string,
+    generation: number,
+  ): Promise<void> {
+    const matches: SearchMatch[] = [];
+    const startPage = this.store.get().currentPage;
+    let current = -1;
+    let pagesSearched = 0;
+    let publishedAt = performance.now();
+    const publish = (status: SearchState["status"]) => {
+      this.store.set({
+        search: { query, status, matches: [...matches], current, pagesSearched },
+      });
+      this.#refreshHighlights();
+    };
+    for (let page = 0; page < doc.pageCount; page++) {
+      const index = await this.#pageIndex(doc, page);
+      if (generation !== this.#searchGeneration) return;
+      const found = findMatches(index, normalized, page);
+      const select = current === -1 && page >= startPage && found.length > 0;
+      if (select) current = matches.length;
+      matches.push(...found);
+      pagesSearched = page + 1;
+      const now = performance.now();
+      if (select || now - publishedAt > SEARCH_PUBLISH_INTERVAL) {
+        publish("searching");
+        const match = matches[current];
+        if (select && match) void this.#scrollToMatch(match);
+        publishedAt = now;
+        await yieldToMain();
+        if (generation !== this.#searchGeneration) return;
+      }
+    }
+    if (current === -1 && matches.length > 0) {
+      current = 0;
+      const match = matches[0];
+      if (match) void this.#scrollToMatch(match);
+    }
+    publish("done");
+  }
+
+  #pageIndex(doc: PdfEngineDocument, pageIndex: number): Promise<PageIndex> {
+    let index = this.#indexes.get(pageIndex);
+    if (!index) {
+      index = doc.getText(pageIndex).then(buildPageIndex);
+      this.#indexes.set(pageIndex, index);
+    }
+    return index;
+  }
+
+  #selectMatch(index: number): void {
+    const search = this.store.get().search;
+    const match = search.matches[index];
+    if (!match) return;
+    this.store.set({ search: { ...search, current: index } });
+    this.#refreshHighlights();
+    void this.#scrollToMatch(match);
+  }
+
+  /** Scroll so a match sits in the upper third of the viewport. */
+  async #scrollToMatch(match: SearchMatch): Promise<void> {
+    const doc = this.#doc;
+    if (!doc) return;
+    const text = await doc.getText(match.pageIndex);
+    const layout = this.store.get().layout;
+    const scroller = this.#scroller;
+    if (!layout || !scroller || this.#doc !== doc) return;
+    const box = match.start.item * 4;
+    const x = (text.boxes[box] ?? 0) * layout.scale;
+    const y = (text.boxes[box + 1] ?? 0) * layout.scale;
+    scroller.scrollTop = (layout.tops[match.pageIndex] ?? 0) + y - scroller.clientHeight / 3;
+    const contentWidth = Math.max(scroller.clientWidth, layout.totalWidth);
+    const left = (contentWidth - (layout.widths[match.pageIndex] ?? 0)) / 2 + x;
+    if (left < scroller.scrollLeft || left > scroller.scrollLeft + scroller.clientWidth) {
+      scroller.scrollLeft = left - scroller.clientWidth / 3;
+    }
+  }
+
+  #refreshHighlights(): void {
+    for (const pageIndex of this.#textPages.keys()) this.#highlightPage(pageIndex);
+  }
+
+  #highlightPage(pageIndex: number): void {
+    const handle = this.#textPages.get(pageIndex);
+    const { matches, current } = this.store.get().search;
+    if (!handle || matches.length === 0) {
+      this.#highlights.clearPage(pageIndex);
+      return;
+    }
+    const pageMatches = matches.filter((match) => match.pageIndex === pageIndex);
+    this.#highlights.setPage(pageIndex, handle.elements, pageMatches, matches[current] ?? null);
   }
 
   #resolveInitialScale(firstPage: PageSize): number {

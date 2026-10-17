@@ -1,0 +1,18 @@
+# Notices
+
+ParaPDF is licensed under the [MIT License](LICENSE).
+
+## PDF.js
+
+Parts of ParaPDF are derived from [PDF.js](https://github.com/mozilla/pdf.js),
+Copyright Mozilla Foundation, licensed under the Apache License, Version 2.0.
+The full license text is in
+[`LICENSES/pdf.js-Apache-2.0.txt`](LICENSES/pdf.js-Apache-2.0.txt).
+
+| ParaPDF file | Derived from | Notes |
+|---|---|---|
+| `packages/parapdf/src/react/styles.ts` | `web/pdf_viewer.css` (pdfjs-dist 6.4.299), `.textLayer` rules | Renamed to `.parapdf-text-layer`; editing and image rules omitted. |
+| `packages/parapdf/src/runtime/scheduler.ts` | `web/text_layer_builder.js` | The `endOfContent` element appended after each text layer. |
+| `packages/parapdf/src/runtime/viewer.ts` | `web/text_layer_builder.js` | Toggling `selecting` on the text layer while a pointer drags. |
+
+pdf.js itself is a peer dependency and is not redistributed by ParaPDF.

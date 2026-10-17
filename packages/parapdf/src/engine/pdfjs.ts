@@ -1,10 +1,12 @@
 import type * as Pdfjs from "pdfjs-dist";
 import {
   type PageSize,
+  type PageText,
   type PdfEngine,
   type PdfEngineDocument,
   type PdfSource,
   RenderCancelledError,
+  type TextLayerHandle,
 } from "./types.ts";
 
 export interface PdfjsEngineOptions {
@@ -20,6 +22,10 @@ export interface PdfjsEngineOptions {
   assetBase?: string;
   enableHWA?: boolean;
 }
+
+// The text layer and the search index must see the same items in the same
+// order, so both read text content with identical options.
+const TEXT_OPTIONS = { includeMarkedContent: true, disableNormalization: true } as const;
 
 /** pdf.js through its core display API only. */
 export function createPdfjsEngine(options: PdfjsEngineOptions): PdfEngine {
@@ -51,6 +57,7 @@ export function createPdfjsEngine(options: PdfjsEngineOptions): PdfEngine {
       });
       const doc = await loadingTask.promise;
       const pages = new Map<number, Promise<Pdfjs.PDFPageProxy>>();
+      const texts = new Map<number, Promise<PageText>>();
       const getPage = (pageIndex: number): Promise<Pdfjs.PDFPageProxy> => {
         let page = pages.get(pageIndex);
         if (!page) {
@@ -85,11 +92,63 @@ export function createPdfjsEngine(options: PdfjsEngineOptions): PdfEngine {
             },
           };
         },
+        getText(pageIndex) {
+          let text = texts.get(pageIndex);
+          if (!text) {
+            text = getPage(pageIndex).then(async (page) => {
+              const content = await page.getTextContent(TEXT_OPTIONS);
+              const viewport = page.getViewport({ scale: 1 });
+              const items: string[] = [];
+              const endsLine: boolean[] = [];
+              const boxes: number[] = [];
+              for (const item of content.items) {
+                if (!("str" in item)) continue;
+                items.push(item.str);
+                endsLine.push(item.hasEOL);
+                const [a = 0, b = 0, c = 0, d = 0, e = 0, f = 0] = item.transform as number[];
+                const [x = 0, baseline = 0] = viewport.convertToViewportPoint(e, f);
+                const height = Math.hypot(c, d) || Math.hypot(a, b) || item.height;
+                boxes.push(x, baseline - height, item.width, height);
+              }
+              return { items, endsLine, boxes: Float32Array.from(boxes) };
+            });
+            texts.set(pageIndex, text);
+          }
+          return text;
+        },
+        renderTextLayer({ pageIndex, container, cssScale }) {
+          let layer: Pdfjs.TextLayer | undefined;
+          let cancelled = false;
+          const promise = getPage(pageIndex).then(async (page): Promise<TextLayerHandle> => {
+            if (cancelled) throw new RenderCancelledError("text layer cancelled before it started");
+            const rendered = new pdfjs.TextLayer({
+              textContentSource: page.streamTextContent(TEXT_OPTIONS),
+              container,
+              viewport: page.getViewport({ scale: cssScale }),
+            });
+            layer = rendered;
+            await rendered.render();
+            return {
+              elements: rendered.textDivs,
+              setScale(next) {
+                rendered.update({ viewport: page.getViewport({ scale: next }) });
+              },
+            };
+          });
+          return {
+            promise,
+            cancel() {
+              cancelled = true;
+              layer?.cancel();
+            },
+          };
+        },
         releasePage(pageIndex) {
           void pages.get(pageIndex)?.then((page) => page.cleanup());
         },
         async destroy() {
           pages.clear();
+          texts.clear();
           await loadingTask.destroy();
         },
       };

@@ -1,4 +1,10 @@
-import { isRenderCancelled, type PdfEngineDocument, type RenderTask } from "../engine/types.ts";
+import {
+  isRenderCancelled,
+  type PdfEngineDocument,
+  type RenderTask,
+  type TextLayerHandle,
+  type TextLayerTask,
+} from "../engine/types.ts";
 import type { Layout } from "./layout.ts";
 
 type Layer = "base" | "detail";
@@ -9,15 +15,24 @@ type Layer = "base" | "detail";
  * detail layer covers it at full device resolution once scrolling settles.
  * Because the base stays underneath, re-rendering the detail layer (for
  * example after zooming) never flashes an empty page.
+ *
+ * The text layer is DOM built on the main thread, so it is the last thing a
+ * page gets: one page at a time, only after scrolling settles, during idle
+ * periods.
  */
 interface Slot {
   readonly index: number;
   readonly base: HTMLCanvasElement;
   readonly detail: HTMLCanvasElement;
+  readonly text: HTMLElement | null;
   /** Device pixels per point of the last completed render, 0 when empty. */
   baseScale: number;
   detailScale: number;
   job: { layer: Layer; scale: number; task: RenderTask } | undefined;
+  textTask: TextLayerTask | undefined;
+  textHandle: TextLayerHandle | undefined;
+  /** CSS pixels per point the text runs were measured for. */
+  textScale: number;
 }
 
 export interface ScheduleInput {
@@ -35,6 +50,7 @@ export interface ScheduleInput {
 export interface SchedulerStats {
   base: number;
   detail: number;
+  text: number;
   cancelled: number;
   failed: number;
 }
@@ -44,31 +60,56 @@ export interface SchedulerOptions {
   /** Detail canvases are capped at this many pixels until region rendering lands. */
   maxDetailPixels?: number;
   onPainted?: (pageIndex: number, layer: Layer) => void;
+  onTextReady?: (pageIndex: number, handle: TextLayerHandle) => void;
+  onTextRemoved?: (pageIndex: number) => void;
 }
 
 /** Base renders use half a device pixel per CSS pixel at most: fast, and fine as a placeholder. */
 const BASE_FACTOR = 0.5;
 
+const whenIdle: (callback: () => void) => void =
+  typeof requestIdleCallback === "function"
+    ? (callback) => requestIdleCallback(callback, { timeout: 300 })
+    : (callback) => setTimeout(callback, 16);
+
 export class RenderScheduler {
-  readonly stats: SchedulerStats = { base: 0, detail: 0, cancelled: 0, failed: 0 };
+  readonly stats: SchedulerStats = { base: 0, detail: 0, text: 0, cancelled: 0, failed: 0 };
   readonly #doc: PdfEngineDocument;
   readonly #slots = new Map<number, Slot>();
   readonly #maxConcurrent: number;
   readonly #maxDetailPixels: number;
-  readonly #onPainted: SchedulerOptions["onPainted"];
+  readonly #options: SchedulerOptions;
   #input: ScheduleInput | undefined;
   #running = 0;
+  #textRunning = false;
+  #textScheduled = false;
 
   constructor(doc: PdfEngineDocument, options: SchedulerOptions = {}) {
     this.#doc = doc;
     this.#maxConcurrent = options.maxConcurrent ?? 2;
     this.#maxDetailPixels = options.maxDetailPixels ?? 16_777_216;
-    this.#onPainted = options.onPainted;
+    this.#options = options;
   }
 
-  attach(index: number, base: HTMLCanvasElement, detail: HTMLCanvasElement): void {
+  attach(
+    index: number,
+    base: HTMLCanvasElement,
+    detail: HTMLCanvasElement,
+    text: HTMLElement | null,
+  ): void {
     this.detach(index);
-    this.#slots.set(index, { index, base, detail, baseScale: 0, detailScale: 0, job: undefined });
+    this.#slots.set(index, {
+      index,
+      base,
+      detail,
+      text,
+      baseScale: 0,
+      detailScale: 0,
+      job: undefined,
+      textTask: undefined,
+      textHandle: undefined,
+      textScale: 0,
+    });
     this.#pump();
   }
 
@@ -77,6 +118,9 @@ export class RenderScheduler {
     if (!slot) return;
     this.#slots.delete(index);
     slot.job?.task.cancel();
+    slot.textTask?.cancel();
+    if (slot.textHandle) this.#options.onTextRemoved?.(index);
+    slot.text?.replaceChildren();
     // Zero-sized canvases hand their backing memory back immediately, which
     // matters on iOS where total canvas memory is capped.
     for (const canvas of [slot.base, slot.detail]) {
@@ -102,6 +146,10 @@ export class RenderScheduler {
     return slot !== undefined && (slot.baseScale > 0 || slot.detailScale > 0);
   }
 
+  textHandle(index: number): TextLayerHandle | undefined {
+    return this.#slots.get(index)?.textHandle;
+  }
+
   #baseScale(input: ScheduleInput): number {
     return input.layout.scale * BASE_FACTOR;
   }
@@ -117,13 +165,17 @@ export class RenderScheduler {
       : scale;
   }
 
-  /** Highest-priority idle slot and the layer it needs, or nothing to do. */
+  #byDistance(input: ScheduleInput): Slot[] {
+    return [...this.#slots.values()].sort(
+      (a, b) => Math.abs(a.index - input.focus) - Math.abs(b.index - input.focus),
+    );
+  }
+
+  /** Highest-priority idle slot and the canvas layer it needs, or nothing to do. */
   #next(): { slot: Slot; layer: Layer; scale: number } | undefined {
     const input = this.#input;
     if (!input) return undefined;
-    const idle = [...this.#slots.values()]
-      .filter((slot) => slot.job === undefined)
-      .sort((a, b) => Math.abs(a.index - input.focus) - Math.abs(b.index - input.focus));
+    const idle = this.#byDistance(input).filter((slot) => slot.job === undefined);
     const visible = (slot: Slot) => slot.index >= input.first && slot.index <= input.last;
     const baseScale = this.#baseScale(input);
     const needsDetail = (slot: Slot) =>
@@ -153,9 +205,10 @@ export class RenderScheduler {
   #pump(): void {
     while (this.#running < this.#maxConcurrent) {
       const next = this.#next();
-      if (!next) return;
+      if (!next) break;
       this.#start(next.slot, next.layer, next.scale);
     }
+    this.#scheduleText();
   }
 
   #start(slot: Slot, layer: Layer, scale: number): void {
@@ -174,7 +227,7 @@ export class RenderScheduler {
             slot.detailScale = scale;
             this.stats.detail++;
           }
-          this.#onPainted?.(slot.index, layer);
+          this.#options.onPainted?.(slot.index, layer);
         },
         (error: unknown) => {
           if (isRenderCancelled(error)) this.stats.cancelled++;
@@ -193,6 +246,74 @@ export class RenderScheduler {
         this.#running--;
         if (slot.job?.task === task) slot.job = undefined;
         this.#pump();
+      });
+  }
+
+  #scheduleText(): void {
+    if (this.#textScheduled || this.#textRunning || !this.#input?.settled) return;
+    this.#textScheduled = true;
+    whenIdle(() => {
+      this.#textScheduled = false;
+      this.#pumpText();
+    });
+  }
+
+  /** Start or refresh at most one text layer, visible pages first. */
+  #pumpText(): void {
+    const input = this.#input;
+    if (!input?.settled || this.#textRunning) return;
+    const slots = this.#byDistance(input).filter((slot) => slot.text !== null);
+    const visible = (slot: Slot) => slot.index >= input.first && slot.index <= input.last;
+    const missing = (slot: Slot) => !slot.textHandle && !slot.textTask;
+    const build = slots.find((slot) => visible(slot) && missing(slot)) ?? slots.find(missing);
+    if (build) {
+      this.#startText(build, input.layout.scale);
+      return;
+    }
+    // Zoom changes only need the runs re-measured; do one page per idle period.
+    const stale = slots.find(
+      (slot) => visible(slot) && slot.textHandle && !sameScale(slot.textScale, input.layout.scale),
+    );
+    if (stale?.textHandle) {
+      stale.textHandle.setScale(input.layout.scale);
+      stale.textScale = input.layout.scale;
+      this.#scheduleText();
+    }
+  }
+
+  #startText(slot: Slot, cssScale: number): void {
+    const container = slot.text;
+    if (!container) return;
+    container.replaceChildren();
+    const task = this.#doc.renderTextLayer({ pageIndex: slot.index, container, cssScale });
+    slot.textTask = task;
+    this.#textRunning = true;
+    task.promise
+      .then(
+        (handle) => {
+          if (this.#slots.get(slot.index) !== slot || slot.textTask !== task) return;
+          // Like pdf.js's viewer, end with an element that catches drags past
+          // the last run so selections do not jump to the page's start.
+          const end = document.createElement("div");
+          end.className = "endOfContent";
+          container.append(end);
+          slot.textHandle = handle;
+          slot.textScale = cssScale;
+          this.stats.text++;
+          this.#options.onTextReady?.(slot.index, handle);
+        },
+        (error: unknown) => {
+          if (isRenderCancelled(error)) this.stats.cancelled++;
+          else {
+            this.stats.failed++;
+            console.error(`page ${slot.index + 1}: text layer failed`, error);
+          }
+        },
+      )
+      .finally(() => {
+        if (slot.textTask === task) slot.textTask = undefined;
+        this.#textRunning = false;
+        this.#scheduleText();
       });
   }
 }

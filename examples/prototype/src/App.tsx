@@ -5,17 +5,20 @@ import {
   PdfViewport,
   usePdfState,
   usePdfViewer,
+  type ViewerOptions,
 } from "parapdf";
 import { Profiler, type ProfilerOnRenderCallback, Suspense, use } from "react";
 import { preload } from "react-dom";
 import { BenchDriver } from "./BenchDriver.tsx";
 import { loadEngine } from "./engines.ts";
+import { SearchBox } from "./SearchBox.tsx";
 
 const params = new URLSearchParams(location.search);
 const settings = {
   file: params.get("file") ?? "synthetic-text-1000.pdf",
   engine: params.get("engine") ?? "pdfjs-next",
   hwa: params.get("hwa") !== "0",
+  text: params.get("text") !== "0",
   autoscroll: Number(params.get("autoscroll") ?? "0"),
   durationMs: Number(params.get("duration") ?? "4000"),
   preload: params.get("preload") !== "0",
@@ -24,6 +27,7 @@ const settings = {
 // Module-level values stay referentially stable across renders.
 const enginePromise = loadEngine(settings.engine, settings.hwa);
 const source: PdfSource = { url: `/corpus/${settings.file}` };
+const viewerOptions: ViewerOptions = { textLayer: settings.text };
 const commits = { count: 0 };
 const countCommit: ProfilerOnRenderCallback = () => {
   commits.count++;
@@ -32,6 +36,7 @@ const benchLabel = {
   file: settings.file,
   engineKind: settings.engine,
   hwa: settings.hwa,
+  text: settings.text,
   speed: settings.autoscroll,
   preload: settings.preload,
 };
@@ -66,7 +71,7 @@ function Viewer() {
   const engine = use(enginePromise);
   return (
     <Profiler id="viewer" onRender={countCommit}>
-      <PdfDocument engine={engine} source={source}>
+      <PdfDocument engine={engine} source={source} options={viewerOptions}>
         <Toolbar />
         <PdfViewport className="viewport" renderOverlay={renderOverlay} />
         {settings.autoscroll > 0 ? (
@@ -104,6 +109,7 @@ function Toolbar() {
       <button type="button" onClick={() => viewer.zoomBy(1.25)} aria-label="Zoom in">
         +
       </button>
+      {viewer.textLayer ? <SearchBox /> : null}
     </header>
   );
 }

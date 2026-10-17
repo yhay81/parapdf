@@ -5,7 +5,8 @@
  * React commits, and render counts.
  *
  * Usage: pnpm --filter @parapdf/prototype build && pnpm --filter @parapdf/prototype bench
- * Environment: VARIANTS, FILES, SPEEDS (px per frame), RUNS (2), DURATION (ms, 4000).
+ * Environment: VARIANTS, TEXT (1, 0, or 1,0), FILES, SPEEDS (px per frame), RUNS (2),
+ * DURATION (ms, 4000), PRELOAD (1), OUTPUT (latest).
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { arch, cpus, platform, release } from "node:os";
@@ -21,17 +22,26 @@ interface Variant {
   name: string;
   engine: string;
   hwa: boolean;
+  text: boolean;
 }
 
-const allVariants: Variant[] = [
+const engineVariants = [
   { name: "pdfjs", engine: "pdfjs", hwa: false },
   { name: "pdfjs-hwa", engine: "pdfjs", hwa: true },
   { name: "pdfjs-next", engine: "pdfjs-next", hwa: false },
   { name: "pdfjs-next-hwa", engine: "pdfjs-next", hwa: true },
-];
-const variants = process.env.VARIANTS
-  ? allVariants.filter((variant) => process.env.VARIANTS?.split(",").includes(variant.name))
-  : allVariants;
+].filter(
+  (variant) => !process.env.VARIANTS || process.env.VARIANTS.split(",").includes(variant.name),
+);
+// TEXT=1,0 measures every engine variant with and without text layers.
+const textModes = (process.env.TEXT ?? "1").split(",").map((mode) => mode !== "0");
+const variants: Variant[] = engineVariants.flatMap((variant) =>
+  textModes.map((text) => ({
+    ...variant,
+    text,
+    name: text ? variant.name : `${variant.name}, no text`,
+  })),
+);
 const files = (process.env.FILES ?? "synthetic-text-1000.pdf,bill-hr815.pdf").split(",");
 const speeds = (process.env.SPEEDS ?? "15,60").split(",").map(Number);
 const runs = Number(process.env.RUNS ?? "2");
@@ -53,7 +63,7 @@ interface JobResult {
   settleMs?: number;
   lag?: { p95Ms: number; maxMs: number; blockedMs: number };
   frames?: { frames: number; p95Ms: number; maxMs: number; dropped: number };
-  renders?: { base: number; detail: number; cancelled: number; failed: number };
+  renders?: { base: number; detail: number; text: number; cancelled: number; failed: number };
 }
 
 const median = (values: number[]): number => {
@@ -105,6 +115,7 @@ try {
           const query = new URLSearchParams({
             engine: variant.engine,
             hwa: variant.hwa ? "1" : "0",
+            text: variant.text ? "1" : "0",
             file,
             autoscroll: String(speed),
             duration: String(durationMs),
@@ -175,6 +186,7 @@ const summaries = files.flatMap((file) =>
         frames: pick((result) => result.frames?.frames),
         baseRenders: pick((result) => result.renders?.base),
         detailRenders: pick((result) => result.renders?.detail),
+        textLayers: pick((result) => result.renders?.text),
         cancelledRenders: pick((result) => result.renders?.cancelled),
         settleMs: pick((result) => result.settleMs),
       };
@@ -217,13 +229,13 @@ const markdown = [
     speeds.flatMap((speed) => [
       `## ${file}, ${speed} px per frame`,
       "",
-      "| Variant | First paint (ms) | Pages crossed | Blank (%) | Blank frames (%) | Main thread blocked (ms) | Lag p95 / max (ms) | Dropped frames | React commits | Renders base / detail / cancelled |",
+      "| Variant | First paint (ms) | Pages crossed | Blank (%) | Blank frames (%) | Main thread blocked (ms) | Lag p95 / max (ms) | Dropped frames | React commits | Renders base / detail / text / cancelled |",
       "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
       ...summaries
         .filter((summary) => summary.file === file && summary.speed === speed)
         .map(
           (summary) =>
-            `| ${summary.variant} | ${fmt(summary.firstPaintMs)} | ${fmt(summary.pagesCrossed)} | ${fmt(summary.blankMeanPct, 1)} | ${fmt(summary.blankFramesPct, 1)} | ${fmt(summary.blockedMs)} | ${fmt(summary.lagP95Ms, 1)} / ${fmt(summary.lagMaxMs)} | ${fmt(summary.droppedFrames)} / ${fmt(summary.frames)} | ${fmt(summary.commitsDuringScroll)} | ${fmt(summary.baseRenders)} / ${fmt(summary.detailRenders)} / ${fmt(summary.cancelledRenders)} |`,
+            `| ${summary.variant} | ${fmt(summary.firstPaintMs)} | ${fmt(summary.pagesCrossed)} | ${fmt(summary.blankMeanPct, 1)} | ${fmt(summary.blankFramesPct, 1)} | ${fmt(summary.blockedMs)} | ${fmt(summary.lagP95Ms, 1)} / ${fmt(summary.lagMaxMs)} | ${fmt(summary.droppedFrames)} / ${fmt(summary.frames)} | ${fmt(summary.commitsDuringScroll)} | ${fmt(summary.baseRenders)} / ${fmt(summary.detailRenders)} / ${fmt(summary.textLayers)} / ${fmt(summary.cancelledRenders)} |`,
         ),
       "",
     ]),

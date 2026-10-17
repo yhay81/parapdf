@@ -70,8 +70,20 @@ with a scripted scroll at devicePixelRatio 2; details in
   503 ms with the renderer worker (median of five runs; see
   [`startup-preload.md`](examples/prototype/results/startup-preload.md) and
   [`startup-no-preload.md`](examples/prototype/results/startup-no-preload.md)).
-- **Not yet built.** Text and annotation layers, region rendering beyond the
-  16 MP detail cap, keyboard navigation, and accessibility semantics.
+- **Text, search, and accessibility.** pdf.js text layers make pages
+  selectable and readable by screen readers; whole-document search normalizes
+  full-width characters and case, and paints results with the CSS Custom
+  Highlight API without touching the text layer DOM. Pages are labelled
+  regions and the viewport is a focusable document.
+  [`check-text.ts`](examples/prototype/scripts/check-text.ts) verifies
+  selection, search, Japanese and full-width matching, and these semantics.
+- **Text layer cost.** Text layers are built only after scrolling settles, one
+  page per idle period. With the renderer worker on a GPU-backed canvas,
+  slow scrolling blocked the main thread for 0–1 ms with text layers versus
+  0 ms without; fast scrolling builds none.
+- **Not yet built.** Annotation layer, structure-tree semantics for tagged
+  PDFs, text for pages outside the mounted window, and region rendering beyond
+  the 16 MP detail cap.
 
 ## License
 
