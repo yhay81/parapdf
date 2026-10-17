@@ -12,3 +12,5 @@ bench/results/raw/
 test-results/
 playwright-report/
 bench/public/
+examples/*/public/
+examples/*/results/raw/

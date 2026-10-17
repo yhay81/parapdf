@@ -43,7 +43,11 @@ until the benchmark results justify the architecture.
   - `corpus/` — redistributable PDFs; sources and licenses are in its README.
   - `scripts/` — synthetic corpus generation and the Playwright runner.
   - `results/` — committed result summaries (`latest.md`, `latest.json`).
-- `packages/` — future library packages (runtime and React bindings).
+- `packages/parapdf/` — the runtime prototype: engine boundary (`engine/`),
+  layout, scheduler, and viewer runtime (`runtime/`), and React bindings
+  (`react/`). Consumed as TypeScript source through the workspace.
+- `examples/prototype/` — Vite + React 19 demo and the scripted scroll
+  benchmark (`scripts/scroll-bench.ts`, results in `results/`).
 
 ## Commands
 
@@ -55,8 +59,35 @@ until the benchmark results justify the architecture.
 - `pnpm bench:build` — build the hayro wasm module and the benchmark harness.
 - `pnpm bench` — run the engine benchmark; results go to `bench/results/`.
   `ENGINES`, `FILES`, `RUNS`, `PAGES`, and `SCALE` narrow a run.
+- `pnpm --filter @parapdf/prototype dev` — run the demo; query parameters
+  select `engine` (`pdfjs` or `pdfjs-next`), `hwa`, `file`, and `preload`.
+- `pnpm --filter @parapdf/prototype build && pnpm --filter @parapdf/prototype bench`
+  — scripted scroll benchmark; `VARIANTS`, `FILES`, `SPEEDS`, `RUNS`,
+  `DURATION`, `PRELOAD`, and `OUTPUT` narrow or rename a run.
 - `pnpm check` — Biome lint and format check. `pnpm format` applies fixes.
 - `pnpm typecheck` — TypeScript checks for every workspace package.
+
+## Runtime prototype
+
+- `PdfViewerRuntime` owns scrolling, layout, zoom, and the render scheduler.
+  It publishes only `status`, `layout`, the mounted window (`first`/`last`),
+  `currentPage`, and `scale` through a small store read with
+  `useSyncExternalStore`; scrolling recomputes every frame but publishes only
+  changes.
+- Layouts are immutable per zoom level. The runtime sizes the content element
+  imperatively so zoom can restore the anchored scroll position before React
+  re-renders the mounted pages. Ctrl or pinch wheel gestures preview with a CSS
+  transform and commit 150 ms after the last event.
+- Each mounted page stacks a base canvas (half a device pixel per CSS pixel)
+  under a detail canvas (full device resolution, capped at 16 MP until region
+  rendering exists). Priority: visible base, visible detail once scrolling
+  settles (120 ms quiet or below 2 px/ms), overscan base, overscan detail, then
+  stale base. Unmounted pages zero their canvases and release pdf.js page data.
+- The pdf.js adapter starts its parsing worker when the engine is created, and
+  the demo preloads the PDF with React's `preload()`, matching the CORS mode
+  pdf.js fetches with.
+- Not yet implemented: text and annotation layers, region rendering above the
+  pixel cap, keyboard navigation, and accessibility semantics.
 
 ## Benchmark methodology
 

@@ -1,0 +1,25 @@
+{
+  "name": "@parapdf/prototype",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "bench": "node scripts/scroll-bench.ts",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "parapdf": "workspace:*",
+    "pdfjs-dist": "6.4.299",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "playwright": "^1.64.1",
+    "vite": "^8.3.4"
+  }
+}

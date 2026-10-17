@@ -48,6 +48,31 @@ Firefox are not measured yet.
   its size, CJK coverage, and vector speed. Keep hayro as a research backend for
   scans and transparency fidelity.
 
+### Runtime prototype (2026-10-18)
+
+[`packages/parapdf`](packages/parapdf) implements the React-first runtime on
+the pdf.js core API. [`examples/prototype`](examples/prototype) measures it
+with a scripted scroll at devicePixelRatio 2; details in
+[`examples/prototype/results/latest.md`](examples/prototype/results/latest.md).
+
+- **React stays out of the hot path.** Scrolling across 7–9 pages over 241
+  frames caused 20–24 React commits, one batch per change of the mounted
+  window or the current page.
+- **No blank pages.** At 900 and 3,600 CSS pixels per second, low-resolution
+  base renders stayed ahead of the viewport; full-resolution renders waited
+  until scrolling settled.
+- **Main thread.** With full-resolution renders running during slow scrolling,
+  pdf.js master's renderer worker on a GPU-backed canvas kept main-thread
+  blocking at 0–2 ms. Released pdf.js on its default CPU canvas reached
+  64–91 ms, with single stalls of 40–58 ms.
+- **Startup.** Starting the PDF download with React's `preload()` moved first
+  paint of bill-hr815 from 800 to 684 ms on released pdf.js and from 619 to
+  503 ms with the renderer worker (median of five runs; see
+  [`startup-preload.md`](examples/prototype/results/startup-preload.md) and
+  [`startup-no-preload.md`](examples/prototype/results/startup-no-preload.md)).
+- **Not yet built.** Text and annotation layers, region rendering beyond the
+  16 MP detail cap, keyboard navigation, and accessibility semantics.
+
 ## License
 
 [MIT](LICENSE)

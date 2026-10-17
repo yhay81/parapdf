@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ParaPDF prototype</title>
+    <style>
+      html, body, #root { margin: 0; height: 100%; }
+      body { font: 13px system-ui, sans-serif; color: #e8e8e8; background: #3b3d40; }
+      .toolbar {
+        position: absolute; inset: 0 0 auto 0; height: 40px; display: flex; gap: 12px;
+        align-items: center; padding: 0 12px; background: #2a2b2e; box-sizing: border-box;
+      }
+      .toolbar button { min-width: 28px; }
+      .toolbar .engine { color: #9aa0a6; }
+      .viewport { position: absolute; inset: 40px 0 0 0; background: #525659; }
+      .status { padding: 16px; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
