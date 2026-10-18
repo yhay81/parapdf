@@ -216,6 +216,50 @@ try {
       check(`${file}: OCR text is selectable`, /Electric/.test(selected), JSON.stringify(selected));
       const matches = await searchFor(hybrid.page, "Menlo Park");
       check(`${file}: search finds OCR text`, matches >= 1, `${matches} matches`);
+
+      // Zooming re-renders the detail layer, which already holds a hayro
+      // bitmap, at the new scale.
+      await hybrid.page.evaluate(() =>
+        (window as { __viewer?: { goToPage(index: number): void } }).__viewer?.goToPage(0),
+      );
+      const detailWidth = () =>
+        hybrid.page.evaluate(
+          () =>
+            document.querySelectorAll<HTMLCanvasElement>('section[data-page="1"] canvas')[1]
+              ?.width ?? 0,
+        );
+      // Search scrolled to a later page; wait until page 1 is sharp again.
+      await hybrid.page.waitForFunction(
+        () =>
+          (document.querySelectorAll<HTMLCanvasElement>('section[data-page="1"] canvas')[1]
+            ?.width ?? 0) > 0,
+        undefined,
+        { timeout: 15_000 },
+      );
+      await hybrid.page.waitForTimeout(300);
+      const before = await detailWidth();
+      await hybrid.page.evaluate(() =>
+        (window as { __viewer?: { zoomBy(factor: number): void } }).__viewer?.zoomBy(1.5),
+      );
+      const grew = await hybrid.page
+        .waitForFunction(
+          (width) =>
+            (document.querySelectorAll<HTMLCanvasElement>('section[data-page="1"] canvas')[1]
+              ?.width ?? 0) >
+            width * 1.3,
+          before,
+          { timeout: 15_000 },
+        )
+        .then(
+          () => true,
+          () => false,
+        );
+      const zoomed = await hybridState(hybrid.page);
+      check(
+        `${file}: zooming re-renders page 1 with hayro`,
+        grew && zoomed.fallbacks.length === 0,
+        `detail width ${before} → ${await detailWidth()}`,
+      );
     }
 
     const reference = await open(file, "pdfjs-next");
