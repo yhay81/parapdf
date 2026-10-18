@@ -158,6 +158,11 @@ export class RenderScheduler {
     this.#doc.releasePage(index);
   }
 
+  /** Cancels all work and releases every page, for example when the document closes. */
+  dispose(): void {
+    for (const index of [...this.#slots.keys()]) this.detach(index);
+  }
+
   update(input: ScheduleInput): void {
     this.#input = input;
     for (const slot of this.#slots.values()) {

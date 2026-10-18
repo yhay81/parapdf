@@ -103,14 +103,16 @@ about 20 ms as noise.
   [`startup-preload.md`](examples/prototype/results/startup-preload.md) and
   [`startup-no-preload.md`](examples/prototype/results/startup-no-preload.md)).
 - **Text, search, and accessibility.** pdf.js text layers make pages
-  selectable and readable by screen readers; whole-document search normalizes
-  full-width characters and case, and paints results with the CSS Custom
-  Highlight API without touching the text layer DOM. Pages are labelled
-  regions and the viewport is a focusable document.
+  selectable and readable by screen readers. Whole-document search normalizes
+  text the way pdf.js's find controller does: it ignores full-width forms,
+  case, and diacritics, and matches words that a line end splits, such as
+  厚生労働 broken after 厚生 or "divi-" / "sions". Results are painted with the
+  CSS Custom Highlight API without touching the text layer DOM. Pages are
+  labelled regions and the viewport is a focusable document.
   [`check-text.ts`](examples/prototype/scripts/check-text.ts) verifies
   selection, including drags past a line's end and across the gap between
-  two pages in both directions, search, Japanese and full-width matching, and
-  these semantics in all three browsers.
+  two pages in both directions, search, Japanese, full-width, diacritic, and
+  line-break matching, and these semantics in all three browsers.
 - **Text layer cost.** Text layers are built only after scrolling settles, one
   page per idle period. With the renderer worker on a GPU-backed canvas in
   Chromium, slow scrolling blocked the main thread for 3–18 ms with text
@@ -126,12 +128,21 @@ about 20 ms as noise.
   GPU-backed canvas, 61 versus 53 ms with released pdf.js; see
   [`links-cost.md`](examples/prototype/results/links-cost.md)). An earlier
   figure of 3 ms came from a run in Low Power Mode.
+- **Document lifecycle.** Viewers of the same source share one loaded
+  document. React StrictMode's double mount used to load bill-hr815 twice, and
+  five remounts loaded it 12 times; both now load it once. Closing a viewer
+  cancels its work, the document is destroyed a second after the last viewer
+  goes, and work that outlives a closed viewer no longer raises "Transport
+  destroyed" as unhandled rejections.
+  [`check-lifecycle.ts`](examples/prototype/scripts/check-lifecycle.ts)
+  verifies this in all three browsers.
 - **Browser notes.** WebKit has neither `requestIdleCallback` nor
   `scheduler.yield`, so idle work falls back to timers. On a second visit in
   the same browser context, WebKit refused pdf.js's module worker scripts in
   the cross-origin-isolated demo, apparently when taken from its cache, and
-  pdf.js silently parsed on the main thread; the demo isolates itself only
-  for precise timers. Mouse selection in WebKit 27.2 ignores unprefixed
+  pdf.js silently parsed on the main thread; the same happens to the renderer
+  worker of a document reopened in the same page. The demo isolates itself
+  only for precise timers. Mouse selection in WebKit 27.2 ignores unprefixed
   `user-select`, so the viewer CSS also declares `-webkit-user-select`, as
   pdf.js's does. Over space without text, WebKit and Firefox put the end of a
   drag selection at the start of the page or gap under the pointer, so

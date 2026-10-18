@@ -118,9 +118,9 @@ const server = await preview({
   root: benchDir,
   configFile: join(benchDir, "vite.config.ts"),
   logLevel: "warn",
-  preview: { port: 4179, strictPort: false, open: false },
+  preview: { port: 4179, host: "127.0.0.1", strictPort: false, open: false },
 });
-const baseUrl = server.resolvedUrls?.local[0] ?? "http://localhost:4179/";
+const baseUrl = server.resolvedUrls?.local[0] ?? "http://127.0.0.1:4179/";
 const browserName = browserFromEnv();
 const launched = await launchBrowser(browserName);
 const { browser } = launched;
