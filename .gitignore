@@ -6,6 +6,8 @@ dist/
 # Benchmark build outputs and local inputs
 bench/hayro-wasm/target/
 bench/hayro-wasm/pkg/
+bench/hayro-classify/target/
+bench/hayro-classify/pkg/
 bench/corpus/generated/
 bench/vendor/
 bench/results/raw/

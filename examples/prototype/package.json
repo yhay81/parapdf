@@ -8,7 +8,8 @@
     "bench": "node scripts/scroll-bench.ts",
     "check:text": "node scripts/check-text.ts",
     "check:links": "node scripts/check-links.ts",
-    "typecheck": "tsc -p ."
+    "typecheck": "tsc -p .",
+    "check:hybrid": "node scripts/check-hybrid.ts"
   },
   "dependencies": {
     "parapdf": "workspace:*",

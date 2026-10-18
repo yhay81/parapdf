@@ -13,6 +13,8 @@ import { Profiler, type ProfilerOnRenderCallback, Suspense, use, useEffect, useS
 import { preload } from "react-dom";
 import { BenchDriver } from "./BenchDriver.tsx";
 import { loadEngine } from "./engines.ts";
+import { benchRecords, instrumentEngine, recordHybridEvent } from "./instrument.ts";
+import { blockedThreshold, startLagMonitor } from "./metrics.ts";
 import { OutlinePanel } from "./OutlinePanel.tsx";
 import { SearchBox } from "./SearchBox.tsx";
 
@@ -34,8 +36,16 @@ const settings = {
   preload: params.get("preload") !== "0",
 };
 
+const benchmarking = settings.autoscroll > 0;
+// Main-thread lag from startup until the scripted scroll begins, which
+// covers loading the engines and painting the first pages.
+const stopStartupLag = benchmarking ? startLagMonitor(blockedThreshold(settings.idle)) : null;
 // Module-level values stay referentially stable across renders.
-const enginePromise = loadEngine(settings.engine, settings.hwa);
+const enginePromise = loadEngine(settings.engine, settings.hwa, recordHybridEvent).then((engine) =>
+  benchmarking ? instrumentEngine(engine) : engine,
+);
+// Exposed for the Playwright probes; not part of the library surface.
+(window as { __benchRecords?: unknown }).__benchRecords = benchRecords;
 const source: PdfSource = { url: `/corpus/${settings.file}` };
 const viewerOptions: ViewerOptions = {
   textLayer: settings.text,
@@ -103,6 +113,7 @@ function Viewer() {
             idle={settings.idle}
             commits={commits}
             label={benchLabel}
+            stopStartupLag={stopStartupLag}
           />
         ) : null}
       </PdfDocument>

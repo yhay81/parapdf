@@ -1,5 +1,6 @@
 import { usePdfState, usePdfViewer } from "parapdf";
 import { useEffect } from "react";
+import { summarizeRecords } from "./instrument.ts";
 import {
   blockedThreshold,
   type IdleBaseline,
@@ -25,6 +26,8 @@ export interface BenchDriverProps {
   /** Shared commit counter fed by the app's <Profiler>. */
   commits: { count: number };
   label: Record<string, unknown>;
+  /** Stops the lag monitor that has run since startup; called when scrolling begins. */
+  stopStartupLag: (() => ReturnType<ReturnType<typeof startLagMonitor>>) | null;
 }
 
 /**
@@ -32,7 +35,14 @@ export interface BenchDriverProps {
  * speed, and publishes main-thread, frame, blank-area, React-commit, and
  * render counts on `window.__result` for the Playwright runner.
  */
-export function BenchDriver({ speed, durationMs, idle, commits, label }: BenchDriverProps) {
+export function BenchDriver({
+  speed,
+  durationMs,
+  idle,
+  commits,
+  label,
+  stopStartupLag,
+}: BenchDriverProps) {
   const viewer = usePdfViewer();
   const status = usePdfState((state) => state.status);
 
@@ -64,6 +74,7 @@ export function BenchDriver({ speed, durationMs, idle, commits, label }: BenchDr
       };
       const commitsBefore = commits.count;
       const startPage = viewer.store.get().currentPage;
+      const startupLag = stopStartupLag?.();
       const stopLag = startLagMonitor(blockedThreshold(idle));
       const stopFrames = startFrameMonitor(idle.frameIntervalMs);
       let sampledFrames = 0;
@@ -100,10 +111,13 @@ export function BenchDriver({ speed, durationMs, idle, commits, label }: BenchDr
         await nextFrame();
       const settleMs = performance.now() - settleStart;
       const after = viewer.stats ?? before;
+      const layout = viewer.store.get().layout;
       publish({
         ...label,
         engine: viewer.engineName,
         firstPaintMs,
+        startupLag,
+        ...(layout ? await summarizeRecords(layout.scale) : {}),
         scrollMs,
         pagesCrossed,
         commitsDuringScroll,
@@ -128,7 +142,7 @@ export function BenchDriver({ speed, durationMs, idle, commits, label }: BenchDr
     return () => {
       cancelled = true;
     };
-  }, [status, viewer, speed, durationMs, idle, commits, label]);
+  }, [status, viewer, speed, durationMs, idle, commits, label, stopStartupLag]);
 
   return null;
 }

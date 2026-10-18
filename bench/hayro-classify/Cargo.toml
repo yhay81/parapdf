@@ -1,0 +1,25 @@
+[package]
+name = "hayro-classify"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Page classifier for the ParaPDF hybrid engine: finds image-only pages without decoding images"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Only the parser of the engine under test: no rasterizer, fonts, or image
+# decoders, so the module stays small enough to load with every document.
+hayro-syntax = { version = "=0.8.0", default-features = false, features = ["std"] }
+wasm-bindgen = "=0.2.129"
+
+[profile.release]
+opt-level = "s"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ["-Os"]

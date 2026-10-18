@@ -1,11 +1,26 @@
-import { createPdfjsEngine, type PdfEngine } from "parapdf";
+import { createHybridEngine, createPdfjsEngine, type HybridEvent, type PdfEngine } from "parapdf";
 
 /**
  * `pdfjs` is released pdfjs-dist (main-thread drawing); `pdfjs-next` is pdf.js
- * master with its renderer worker. Both load lazily so neither inflates the
- * other's startup.
+ * master with its renderer worker; `hybrid` is `pdfjs-next` with image-only
+ * pages rendered by hayro. All load lazily so none inflates the others'
+ * startup.
  */
-export async function loadEngine(kind: string, enableHWA: boolean): Promise<PdfEngine> {
+export async function loadEngine(
+  kind: string,
+  enableHWA: boolean,
+  onHybridEvent?: (event: HybridEvent) => void,
+): Promise<PdfEngine> {
+  if (kind === "hybrid") {
+    // Start the hybrid worker before pdf.js loads, so the classifier module
+    // and pdf.js's modules download in parallel.
+    const worker = new Worker(new URL("./hybrid.worker.ts", import.meta.url), { type: "module" });
+    return createHybridEngine({
+      base: await loadEngine("pdfjs-next", enableHWA),
+      createWorker: () => worker,
+      onEvent: onHybridEvent,
+    });
+  }
   if (kind === "pdfjs-next") {
     const [pdfjs, worker, renderer] = await Promise.all([
       import("pdfjs-next/pdf.mjs"),

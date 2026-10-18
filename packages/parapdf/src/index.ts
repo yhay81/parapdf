@@ -1,3 +1,11 @@
+export {
+  createHybridEngine,
+  type HybridEngine,
+  type HybridEngineOptions,
+  type HybridEvent,
+  type PageClassification,
+  type PageRenderer,
+} from "./engine/hybrid.ts";
 export { createPdfjsEngine, type PdfjsEngineOptions } from "./engine/pdfjs.ts";
 export {
   type AnnotationLayerHandle,
