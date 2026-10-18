@@ -11,13 +11,14 @@
  * pnpm --filter @parapdf/prototype bench:hybrid
  * Environment: BROWSER (chromium, webkit, or firefox), VARIANTS, FILES, SPEEDS
  * (CSS px per second, 900,3600), RUNS (5), DURATION (ms, 4000), OUTPUT
- * (hybrid-<browser>). The run waits while Playwright browsers started by other
- * processes are open and repeats jobs they overlapped; ALLOW_PARALLEL=1 skips
- * that.
+ * (hybrid-<browser>), MAX_LOAD (half the logical cores). Before each job the
+ * run waits while Playwright browsers started by other processes are open or
+ * the 1-minute load average exceeds MAX_LOAD, and it repeats jobs another
+ * Playwright browser overlapped; ALLOW_PARALLEL=1 skips both waits.
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { arch, cpus, platform, release } from "node:os";
+import { arch, cpus, loadavg, platform, release } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { brotliCompressSync, constants } from "node:zlib";
@@ -49,6 +50,7 @@ const runs = Number(process.env.RUNS ?? "5");
 const durationMs = Number(process.env.DURATION ?? "4000");
 const browserName = browserFromEnv();
 const output = process.env.OUTPUT ?? `hybrid-${browserName}`;
+const maxLoad = Number(process.env.MAX_LOAD ?? String(cpus().length / 2));
 
 interface Lag {
   p95Ms: number;
@@ -67,6 +69,8 @@ interface JobResult {
   file: string;
   speed: number;
   run: number;
+  /** 1-minute load average when the job started. */
+  load?: number;
   error?: string;
   idle?: { timerLagP50Ms: number; timerLagP95Ms: number; frameIntervalMs: number };
   firstPaintMs?: number | null;
@@ -138,14 +142,28 @@ function foreignBrowsers(): string[] {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * Waits until no other Playwright browser is open and the load average is at
+ * most MAX_LOAD: other work on the machine moves every number here.
+ */
 async function waitForQuietMachine(): Promise<void> {
   if (process.env.ALLOW_PARALLEL) return;
   const start = Date.now();
-  for (let foreign = foreignBrowsers(); foreign.length; foreign = foreignBrowsers()) {
-    if (Date.now() - start > 60 * 60_000) {
-      throw new Error(`other Playwright browsers kept running for an hour:\n${foreign.join("\n")}`);
+  let reported = "";
+  for (;;) {
+    const foreign = foreignBrowsers();
+    const [load = 0] = loadavg();
+    if (foreign.length === 0 && load <= maxLoad) return;
+    const reason = foreign.length
+      ? `other Playwright browsers are open:\n  ${foreign.join("\n  ")}`
+      : `the load average is ${load.toFixed(1)}, above ${maxLoad}`;
+    if (Date.now() - start > 2 * 60 * 60_000) throw new Error(`gave up after two hours: ${reason}`);
+    // Report each reason once, then once a minute while it lasts.
+    const minute = Math.floor((Date.now() - start) / 60_000);
+    if (`${reason.split(":")[0]}${minute}` !== reported) {
+      reported = `${reason.split(":")[0]}${minute}`;
+      console.log(`Waiting: ${reason}`);
     }
-    console.log(`Waiting for other Playwright browsers to close:\n  ${foreign.join("\n  ")}`);
     await sleep(15_000);
   }
 }
@@ -214,7 +232,7 @@ async function runJob(
     deviceScaleFactor: 2,
   });
   const page = await context.newPage();
-  const job = { variant: variant.name, file, speed, run };
+  const job = { variant: variant.name, file, speed, run, load: loadavg()[0] };
   try {
     // The idle baseline comes from a page without the viewer, in the same
     // context, right before the job.
@@ -376,7 +394,11 @@ const environment = {
     timerLagP95Ms: median(ok.map((result) => result.idle?.timerLagP95Ms)),
     frameIntervalMs: median(ok.map((result) => result.idle?.frameIntervalMs)),
   },
-  settings: { runs, speeds, durationMs, viewport: "1280x900", devicePixelRatio: 2 },
+  settings: { runs, speeds, durationMs, viewport: "1280x900", devicePixelRatio: 2, maxLoad },
+  load: {
+    median: median(results.map((result) => result.load)),
+    max: Math.max(...results.map((result) => result.load ?? 0)),
+  },
   errors: results.filter((result) => result.error).map((r) => `${r.file} ${r.variant}: ${r.error}`),
 };
 const round = (_key: string, value: unknown) =>
@@ -439,6 +461,7 @@ function renderReport(): string {
     `- Run at: ${environment.runAt}`,
     `- Machine: ${environment.os}, ${environment.cpu}; ${environment.browser} (Playwright build, ${environment.headless ? "headless" : "headed"}); power: ${power.source === "ac" && !power.lowPowerMode ? "AC" : `**${power.source}${power.lowPowerMode ? ", Low Power Mode" : ""}; not comparable with AC runs**`}`,
     `- Idle baseline (calibrate.html, median of jobs): 4 ms timer late by ${fmt(environment.idle.timerLagP50Ms, 1)} ms (median) / ${fmt(environment.idle.timerLagP95Ms, 1)} ms (p95); animation frames every ${fmt(environment.idle.frameIntervalMs, 1)} ms.`,
+    `- Load: jobs started only while no other Playwright browser was open and the 1-minute load average was at most ${maxLoad}; at job start it was ${fmt(environment.load.median, 1)} (median), ${fmt(environment.load.max, 1)} at most, on ${cpus().length} logical cores.`,
     `- Variants: \`pdfjs-next-hwa\` is pdf.js master with its renderer worker on a GPU-backed canvas; \`hybrid-hwa\` is the same engine with image-only pages rendered by hayro (wasm, simd128) in the hybrid worker. Text, links, and search come from pdf.js in both.`,
     `- Method: fresh browser context per job, 1280×900 viewport at devicePixelRatio 2, fit-width zoom; ${runs} runs per file, speed, and variant, alternating which variant goes first; startup numbers pool both speeds (${runs * speeds.length} jobs per cell). Medians throughout.`,
     "- First paint: navigation start until page 1 shows pixels (its low-resolution base layer). Page 1 sharp: until page 1's full-resolution layer is on the canvas.",
