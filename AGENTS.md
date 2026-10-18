@@ -38,8 +38,12 @@ until the benchmark results justify the architecture.
 
 - `bench/` — browser engine benchmark (`@parapdf/bench`, private).
   - `src/engines/` — one adapter per engine behind `EngineAdapter`.
-  - `hayro-wasm/` — wasm-bindgen wrapper around hayro, used only by the
-    benchmark.
+  - `hayro-wasm/` — wasm-bindgen wrapper around hayro, used by the benchmark
+    and by the demo's hybrid engine.
+  - `hayro-classify/` — the hybrid engine's page classifier: hayro-syntax
+    only (no rasterizer, fonts, or image decoders) behind wasm-bindgen.
+    `cargo run --release --example classify -- file.pdf` prints its counts
+    for local PDFs.
   - `corpus/` — redistributable PDFs; sources and licenses are in its README.
   - `scripts/` — synthetic corpus generation, the Playwright runner, report
     generation, and `browsers.ts`, the browser launcher every Playwright
@@ -52,8 +56,9 @@ until the benchmark results justify the architecture.
   (`react/`). Consumed as TypeScript source through the workspace.
 - `examples/prototype/` — Vite + React 19 demo, the scripted scroll
   benchmark (`scripts/scroll-bench.ts`, results per browser in `results/`,
-  summarized by `scripts/compare.ts` in `results/browsers.md`), and
-  functional checks (`scripts/check-*.ts`).
+  summarized by `scripts/compare.ts` in `results/browsers.md`), the hybrid
+  engine benchmark (`scripts/hybrid-bench.ts`, `results/hybrid-*.{json,md}`
+  and `results/hybrid.md`), and functional checks (`scripts/check-*.ts`).
 
 ## Commands
 
@@ -64,14 +69,15 @@ until the benchmark results justify the architecture.
 - `bench/scripts/build-pdfjs-next.sh` — optional: build unreleased pdf.js
   master (renderer worker) into `bench/vendor/`; enables the `pdfjs-next`
   engines.
-- `pnpm bench:build` — build the hayro wasm module and the benchmark harness.
+- `pnpm bench:build` — build the hayro and page classifier wasm modules and
+  the benchmark harness. The demo's hybrid engine needs both modules.
 - `pnpm bench` — run the engine benchmark; results go to
   `bench/results/<browser>.{json,md}` and `bench/results/browsers.md`.
   `BROWSER` (`chromium`, `webkit`, or `firefox`) picks the browser;
   `ENGINES`, `FILES`, `RUNS`, `PAGES`, and `SCALE` narrow a run.
 - `pnpm --filter @parapdf/prototype dev` — run the demo; query parameters
-  select `engine` (`pdfjs` or `pdfjs-next`), `hwa`, `text`, `file`, and
-  `preload`.
+  select `engine` (`pdfjs`, `pdfjs-next`, or `hybrid`), `hwa`, `text`,
+  `file`, and `preload`.
 - `pnpm --filter @parapdf/prototype build && pnpm --filter @parapdf/prototype bench`
   — scripted scroll benchmark; `BROWSER` picks the browser, and `VARIANTS`,
   `TEXT`, `LINKS`, `FILES`, `SPEEDS` (CSS px per second), `RUNS`, `DURATION`,
@@ -83,6 +89,17 @@ until the benchmark results justify the architecture.
 - `pnpm --filter @parapdf/prototype check:links` — functional checks for
   internal and external links, keyboard activation, the back stack, and the
   outline on `usrguide.pdf` (run after `build`; `BROWSER` applies here too).
+  `ENGINE=hybrid` runs this and `check:text` on the hybrid engine.
+- `pnpm --filter @parapdf/prototype check:hybrid` — functional checks for the
+  hybrid engine: which engine renders each page, that text documents never
+  load hayro, hayro's pixels against pdf.js's, OCR text search and selection
+  on hayro-rendered pages, and zoom (run after `build`; `BROWSER` applies).
+- `pnpm --filter @parapdf/prototype bench:hybrid` — hybrid engine benchmark
+  (`pdfjs-next-hwa` against `hybrid-hwa`); `BROWSER`, `VARIANTS`, `FILES`,
+  `SPEEDS`, `RUNS`, `DURATION`, and `OUTPUT` narrow or rename a run. Before
+  every job it waits until no Playwright browser started by another process
+  is open and the 1-minute load average is at most `MAX_LOAD` (half the
+  logical cores), and it gives up after two hours of waiting.
 - `pnpm check` — Biome lint and format check. `pnpm format` applies fixes.
 - `pnpm typecheck` — TypeScript checks for every workspace package.
 
@@ -149,6 +166,30 @@ until the benchmark results justify the architecture.
   WebKit, and Firefox. WebKit has neither `requestIdleCallback` nor
   `scheduler.yield`, so idle text and annotation layers fall back to a 16 ms
   timer and search yields through `setTimeout(0)`.
+- Hybrid engine (experiment): `createHybridEngine` (`engine/hybrid.ts`)
+  wraps the pdf.js engine behind the same boundary. Image-only pages render
+  with hayro; every other page, and every page's text layer, links, search,
+  outline, and size, stay on pdf.js. Its worker (`engine/hybrid-worker.ts`,
+  entry `examples/prototype/src/hybrid.worker.ts`) starts with the engine,
+  loads the page classifier (93 KiB brotli), fetches the PDF itself, and
+  classifies each page before its first render without decoding images. A
+  page goes to hayro when it has no visible text (rendering modes 3 and 7,
+  which OCR layers use, count as invisible), an image covering at least half
+  of the crop box, at most 64 path segments, no shadings, and no non-link
+  annotation appearances; the walk stops at the first visible text, the 65th
+  segment, or before decoding more than 256 KiB of encoded content. The hayro
+  module (1.36 MiB brotli) loads in the same worker on the first render of an
+  image-only page. A render waits up to 250 ms for its page's classification,
+  then uses pdf.js. hayro's bitmaps reach the canvas through a
+  `bitmaprenderer` context (a canvas pdf.js drew first gets `drawImage`, and
+  pdf.js draws through a scratch canvas when hayro owns the target); after
+  two hayro failures in a document, every page goes to pdf.js.
+- Hybrid engine costs: the worker downloads the PDF again (from the HTTP
+  cache when the response allows it), the classifier and hayro parse it again,
+  and hayro decodes a page's images for every render (base and detail),
+  where pdf.js keeps decoded images between renders of a page. The benchmark
+  wrapper in `bench/hayro-wasm` leaks each parsed document (`Box::leak`),
+  which is fine for one document per page but not for an application.
 - Not yet implemented: form filling, structure tree (tagged PDF) semantics,
   text for pages outside the mounted window, highlight fallback for browsers
   without the CSS Custom Highlight API, optional content toggles, attachments,
@@ -207,6 +248,18 @@ until the benchmark results justify the architecture.
   to input or scrolling.
 - Payload is the brotli size of each engine's own assets in `bench/dist/`; the
   `pdfjs-next` workers are unminified.
+- Playwright's Firefox 157 ignores `deviceScaleFactor` on cross-origin-isolated
+  pages: with `deviceScaleFactor: 2`, a page reports `devicePixelRatio` 2
+  without COOP and COEP and 1 with them. The demo is isolated, so its Firefox
+  runs render detail canvases at a quarter of the pixels of the Chromium and
+  WebKit runs; compare Firefox's demo timings within Firefox only until the
+  launcher forces the ratio (for example with the `layout.css.devPixelsPerPx`
+  pref). The engine benchmark renders at a fixed scale and is not affected.
+- A runner that waits for other processes' Playwright browsers must tell its
+  own apart by ancestry and skip WebKit's helpers (`com.apple.WebKit.*`),
+  whose parent is launchd: counting them as foreign makes a runner wait for
+  its own browser while holding it open, and every other careful runner then
+  waits for it too (seen on 2026-10-18 for more than two hours).
 - Review fidelity in `bench/results/raw/<browser>-contact.html` before
   trusting a speed win: an engine that skips content is fast for the wrong
   reason.

@@ -136,6 +136,52 @@ about 20 ms as noise.
   text for pages outside the mounted window, and region rendering beyond the
   16 MP detail cap.
 
+### Hybrid engine experiment (2026-10-18, measurement pending)
+
+The engine benchmark found one clear WebAssembly win: hayro renders the three
+scans faster than pdf.js master with its renderer worker in every browser and
+without main-thread stalls, while pdf.js stays ahead on vector pages and is
+the only engine that draws non-embedded Japanese fonts. The hybrid engine
+(`?engine=hybrid` in the demo, `createHybridEngine` in the package) tests
+whether a viewer can take that win per page; another engine replaces pdf.js
+only after a reproducible win, so it stays an experiment.
+
+- **Routing.** A classifier built from hayro's parser alone reads each page's
+  content stream before its first render, without decoding images. Image-only
+  pages render with hayro; everything else, and every page's text layer,
+  links, and search, stays on pdf.js. OCR text in rendering mode 3 counts as
+  invisible, so OCR'd scans such as the patent qualify. On the corpus, the
+  three scans and the JPEG 2000 fixture go to hayro and every other page to
+  pdf.js; see
+  [`hybrid-classifier.md`](examples/prototype/results/hybrid-classifier.md).
+- **Cost of classifying.** Natively, the median page costs 1–117 µs
+  depending on the file (0.9 ms on `f1040.pdf`, whose 53 form fields are read
+  first), and parsing a document 0.01–14 ms; the 200,000-segment vector page
+  is never decoded because its content stream is over the 256 KiB limit. The
+  in-browser cost, as WebAssembly in a worker, awaits the benchmark.
+- **Payload.** 95 KiB brotli with every document (the classifier and the
+  worker), 1,363 KiB more only once a document has an image-only page. Text
+  documents never request the hayro module.
+- **Behavior.** [`check-hybrid.ts`](examples/prototype/scripts/check-hybrid.ts)
+  passes in Chromium, WebKit, and Firefox: routing, the lazy load, hayro's
+  page 1 within 0.5–1.2 of 255 per channel of pdf.js's, OCR text search and
+  selection on hayro-rendered pages, and zoom. `check-text.ts` and
+  `check-links.ts` pass unchanged on the hybrid engine
+  ([`hybrid-checks.md`](examples/prototype/results/hybrid-checks.md)).
+- **Known costs.** The worker fetches the PDF again (from the HTTP cache when
+  the response allows), the classifier and hayro parse it twice more, and
+  hayro decodes a page's images for every render (base and detail), where
+  pdf.js keeps decoded images between renders of a page.
+- **Not measured yet.** First paint, full-resolution page 1, the main
+  thread's longest stall, render times, and WebAssembly memory come from
+  [`hybrid-bench.ts`](examples/prototype/scripts/hybrid-bench.ts), which runs
+  only while no other Playwright browser is open and the load average is at
+  most half the logical cores. Neither held on 2026-10-18 (load average
+  14–145 on 12 cores, and another session's WebKit run open for hours).
+  Firefox numbers from the demo also need its device pixel ratio fixed first:
+  Playwright's Firefox ignores `deviceScaleFactor` on cross-origin-isolated
+  pages and renders the demo at devicePixelRatio 1.
+
 ## License
 
 [MIT](LICENSE)
