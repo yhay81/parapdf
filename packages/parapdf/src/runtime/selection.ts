@@ -6,10 +6,25 @@
  *
  * Every text layer ends with an `.endOfContent` element. While a selection
  * touches a layer, the layer has the `selecting` class, and the viewer CSS
- * stretches that element over the page so that dragging past the last run
- * does not select from the page's start. WebKit and Chromium before 148
- * instead extend such a selection to wherever `.endOfContent` sits in the
- * DOM, so the element moves next to the run where the selection is changing.
+ * stretches that unselectable element over the page so that dragging past
+ * the last run does not select from the page's start. Browsers other than
+ * Firefox and Chromium 148 or later may instead extend such a selection to
+ * wherever `.endOfContent` sits in the DOM (Playwright's WebKit 27.2 did while
+ * the element lacked `-webkit-user-select: none`), so in them the element
+ * moves next to the run where the selection is changing.
+ *
+ * Over space without text, WebKit and Firefox put the end of a drag selection
+ * at the start of the element under the pointer, where Chromium picks the
+ * nearest text: over the space between and beside the pages, the start of the
+ * first mounted page; over the blank space of a page above the selection,
+ * which the pointer enters from below, that page's start. So in WebKit and
+ * Firefox, from a primary-button press in a text layer until the pointer is
+ * released, the pages element has the `selecting` class, which makes that
+ * space unselectable, and every text layer above the selection has
+ * `selecting` and `before-selection`, which make its `.endOfContent`
+ * selectable, so its blank space selects up to the page's end. Pages below
+ * the selection keep the browser's behaviour, which selects up to their
+ * start.
  *
  * pdf.js shares one set of document listeners among all its text layers;
  * here every viewer owns a tracker, so destroying one viewer cannot switch
@@ -20,8 +35,20 @@ export class TextSelectionTracker {
   readonly #layers = new Map<HTMLElement, HTMLElement>();
   #listeners: AbortController | null = null;
   #pointerDown = false;
+  /** In WebKit and Firefox, a drag that started in a tracked text layer is in progress. */
+  #dragging = false;
   #previousRange: Range | null = null;
-  #keepsSelectionInRuns: boolean | undefined;
+  #quirks: SelectionQuirks | undefined;
+  #pages: HTMLElement | null = null;
+
+  /** Binds the element that holds the pages; returns the function that releases it. */
+  attachPages(pages: HTMLElement): () => void {
+    this.#pages = pages;
+    return () => {
+      pages.classList.remove("selecting");
+      if (this.#pages === pages) this.#pages = null;
+    };
+  }
 
   /** Tracks a rendered text layer whose last child is `end`. */
   add(layer: HTMLElement, end: HTMLElement): void {
@@ -45,14 +72,20 @@ export class TextSelectionTracker {
     this.#listeners?.abort();
     this.#listeners = null;
     this.#pointerDown = false;
+    this.#endDrag();
     this.#previousRange = null;
+  }
+
+  #endDrag(): void {
+    this.#dragging = false;
+    this.#pages?.classList.remove("selecting");
   }
 
   #reset(layer: HTMLElement, end: HTMLElement): void {
     layer.append(end);
     end.style.width = "";
     end.style.height = "";
-    layer.classList.remove("selecting");
+    layer.classList.remove("selecting", "before-selection");
   }
 
   #resetAll(): void {
@@ -65,6 +98,7 @@ export class TextSelectionTracker {
     const options = { signal: this.#listeners.signal };
     const release = () => {
       this.#pointerDown = false;
+      this.#endDrag();
       this.#resetAll();
     };
     document.addEventListener(
@@ -72,8 +106,12 @@ export class TextSelectionTracker {
       (event) => {
         const layer =
           event.target instanceof Element ? event.target.closest(".parapdf-text-layer") : null;
-        if (layer instanceof HTMLElement && this.#layers.has(layer)) {
-          layer.classList.add("selecting");
+        if (!(layer instanceof HTMLElement) || !this.#layers.has(layer)) return;
+        layer.classList.add("selecting");
+        this.#quirks ??= selectionQuirks();
+        if (event.button === 0 && this.#quirks.endsAtStartOfBlankSpace) {
+          this.#dragging = true;
+          this.#pages?.classList.add("selecting");
         }
       },
       options,
@@ -112,13 +150,21 @@ export class TextSelectionTracker {
         if (!active.has(layer) && range.intersectsNode(layer)) active.add(layer);
       }
     }
+    const focus = selection.focusNode;
     for (const [layer, end] of this.#layers) {
-      if (active.has(layer)) layer.classList.add("selecting");
-      else this.#reset(layer, end);
+      if (active.has(layer)) {
+        layer.classList.add("selecting");
+        layer.classList.remove("before-selection");
+      } else {
+        this.#reset(layer, end);
+        if (this.#dragging && focus && precedes(layer, focus)) {
+          layer.classList.add("selecting", "before-selection");
+        }
+      }
     }
 
-    this.#keepsSelectionInRuns ??= keepsSelectionInRuns();
-    if (this.#keepsSelectionInRuns) return;
+    this.#quirks ??= selectionQuirks();
+    if (this.#quirks.keepsSelectionInRuns) return;
     // Move `.endOfContent` next to the end of the selection that is changing,
     // so a jump covers at most the run being dragged over.
     const range = selection.getRangeAt(0);
@@ -150,16 +196,34 @@ export class TextSelectionTracker {
   }
 }
 
+/** Whether `layer` comes before `node` in the document and does not contain it. */
+const precedes = (layer: Node, node: Node): boolean =>
+  (layer.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0 &&
+  !layer.contains(node);
+
 interface UserAgentData {
   brands: { brand: string; version: string }[];
 }
 
-/** Firefox, and Chromium from version 148, stop a selection at the runs without help. */
-function keepsSelectionInRuns(): boolean {
-  if (CSS.supports("-moz-user-select", "none")) return true;
+interface SelectionQuirks {
+  /** Firefox, and Chromium from version 148, stop a selection at the runs without help. */
+  keepsSelectionInRuns: boolean;
+  /**
+   * WebKit and Firefox end a drag selection over space without text at the
+   * start of the element under the pointer; Chromium at the nearest text.
+   */
+  endsAtStartOfBlankSpace: boolean;
+}
+
+function selectionQuirks(): SelectionQuirks {
+  const firefox = CSS.supports("-moz-user-select", "none");
   const { userAgentData } = navigator as Navigator & { userAgentData?: UserAgentData };
   const version = userAgentData
     ? userAgentData.brands.find(({ brand }) => brand === "Chromium")?.version
     : /\bChrome\/(\d+)\b/.exec(navigator.userAgent)?.[1];
-  return version !== undefined && Number.parseInt(version, 10) >= 148;
+  const chromium = version === undefined ? undefined : Number.parseInt(version, 10);
+  return {
+    keepsSelectionInRuns: firefox || (chromium !== undefined && chromium >= 148),
+    endsAtStartOfBlankSpace: chromium === undefined,
+  };
 }

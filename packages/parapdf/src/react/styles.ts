@@ -6,7 +6,15 @@
  * `web/pdf_viewer.css` (Copyright Mozilla Foundation, Apache License 2.0; see
  * NOTICE.md). pdf.js's `TextLayer` and `AnnotationLayer` size and position
  * their elements through these classes and custom properties, so the rules
- * must match its expectations.
+ * must match its expectations. Like pdf.js's, they declare
+ * `-webkit-user-select` next to `user-select`: Playwright's WebKit 27.2
+ * parses `user-select` but follows only the prefixed property when the mouse
+ * selects text.
+ *
+ * The `.before-selection` and `.parapdf-pages.selecting` rules are ParaPDF's
+ * own, for drag selections in WebKit and Firefox (see `TextSelectionTracker`):
+ * the first makes a text layer's `.endOfContent` selectable, the second makes
+ * the space between and beside the pages unselectable.
  */
 export const VIEWER_CSS = `
 .parapdf-text-layer {
@@ -35,6 +43,7 @@ export const VIEWER_CSS = `
   white-space: pre;
   cursor: text;
   transform-origin: 0% 0%;
+  -webkit-user-select: text;
   user-select: text;
 }
 .parapdf-text-layer > :not(.markedContent),
@@ -47,7 +56,7 @@ export const VIEWER_CSS = `
   transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
 }
 .parapdf-text-layer .markedContent { display: contents; }
-.parapdf-text-layer span[role="img"] { user-select: none; cursor: default; }
+.parapdf-text-layer span[role="img"] { -webkit-user-select: none; user-select: none; cursor: default; }
 .parapdf-text-layer ::selection {
   background: rgba(0 0 255 / 0.25);
   background: color-mix(in srgb, AccentColor, transparent 50%);
@@ -60,9 +69,11 @@ export const VIEWER_CSS = `
   inset: 100% 0 0;
   z-index: 0;
   cursor: default;
+  -webkit-user-select: none;
   user-select: none;
 }
 .parapdf-text-layer.selecting .endOfContent { top: 0; }
+.parapdf-text-layer.before-selection .endOfContent { -webkit-user-select: text; user-select: text; }
 .parapdf-text-layer[data-main-rotation="90"] { transform: rotate(90deg) translateY(-100%); }
 .parapdf-text-layer[data-main-rotation="180"] { transform: rotate(180deg) translate(-100%, -100%); }
 .parapdf-text-layer[data-main-rotation="270"] { transform: rotate(270deg) translateX(-100%); }
@@ -87,6 +98,7 @@ export const VIEWER_CSS = `
   pointer-events: auto;
   box-sizing: border-box;
   transform-origin: 0 0;
+  -webkit-user-select: none;
   user-select: none;
 }
 .parapdf-annotation-layer section .overlaidText {
@@ -117,6 +129,8 @@ export const VIEWER_CSS = `
   outline: 2px solid Highlight;
   outline-offset: 1px;
 }
+.parapdf-pages.selecting { -webkit-user-select: none; user-select: none; }
+.parapdf-pages.selecting > section { -webkit-user-select: text; user-select: text; }
 ::highlight(parapdf-search) { background-color: rgb(255 200 0 / 0.45); }
 ::highlight(parapdf-search-current) { background-color: rgb(255 110 0 / 0.65); }
 .parapdf-viewport:focus-visible { outline: 2px solid Highlight; outline-offset: -2px; }

@@ -13,6 +13,6 @@ The full license text is in
 |---|---|---|
 | `packages/parapdf/src/react/styles.ts` | `web/pdf_viewer.css` (pdfjs-dist 6.4.299), `.textLayer` and `.annotationLayer` rules | Renamed to `.parapdf-text-layer` and `.parapdf-annotation-layer`; editing, form, popup, and image rules omitted. |
 | `packages/parapdf/src/runtime/scheduler.ts` | `web/text_layer_builder.js` | The `endOfContent` element appended after each text layer. |
-| `packages/parapdf/src/runtime/selection.ts` | `web/text_layer_builder.js` (pdfjs-dist 6.4.299), `TextLayerBuilder` | The selection handling: the `selecting` class on text layers a selection touches, its reset on pointer release, blur, and key release, and moving `endOfContent` next to the changing end of the selection in browsers other than Firefox and Chromium 148 or later. Each viewer owns its listeners instead of sharing static ones. |
+| `packages/parapdf/src/runtime/selection.ts` | `web/text_layer_builder.js` (pdfjs-dist 6.4.299), `TextLayerBuilder` | The selection handling: the `selecting` class on text layers a selection touches, its reset on pointer release, blur, and key release, and moving `endOfContent` next to the changing end of the selection in browsers other than Firefox and Chromium 148 or later. Each viewer owns its listeners instead of sharing static ones; the drag handling for the space around the pages and for text layers above the selection is ParaPDF's own. |
 
 pdf.js itself is a peer dependency and is not redistributed by ParaPDF.
