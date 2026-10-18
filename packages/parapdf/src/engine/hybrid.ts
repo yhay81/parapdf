@@ -267,9 +267,16 @@ class HybridDocument implements PdfEngineDocument {
     let inner: RenderTask | undefined;
     let workerRequest: number | undefined;
 
+    // A cancel that lands after a step settled but before this code resumes
+    // must still stop the render.
+    const stopIfCancelled = () => {
+      if (isCancelled) throw new RenderCancelledError("render cancelled");
+    };
+
     const promise = (async () => {
       const start = performance.now();
       const renderer = await Promise.race([this.#decide(pageIndex), cancelled.promise]);
+      stopIfCancelled();
       const channel = this.#channel;
       if (renderer === "hayro" && channel) {
         try {
@@ -286,6 +293,8 @@ class HybridDocument implements PdfEngineDocument {
             () => {},
           );
           const result = await Promise.race([rendering, cancelled.promise]);
+          if (isCancelled) result.bitmap.close();
+          stopIfCancelled();
           if (result.rendererLoad) {
             this.#settings.emit({
               type: "renderer-loaded",
