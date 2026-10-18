@@ -9,7 +9,8 @@
     "check:text": "node scripts/check-text.ts",
     "check:links": "node scripts/check-links.ts",
     "typecheck": "tsc -p .",
-    "check:hybrid": "node scripts/check-hybrid.ts"
+    "check:hybrid": "node scripts/check-hybrid.ts",
+    "bench:hybrid": "node scripts/hybrid-bench.ts"
   },
   "dependencies": {
     "parapdf": "workspace:*",

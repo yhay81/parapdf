@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "build:hayro": "RUSTFLAGS='-C target-feature=+simd128' wasm-pack build hayro-wasm --target web --release --out-dir pkg --no-pack",
-    "build": "pnpm run build:hayro && vite build",
+    "build:classify": "wasm-pack build hayro-classify --target web --release --out-dir pkg --no-pack",
+    "build": "pnpm run build:hayro && pnpm run build:classify && vite build",
     "corpus": "node scripts/gen-synthetic.ts",
     "bench": "node scripts/run.ts",
     "typecheck": "tsc -p ."
