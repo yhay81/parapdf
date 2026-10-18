@@ -16,7 +16,9 @@
  * the 1-minute load average exceeds MAX_LOAD, and it repeats jobs another
  * Playwright browser overlapped; ALLOW_PARALLEL=1 skips both waits.
  * IGNORE_PIDS lists processes whose Playwright browsers do not count, such as
- * an idle runner stuck holding its browser; the report names them.
+ * an idle runner stuck holding its browser; the report names them. Results are
+ * saved after every job, and RESUME=1 continues an interrupted run with the
+ * same settings instead of starting over.
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -117,13 +119,17 @@ const median = (values: (number | null | undefined)[]): number => {
     : ((sorted[mid - 1] as number) + (sorted[mid] as number)) / 2;
 };
 
+/** The process table; a busy machine's full command lines exceed execFileSync's default buffer. */
+const processTable = (columns: string) =>
+  execFileSync("ps", ["-axo", columns], { encoding: "utf8", maxBuffer: 64 * 2 ** 20 });
+
 /**
  * Playwright browsers and test runners that another process started. Browser
  * main processes are children of their driver, so ancestry tells ours apart;
  * WebKit's helper processes belong to launchd and are skipped.
  */
 function foreignBrowsers(): string[] {
-  const rows = execFileSync("ps", ["-axo", "pid=,ppid=,command="], { encoding: "utf8" })
+  const rows = processTable("pid=,ppid=,command=")
     .split("\n")
     .map((line) => /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line))
     .filter((match): match is RegExpExecArray => match !== null)
@@ -150,7 +156,7 @@ function foreignBrowsers(): string[] {
 /** CPU seconds of the IGNORE_PIDS processes and their descendants. */
 function ignoredProcesses(): { pid: number; cpuSeconds: number; command: string }[] {
   if (ignoredRoots.size === 0) return [];
-  const rows = execFileSync("ps", ["-axo", "pid=,ppid=,time=,command="], { encoding: "utf8" })
+  const rows = processTable("pid=,ppid=,time=,command=")
     .split("\n")
     .map((line) => /^\s*(\d+)\s+(\d+)\s+([\d:.]+)\s+(.*)$/.exec(line))
     .filter((match): match is RegExpExecArray => match !== null)
@@ -301,7 +307,30 @@ async function runJob(
   }
 }
 
-const results: JobResult[] = [];
+// Saved after every job so an interrupted run can continue (RESUME=1).
+const partialPath = join(resultsDir, "raw", `${output}-partial.json`);
+const settingsKey = JSON.stringify({ variants, files, speeds, runs, durationMs });
+const resumed: JobResult[] = [];
+if (process.env.RESUME && existsSync(partialPath)) {
+  const saved = JSON.parse(readFileSync(partialPath, "utf8")) as {
+    settingsKey: string;
+    results: JobResult[];
+  };
+  if (saved.settingsKey !== settingsKey) throw new Error(`${partialPath} has other settings`);
+  resumed.push(...saved.results.filter((result) => !result.error));
+  console.log(`Resuming with ${resumed.length} finished jobs from ${partialPath}`);
+}
+const results: JobResult[] = [...resumed];
+const finished = (variant: string, file: string, speed: number, run: number) =>
+  results.some(
+    (result) =>
+      result.variant === variant &&
+      result.file === file &&
+      result.speed === speed &&
+      result.run === run &&
+      !result.error,
+  );
+mkdirSync(join(resultsDir, "raw"), { recursive: true });
 try {
   // Discarded jobs warm the GPU process and the server for each variant.
   for (const variant of variants) await runJob(variant, files[0] ?? "", speeds[0] ?? 900, -1);
@@ -311,8 +340,9 @@ try {
         // Alternate which variant goes first so drift affects both alike.
         const ordered = run % 2 ? [...variants].reverse() : variants;
         for (const variant of ordered) {
+          if (finished(variant.name, file, speed, run)) continue;
           let result: JobResult | undefined;
-          for (let attempt = 0; attempt < 3 && !result; attempt++) {
+          for (let attempt = 0; attempt < 10 && !result; attempt++) {
             await waitForQuietMachine();
             // Stop without writing results if the machine lost AC power mid-run.
             assertMeasurementPower();
@@ -322,6 +352,7 @@ try {
           }
           if (!result) throw new Error("other Playwright browsers kept overlapping the jobs");
           results.push(result);
+          writeFileSync(partialPath, JSON.stringify({ settingsKey, results }));
           const hybrid = result.hybrid;
           console.log(
             `${file} · ${speed} px/s · ${variant.name} · run ${run + 1}/${runs}: ${
@@ -433,6 +464,8 @@ const environment = {
     frameIntervalMs: median(ok.map((result) => result.idle?.frameIntervalMs)),
   },
   settings: { runs, speeds, durationMs, viewport: "1280x900", devicePixelRatio: 2, maxLoad },
+  /** Jobs carried over from an interrupted run of the same settings. */
+  resumedJobs: resumed.length,
   load: {
     median: median(results.map((result) => result.load)),
     max: Math.max(...results.map((result) => result.load ?? 0)),
@@ -518,7 +551,12 @@ function renderReport(): string {
         ]
       : []),
     `- Variants: \`pdfjs-next-hwa\` is pdf.js master with its renderer worker on a GPU-backed canvas; \`hybrid-hwa\` is the same engine with image-only pages rendered by hayro (wasm, simd128) in the hybrid worker. Text, links, and search come from pdf.js in both.`,
-    `- Method: fresh browser context per job, 1280×900 viewport at devicePixelRatio 2, fit-width zoom; ${runs} runs per file, speed, and variant, alternating which variant goes first; startup numbers pool both speeds (${runs * speeds.length} jobs per cell). Medians throughout.`,
+    `- Method: fresh browser context per job, 1280×900 viewport at devicePixelRatio 2, fit-width zoom; ${runs} runs per file, speed, and variant, alternating which variant goes first; startup numbers pool both speeds (${runs * speeds.length} jobs per cell). Medians throughout.${environment.resumedJobs ? ` ${environment.resumedJobs} jobs come from an interrupted run of the same build and settings.` : ""}`,
+    ...(browserName === "firefox"
+      ? [
+          "- **Firefox renders at devicePixelRatio 1 here**: Playwright's Firefox ignores `deviceScaleFactor` on cross-origin-isolated pages, so its detail canvases hold a quarter of the pixels of the Chromium and WebKit runs. Compare Firefox's variants with each other, not with other browsers.",
+        ]
+      : []),
     "- First paint: navigation start until page 1 shows pixels (its low-resolution base layer). Page 1 sharp: until page 1's full-resolution layer is on the canvas.",
     "- Longest stall: the largest lateness of a 4 ms timer on the main thread, from startup until the scroll begins (startup) or during the scroll. Blocked: summed lateness beyond 2 ms or the idle page's 95th percentile, whichever is larger.",
     "- Render: from the scheduler's request until the pixels are on the canvas, per canvas layer (base at half a device pixel per CSS pixel, detail at full resolution) and per engine; median of each job's median. Renders overlap (two at a time), so this is latency, not CPU time.",
