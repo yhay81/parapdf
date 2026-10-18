@@ -94,12 +94,16 @@ function gpuRenderer(): string | undefined {
 
 const nextFrame = () => new Promise((resolve) => requestAnimationFrame(resolve));
 
+const quantile = (sorted: number[], q: number): number =>
+  sorted[Math.min(sorted.length - 1, Math.ceil(q * sorted.length) - 1)] ?? 0;
+
 /**
  * Measures main-thread availability: a 4 ms timer chain records how late each
  * tick fires. Lateness is time the event loop could not service input, so its
- * sum approximates how long rendering kept the main thread busy.
+ * sum approximates how long rendering kept the main thread busy. Only lateness
+ * beyond `thresholdMs` counts as blocked; see blockedThreshold().
  */
-function startLagMonitor(intervalMs = 4) {
+function startLagMonitor(thresholdMs: number, intervalMs = 4) {
   const lags: number[] = [];
   let running = true;
   let expected = performance.now() + intervalMs;
@@ -113,19 +117,71 @@ function startLagMonitor(intervalMs = 4) {
   return () => {
     running = false;
     const sorted = [...lags].sort((a, b) => a - b);
-    const p = (q: number) =>
-      sorted[Math.min(sorted.length - 1, Math.ceil(q * sorted.length) - 1)] ?? 0;
     return {
       samples: lags.length,
-      p95Ms: p(0.95),
+      p95Ms: quantile(sorted, 0.95),
       maxMs: sorted.at(-1) ?? 0,
-      blockedMs: lags.reduce((sum, lag) => sum + lag, 0),
+      blockedMs: lags.reduce((sum, lag) => sum + Math.max(0, lag - thresholdMs), 0),
+      rawLagMs: lags.reduce((sum, lag) => sum + lag, 0),
     };
   };
 }
 
-/** Records animation-frame intervals while optionally burning `workMs` per frame. */
-function startFrameMonitor(workMs: number) {
+/**
+ * Lateness that counts as blocked: beyond 2 ms, so the small delays every
+ * frame adds while a page scrolls or animates do not pile up, and beyond the
+ * idle page's 95th percentile, because WebKit delivers even idle timers about
+ * 4 ms late.
+ */
+const blockedThreshold = (idle: { timerLagP95Ms: number }): number =>
+  Math.max(2, idle.timerLagP95Ms);
+
+/**
+ * Timer lateness and frame interval of the idle page, measured before the
+ * engine loads: the baseline that blocked time and dropped frames are judged
+ * against in each browser.
+ */
+async function measureIdle(durationMs = 500) {
+  const lags: number[] = [];
+  const frames: number[] = [];
+  const until = performance.now() + durationMs;
+  await Promise.all([
+    new Promise<void>((resolve) => {
+      let expected = performance.now() + 4;
+      const tick = () => {
+        const now = performance.now();
+        lags.push(Math.max(0, now - expected));
+        expected = now + 4;
+        if (now < until) setTimeout(tick, 4);
+        else resolve();
+      };
+      setTimeout(tick, 4);
+    }),
+    new Promise<void>((resolve) => {
+      let last = -1;
+      const tick = (now: number) => {
+        if (last >= 0) frames.push(now - last);
+        last = now;
+        if (now < until) requestAnimationFrame(tick);
+        else resolve();
+      };
+      requestAnimationFrame(tick);
+    }),
+  ]);
+  lags.sort((a, b) => a - b);
+  frames.sort((a, b) => a - b);
+  return {
+    timerLagP50Ms: quantile(lags, 0.5),
+    timerLagP95Ms: quantile(lags, 0.95),
+    frameIntervalMs: quantile(frames, 0.5),
+  };
+}
+
+/**
+ * Records animation-frame intervals while optionally burning `workMs` per
+ * frame. A frame longer than 1.5 idle intervals missed at least one vsync.
+ */
+function startFrameMonitor(workMs: number, idleFrameMs: number) {
   const intervals: number[] = [];
   let running = true;
   let last = performance.now();
@@ -144,21 +200,19 @@ function startFrameMonitor(workMs: number) {
   return () => {
     running = false;
     const sorted = [...intervals].sort((a, b) => a - b);
-    const p = (q: number) =>
-      sorted[Math.min(sorted.length - 1, Math.ceil(q * sorted.length) - 1)] ?? 0;
     return {
       frames: intervals.length,
-      p50Ms: p(0.5),
-      p95Ms: p(0.95),
+      p50Ms: quantile(sorted, 0.5),
+      p95Ms: quantile(sorted, 0.95),
       maxMs: sorted.at(-1) ?? 0,
-      // A frame longer than two vsync intervals at 60 Hz means at least one drop.
-      dropped: intervals.filter((interval) => interval > 34).length,
+      dropped: intervals.filter((interval) => interval > idleFrameMs * 1.5).length,
     };
   };
 }
 
 async function run() {
   if (status) status.textContent = `${engineId} · ${file}`;
+  const idle = await measureIdle();
   const start = performance.now();
   const engine = await loadEngine(engineId);
   stage?.append(engine.canvas);
@@ -178,8 +232,8 @@ async function run() {
   const presentMs: number[] = [];
   const rasterMs: number[] = [];
   await nextFrame();
-  const stopFrames = startFrameMonitor(frameWorkMs);
-  const stopLag = startLagMonitor();
+  const stopFrames = startFrameMonitor(frameWorkMs, idle.frameIntervalMs);
+  const stopLag = startLagMonitor(blockedThreshold(idle));
   const phaseStart = performance.now();
   for (let index = 0; index < pages; index++) {
     const renderStart = performance.now();
@@ -217,6 +271,7 @@ async function run() {
     presentMs,
     rasterMs,
     renderPhaseMs: phaseEnd - phaseStart,
+    idle,
     frames,
     lag,
     longTasks: summarize(longTasks, phaseStart, phaseEnd),

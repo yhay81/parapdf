@@ -4,11 +4,13 @@
  * back stack, outline consistency, and external link attributes.
  *
  * Usage: pnpm --filter @parapdf/prototype build && pnpm --filter @parapdf/prototype check:links
+ * Environment: BROWSER (chromium, webkit, or firefox), ENGINE (pdfjs-next).
  */
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { chromium, type Page } from "playwright";
+import type { Page } from "playwright";
 import { preview } from "vite";
+import { launchBrowser } from "../../../bench/scripts/browsers.ts";
 
 const exampleDir = fileURLToPath(new URL("..", import.meta.url));
 const engine = process.env.ENGINE ?? "pdfjs-next";
@@ -55,8 +57,9 @@ const server = await preview({
   preview: { port: 4186, strictPort: false, open: false },
 });
 const baseUrl = server.resolvedUrls?.local[0] ?? "http://localhost:4186/";
-const browser = await chromium.launch({ args: ["--use-angle=metal", "--enable-gpu"] });
-const context = await browser.newContext({
+const launched = await launchBrowser();
+console.log(`${launched.label}, engine ${engine}`);
+const context = await launched.browser.newContext({
   viewport: { width: 1280, height: 900 },
   deviceScaleFactor: 2,
 });
@@ -163,7 +166,7 @@ try {
 
   check("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));
 } finally {
-  await browser.close();
+  await launched.close();
   await server.close();
 }
 

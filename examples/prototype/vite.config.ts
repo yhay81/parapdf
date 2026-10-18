@@ -62,5 +62,17 @@ export default defineConfig(({ command }) => ({
   server: { headers: isolationHeaders },
   preview: { headers: isolationHeaders },
   worker: { format: "es" },
-  build: { target: "es2023", outDir: "dist", emptyOutDir: true, assetsInlineLimit: 0 },
+  build: {
+    target: "es2023",
+    outDir: "dist",
+    emptyOutDir: true,
+    assetsInlineLimit: 0,
+    // calibrate.html measures the idle baseline for the scroll benchmark.
+    rolldownOptions: {
+      input: {
+        main: join(exampleDir, "index.html"),
+        calibrate: join(exampleDir, "calibrate.html"),
+      },
+    },
+  },
 }));

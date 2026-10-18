@@ -41,36 +41,48 @@ until the benchmark results justify the architecture.
   - `hayro-wasm/` — wasm-bindgen wrapper around hayro, used only by the
     benchmark.
   - `corpus/` — redistributable PDFs; sources and licenses are in its README.
-  - `scripts/` — synthetic corpus generation and the Playwright runner.
-  - `results/` — committed result summaries (`latest.md`, `latest.json`).
+  - `scripts/` — synthetic corpus generation, the Playwright runner, report
+    generation, and `browsers.ts`, the browser launcher every Playwright
+    script in the repository shares.
+  - `results/` — committed result summaries per browser (`chromium`,
+    `webkit`, `firefox` as `.md` and `.json`) and the cross-browser summary
+    `browsers.md`.
 - `packages/parapdf/` — the runtime prototype: engine boundary (`engine/`),
   layout, scheduler, and viewer runtime (`runtime/`), and React bindings
   (`react/`). Consumed as TypeScript source through the workspace.
-- `examples/prototype/` — Vite + React 19 demo and the scripted scroll
-  benchmark (`scripts/scroll-bench.ts`, results in `results/`).
+- `examples/prototype/` — Vite + React 19 demo, the scripted scroll
+  benchmark (`scripts/scroll-bench.ts`, results per browser in `results/`,
+  summarized by `scripts/compare.ts` in `results/browsers.md`), and
+  functional checks (`scripts/check-*.ts`).
 
 ## Commands
 
 - `pnpm install`
+- `pnpm --filter @parapdf/bench exec playwright install chromium webkit firefox`
+  — Playwright's browser builds for every script below.
 - `pnpm --filter @parapdf/bench corpus` — regenerate the synthetic stress PDFs.
 - `bench/scripts/build-pdfjs-next.sh` — optional: build unreleased pdf.js
   master (renderer worker) into `bench/vendor/`; enables the `pdfjs-next`
   engines.
 - `pnpm bench:build` — build the hayro wasm module and the benchmark harness.
-- `pnpm bench` — run the engine benchmark; results go to `bench/results/`.
+- `pnpm bench` — run the engine benchmark; results go to
+  `bench/results/<browser>.{json,md}` and `bench/results/browsers.md`.
+  `BROWSER` (`chromium`, `webkit`, or `firefox`) picks the browser;
   `ENGINES`, `FILES`, `RUNS`, `PAGES`, and `SCALE` narrow a run.
 - `pnpm --filter @parapdf/prototype dev` — run the demo; query parameters
   select `engine` (`pdfjs` or `pdfjs-next`), `hwa`, `text`, `file`, and
   `preload`.
 - `pnpm --filter @parapdf/prototype build && pnpm --filter @parapdf/prototype bench`
-  — scripted scroll benchmark; `VARIANTS`, `TEXT`, `LINKS`, `FILES`, `SPEEDS`,
-  `RUNS`, `DURATION`, `PRELOAD`, and `OUTPUT` narrow or rename a run.
+  — scripted scroll benchmark; `BROWSER` picks the browser, and `VARIANTS`,
+  `TEXT`, `LINKS`, `FILES`, `SPEEDS` (CSS px per second), `RUNS`, `DURATION`,
+  `PRELOAD`, and `OUTPUT` narrow or rename a run. `node
+  examples/prototype/scripts/compare.ts` then rewrites `results/browsers.md`.
 - `pnpm --filter @parapdf/prototype check:text` — functional checks for text
   selection, search highlights, normalization, and accessibility semantics
-  (run after `build`).
+  (run after `build`; `BROWSER` applies here too).
 - `pnpm --filter @parapdf/prototype check:links` — functional checks for
   internal and external links, keyboard activation, the back stack, and the
-  outline on `usrguide.pdf` (run after `build`).
+  outline on `usrguide.pdf` (run after `build`; `BROWSER` applies here too).
 - `pnpm check` — Biome lint and format check. `pnpm format` applies fixes.
 - `pnpm typecheck` — TypeScript checks for every workspace package.
 
@@ -133,6 +145,10 @@ until the benchmark results justify the architecture.
   outline jumps push the previous position (a page plus a fraction, so zoom
   does not invalidate it) onto a 50-entry back stack exposed as `canGoBack`
   and `back()`. The outline loads in the background after the first layout.
+- Browsers: `check:text` and `check:links` pass in Playwright's Chromium,
+  WebKit, and Firefox. WebKit has neither `requestIdleCallback` nor
+  `scheduler.yield`, so idle text and annotation layers fall back to a 16 ms
+  timer and search yields through `setTimeout(0)`.
 - Not yet implemented: form filling, structure tree (tagged PDF) semantics,
   text for pages outside the mounted window, highlight fallback for browsers
   without the CSS Custom Highlight API, optional content toggles, attachments,
@@ -140,10 +156,43 @@ until the benchmark results justify the architecture.
 
 ## Benchmark methodology
 
-- Every job runs in a fresh, cross-origin-isolated Chromium page driven by
-  Playwright. On macOS the runner passes `--use-angle=metal`; headless
-  Chromium otherwise falls back to SwiftShader and GPU-backed canvases become
-  meaningless.
+- Every job runs in a fresh, cross-origin-isolated page in Playwright's
+  headless Chromium, WebKit, or Firefox build, launched by
+  `bench/scripts/browsers.ts`. Playwright's WebKit is not Safari; never
+  present its numbers as Safari's.
+  - Chromium: on macOS the launcher passes `--use-angle=metal`; headless
+    Chromium otherwise falls back to SwiftShader and GPU-backed canvases
+    become meaningless.
+  - Firefox: pinned to 60 Hz with `layout.frame_rate`, like the other two
+    headless browsers. On macOS it runs with `CFFIXED_USER_HOME` pointing at a
+    reused temporary home: macOS may refuse `~/Library/Application Support/Firefox`
+    to processes another app started, and Firefox then exits with "Could not
+    find profile folder".
+  - WebKit refuses some ports outright (4190 among them); the runners use
+    4179–4187.
+- Measure on AC power. Low Power Mode, which this Mac enables on battery,
+  drops WebKit's animation frames to 30 Hz and slows every engine by about a
+  quarter. The measuring scripts check `pmset` before the run and between
+  jobs and stop without writing results on battery or in Low Power Mode;
+  `ALLOW_BATTERY=1` overrides, and reports then flag the run.
+- Each job first measures an idle baseline: timer lateness and the
+  animation-frame interval of a page doing nothing (the engine benchmark
+  before its engine loads, the scroll benchmark on `calibrate.html`). An idle
+  4 ms timer fires about 1 ms late in Chromium, 1–2 ms in Firefox, and 4 ms
+  in WebKit. Blocked time counts only lateness beyond 2 ms or the idle 95th
+  percentile, whichever is larger: the 2 ms floor keeps the small delays that
+  every scrolled frame adds from piling up. Compare blocked time within a
+  browser and compare browsers by their longest stalls. A dropped frame is one
+  longer than 1.5 idle intervals.
+- Background load moves these numbers: while a virtual machine used most of
+  a CPU core, some scroll results moved severalfold between runs. Check
+  `uptime` and Activity Monitor before measuring, and rerun when in doubt.
+- On a second visit in the same browser context, WebKit refused pdf.js's
+  module worker scripts in the cross-origin-isolated demo ("Worker load was
+  blocked by Cross-Origin-Embedder-Policy"), apparently when it took them
+  from its cache, and pdf.js silently parsed on the main thread ("Setting up
+  fake worker"). Open every document in a fresh browser context, as the
+  runners and checks do.
 - Engines: `pdfjs` (released pdfjs-dist, main-thread drawing), `pdfjs-next`
   (pdf.js master with its renderer worker), `pdfium` (the raw
   `@embedpdf/pdfium` API in a worker, without fallback fonts), and `hayro`
@@ -154,11 +203,13 @@ until the benchmark results justify the architecture.
 - "Visible" is the time until pixels are committed to the canvas plus two
   animation frames, because GPU canvases may rasterize after the commit.
 - "Main thread blocked" is the summed lateness of a 4 ms timer chain during the
-  render phase: time the page could not respond to input or scrolling.
+  render phase, beyond the threshold above: time the page could not respond
+  to input or scrolling.
 - Payload is the brotli size of each engine's own assets in `bench/dist/`; the
   `pdfjs-next` workers are unminified.
-- Review fidelity in `bench/results/raw/contact.html` before trusting a speed
-  win: an engine that skips content is fast for the wrong reason.
+- Review fidelity in `bench/results/raw/<browser>-contact.html` before
+  trusting a speed win: an engine that skips content is fast for the wrong
+  reason.
 - Disk: the pdf.js master dev dependencies (~600 MB) are deleted after the
   build, and `bench/hayro-wasm/target/` holds ~270 MB of Rust artifacts.
 

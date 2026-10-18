@@ -23,8 +23,14 @@ const settings = {
   hwa: params.get("hwa") !== "0",
   text: params.get("text") !== "0",
   links: params.get("links") !== "0",
+  /** Scripted scroll speed in CSS pixels per second; 0 disables the benchmark driver. */
   autoscroll: Number(params.get("autoscroll") ?? "0"),
   durationMs: Number(params.get("duration") ?? "4000"),
+  // Idle baseline from calibrate.html; the defaults suit Chromium at 60 Hz.
+  idle: {
+    timerLagP95Ms: Number(params.get("idleLag") ?? "2"),
+    frameIntervalMs: Number(params.get("idleFrame") ?? "16.7"),
+  },
   preload: params.get("preload") !== "0",
 };
 
@@ -94,6 +100,7 @@ function Viewer() {
           <BenchDriver
             speed={settings.autoscroll}
             durationMs={settings.durationMs}
+            idle={settings.idle}
             commits={commits}
             label={benchLabel}
           />
