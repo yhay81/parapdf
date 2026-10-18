@@ -1,11 +1,12 @@
 /**
- * Runs every engine on every corpus file in fresh Chromium pages and writes
- * bench/results/latest.{json,md}. Per-run data and a thumbnail contact sheet
- * go to bench/results/raw/ (not committed).
+ * Runs every engine on every corpus file in fresh browser pages and writes
+ * bench/results/<browser>.{json,md} plus the cross-browser summary
+ * bench/results/browsers.md. Per-run data and a thumbnail contact sheet go to
+ * bench/results/raw/ (not committed).
  *
- * Environment: ENGINES, FILES (comma-separated), RUNS (3), PAGES (10),
- * SCALE (2.6667 = 100% zoom at devicePixelRatio 2), HEADED=1 to show the
- * browser.
+ * Environment: BROWSER (chromium, webkit, or firefox), ENGINES, FILES
+ * (comma-separated), RUNS (3), PAGES (10), SCALE (2.6667 = 100% zoom at
+ * devicePixelRatio 2), HEADED=1 to show the browser.
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -13,9 +14,10 @@ import { arch, cpus, platform, release, totalmem } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { brotliCompressSync, constants, gzipSync } from "node:zlib";
-import { type Browser, chromium } from "playwright";
+import type { Browser } from "playwright";
 import { preview } from "vite";
-import { writeReport } from "./report.ts";
+import { assertMeasurementPower, browserFromEnv, launchBrowser } from "./browsers.ts";
+import { writeComparison, writeReport } from "./report.ts";
 
 const benchDir = fileURLToPath(new URL("..", import.meta.url));
 const distDir = join(benchDir, "dist");
@@ -57,7 +59,8 @@ interface JobResult {
   presentMs?: number[];
   renderPhaseMs?: number;
   longTasks?: { blockingMs: number; maxMs: number };
-  lag?: { samples: number; p95Ms: number; maxMs: number; blockedMs: number };
+  idle?: { timerLagP50Ms: number; timerLagP95Ms: number; frameIntervalMs: number };
+  lag?: { samples: number; p95Ms: number; maxMs: number; blockedMs: number; rawLagMs: number };
   wasmMemoryBytes?: number;
   usesRendererWorker?: boolean;
   environment?: { gpu?: string; crossOriginIsolated?: boolean };
@@ -110,6 +113,7 @@ async function runJob(
   }
 }
 
+const power = assertMeasurementPower();
 const server = await preview({
   root: benchDir,
   configFile: join(benchDir, "vite.config.ts"),
@@ -117,18 +121,18 @@ const server = await preview({
   preview: { port: 4179, strictPort: false, open: false },
 });
 const baseUrl = server.resolvedUrls?.local[0] ?? "http://localhost:4179/";
-// Headless Chromium falls back to SwiftShader unless ANGLE is pointed at the
-// real GPU; without this, GPU-backed canvases (the -hwa engines) are meaningless.
-const gpuArgs = platform() === "darwin" ? ["--use-angle=metal", "--enable-gpu"] : ["--enable-gpu"];
-const browser = await chromium.launch({
-  headless: !process.env.HEADED,
-  args: ["--ignore-gpu-blocklist", ...gpuArgs],
-});
-const chromiumVersion = browser.version();
+const browserName = browserFromEnv();
+const launched = await launchBrowser(browserName);
+const { browser } = launched;
 
 const results: JobResult[] = [];
 try {
+  // One discarded job warms the GPU process, fonts, and HTTP cache so the first
+  // measured job is not penalized.
+  await runJob(browser, baseUrl, { engine: engines[0] ?? "pdfjs", file: files[0] ?? "", run: -1 });
   for (const file of files) {
+    // Stop without writing results if the machine lost AC power mid-run.
+    assertMeasurementPower();
     for (const engine of engines) {
       for (let run = 0; run < runs; run++) {
         const result = await runJob(browser, baseUrl, { engine, file, run });
@@ -141,7 +145,7 @@ try {
     }
   }
 } finally {
-  await browser.close();
+  await launched.close();
   await server.close();
 }
 
@@ -182,15 +186,24 @@ const pdfjsNextCommit = hasPdfjsNext
     }).trim()
   : undefined;
 const firstOk = results.find((result) => !result.error);
+const okResults = results.filter((result) => !result.error);
 const environment = {
   runAt: new Date().toISOString(),
   os: `${platform()} ${release()} ${arch()}`,
   cpu: `${cpus()[0]?.model ?? "unknown"} (${cpus().length} logical cores)`,
   memoryGiB: Math.round(totalmem() / 2 ** 30),
-  chromium: chromiumVersion,
-  headless: !process.env.HEADED,
+  browserName,
+  browser: launched.label,
+  headless: launched.headless,
+  power,
   gpu: firstOk?.environment?.gpu ?? "unknown",
   crossOriginIsolated: firstOk?.environment?.crossOriginIsolated ?? false,
+  // Medians of each job's idle baseline, measured before its engine loaded.
+  idle: {
+    timerLagP50Ms: median(okResults.map((result) => result.idle?.timerLagP50Ms ?? Number.NaN)),
+    timerLagP95Ms: median(okResults.map((result) => result.idle?.timerLagP95Ms ?? Number.NaN)),
+    frameIntervalMs: median(okResults.map((result) => result.idle?.frameIntervalMs ?? Number.NaN)),
+  },
   versions: {
     "pdfjs-dist": packageVersion("pdfjs-dist"),
     "pdf.js master": pdfjsNextCommit,
@@ -233,20 +246,20 @@ const summaries = files.flatMap((file) =>
 mkdirSync(join(resultsDir, "raw"), { recursive: true });
 const stamp = environment.runAt.replace(/[:.]/g, "-");
 writeFileSync(
-  join(resultsDir, "raw", `${stamp}.json`),
+  join(resultsDir, "raw", `${browserName}-${stamp}.json`),
   JSON.stringify({ environment, results }, null, 1),
 );
 // Timer resolution is far coarser than float noise, so keep one decimal.
 const roundMetrics = (_key: string, value: unknown) =>
   typeof value === "number" && !Number.isInteger(value) ? Math.round(value * 10) / 10 : value;
 writeFileSync(
-  join(resultsDir, "latest.json"),
+  join(resultsDir, `${browserName}.json`),
   `${JSON.stringify({ environment, payload, summaries }, roundMetrics, 2)}\n`,
 );
 
 // Contact sheet for side-by-side fidelity review of page 1 at the bench scale.
 const contact = [
-  "<!doctype html><meta charset=utf-8><title>ParaPDF engine thumbnails</title>",
+  `<!doctype html><meta charset=utf-8><title>ParaPDF engine thumbnails, ${launched.label}</title>`,
   "<style>body{font:12px system-ui;margin:16px}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:4px;vertical-align:top}img{width:200px;display:block}</style>",
   `<table><tr><th>file</th>${engines.map((engine) => `<th>${engine}</th>`).join("")}</tr>`,
   ...files.map((file) => {
@@ -260,7 +273,7 @@ const contact = [
   }),
   "</table>",
 ].join("\n");
-writeFileSync(join(resultsDir, "raw", "contact.html"), contact);
+writeFileSync(join(resultsDir, "raw", `${browserName}-contact.html`), contact);
 
-const report = writeReport(resultsDir);
-console.log(`\nWrote ${report}`);
+console.log(`\nWrote ${writeReport(resultsDir, browserName)}`);
+console.log(`Wrote ${writeComparison(resultsDir)}`);

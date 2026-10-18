@@ -1,11 +1,10 @@
 /**
  * Main-thread availability: a 4 ms timer chain records how late each tick
  * fires. The summed lateness approximates how long the page could not
- * respond to input.
+ * respond to input. Only lateness beyond `thresholdMs` counts as blocked;
+ * see blockedThreshold().
  */
-const JITTER_MS = 2;
-
-export function startLagMonitor(intervalMs = 4) {
+export function startLagMonitor(thresholdMs: number, intervalMs = 4) {
   const lags: number[] = [];
   let running = true;
   let expected = performance.now() + intervalMs;
@@ -22,15 +21,13 @@ export function startLagMonitor(intervalMs = 4) {
     return {
       p95Ms: quantile(sorted, 0.95),
       maxMs: sorted.at(-1) ?? 0,
-      // Timers jitter by about a millisecond even on an idle page; count only
-      // the lateness beyond that so idle scrolling reads as zero.
-      blockedMs: lags.reduce((sum, lag) => sum + Math.max(0, lag - JITTER_MS), 0),
+      blockedMs: lags.reduce((sum, lag) => sum + Math.max(0, lag - thresholdMs), 0),
     };
   };
 }
 
-/** Animation-frame intervals; a frame longer than 34 ms dropped at least one vsync at 60 Hz. */
-export function startFrameMonitor() {
+/** Animation-frame intervals; a frame longer than 1.5 idle intervals missed at least one vsync. */
+export function startFrameMonitor(idleFrameMs: number) {
   const intervals: number[] = [];
   let running = true;
   let last = performance.now();
@@ -47,8 +44,60 @@ export function startFrameMonitor() {
       frames: intervals.length,
       p95Ms: quantile(sorted, 0.95),
       maxMs: sorted.at(-1) ?? 0,
-      dropped: intervals.filter((interval) => interval > 34).length,
+      dropped: intervals.filter((interval) => interval > idleFrameMs * 1.5).length,
     };
+  };
+}
+
+/**
+ * Lateness that counts as blocked: beyond 2 ms, so the small delays every
+ * frame adds while the page scrolls do not pile up, and beyond the idle
+ * page's 95th percentile, because WebKit delivers even idle timers about
+ * 4 ms late.
+ */
+export const blockedThreshold = (idle: Pick<IdleBaseline, "timerLagP95Ms">): number =>
+  Math.max(2, idle.timerLagP95Ms);
+
+export interface IdleBaseline {
+  timerLagP50Ms: number;
+  timerLagP95Ms: number;
+  frameIntervalMs: number;
+}
+
+/** Timer lateness and animation-frame interval of a page doing nothing else. */
+export async function measureIdle(durationMs = 1000): Promise<IdleBaseline> {
+  const lags: number[] = [];
+  const frames: number[] = [];
+  const until = performance.now() + durationMs;
+  await Promise.all([
+    new Promise<void>((resolve) => {
+      let expected = performance.now() + 4;
+      const tick = () => {
+        const now = performance.now();
+        lags.push(Math.max(0, now - expected));
+        expected = now + 4;
+        if (now < until) setTimeout(tick, 4);
+        else resolve();
+      };
+      setTimeout(tick, 4);
+    }),
+    new Promise<void>((resolve) => {
+      let last = -1;
+      const tick = (now: number) => {
+        if (last >= 0) frames.push(now - last);
+        last = now;
+        if (now < until) requestAnimationFrame(tick);
+        else resolve();
+      };
+      requestAnimationFrame(tick);
+    }),
+  ]);
+  lags.sort((a, b) => a - b);
+  frames.sort((a, b) => a - b);
+  return {
+    timerLagP50Ms: quantile(lags, 0.5),
+    timerLagP95Ms: quantile(lags, 0.95),
+    frameIntervalMs: quantile(frames, 0.5),
   };
 }
 

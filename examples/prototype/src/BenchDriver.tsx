@@ -1,6 +1,13 @@
 import { usePdfState, usePdfViewer } from "parapdf";
 import { useEffect } from "react";
-import { nextFrame, sleep, startFrameMonitor, startLagMonitor } from "./metrics.ts";
+import {
+  blockedThreshold,
+  type IdleBaseline,
+  nextFrame,
+  sleep,
+  startFrameMonitor,
+  startLagMonitor,
+} from "./metrics.ts";
 
 declare global {
   interface Window {
@@ -10,9 +17,11 @@ declare global {
 }
 
 export interface BenchDriverProps {
-  /** CSS pixels scrolled per animation frame. */
+  /** CSS pixels scrolled per second, independent of the browser's frame rate. */
   speed: number;
   durationMs: number;
+  /** Idle timer lateness and frame interval from calibrate.html in the same browser. */
+  idle: Pick<IdleBaseline, "timerLagP95Ms" | "frameIntervalMs">;
   /** Shared commit counter fed by the app's <Profiler>. */
   commits: { count: number };
   label: Record<string, unknown>;
@@ -23,7 +32,7 @@ export interface BenchDriverProps {
  * speed, and publishes main-thread, frame, blank-area, React-commit, and
  * render counts on `window.__result` for the Playwright runner.
  */
-export function BenchDriver({ speed, durationMs, commits, label }: BenchDriverProps) {
+export function BenchDriver({ speed, durationMs, idle, commits, label }: BenchDriverProps) {
   const viewer = usePdfViewer();
   const status = usePdfState((state) => state.status);
 
@@ -55,12 +64,13 @@ export function BenchDriver({ speed, durationMs, commits, label }: BenchDriverPr
       };
       const commitsBefore = commits.count;
       const startPage = viewer.store.get().currentPage;
-      const stopLag = startLagMonitor();
-      const stopFrames = startFrameMonitor();
+      const stopLag = startLagMonitor(blockedThreshold(idle));
+      const stopFrames = startFrameMonitor(idle.frameIntervalMs);
       let sampledFrames = 0;
       let blankSum = 0;
       let blankFrames = 0;
       const start = performance.now();
+      const startTop = scroller.scrollTop;
 
       await new Promise<void>((resolve) => {
         const tick = () => {
@@ -69,9 +79,12 @@ export function BenchDriver({ speed, durationMs, commits, label }: BenchDriverPr
           blankSum += blank;
           if (blank > 0.01) blankFrames++;
           sampledFrames++;
+          const elapsed = performance.now() - start;
           const atEnd = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1;
-          if (performance.now() - start >= durationMs || atEnd) return resolve();
-          scroller.scrollTop += speed;
+          if (elapsed >= durationMs || atEnd) return resolve();
+          // Position follows elapsed time, so a slow or dropped frame jumps
+          // further instead of slowing the scroll down.
+          scroller.scrollTop = startTop + (speed * elapsed) / 1000;
           requestAnimationFrame(tick);
         };
         requestAnimationFrame(tick);
@@ -115,7 +128,7 @@ export function BenchDriver({ speed, durationMs, commits, label }: BenchDriverPr
     return () => {
       cancelled = true;
     };
-  }, [status, viewer, speed, durationMs, commits, label]);
+  }, [status, viewer, speed, durationMs, idle, commits, label]);
 
   return null;
 }

@@ -2,13 +2,15 @@
  * Functional checks for the text layer: selection, search highlights,
  * normalization, and accessibility semantics. Exits non-zero on failure.
  *
- * Usage: pnpm --filter @parapdf/prototype build && node examples/prototype/scripts/check-text.ts
+ * Usage: pnpm --filter @parapdf/prototype build && pnpm --filter @parapdf/prototype check:text
  * SCREENSHOT=path.png saves the search view for visual review.
+ * Environment: BROWSER (chromium, webkit, or firefox), ENGINE (pdfjs-next).
  */
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { chromium, type Page } from "playwright";
+import type { Page } from "playwright";
 import { preview } from "vite";
+import { launchBrowser } from "../../../bench/scripts/browsers.ts";
 
 const exampleDir = fileURLToPath(new URL("..", import.meta.url));
 const engine = process.env.ENGINE ?? "pdfjs-next";
@@ -66,14 +68,23 @@ const server = await preview({
   preview: { port: 4185, strictPort: false, open: false },
 });
 const baseUrl = server.resolvedUrls?.local[0] ?? "http://localhost:4185/";
-const browser = await chromium.launch({ args: ["--use-angle=metal", "--enable-gpu"] });
-const context = await browser.newContext({
-  viewport: { width: 1280, height: 900 },
-  deviceScaleFactor: 2,
-});
-const page = await context.newPage();
+const launched = await launchBrowser();
+console.log(`${launched.label}, engine ${engine}`);
 const errors: string[] = [];
-page.on("pageerror", (error) => errors.push(error.message));
+// Each document gets a fresh context, like a first visit. On a second visit
+// in the same context WebKit refused pdf.js's module workers under COEP,
+// apparently when taken from its cache, and pdf.js silently parsed on the
+// main thread.
+const newPage = async (): Promise<Page> => {
+  const context = await launched.browser.newContext({
+    viewport: { width: 1280, height: 900 },
+    deviceScaleFactor: 2,
+  });
+  const page = await context.newPage();
+  page.on("pageerror", (error) => errors.push(error.message));
+  return page;
+};
+let page = await newPage();
 
 try {
   // Selection and semantics on a born-digital document.
@@ -152,6 +163,7 @@ try {
   if (process.env.SCREENSHOT) await page.screenshot({ path: process.env.SCREENSHOT });
 
   // Japanese text in a non-embedded CID font, plus compatibility normalization.
+  page = await newPage();
   await openViewer(page, baseUrl, "synthetic-cjk-nonembedded.pdf");
   const japanese = await searchFor(page, "非埋め込み");
   check("Japanese search", japanese.total >= 6, `${japanese.total} matches`);
@@ -166,6 +178,7 @@ try {
   // Dragging into the blank space past a line's end must select the dragged
   // lines, not the rest of the page: WebKit extends such a selection to
   // wherever the text layer's .endOfContent element sits.
+  page = await newPage();
   await openViewer(page, baseUrl, "synthetic-text-1000.pdf");
   const drag = await page.evaluate(() => {
     const section = document.querySelector('section[data-page="1"]');
@@ -222,7 +235,7 @@ try {
 
   check("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));
 } finally {
-  await browser.close();
+  await launched.close();
   await server.close();
 }
 
