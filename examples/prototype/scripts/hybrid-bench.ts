@@ -15,6 +15,8 @@
  * run waits while Playwright browsers started by other processes are open or
  * the 1-minute load average exceeds MAX_LOAD, and it repeats jobs another
  * Playwright browser overlapped; ALLOW_PARALLEL=1 skips both waits.
+ * IGNORE_PIDS lists processes whose Playwright browsers do not count, such as
+ * an idle runner stuck holding its browser; the report names them.
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -51,6 +53,9 @@ const durationMs = Number(process.env.DURATION ?? "4000");
 const browserName = browserFromEnv();
 const output = process.env.OUTPUT ?? `hybrid-${browserName}`;
 const maxLoad = Number(process.env.MAX_LOAD ?? String(cpus().length / 2));
+const ignoredRoots = new Set(
+  (process.env.IGNORE_PIDS ?? "").split(",").filter(Boolean).map(Number),
+);
 
 interface Lag {
   p95Ms: number;
@@ -124,12 +129,14 @@ function foreignBrowsers(): string[] {
     .filter((match): match is RegExpExecArray => match !== null)
     .map(([, pid, ppid, command]) => ({ pid: Number(pid), ppid: Number(ppid), command }));
   const parent = new Map(rows.map((row) => [row.pid, row.ppid]));
-  const ours = (pid: number) => {
+  const descendsFrom = (pid: number, roots: Set<number>) => {
     for (let at = pid, depth = 0; at > 1 && depth < 50; at = parent.get(at) ?? 0, depth++) {
-      if (at === process.pid) return true;
+      if (roots.has(at)) return true;
     }
     return false;
   };
+  const ours = (pid: number) =>
+    descendsFrom(pid, new Set([process.pid])) || descendsFrom(pid, ignoredRoots);
   const browserMain = (command = "") =>
     (/ms-playwright\/chromium/.test(command) && !command.includes("--type=")) ||
     (/ms-playwright\/firefox/.test(command) && !command.includes("-contentproc")) ||
@@ -138,6 +145,31 @@ function foreignBrowsers(): string[] {
   return rows
     .filter((row) => (browserMain(row.command) || driver(row.command)) && !ours(row.pid))
     .map((row) => `${row.pid} ${row.command?.slice(0, 140)}`);
+}
+
+/** CPU seconds of the IGNORE_PIDS processes and their descendants. */
+function ignoredProcesses(): { pid: number; cpuSeconds: number; command: string }[] {
+  if (ignoredRoots.size === 0) return [];
+  const rows = execFileSync("ps", ["-axo", "pid=,ppid=,time=,command="], { encoding: "utf8" })
+    .split("\n")
+    .map((line) => /^\s*(\d+)\s+(\d+)\s+([\d:.]+)\s+(.*)$/.exec(line))
+    .filter((match): match is RegExpExecArray => match !== null)
+    .map(([, pid, ppid, time = "0", command = ""]) => ({
+      pid: Number(pid),
+      ppid: Number(ppid),
+      cpuSeconds: time.split(":").reduce((sum, part) => sum * 60 + Number(part), 0),
+      command: command.slice(0, 100),
+    }));
+  const parent = new Map(rows.map((row) => [row.pid, row.ppid]));
+  const ignored = (pid: number) => {
+    for (let at = pid, depth = 0; at > 1 && depth < 50; at = parent.get(at) ?? 0, depth++) {
+      if (ignoredRoots.has(at)) return true;
+    }
+    return false;
+  };
+  return rows
+    .filter((row) => ignored(row.pid))
+    .map(({ pid, cpuSeconds, command }) => ({ pid, cpuSeconds, command }));
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -206,6 +238,12 @@ function measurePayload() {
 assertMeasurementPower();
 await waitForQuietMachine();
 const power = assertMeasurementPower();
+const ignoredBefore = ignoredProcesses();
+if (ignoredBefore.length) {
+  console.log(
+    `Not waiting for these processes (IGNORE_PIDS):\n  ${ignoredBefore.map((row) => `${row.pid} ${row.command}`).join("\n  ")}`,
+  );
+}
 const server = await preview({
   root: exampleDir,
   configFile: join(exampleDir, "vite.config.ts"),
@@ -399,6 +437,13 @@ const environment = {
     median: median(results.map((result) => result.load)),
     max: Math.max(...results.map((result) => result.load ?? 0)),
   },
+  // Ignored processes and the CPU time they used while the run lasted.
+  ignored: ignoredBefore.map((row) => ({
+    ...row,
+    cpuSecondsDuringRun:
+      (ignoredProcesses().find((after) => after.pid === row.pid)?.cpuSeconds ?? row.cpuSeconds) -
+      row.cpuSeconds,
+  })),
   errors: results.filter((result) => result.error).map((r) => `${r.file} ${r.variant}: ${r.error}`),
 };
 const round = (_key: string, value: unknown) =>
@@ -462,6 +507,16 @@ function renderReport(): string {
     `- Machine: ${environment.os}, ${environment.cpu}; ${environment.browser} (Playwright build, ${environment.headless ? "headless" : "headed"}); power: ${power.source === "ac" && !power.lowPowerMode ? "AC" : `**${power.source}${power.lowPowerMode ? ", Low Power Mode" : ""}; not comparable with AC runs**`}`,
     `- Idle baseline (calibrate.html, median of jobs): 4 ms timer late by ${fmt(environment.idle.timerLagP50Ms, 1)} ms (median) / ${fmt(environment.idle.timerLagP95Ms, 1)} ms (p95); animation frames every ${fmt(environment.idle.frameIntervalMs, 1)} ms.`,
     `- Load: jobs started only while no other Playwright browser was open and the 1-minute load average was at most ${maxLoad}; at job start it was ${fmt(environment.load.median, 1)} (median), ${fmt(environment.load.max, 1)} at most, on ${cpus().length} logical cores.`,
+    ...(environment.ignored.length
+      ? [
+          `- Not waited for (IGNORE_PIDS), with the CPU time each used during the run: ${environment.ignored
+            .map(
+              (row) =>
+                `pid ${row.pid} \`${row.command.split(" ")[0]?.split("/").at(-1)}\` ${fmt(row.cpuSecondsDuringRun, 2)} s`,
+            )
+            .join(", ")}.`,
+        ]
+      : []),
     `- Variants: \`pdfjs-next-hwa\` is pdf.js master with its renderer worker on a GPU-backed canvas; \`hybrid-hwa\` is the same engine with image-only pages rendered by hayro (wasm, simd128) in the hybrid worker. Text, links, and search come from pdf.js in both.`,
     `- Method: fresh browser context per job, 1280×900 viewport at devicePixelRatio 2, fit-width zoom; ${runs} runs per file, speed, and variant, alternating which variant goes first; startup numbers pool both speeds (${runs * speeds.length} jobs per cell). Medians throughout.`,
     "- First paint: navigation start until page 1 shows pixels (its low-resolution base layer). Page 1 sharp: until page 1's full-resolution layer is on the canvas.",
