@@ -12,9 +12,9 @@
  * selects text.
  *
  * The `.before-selection` and `.parapdf-pages.selecting` rules are ParaPDF's
- * own, for drag selections in WebKit and Firefox (see `TextSelectionTracker`):
- * the first makes a text layer's `.endOfContent` selectable, the second makes
- * the space between and beside the pages unselectable.
+ * own, for drag selections (see `TextSelectionTracker`): the first makes a
+ * text layer's `.endOfContent` selectable in WebKit and Firefox, the second
+ * makes the space between and beside the pages unselectable.
  */
 export const VIEWER_CSS = `
 .parapdf-text-layer {

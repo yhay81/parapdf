@@ -110,9 +110,10 @@ about 20 ms as noise.
   CSS Custom Highlight API without touching the text layer DOM. Pages are
   labelled regions and the viewport is a focusable document.
   [`check-text.ts`](examples/prototype/scripts/check-text.ts) verifies
-  selection, including drags past a line's end and across the gap between
-  two pages in both directions, search, Japanese, full-width, diacritic, and
-  line-break matching, and these semantics in all three browsers.
+  selection, including drags past a line's end, across the gap between two
+  pages in both directions, and from beside or between pages, search,
+  Japanese, full-width, diacritic, and line-break matching, and these
+  semantics in all three browsers.
 - **Text layer cost.** Text layers are built only after scrolling settles, one
   page per idle period. With the renderer worker on a GPU-backed canvas in
   Chromium, slow scrolling blocked the main thread for 3–18 ms with text
@@ -149,7 +150,12 @@ about 20 ms as noise.
   during a drag ParaPDF holds the selection over gaps and sends a page's
   blank space to the page boundary: drags between pages no longer jump to the
   start or end of a page. pdf.js's own viewer still selects the whole page
-  above when a drag enters it from below in WebKit and Firefox.
+  above when a drag enters it from below in WebKit and Firefox. Chromium sent
+  a drag over the space beside a page to that page's start, and all three
+  browsers started a drag pressed beside or between pages at the start of the
+  first mounted page: 3,357 characters where the dragged line holds 49. Drags
+  now hold beside a page too, and a drag pressed there starts at the nearest
+  text.
 - **Not yet built.** Form filling, structure-tree semantics for tagged PDFs,
   text for pages outside the mounted window, and region rendering beyond the
   16 MP detail cap.

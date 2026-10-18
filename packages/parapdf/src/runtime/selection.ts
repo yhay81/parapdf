@@ -13,18 +13,33 @@
  * the element lacked `-webkit-user-select: none`), so in them the element
  * moves next to the run where the selection is changing.
  *
- * Over space without text, WebKit and Firefox put the end of a drag selection
- * at the start of the element under the pointer, where Chromium picks the
- * nearest text: over the space between and beside the pages, the start of the
- * first mounted page; over the blank space of a page above the selection,
- * which the pointer enters from below, that page's start. So in WebKit and
- * Firefox, from a primary-button press in a text layer until the pointer is
- * released, the pages element has the `selecting` class, which makes that
- * space unselectable, and every text layer above the selection has
- * `selecting` and `before-selection`, which make its `.endOfContent`
- * selectable, so its blank space selects up to the page's end. Pages below
- * the selection keep the browser's behaviour, which selects up to their
- * start.
+ * Over space without text, browsers end a drag selection at the start of an
+ * element rather than at the nearest text. The space between and beside the
+ * pages belongs to the pages element: WebKit and Firefox send it to the start
+ * of the first mounted page, and Chromium the space beside a page to that
+ * page's start. Over the blank space of a page above the selection, which the
+ * pointer enters from below, WebKit and Firefox use that page's start. So
+ * during a primary-button drag, until the pointer is released, the pages
+ * element has the `selecting` class, which makes the space around the pages
+ * unselectable, and in WebKit and Firefox every text layer above the
+ * selection has `selecting` and `before-selection`, which make its
+ * `.endOfContent` selectable, so its blank space selects up to the page's
+ * end. Pages below the selection keep the browser's behaviour, which selects
+ * up to their start.
+ *
+ * A press on the pages element itself, beside or between the pages, would
+ * start the selection at that same wrong place. A drag from there starts at
+ * the nearest text instead: beside a page, at the start or end of the run
+ * nearest to the press, on the side the press is on; in a gap, at the
+ * boundary between the pages. The browser still handles the press, so a click
+ * there clears the selection, and the layers are marked for that position at
+ * once, because Chromium and Firefox hit-test a pointer move before its
+ * listeners run. At the first move, before the browser extends anything, the
+ * tracker selects the position as a range between two equivalent DOM
+ * positions: Chromium extends a drag from the selection only while it is a
+ * range and otherwise restarts it from the pressed point. WebKit restarts the
+ * drag at the first text the pointer reaches, so until release the tracker
+ * puts the anchor back whenever it moves.
  *
  * pdf.js shares one set of document listeners among all its text layers;
  * here every viewer owns a tracker, so destroying one viewer cannot switch
@@ -35,8 +50,12 @@ export class TextSelectionTracker {
   readonly #layers = new Map<HTMLElement, HTMLElement>();
   #listeners: AbortController | null = null;
   #pointerDown = false;
-  /** In WebKit and Firefox, a drag that started in a tracked text layer is in progress. */
+  /** A primary-button drag from a tracked text layer or the pages element is in progress. */
   #dragging = false;
+  /** Where a drag that started on the pages element itself starts its selection. */
+  #anchor: Point | null = null;
+  /** The anchor is selected at the first pointer move, after the browser has handled the press. */
+  #anchorPending = false;
   #previousRange: Range | null = null;
   #quirks: SelectionQuirks | undefined;
   #pages: HTMLElement | null = null;
@@ -78,14 +97,23 @@ export class TextSelectionTracker {
 
   #endDrag(): void {
     this.#dragging = false;
+    this.#anchor = null;
+    this.#anchorPending = false;
     this.#pages?.classList.remove("selecting");
   }
 
   #reset(layer: HTMLElement, end: HTMLElement): void {
-    layer.append(end);
+    this.#putBack(layer, end);
+    layer.classList.remove("selecting", "before-selection");
+  }
+
+  /** Returns `.endOfContent` to the end of its layer at its own size. */
+  #putBack(layer: HTMLElement, end: HTMLElement): void {
+    // Re-inserting it in place would rebuild the box the pointer may be over:
+    // Firefox then ends the selection at the layer's start.
+    if (layer.lastChild !== end) layer.append(end);
     end.style.width = "";
     end.style.height = "";
-    layer.classList.remove("selecting", "before-selection");
   }
 
   #resetAll(): void {
@@ -97,6 +125,14 @@ export class TextSelectionTracker {
     this.#listeners = new AbortController();
     const options = { signal: this.#listeners.signal };
     const release = () => {
+      const anchor = this.#anchor;
+      const selection = document.getSelection();
+      if (anchor && !this.#anchorPending && selection) {
+        // WebKit may have restarted the drag at the pointer's last move.
+        this.#keepAnchor(selection);
+        // A drag that selected nothing leaves no selection, not an empty range.
+        if (isAt(selection, anchor) && selection.toString() === "") selection.removeAllRanges();
+      }
       this.#pointerDown = false;
       this.#endDrag();
       this.#resetAll();
@@ -104,14 +140,35 @@ export class TextSelectionTracker {
     document.addEventListener(
       "mousedown",
       (event) => {
-        const layer =
-          event.target instanceof Element ? event.target.closest(".parapdf-text-layer") : null;
-        if (!(layer instanceof HTMLElement) || !this.#layers.has(layer)) return;
-        layer.classList.add("selecting");
-        this.#quirks ??= selectionQuirks();
-        if (event.button === 0 && this.#quirks.endsAtStartOfBlankSpace) {
+        this.#anchor = null;
+        this.#anchorPending = false;
+        const pages = this.#pages;
+        const target = event.target instanceof Element ? event.target : null;
+        const layer = target?.closest(".parapdf-text-layer");
+        // A touch sends its mouse events after the pointer is up: no drag follows.
+        const primary = event.button === 0 && this.#pointerDown;
+        if (layer instanceof HTMLElement && this.#layers.has(layer)) {
+          layer.classList.add("selecting");
+          if (primary) {
+            this.#dragging = true;
+            pages?.classList.add("selecting");
+          }
+        } else if (
+          primary &&
+          pages !== null &&
+          target === pages &&
+          event.detail <= 1 &&
+          !(event.shiftKey || event.ctrlKey || event.metaKey || event.altKey)
+        ) {
+          const anchor = this.#nearestPoint(pages, event.clientX, event.clientY);
+          this.#anchor = anchor;
+          this.#anchorPending = true;
           this.#dragging = true;
-          this.#pages?.classList.add("selecting");
+          // Mark the layers for the anchor now: Chromium and Firefox hit-test
+          // the first move before its listeners run.
+          const at = document.createRange();
+          at.setStart(anchor.node, anchor.offset);
+          this.#mark([at], anchor);
         }
       },
       options,
@@ -120,9 +177,17 @@ export class TextSelectionTracker {
       "pointerdown",
       () => {
         this.#pointerDown = true;
+        // The mouse press that follows decides whether there is an anchor.
+        this.#anchor = null;
+        this.#anchorPending = false;
       },
       options,
     );
+    // Capture, so the anchor is in place before the browser handles the move.
+    document.addEventListener("pointermove", (event) => this.#onPointerMove(event), {
+      ...options,
+      capture: true,
+    });
     document.addEventListener("pointerup", release, options);
     document.addEventListener("pointercancel", release, options);
     window.addEventListener("blur", release, options);
@@ -136,32 +201,111 @@ export class TextSelectionTracker {
     document.addEventListener("selectionchange", () => this.#onSelectionChange(), options);
   }
 
+  #onPointerMove(event: PointerEvent): void {
+    const anchor = this.#anchor;
+    if (!anchor) return;
+    if ((event.buttons & 1) === 0) {
+      // The release went unseen.
+      this.#endDrag();
+      return;
+    }
+    const selection = document.getSelection();
+    if (!selection || !anchor.node.isConnected) {
+      // The page that held the anchor was unmounted.
+      this.#anchor = null;
+      return;
+    }
+    if (this.#anchorPending) {
+      this.#anchorPending = false;
+      // Only now: an unselectable target would not have started a selection.
+      this.#pages?.classList.add("selecting");
+      selectAt(selection, anchor);
+    } else if (selection.rangeCount === 0 || (isAt(selection, anchor) && !selection.isCollapsed)) {
+      return;
+    } else {
+      this.#keepAnchor(selection);
+    }
+    // Mark the layers before the browser hit-tests again; selectionchange comes later.
+    this.#onSelectionChange();
+  }
+
+  /** Puts the anchor of a drag from the pages element back where it started. */
+  #keepAnchor(selection: Selection): void {
+    const anchor = this.#anchor;
+    if (!anchor || selection.rangeCount === 0) return;
+    const { focusNode, focusOffset } = selection;
+    if (isAt(selection, anchor) || !focusNode) {
+      if (selection.isCollapsed) selectAt(selection, anchor);
+    } else {
+      selection.setBaseAndExtent(anchor.node, anchor.offset, focusNode, focusOffset);
+    }
+  }
+
+  /**
+   * Gives the layers that `ranges` touch the `selecting` class and, in WebKit
+   * and Firefox during a drag, the layers that end before `focus` the
+   * `selecting` and `before-selection` classes; resets every other layer.
+   */
+  #mark(ranges: readonly Range[], focus: Point | null): void {
+    this.#quirks ??= selectionQuirks();
+    // Firefox makes one range per page when a selection spans pages.
+    const active = new Set<HTMLElement>();
+    for (const range of ranges) {
+      for (const layer of this.#layers.keys()) {
+        if (!active.has(layer) && range.intersectsNode(layer)) active.add(layer);
+      }
+    }
+    let above: Range | null = null;
+    if (focus && this.#dragging && this.#quirks.endsAtStartOfBlankSpace) {
+      above = document.createRange();
+      above.setStart(focus.node, focus.offset);
+    }
+    for (const [layer, end] of this.#layers) {
+      if (active.has(layer)) {
+        layer.classList.add("selecting");
+        layer.classList.remove("before-selection");
+      } else if (above && above.comparePoint(layer, layer.childNodes.length) < 0) {
+        this.#putBack(layer, end);
+        layer.classList.add("selecting", "before-selection");
+      } else {
+        this.#reset(layer, end);
+      }
+    }
+  }
+
+  /**
+   * Where a press at (x, y) on the pages element starts a selection: beside a
+   * page, the start or end of the nearest run of its text layer, on the side
+   * the press is on; elsewhere, the boundary between the pages around it.
+   */
+  #nearestPoint(pages: HTMLElement, x: number, y: number): Point {
+    const children = pages.childNodes;
+    for (let index = 0; index < children.length; index++) {
+      const page = children[index];
+      if (!(page instanceof HTMLElement)) continue;
+      const box = page.getBoundingClientRect();
+      if (y < box.top) return { node: pages, offset: index };
+      if (y > box.bottom) continue;
+      const layer = page.querySelector(".parapdf-text-layer");
+      const run =
+        layer instanceof HTMLElement && this.#layers.has(layer) ? nearestRun(layer, x, y) : null;
+      return run ?? { node: pages, offset: index };
+    }
+    return { node: pages, offset: children.length };
+  }
+
   #onSelectionChange(): void {
+    // The browser's caret for a press beside the pages gives way at the first move.
+    if (this.#anchorPending) return;
     const selection = document.getSelection();
     if (!selection || selection.rangeCount === 0) {
       this.#resetAll();
       return;
     }
-    // Firefox makes one range per page when a selection spans pages.
-    const active = new Set<HTMLElement>();
-    for (let i = 0; i < selection.rangeCount; i++) {
-      const range = selection.getRangeAt(i);
-      for (const layer of this.#layers.keys()) {
-        if (!active.has(layer) && range.intersectsNode(layer)) active.add(layer);
-      }
-    }
-    const focus = selection.focusNode;
-    for (const [layer, end] of this.#layers) {
-      if (active.has(layer)) {
-        layer.classList.add("selecting");
-        layer.classList.remove("before-selection");
-      } else {
-        this.#reset(layer, end);
-        if (this.#dragging && focus && precedes(layer, focus)) {
-          layer.classList.add("selecting", "before-selection");
-        }
-      }
-    }
+    const ranges: Range[] = [];
+    for (let i = 0; i < selection.rangeCount; i++) ranges.push(selection.getRangeAt(i));
+    const { focusNode, focusOffset } = selection;
+    this.#mark(ranges, focusNode ? { node: focusNode, offset: focusOffset } : null);
 
     this.#quirks ??= selectionQuirks();
     if (this.#quirks.keepsSelectionInRuns) return;
@@ -196,10 +340,56 @@ export class TextSelectionTracker {
   }
 }
 
-/** Whether `layer` comes before `node` in the document and does not contain it. */
-const precedes = (layer: Node, node: Node): boolean =>
-  (layer.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0 &&
-  !layer.contains(node);
+/** A boundary point: a node and an offset in it. */
+interface Point {
+  node: Node;
+  offset: number;
+}
+
+/** The start or end of the run in `layer` nearest to (x, y), rows first, on the side of x. */
+function nearestRun(layer: HTMLElement, x: number, y: number): Point | null {
+  let nearest: { text: Text; box: DOMRect } | null = null;
+  let nearestDy = Number.POSITIVE_INFINITY;
+  let nearestDx = Number.POSITIVE_INFINITY;
+  for (const span of layer.getElementsByTagName("span")) {
+    const text = span.firstChild;
+    if (!(text instanceof Text) || !/\S/.test(text.data)) continue;
+    const box = span.getBoundingClientRect();
+    const dy = Math.max(box.top - y, y - box.bottom, 0);
+    const dx = Math.max(box.left - x, x - box.right, 0);
+    if (dy < nearestDy || (dy === nearestDy && dx < nearestDx)) {
+      nearest = { text, box };
+      nearestDy = dy;
+      nearestDx = dx;
+    }
+  }
+  if (!nearest) return null;
+  const { text, box } = nearest;
+  return { node: text, offset: x < (box.left + box.right) / 2 ? 0 : text.length };
+}
+
+/**
+ * Selects `point` as a range to another DOM position at the same place:
+ * nothing is selected, but Chromium extends a drag from it.
+ */
+function selectAt(selection: Selection, point: Point): void {
+  const { node, offset } = point;
+  let other: Point = point;
+  if (node instanceof Text) {
+    const parent = node.parentNode;
+    const index = parent ? Array.prototype.indexOf.call(parent.childNodes, node) : -1;
+    if (parent && index >= 0) other = { node: parent, offset: offset === 0 ? index : index + 1 };
+  } else {
+    const after = node.childNodes[offset];
+    const before = node.childNodes[offset - 1];
+    if (after) other = { node: after, offset: 0 };
+    else if (before) other = { node: before, offset: before.childNodes.length };
+  }
+  selection.setBaseAndExtent(node, offset, other.node, other.offset);
+}
+
+const isAt = (selection: Selection, point: Point): boolean =>
+  selection.anchorNode === point.node && selection.anchorOffset === point.offset;
 
 interface UserAgentData {
   brands: { brand: string; version: string }[];
@@ -209,7 +399,7 @@ interface SelectionQuirks {
   /** Firefox, and Chromium from version 148, stop a selection at the runs without help. */
   keepsSelectionInRuns: boolean;
   /**
-   * WebKit and Firefox end a drag selection over space without text at the
+   * WebKit and Firefox end a drag selection over a page's blank space at the
    * start of the element under the pointer; Chromium at the nearest text.
    */
   endsAtStartOfBlankSpace: boolean;

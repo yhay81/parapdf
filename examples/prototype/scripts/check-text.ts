@@ -96,7 +96,13 @@ const pageLines = (page: Page, pageNumber: number) =>
     }
     lines.sort((a, b) => a.top - b.top);
     const box = section?.getBoundingClientRect();
-    return { lines, top: box?.top ?? 0, bottom: box?.bottom ?? 0, right: box?.right ?? 0 };
+    return {
+      lines,
+      top: box?.top ?? 0,
+      bottom: box?.bottom ?? 0,
+      left: box?.left ?? 0,
+      right: box?.right ?? 0,
+    };
   }, pageNumber);
 
 const count = (lines: TextLine[], from: number, to?: number): number =>
@@ -106,6 +112,39 @@ const middle = (line: TextLine): number => line.top + line.height / 2;
 
 const selectedChars = (page: Page) =>
   page.evaluate(() => (window.getSelection()?.toString() ?? "").replace(/\s/g, "").length);
+
+interface ViewerProbe {
+  scroller: HTMLElement | null;
+  store: { get(): { scale: number; layout: { tops: number[] } | null } };
+}
+
+/** Scrolls the boundary between pages 1 and 2 to the middle of the viewport. */
+async function centerFirstBoundary(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const viewer = (window as { __viewer?: ViewerProbe }).__viewer;
+    const scroller = viewer?.scroller;
+    const top = viewer?.store.get().layout?.tops[1];
+    if (scroller && top !== undefined) scroller.scrollTop = top - scroller.clientHeight / 2;
+  });
+  for (const pageNumber of [1, 2]) {
+    await page.waitForSelector(
+      `section[data-page="${pageNumber}"] .parapdf-text-layer .endOfContent`,
+      { state: "attached", timeout: 30_000 },
+    );
+  }
+}
+
+/** A page's lines once two measurements a quarter second apart agree, as after a zoom. */
+async function settledLines(page: Page, pageNumber: number) {
+  let lines = await pageLines(page, pageNumber);
+  for (let attempt = 0; attempt < 40; attempt++) {
+    await page.waitForTimeout(250);
+    const next = await pageLines(page, pageNumber);
+    if (JSON.stringify(next) === JSON.stringify(lines)) break;
+    lines = next;
+  }
+  return lines;
+}
 
 const server = await preview({
   root: exampleDir,
@@ -286,23 +325,7 @@ try {
   // start of the first mounted page; over page 2's blank space, WebKit
   // extended the selection to page 2's end; and over page 1's, entered from
   // below, WebKit and Firefox put the selection's end at page 1's start.
-  await page.evaluate(() => {
-    const viewer = (
-      window as {
-        __viewer?: {
-          scroller: HTMLElement | null;
-          store: { get(): { layout: { tops: number[] } | null } };
-        };
-      }
-    ).__viewer;
-    const scroller = viewer?.scroller;
-    const top = viewer?.store.get().layout?.tops[1];
-    if (scroller && top !== undefined) scroller.scrollTop = top - scroller.clientHeight / 2;
-  });
-  await page.waitForSelector('section[data-page="2"] .parapdf-text-layer .endOfContent', {
-    state: "attached",
-    timeout: 30_000,
-  });
+  await centerFirstBoundary(page);
   const upper = await pageLines(page, 1);
   const lower = await pageLines(page, 2);
   const pressed = upper.lines.at(-3);
@@ -368,6 +391,92 @@ try {
     "dragging up across the gap between pages selects only the dragged lines",
     up !== null && upward >= up.min && upward <= up.min + up.last,
     `${upward} characters; page 2's first three lines hold ${up?.min}, page 1's last line ${up?.last}`,
+  );
+
+  // Drags that start beside a page or in the gap between pages must start at
+  // the nearest text. That space belongs to the element that holds the
+  // absolutely positioned pages, and all three browsers started a selection
+  // pressed there at the start of the first mounted page: 3,357 characters
+  // for the drag from beside page 1. Zooming out twice leaves room beside the
+  // pages.
+  for (let i = 0; i < 2; i++) {
+    const before = await page.evaluate(
+      () => (window as { __viewer?: ViewerProbe }).__viewer?.store.get().scale ?? 0,
+    );
+    await page.getByRole("button", { name: "Zoom out" }).click();
+    await page.waitForFunction(
+      (before) =>
+        ((window as { __viewer?: ViewerProbe }).__viewer?.store.get().scale ?? 0) < before,
+      before,
+    );
+  }
+  await centerFirstBoundary(page);
+  const narrowUpper = await settledLines(page, 1);
+  const narrowLower = await settledLines(page, 2);
+  const besideLine = narrowUpper.lines.at(-3);
+  let beside = -1;
+  if (besideLine) {
+    const y = middle(besideLine);
+    await page.mouse.move(narrowUpper.left - 40, y);
+    await page.mouse.down();
+    await page.mouse.move(besideLine.right - 1, y, { steps: 10 });
+    await page.mouse.up();
+    beside = await selectedChars(page);
+  }
+  check(
+    "a drag that starts beside a page selects from the nearest line",
+    besideLine !== undefined && beside === besideLine.chars,
+    `${beside} characters; the line holds ${besideLine?.chars}`,
+  );
+
+  // From the middle of the gap down to the end of page 2's second line, where
+  // WebKit and Firefox selected 3,566 characters from the start of page 1.
+  const gapTarget = narrowLower.lines[1];
+  let fromGap = -1;
+  if (gapTarget) {
+    await page.mouse.move(
+      (narrowUpper.left + narrowUpper.right) / 2,
+      (narrowUpper.bottom + narrowLower.top) / 2,
+    );
+    await page.mouse.down();
+    await page.mouse.move(gapTarget.right - 1, middle(gapTarget), { steps: 10 });
+    await page.mouse.up();
+    fromGap = await selectedChars(page);
+  }
+  const gapExpected = count(narrowLower.lines, 0, 2);
+  check(
+    "a drag that starts between pages selects from the page boundary",
+    gapTarget !== undefined && fromGap === gapExpected,
+    `${fromGap} characters; page 2's first two lines hold ${gapExpected}`,
+  );
+
+  // Out of the page sideways, from the line's start to beside the page:
+  // Chromium put the selection's end at the start of the page, 3,308
+  // characters back. A press on selected text would drag that text instead,
+  // so nothing is selected first.
+  let sideways = -1;
+  if (besideLine) {
+    const y = middle(besideLine);
+    await page.evaluate(() => window.getSelection()?.removeAllRanges());
+    await page.mouse.move(besideLine.left + 1, y);
+    await page.mouse.down();
+    await page.mouse.move(narrowUpper.right + 40, y, { steps: 10 });
+    await page.mouse.up();
+    sideways = await selectedChars(page);
+  }
+  check(
+    "a drag selection holds beside a page",
+    besideLine !== undefined && sideways > 0 && sideways <= besideLine.chars,
+    `${sideways} characters; the line holds ${besideLine?.chars}`,
+  );
+
+  // A click beside a page still clears the selection.
+  if (besideLine) await page.mouse.click(narrowUpper.left - 40, middle(besideLine));
+  const afterClick = await selectedChars(page);
+  check(
+    "a click beside a page clears the selection",
+    sideways > 0 && afterClick === 0,
+    `${afterClick} characters selected after the click`,
   );
 
   check("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));
