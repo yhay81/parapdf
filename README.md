@@ -110,9 +110,9 @@ about 20 ms as noise.
   CSS Custom Highlight API without touching the text layer DOM. Pages are
   labelled regions and the viewport is a focusable document.
   [`check-text.ts`](examples/prototype/scripts/check-text.ts) verifies
-  selection, including a drag past a line's end, search, Japanese,
-  full-width, diacritic, and line-break matching, and these semantics in all
-  three browsers.
+  selection, including drags past a line's end and across the gap between
+  two pages in both directions, search, Japanese, full-width, diacritic, and
+  line-break matching, and these semantics in all three browsers.
 - **Text layer cost.** Text layers are built only after scrolling settles, one
   page per idle period. With the renderer worker on a GPU-backed canvas in
   Chromium, slow scrolling blocked the main thread for 3–18 ms with text
@@ -142,8 +142,14 @@ about 20 ms as noise.
   the cross-origin-isolated demo, apparently when taken from its cache, and
   pdf.js silently parsed on the main thread; the same happens to the renderer
   worker of a document reopened in the same page. The demo isolates itself
-  only for precise timers. In WebKit, a drag selection across the gap between two
-  pages still jumps to the end of the next page.
+  only for precise timers. Mouse selection in WebKit 27.2 ignores unprefixed
+  `user-select`, so the viewer CSS also declares `-webkit-user-select`, as
+  pdf.js's does. Over space without text, WebKit and Firefox put the end of a
+  drag selection at the start of the page or gap under the pointer, so
+  during a drag ParaPDF holds the selection over gaps and sends a page's
+  blank space to the page boundary: drags between pages no longer jump to the
+  start or end of a page. pdf.js's own viewer still selects the whole page
+  above when a drag enters it from below in WebKit and Firefox.
 - **Not yet built.** Form filling, structure-tree semantics for tagged PDFs,
   text for pages outside the mounted window, and region rendering beyond the
   16 MP detail cap.

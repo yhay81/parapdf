@@ -295,11 +295,13 @@ export class PdfViewerRuntime {
     scroller.addEventListener("wheel", this.#onWheel, { passive: false });
     const resize = new ResizeObserver(() => this.#requestUpdate());
     resize.observe(scroller);
+    const detachSelection = this.#selection.attachPages(content);
     this.#requestUpdate();
     return () => {
       scroller.removeEventListener("scroll", this.#onScroll);
       scroller.removeEventListener("wheel", this.#onWheel);
       resize.disconnect();
+      detachSelection();
       if (this.#frame) cancelAnimationFrame(this.#frame);
       this.#frame = 0;
       if (this.#scroller === scroller) {

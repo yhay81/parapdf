@@ -117,13 +117,27 @@ until the benchmark results justify the architecture.
   options so element order matches item order.
 - `TextSelectionTracker` (`runtime/selection.ts`, ported from pdf.js's
   `TextLayerBuilder` and attributed in `NOTICE.md`) gives every text layer a
-  selection touches the `selecting` class, which stretches its
-  `.endOfContent` over the page. In WebKit and Chromium before 148 it also
-  moves `.endOfContent` next to the changing end of the selection, so a drag
-  past a line's end does not select the rest of the page. Each viewer owns
-  its listeners, so closing one viewer leaves the others working (pdf.js
-  issue 22129). In WebKit a drag across the gap between two pages still jumps
-  to the end of the next page.
+  selection touches the `selecting` class, which stretches its unselectable
+  `.endOfContent` over the page, so a drag past a line's end does not select
+  the rest of the page. In browsers other than Firefox and Chromium 148 or
+  later it also moves `.endOfContent` next to the changing end of the
+  selection, as pdf.js does. Each viewer owns its listeners, so closing one
+  viewer leaves the others working (pdf.js issue 22129).
+- The viewer CSS declares `-webkit-user-select` next to every `user-select`,
+  as pdf.js's does: Playwright's WebKit 27.2 parses `user-select` but its
+  mouse selection follows only the prefixed property. Without it,
+  `.endOfContent` was selectable in WebKit, and a drag into the next page
+  selected to that page's end.
+- Over space without text, WebKit and Firefox put the end of a drag selection
+  at the start of the element under the pointer; Chromium picks the nearest
+  text. So in WebKit and Firefox, from a press in a text layer until release,
+  the pages element (`.parapdf-pages`) has `selecting`, which makes the space
+  between and beside the pages unselectable, and text layers above the
+  selection have `selecting` and `before-selection`, whose selectable
+  `.endOfContent` sends their blank space to the page's end. A drag holds over
+  a gap and, entering a page from either side, selects up to the page
+  boundary. pdf.js's own viewer selects all of the page above in WebKit and
+  Firefox when a drag enters it from below; not yet reported upstream.
 - Search indexes each page with the normalization of pdf.js's
   `PDFFindController` (ported in `runtime/text-search.ts`, attributed in
   `NOTICE.md`) at its default options: compatibility forms, case, and

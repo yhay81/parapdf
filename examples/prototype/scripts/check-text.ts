@@ -61,6 +61,52 @@ const currentHighlightText = (page: Page) =>
     return range instanceof Range ? range.toString() : null;
   });
 
+interface TextLine {
+  top: number;
+  height: number;
+  left: number;
+  right: number;
+  /** Non-space characters. */
+  chars: number;
+}
+
+/** A page's box and the lines of its text layer, top to bottom, in viewport coordinates. */
+const pageLines = (page: Page, pageNumber: number) =>
+  page.evaluate((pageNumber) => {
+    const section = document.querySelector(`section[data-page="${pageNumber}"]`);
+    const lines: TextLine[] = [];
+    for (const span of section?.querySelectorAll(".parapdf-text-layer span") ?? []) {
+      const chars = (span.textContent ?? "").replace(/\s/g, "").length;
+      if (chars === 0) continue;
+      const rect = span.getBoundingClientRect();
+      const line = lines.find((entry) => Math.abs(entry.top - rect.top) < rect.height / 2);
+      if (line) {
+        line.left = Math.min(line.left, rect.left);
+        line.right = Math.max(line.right, rect.right);
+        line.chars += chars;
+      } else {
+        lines.push({
+          top: rect.top,
+          height: rect.height,
+          left: rect.left,
+          right: rect.right,
+          chars,
+        });
+      }
+    }
+    lines.sort((a, b) => a.top - b.top);
+    const box = section?.getBoundingClientRect();
+    return { lines, top: box?.top ?? 0, bottom: box?.bottom ?? 0, right: box?.right ?? 0 };
+  }, pageNumber);
+
+const count = (lines: TextLine[], from: number, to?: number): number =>
+  lines.slice(from, to).reduce((sum, line) => sum + line.chars, 0);
+
+const middle = (line: TextLine): number => line.top + line.height / 2;
+
+const selectedChars = (page: Page) =>
+  page.evaluate(() => (window.getSelection()?.toString() ?? "").replace(/\s/g, "").length);
+
 const server = await preview({
   root: exampleDir,
   configFile: join(exampleDir, "vite.config.ts"),
@@ -206,61 +252,122 @@ try {
   );
 
   // Dragging into the blank space past a line's end must select the dragged
-  // lines, not the rest of the page: WebKit extends such a selection to
-  // wherever the text layer's .endOfContent element sits.
+  // lines, not the rest of the page: WebKit extended such a selection to the
+  // text layer's .endOfContent element while that element was selectable.
   page = await newPage();
   await openViewer(page, baseUrl, "synthetic-text-1000.pdf");
-  const drag = await page.evaluate(() => {
-    const section = document.querySelector('section[data-page="1"]');
-    const lines: { top: number; height: number; left: number; right: number; chars: number }[] = [];
-    for (const span of section?.querySelectorAll(".parapdf-text-layer span") ?? []) {
-      const chars = (span.textContent ?? "").replace(/\s/g, "").length;
-      if (chars === 0) continue;
-      const rect = span.getBoundingClientRect();
-      const line = lines.find((entry) => Math.abs(entry.top - rect.top) < rect.height / 2);
-      if (line) {
-        line.left = Math.min(line.left, rect.left);
-        line.right = Math.max(line.right, rect.right);
-        line.chars += chars;
-      } else {
-        lines.push({
-          top: rect.top,
-          height: rect.height,
-          left: rect.left,
-          right: rect.right,
-          chars,
-        });
-      }
-    }
-    lines.sort((a, b) => a.top - b.top);
-    const count = (from: number, to: number) =>
-      lines.slice(from, to).reduce((sum, line) => sum + line.chars, 0);
-    const fifth = lines[4];
-    const ninth = lines[8];
-    const pageRight = section?.getBoundingClientRect().right ?? 0;
-    return fifth && ninth
+  const first = await pageLines(page, 1);
+  const fifth = first.lines[4];
+  const ninth = first.lines[8];
+  const drag =
+    fifth && ninth
       ? {
-          start: { x: fifth.left + 1, y: fifth.top + fifth.height / 2 },
-          end: { x: Math.min(pageRight - 20, ninth.right + 120), y: ninth.top + ninth.height / 2 },
-          min: count(4, 7),
-          max: count(4, 10),
+          start: { x: fifth.left + 1, y: middle(fifth) },
+          end: { x: Math.min(first.right - 20, ninth.right + 120), y: middle(ninth) },
+          min: count(first.lines, 4, 7),
+          max: count(first.lines, 4, 10),
         }
       : null;
-  });
   if (drag) {
     await page.mouse.move(drag.start.x, drag.start.y);
     await page.mouse.down();
     await page.mouse.move(drag.end.x, drag.end.y, { steps: 20 });
     await page.mouse.up();
   }
-  const dragged = (await page.evaluate(() => window.getSelection()?.toString() ?? "")).replace(
-    /\s/g,
-    "",
-  ).length;
+  const dragged = await selectedChars(page);
   check(
     "dragging past a line's end selects only the dragged lines",
     drag !== null && dragged >= drag.min && dragged <= drag.max,
     `${dragged} characters; lines 5–7 hold ${drag?.min}, lines 5–10 hold ${drag?.max}`,
+  );
+
+  // Drags between pages 1 and 2 must not jump across either page. Over the
+  // gap between the pages, WebKit and Firefox put the selection's end at the
+  // start of the first mounted page; over page 2's blank space, WebKit
+  // extended the selection to page 2's end; and over page 1's, entered from
+  // below, WebKit and Firefox put the selection's end at page 1's start.
+  await page.evaluate(() => {
+    const viewer = (
+      window as {
+        __viewer?: {
+          scroller: HTMLElement | null;
+          store: { get(): { layout: { tops: number[] } | null } };
+        };
+      }
+    ).__viewer;
+    const scroller = viewer?.scroller;
+    const top = viewer?.store.get().layout?.tops[1];
+    if (scroller && top !== undefined) scroller.scrollTop = top - scroller.clientHeight / 2;
+  });
+  await page.waitForSelector('section[data-page="2"] .parapdf-text-layer .endOfContent', {
+    state: "attached",
+    timeout: 30_000,
+  });
+  const upper = await pageLines(page, 1);
+  const lower = await pageLines(page, 2);
+  const pressed = upper.lines.at(-3);
+  const target = lower.lines[1];
+  const cross =
+    pressed && target
+      ? {
+          start: { x: pressed.left + 1, y: middle(pressed) },
+          end: { x: Math.min(lower.right - 20, target.right + 120), y: middle(target) },
+          rest: count(upper.lines, -3),
+          next: count(lower.lines, 0, 2),
+        }
+      : null;
+  let inGap = -1;
+  let across = -1;
+  if (cross) {
+    await page.mouse.move(cross.start.x, cross.start.y);
+    await page.mouse.down();
+    await page.mouse.move((cross.start.x + cross.end.x) / 2, (upper.bottom + lower.top) / 2, {
+      steps: 10,
+    });
+    inGap = await selectedChars(page);
+    await page.mouse.move(cross.end.x, cross.end.y, { steps: 10 });
+    await page.mouse.up();
+    across = await selectedChars(page);
+  }
+  check(
+    "a drag selection holds over the gap between pages",
+    cross !== null && inGap > 0 && inGap <= cross.rest,
+    `${inGap} characters; page 1 holds ${cross?.rest} from the pressed line on`,
+  );
+  check(
+    "dragging across the gap between pages selects only the dragged lines",
+    cross !== null && across >= cross.rest && across <= cross.rest + cross.next,
+    `${across} characters; page 1 holds ${cross?.rest} from the pressed line on, page 2's first two lines ${cross?.next}`,
+  );
+
+  // Upward, from the end of page 2's third line into the blank space below
+  // page 1's last line: page 2's first three lines, and at most page 1's
+  // last line, which Chromium selects up to the pointer.
+  const lifted = lower.lines[2];
+  const last = upper.lines.at(-1);
+  const up =
+    lifted && last
+      ? {
+          start: { x: lifted.right - 1, y: middle(lifted) },
+          x: (last.left + last.right) / 2,
+          end: last.top + last.height + 20,
+          min: count(lower.lines, 0, 3),
+          last: last.chars,
+        }
+      : null;
+  let upward = -1;
+  if (up) {
+    await page.mouse.move(up.start.x, up.start.y);
+    await page.mouse.down();
+    await page.mouse.move(up.x, (upper.bottom + lower.top) / 2, { steps: 10 });
+    await page.mouse.move(up.x, up.end, { steps: 5 });
+    await page.mouse.up();
+    upward = await selectedChars(page);
+  }
+  check(
+    "dragging up across the gap between pages selects only the dragged lines",
+    up !== null && upward >= up.min && upward <= up.min + up.last,
+    `${upward} characters; page 2's first three lines hold ${up?.min}, page 1's last line ${up?.last}`,
   );
 
   check("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));
