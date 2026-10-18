@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Page } from "playwright";
 import { preview } from "vite";
-import { launchBrowser } from "../../../bench/scripts/browsers.ts";
+import { launchBrowser, restoreScaleFactor } from "../../../bench/scripts/browsers.ts";
 
 const exampleDir = fileURLToPath(new URL("..", import.meta.url));
 const engine = process.env.ENGINE ?? "pdfjs-next";
@@ -64,6 +64,7 @@ const context = await launched.browser.newContext({
   deviceScaleFactor: 2,
 });
 const page = await context.newPage();
+await restoreScaleFactor(page, `${baseUrl}calibrate.html`);
 const errors: string[] = [];
 page.on("pageerror", (error) => errors.push(error.message));
 

@@ -13,6 +13,7 @@ export {
   type PdfEngineDocument,
   type PdfSource,
   RenderCancelledError,
+  type RenderRegion,
   type RenderRequest,
   type RenderTask,
   type ResolvedDestination,

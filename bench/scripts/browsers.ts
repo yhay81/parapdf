@@ -10,7 +10,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { platform, tmpdir } from "node:os";
 import { join } from "node:path";
-import { type Browser, chromium, firefox, webkit } from "playwright";
+import { type Browser, chromium, firefox, type Page, webkit } from "playwright";
 
 export const browserNames = ["chromium", "webkit", "firefox"] as const;
 export type BrowserName = (typeof browserNames)[number];
@@ -67,6 +67,20 @@ export function assertMeasurementPower(): PowerState {
   throw new Error(
     `Not measuring on ${state.source === "battery" ? "battery power" : "Low Power Mode"}: results would not be comparable. Connect AC power, or set ALLOW_BATTERY=1 to measure anyway.`,
   );
+}
+
+/**
+ * Playwright's Firefox drops a context's deviceScaleFactor when a page first
+ * navigates into a cross-origin-isolated process (COOP and COEP), so the page
+ * renders at devicePixelRatio 1. Visiting a cross-origin-isolated `url` once
+ * and applying the viewport again restores the scale factor for every later
+ * navigation of that page. Other browsers need nothing.
+ */
+export async function restoreScaleFactor(page: Page, url: string): Promise<void> {
+  if (page.context().browser()?.browserType().name() !== "firefox") return;
+  await page.goto(url);
+  const viewport = page.viewportSize();
+  if (viewport) await page.setViewportSize(viewport);
 }
 
 export interface LaunchedBrowser {

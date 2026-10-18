@@ -3,12 +3,21 @@ import {
   type AnnotationLayerTask,
   isRenderCancelled,
   type LinkHandlers,
+  type PageSize,
   type PdfEngineDocument,
+  type RenderRegion,
   type RenderTask,
   type TextLayerHandle,
   type TextLayerTask,
 } from "../engine/types.ts";
-import type { Layout } from "./layout.ts";
+import {
+  areaSize,
+  intersectAreas,
+  type Layout,
+  type PageArea,
+  type Viewport,
+  visibleArea,
+} from "./layout.ts";
 import type { TextSelectionTracker } from "./selection.ts";
 
 type Layer = "base" | "detail";
@@ -33,7 +42,9 @@ interface Slot {
   /** Device pixels per point of the last completed render, 0 when empty. */
   baseScale: number;
   detailScale: number;
-  job: { layer: Layer; scale: number; task: RenderTask } | undefined;
+  /** The part of the page the detail layer covers; null for the whole page. */
+  detailRegion: PageArea | null;
+  job: { layer: Layer; scale: number; region: PageArea | null; task: RenderTask } | undefined;
   textTask: TextLayerTask | undefined;
   textHandle: TextLayerHandle | undefined;
   /** CSS pixels per point the text runs were measured for. */
@@ -50,6 +61,7 @@ export interface ScheduleInput {
   last: number;
   /** Page nearest the viewport center; work radiates out from it. */
   focus: number;
+  viewport: Viewport;
   devicePixelRatio: number;
   /** Scrolling is slow or stopped, so full-resolution work is worth starting. */
   settled: boolean;
@@ -66,8 +78,13 @@ export interface SchedulerStats {
 
 export interface SchedulerOptions {
   maxConcurrent?: number;
-  /** Detail canvases are capped at this many pixels until region rendering lands. */
+  /**
+   * The most pixels a detail canvas holds. A page whose full-resolution render
+   * is larger gets detail only for its visible area plus a margin.
+   */
   maxDetailPixels?: number;
+  /** The most pixels a base canvas holds; beyond it the base renders at lower resolution. */
+  maxBasePixels?: number;
   /** Where activated links in annotation layers go. */
   links?: LinkHandlers;
   /** Keeps drag selections inside rendered text layers. */
@@ -79,6 +96,59 @@ export interface SchedulerOptions {
 
 /** Base renders use half a device pixel per CSS pixel at most: fast, and fine as a placeholder. */
 const BASE_FACTOR = 0.5;
+
+/** What a page's detail layer should hold. */
+interface DetailPlan {
+  /** Device pixels per point. */
+  scale: number;
+  /** The part of the page to draw; null for the whole page. */
+  region: PageArea | null;
+}
+
+/**
+ * pdf.js's PDFPageDetailView redraws its region once the visible area leaves
+ * it, or once the margin on one side grows past (1 + 0.5) / 0.5 = 3 times the
+ * margin on the opposite side, which is wasted on the region's far side.
+ */
+const LOPSIDED_MARGIN = 3;
+
+function shouldRedrawRegion(region: PageArea, visible: PageArea): boolean {
+  if (
+    visible.minX < region.minX ||
+    visible.minY < region.minY ||
+    visible.maxX > region.maxX ||
+    visible.maxY > region.maxY
+  ) {
+    return true;
+  }
+  const left = visible.minX - region.minX;
+  const right = region.maxX - visible.maxX;
+  const top = visible.minY - region.minY;
+  const bottom = region.maxY - visible.maxY;
+  return (
+    (region.minX > 0 && right / left > LOPSIDED_MARGIN) ||
+    (region.maxX < 1 && left / right > LOPSIDED_MARGIN) ||
+    (region.minY > 0 && bottom / top > LOPSIDED_MARGIN) ||
+    (region.maxY < 1 && top / bottom > LOPSIDED_MARGIN)
+  );
+}
+
+/** Lowers `scale` until a page of `size` points fits in `maxPixels`. */
+function capScale(scale: number, size: PageSize | undefined, maxPixels: number): number {
+  if (!size) return scale;
+  const pixels = size.width * scale * (size.height * scale);
+  return pixels > maxPixels ? scale * Math.sqrt(maxPixels / pixels) : scale;
+}
+
+/** Positions a detail canvas over `region` of its page, or over the whole page. */
+function placeDetail(canvas: HTMLCanvasElement, region: PageArea | null): void {
+  const { style } = canvas;
+  const area = region ?? { minX: 0, minY: 0, maxX: 1, maxY: 1 };
+  style.left = `${area.minX * 100}%`;
+  style.top = `${area.minY * 100}%`;
+  style.width = `${(area.maxX - area.minX) * 100}%`;
+  style.height = `${(area.maxY - area.minY) * 100}%`;
+}
 
 const whenIdle: (callback: () => void) => void =
   typeof requestIdleCallback === "function"
@@ -98,6 +168,7 @@ export class RenderScheduler {
   readonly #slots = new Map<number, Slot>();
   readonly #maxConcurrent: number;
   readonly #maxDetailPixels: number;
+  readonly #maxBasePixels: number;
   readonly #options: SchedulerOptions;
   #input: ScheduleInput | undefined;
   #running = 0;
@@ -108,6 +179,7 @@ export class RenderScheduler {
     this.#doc = doc;
     this.#maxConcurrent = options.maxConcurrent ?? 2;
     this.#maxDetailPixels = options.maxDetailPixels ?? 16_777_216;
+    this.#maxBasePixels = options.maxBasePixels ?? 2_097_152;
     this.#options = options;
   }
 
@@ -127,6 +199,7 @@ export class RenderScheduler {
       annotations,
       baseScale: 0,
       detailScale: 0,
+      detailRegion: null,
       job: undefined,
       textTask: undefined,
       textHandle: undefined,
@@ -166,9 +239,15 @@ export class RenderScheduler {
   update(input: ScheduleInput): void {
     this.#input = input;
     for (const slot of this.#slots.values()) {
+      const plan = this.#detailPlan(slot.index, input);
       const job = slot.job;
-      if (job?.layer === "detail" && !sameScale(job.scale, this.#detailScale(slot.index, input))) {
+      if (job?.layer === "detail" && (!plan || !sameScale(job.scale, plan.scale))) {
         job.task.cancel();
+      }
+      if (!plan && slot.detailScale > 0) {
+        // Pages that left the viewport at a region-rendering zoom give their
+        // detail memory back; their base layer still shows.
+        this.#clearDetail(slot);
       }
     }
     this.#pump();
@@ -183,19 +262,82 @@ export class RenderScheduler {
     return this.#slots.get(index)?.textHandle;
   }
 
-  #baseScale(input: ScheduleInput): number {
-    return input.layout.scale * BASE_FACTOR;
+  /**
+   * How sharp a page looks over `area`: the resolution of its pixels as a
+   * share of `needed` device pixels per point, weighted by area. 1 means
+   * full resolution everywhere, 0 means blank.
+   */
+  sharpness(index: number, area: PageArea, needed: number): number {
+    const slot = this.#slots.get(index);
+    const total = areaSize(area);
+    if (!slot || total === 0) return 0;
+    const base = Math.min(1, slot.baseScale / needed);
+    if (slot.detailScale === 0) return base;
+    const detail = Math.max(base, Math.min(1, slot.detailScale / needed));
+    const covered = slot.detailRegion ? areaSize(intersectAreas(area, slot.detailRegion)) : total;
+    return (covered * detail + (total - covered) * base) / total;
   }
 
-  #detailScale(index: number, input: ScheduleInput): number {
+  #baseScale(index: number, input: ScheduleInput): number {
+    return capScale(
+      input.layout.scale * BASE_FACTOR,
+      input.layout.sizes[index],
+      this.#maxBasePixels,
+    );
+  }
+
+  /**
+   * A page whose full-resolution render fits in maxDetailPixels gets detail
+   * for the whole page. A larger one gets detail only while visible, for the
+   * visible area grown by up to its own size on each side as far as the pixel
+   * budget allows, as in pdf.js's PDFPageDetailView. Null: no detail layer.
+   */
+  #detailPlan(index: number, input: ScheduleInput): DetailPlan | null {
     const { layout, devicePixelRatio } = input;
-    const scale = layout.scale * devicePixelRatio;
     const size = layout.sizes[index];
-    if (!size) return scale;
-    const pixels = size.width * scale * (size.height * scale);
-    return pixels > this.#maxDetailPixels
-      ? scale * Math.sqrt(this.#maxDetailPixels / pixels)
-      : scale;
+    if (!size) return null;
+    const scale = layout.scale * devicePixelRatio;
+    const pagePixels = size.width * scale * (size.height * scale);
+    if (pagePixels <= this.#maxDetailPixels) return { scale, region: null };
+    const visible = visibleArea(layout, index, input.viewport);
+    if (!visible) return null;
+    const visiblePixels = areaSize(visible) * pagePixels;
+    const overflow = Math.min(
+      1,
+      Math.max(0, (Math.sqrt(this.#maxDetailPixels / visiblePixels) - 1) / 2),
+    );
+    const growX = (visible.maxX - visible.minX) * overflow;
+    const growY = (visible.maxY - visible.minY) * overflow;
+    const region = {
+      minX: Math.max(0, visible.minX - growX),
+      minY: Math.max(0, visible.minY - growY),
+      maxX: Math.min(1, visible.maxX + growX),
+      maxY: Math.min(1, visible.maxY + growY),
+    };
+    // A viewport larger than the budget gets its detail at lower resolution.
+    const regionPixels = areaSize(region) * pagePixels;
+    return {
+      scale:
+        regionPixels > this.#maxDetailPixels
+          ? scale * Math.sqrt(this.#maxDetailPixels / regionPixels)
+          : scale,
+      region,
+    };
+  }
+
+  #needsDetail(slot: Slot, plan: DetailPlan, input: ScheduleInput): boolean {
+    if (!sameScale(slot.detailScale, plan.scale)) return true;
+    if (!plan.region) return slot.detailRegion !== null;
+    if (!slot.detailRegion) return true;
+    const visible = visibleArea(input.layout, slot.index, input.viewport);
+    return visible !== null && shouldRedrawRegion(slot.detailRegion, visible);
+  }
+
+  #clearDetail(slot: Slot): void {
+    slot.detailScale = 0;
+    slot.detailRegion = null;
+    slot.detail.width = 0;
+    slot.detail.height = 0;
   }
 
   #byDistance(input: ScheduleInput): Slot[] {
@@ -205,18 +347,26 @@ export class RenderScheduler {
   }
 
   /** Highest-priority idle slot and the canvas layer it needs, or nothing to do. */
-  #next(): { slot: Slot; layer: Layer; scale: number } | undefined {
+  #next(): { slot: Slot; layer: Layer; scale: number; region: PageArea | null } | undefined {
     const input = this.#input;
     if (!input) return undefined;
     const idle = this.#byDistance(input).filter((slot) => slot.job === undefined);
     const visible = (slot: Slot) => slot.index >= input.first && slot.index <= input.last;
-    const baseScale = this.#baseScale(input);
-    const needsDetail = (slot: Slot) =>
-      !sameScale(slot.detailScale, this.#detailScale(slot.index, input));
+    const plans = new Map<Slot, DetailPlan | null>();
+    const planOf = (slot: Slot) => {
+      if (!plans.has(slot)) plans.set(slot, this.#detailPlan(slot.index, input));
+      return plans.get(slot) ?? null;
+    };
+    const needsDetail = (slot: Slot) => {
+      const plan = planOf(slot);
+      return plan !== null && this.#needsDetail(slot, plan, input);
+    };
     // A base render from a very different zoom level still beats an empty page,
     // so refreshing it comes last.
-    const staleBase = (slot: Slot) =>
-      slot.baseScale > 0 && (slot.baseScale > baseScale * 2 || slot.baseScale < baseScale / 2);
+    const staleBase = (slot: Slot) => {
+      const target = this.#baseScale(slot.index, input);
+      return slot.baseScale > 0 && (slot.baseScale > target * 2 || slot.baseScale < target / 2);
+    };
 
     const phases: [(slot: Slot) => boolean, Layer][] = [
       [(slot) => visible(slot) && slot.baseScale === 0, "base"],
@@ -228,8 +378,11 @@ export class RenderScheduler {
     for (const [matches, layer] of phases) {
       const slot = idle.find(matches);
       if (slot) {
-        const scale = layer === "base" ? baseScale : this.#detailScale(slot.index, input);
-        return { slot, layer, scale };
+        if (layer === "base") {
+          return { slot, layer, scale: this.#baseScale(slot.index, input), region: null };
+        }
+        const plan = planOf(slot);
+        if (plan) return { slot, layer, scale: plan.scale, region: plan.region };
       }
     }
     return undefined;
@@ -239,15 +392,37 @@ export class RenderScheduler {
     while (this.#running < this.#maxConcurrent) {
       const next = this.#next();
       if (!next) break;
-      this.#start(next.slot, next.layer, next.scale);
+      this.#start(next.slot, next.layer, next.scale, next.region);
     }
     this.#scheduleText();
   }
 
-  #start(slot: Slot, layer: Layer, scale: number): void {
+  #start(slot: Slot, layer: Layer, scale: number, plannedRegion: PageArea | null): void {
     const canvas = layer === "base" ? slot.base : slot.detail;
-    const task = this.#doc.render({ pageIndex: slot.index, scale, canvas });
-    slot.job = { layer, scale, task };
+    let region = plannedRegion;
+    let pixels: RenderRegion | undefined;
+    const size = this.#input?.layout.sizes[slot.index];
+    if (region && size) {
+      // Snap the region to whole pixels so it lines up with the base below.
+      const width = size.width * scale;
+      const height = size.height * scale;
+      const x = Math.floor(region.minX * width);
+      const y = Math.floor(region.minY * height);
+      const right = Math.min(Math.ceil(width), Math.ceil(region.maxX * width));
+      const bottom = Math.min(Math.ceil(height), Math.ceil(region.maxY * height));
+      pixels = { x, y, width: right - x, height: bottom - y };
+      region = { minX: x / width, minY: y / height, maxX: right / width, maxY: bottom / height };
+    }
+    // The canvas is resized, which clears it, before the page next paints, so
+    // moving it now never shows old pixels in the new place.
+    if (layer === "detail") placeDetail(canvas, region);
+    const task = this.#doc.render({
+      pageIndex: slot.index,
+      scale,
+      canvas,
+      ...(pixels ? { region: pixels } : {}),
+    });
+    slot.job = { layer, scale, region, task };
     this.#running++;
     task.promise
       .then(
@@ -258,6 +433,7 @@ export class RenderScheduler {
             this.stats.base++;
           } else {
             slot.detailScale = scale;
+            slot.detailRegion = region;
             this.stats.detail++;
           }
           this.#options.onPainted?.(slot.index, layer);
@@ -270,8 +446,7 @@ export class RenderScheduler {
           }
           if (layer === "detail" && this.#slots.get(slot.index) === slot) {
             // Hide a half-drawn detail layer so the base shows through.
-            slot.detailScale = 0;
-            slot.detail.width = 0;
+            this.#clearDetail(slot);
           }
         },
       )

@@ -1,0 +1,200 @@
+{
+  "environment": {
+    "runAt": "2026-10-18T14:46:28.220Z",
+    "os": "darwin 27.0.0 arm64",
+    "cpu": "Apple M2 Pro (12 logical cores)",
+    "browser": "WebKit 27.2",
+    "power": {
+      "source": "ac",
+      "lowPowerMode": false
+    },
+    "loadAverage": {
+      "start": 376.24,
+      "end": 401.86
+    },
+    "settings": {
+      "file": "bill-hr815.pdf",
+      "runs": 2,
+      "devices": [
+        {
+          "name": "desktop",
+          "viewport": {
+            "width": 1280,
+            "height": 900
+          },
+          "deviceScaleFactor": 2
+        },
+        {
+          "name": "phone",
+          "viewport": {
+            "width": 390,
+            "height": 844
+          },
+          "deviceScaleFactor": 3
+        }
+      ]
+    }
+  },
+  "summaries": [
+    {
+      "device": "desktop",
+      "scale": 4,
+      "variant": "pdfjs-hwa",
+      "runs": 2,
+      "zoom": {
+        "timeToSharpMs": 121.38,
+        "sharpRuns": 2,
+        "sharpness": 1,
+        "canvasMiB": 70.96,
+        "peakCanvasMiB": 70.96
+      },
+      "pan": {
+        "timeToSharpMs": 86.01,
+        "sharpRuns": 2,
+        "sharpness": 1,
+        "canvasMiB": 66.01,
+        "peakCanvasMiB": 70.96
+      }
+    },
+    {
+      "device": "desktop",
+      "scale": 4,
+      "variant": "pdfjs-next-hwa",
+      "runs": 2,
+      "zoom": {
+        "timeToSharpMs": 130.47,
+        "sharpRuns": 2,
+        "sharpness": 1,
+        "canvasMiB": 70.96,
+        "peakCanvasMiB": 70.96
+      },
+      "pan": {
+        "timeToSharpMs": 109.65,
+        "sharpRuns": 2,
+        "sharpness": 1,
+        "canvasMiB": 66.01,
+        "peakCanvasMiB": 70.96
+      }
+    },
+    {
+      "device": "desktop",
+      "scale": 8,
+      "variant": "pdfjs-hwa",
+      "runs": 2,
+      "zoom": {
+        "timeToSharpMs": 89.49,
+        "sharpRuns": 2,
+        "sharpness": 1,
+        "canvasMiB": 70.96,
+        "peakCanvasMiB": 70.96
+      },
+      "pan": {
+        "timeToSharpMs": 82.06,
+        "sharpRuns": 2,
+        "sharpness": 1,
+        "canvasMiB": 70.96,
+        "peakCanvasMiB": 70.96
+      }
+    },
+    {
+      "device": "desktop",
+      "scale": 8,
+      "variant": "pdfjs-next-hwa",
+      "runs": 2,
+      "zoom": {
+        "timeToSharpMs": 144.17,
+        "sharpRuns": 2,
+        "sharpness": 1,
+        "canvasMiB": 70.96,
+        "peakCanvasMiB": 70.96
+      },
+      "pan": {
+        "timeToSharpMs": 130.77,
+        "sharpRuns": 2,
+        "sharpness": 1,
+        "canvasMiB": 70.96,
+        "peakCanvasMiB": 70.96
+      }
+    },
+    {
+      "device": "phone",
+      "scale": 4,
+      "variant": "pdfjs-hwa",
+      "runs": 2,
+      "zoom": {
+        "timeToSharpMs": 89.15,
+        "sharpRuns": 2,
+        "sharpness": 1,
+        "canvasMiB": 88.19,
+        "peakCanvasMiB": 88.19
+      },
+      "pan": {
+        "timeToSharpMs": 13.99,
+        "sharpRuns": 2,
+        "sharpness": 1,
+        "canvasMiB": 81.32,
+        "peakCanvasMiB": 88.19
+      }
+    },
+    {
+      "device": "phone",
+      "scale": 4,
+      "variant": "pdfjs-next-hwa",
+      "runs": 2,
+      "zoom": {
+        "timeToSharpMs": 122.28,
+        "sharpRuns": 2,
+        "sharpness": 1,
+        "canvasMiB": 88.19,
+        "peakCanvasMiB": 88.19
+      },
+      "pan": {
+        "timeToSharpMs": 13.77,
+        "sharpRuns": 2,
+        "sharpness": 1,
+        "canvasMiB": 81.32,
+        "peakCanvasMiB": 88.19
+      }
+    },
+    {
+      "device": "phone",
+      "scale": 8,
+      "variant": "pdfjs-hwa",
+      "runs": 2,
+      "zoom": {
+        "timeToSharpMs": 80.86,
+        "sharpRuns": 2,
+        "sharpness": 1,
+        "canvasMiB": 88.19,
+        "peakCanvasMiB": 88.19
+      },
+      "pan": {
+        "timeToSharpMs": 13.88,
+        "sharpRuns": 2,
+        "sharpness": 1,
+        "canvasMiB": 88.19,
+        "peakCanvasMiB": 88.19
+      }
+    },
+    {
+      "device": "phone",
+      "scale": 8,
+      "variant": "pdfjs-next-hwa",
+      "runs": 2,
+      "zoom": {
+        "timeToSharpMs": 127.65,
+        "sharpRuns": 2,
+        "sharpness": 1,
+        "canvasMiB": 88.19,
+        "peakCanvasMiB": 88.19
+      },
+      "pan": {
+        "timeToSharpMs": 13.68,
+        "sharpRuns": 2,
+        "sharpness": 1,
+        "canvasMiB": 88.19,
+        "peakCanvasMiB": 88.19
+      }
+    }
+  ]
+}

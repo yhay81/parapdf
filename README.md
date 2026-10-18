@@ -90,13 +90,14 @@ about 20 ms as noise.
   14 ms. CPU-backed canvases dropped 6–12 frames in 4 seconds of scrolling
   where GPU-backed canvases dropped none: one more reason to default to
   `enableHWA`.
-- **Firefox.** Every variant blocked for 25–96 ms, with stalls of 7–14 ms,
-  the renderer worker on a GPU-backed canvas included (31–51 ms). Scrolling
-  pages that are already rendered, with nothing new to render, blocks for
-  2–42 ms (median 5; see
-  [`control.md`](examples/prototype/results/control.md)), so rendering still
-  costs Firefox's main thread time with the renderer worker; why is not known
-  yet.
+- **Firefox.** These Firefox runs rendered at devicePixelRatio 1, not 2:
+  Playwright's Firefox drops the scale factor in cross-origin-isolated pages,
+  which the scripts now work around, so they are not comparable with the other
+  browsers until rerun. In them, every variant blocked for 25–96 ms, with
+  stalls of 7–14 ms, the renderer worker on a GPU-backed canvas included
+  (31–51 ms), while scrolling already rendered pages with nothing new to
+  render blocked for 2–42 ms (median 5; see
+  [`control.md`](examples/prototype/results/control.md)).
 - **Startup.** Starting the PDF download with React's `preload()` moved first
   paint of bill-hr815 from 800 to 684 ms on released pdf.js and from 619 to
   503 ms with the renderer worker (Chromium, median of five runs; see
@@ -144,9 +145,20 @@ about 20 ms as noise.
   worker of a document reopened in the same page. The demo isolates itself
   only for precise timers. In WebKit, a drag selection across the gap between two
   pages still jumps to the end of the next page.
+- **High zoom.** Pages whose full-resolution render exceeds 16 MP now get
+  detail only for the visible area plus a margin, as pdf.js's viewer does,
+  and base canvases stop at 2 MP. At 4 and 8 CSS pixels per point on
+  bill-hr815, the visible pages used to stay at 0.19–0.58 of full resolution
+  while canvases held 228–335 MiB; they now reach full resolution with 66–88
+  MiB, in Chromium, WebKit, and Firefox alike (see
+  [`zoom-baseline.md`](examples/prototype/results/zoom-baseline.md) and
+  [`zoom-chromium.md`](examples/prototype/results/zoom-chromium.md)). Full
+  resolution arrived 29–77 ms after zooming in Chromium, 81–144 ms in WebKit,
+  and 114–491 ms in Firefox, but other work kept the machine's load average
+  near 400 during these runs, so the times are only indicative. The zoom now
+  goes up to 10 CSS pixels per point.
 - **Not yet built.** Form filling, structure-tree semantics for tagged PDFs,
-  text for pages outside the mounted window, and region rendering beyond the
-  16 MP detail cap.
+  and text for pages outside the mounted window.
 
 ## License
 

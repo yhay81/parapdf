@@ -86,6 +86,10 @@ until the benchmark results justify the architecture.
 - `pnpm --filter @parapdf/prototype check:lifecycle` — functional checks for
   document sharing under StrictMode (on the Vite development server) and for
   closing viewers while work runs (run after `build`; `BROWSER` applies).
+- `node examples/prototype/scripts/zoom-bench.ts` — zoom benchmark: sharpness,
+  time to sharp, and canvas memory after zooming to `SCALES` (4,8) and
+  panning, on desktop and phone-sized viewports (run after `build`; `BROWSER`,
+  `VARIANTS`, `FILE`, `RUNS`, and `OUTPUT` apply).
 - `pnpm check` — Biome lint and format check. `pnpm format` applies fixes.
 - `pnpm typecheck` — TypeScript checks for every workspace package.
 
@@ -100,11 +104,19 @@ until the benchmark results justify the architecture.
   imperatively so zoom can restore the anchored scroll position before React
   re-renders the mounted pages. Ctrl or pinch wheel gestures preview with a CSS
   transform and commit 150 ms after the last event.
-- Each mounted page stacks a base canvas (half a device pixel per CSS pixel)
-  under a detail canvas (full device resolution, capped at 16 MP until region
-  rendering exists). Priority: visible base, visible detail once scrolling
+- Each mounted page stacks a base canvas (half a device pixel per CSS pixel,
+  at most 2 MP) under a detail canvas at full device resolution. A page whose
+  full-resolution render fits in 16 MP gets detail for the whole page. Beyond
+  that, as in pdf.js's `PDFPageDetailView` (attributed in `NOTICE.md`), only
+  visible pages get detail, drawn through the engine's `region` request for
+  the visible area grown by up to its own size on each side within the 16 MP
+  budget, and redrawn when the view leaves that region or sits three times
+  closer to one side than the other; pages that leave the viewport drop their
+  detail canvases. Priority: visible base, visible detail once scrolling
   settles (120 ms quiet or below 2 px/ms), overscan base, overscan detail, then
   stale base. Unmounted pages zero their canvases and release pdf.js page data.
+  `sharpness()` reports the resolution of the visible pixels as a share of
+  full device resolution. The zoom goes up to 10 CSS pixels per point.
 - The pdf.js adapter starts its parsing worker when the engine is created, and
   the demo preloads the PDF with React's `preload()`, matching the CORS mode
   pdf.js fetches with.
@@ -169,8 +181,8 @@ until the benchmark results justify the architecture.
   layers fall back to a 16 ms timer and search yields through `setTimeout(0)`.
 - Not yet implemented: form filling, structure tree (tagged PDF) semantics,
   text for pages outside the mounted window, highlight fallback for browsers
-  without the CSS Custom Highlight API, optional content toggles, attachments,
-  and region rendering above the pixel cap.
+  without the CSS Custom Highlight API, optional content toggles, and
+  attachments.
 
 ## Benchmark methodology
 
@@ -186,6 +198,14 @@ until the benchmark results justify the architecture.
     reused temporary home: macOS may refuse `~/Library/Application Support/Firefox`
     to processes another app started, and Firefox then exits with "Could not
     find profile folder".
+  - Firefox loses a context's `deviceScaleFactor` when a page first
+    navigates into a cross-origin-isolated process and renders at
+    devicePixelRatio 1. `restoreScaleFactor()` visits `calibrate.html` and
+    applies the viewport again before the real navigation, and the scroll and
+    zoom benchmarks reject jobs whose devicePixelRatio is wrong. The Firefox
+    scroll and control results measured before this fix (`firefox.md`,
+    `browsers.md`, and `control.md` in `examples/prototype/results/`) ran at
+    devicePixelRatio 1 and need a rerun.
   - WebKit refuses some ports outright (4190 among them); the runners use
     4179–4189. Their servers bind 127.0.0.1: with `localhost` they could listen
     on `::1` beside another session's server on 127.0.0.1, and the browser

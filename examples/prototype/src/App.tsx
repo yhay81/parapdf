@@ -33,6 +33,8 @@ const settings = {
     frameIntervalMs: Number(params.get("idleFrame") ?? "16.7"),
   },
   preload: params.get("preload") !== "0",
+  /** CSS pixels per PDF point the zoom may reach; the runtime's default when absent. */
+  maxScale: params.has("maxScale") ? Number(params.get("maxScale")) : undefined,
 };
 
 declare global {
@@ -78,6 +80,7 @@ const source: PdfSource = { url: `/corpus/${settings.file}` };
 const viewerOptions: ViewerOptions = {
   textLayer: settings.text,
   annotationLayer: settings.links,
+  ...(settings.maxScale ? { maxScale: settings.maxScale } : {}),
 };
 const commits = { count: 0 };
 const countCommit: ProfilerOnRenderCallback = () => {

@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Browser, Page } from "playwright";
 import { createServer, preview } from "vite";
-import { launchBrowser } from "../../../bench/scripts/browsers.ts";
+import { launchBrowser, restoreScaleFactor } from "../../../bench/scripts/browsers.ts";
 
 const exampleDir = fileURLToPath(new URL("..", import.meta.url));
 const configFile = join(exampleDir, "vite.config.ts");
@@ -78,6 +78,7 @@ async function openPage(browser: Browser, url: string) {
     deviceScaleFactor: 2,
   });
   const page = await context.newPage();
+  await restoreScaleFactor(page, new URL("calibrate.html", url).href);
   const errors: string[] = [];
   const record = (text: string) => {
     if (isWebKitWorkerRefusal(text)) browserNotes.push(text);

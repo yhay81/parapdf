@@ -71,3 +71,44 @@ export function visibleRange(
   const last = pageAt(layout, top + height);
   return { first, last: Math.max(first, last) };
 }
+
+/** A rectangle within a page, as fractions of the page's width and height. */
+export interface PageArea {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+/** The viewport in the CSS pixels of the scrolled content. */
+export interface Viewport {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/** The part of a page inside the viewport, or null when none of it is. */
+export function visibleArea(layout: Layout, index: number, viewport: Viewport): PageArea | null {
+  const width = layout.widths[index] ?? 0;
+  const height = layout.heights[index] ?? 0;
+  if (width === 0 || height === 0) return null;
+  const top = layout.tops[index] ?? 0;
+  // Pages are centered in content at least as wide as the viewport.
+  const left = (Math.max(viewport.width, layout.totalWidth) - width) / 2;
+  const minX = Math.max(0, viewport.left - left) / width;
+  const maxX = Math.min(width, viewport.left + viewport.width - left) / width;
+  const minY = Math.max(0, viewport.top - top) / height;
+  const maxY = Math.min(height, viewport.top + viewport.height - top) / height;
+  return maxX > minX && maxY > minY ? { minX, minY, maxX, maxY } : null;
+}
+
+export const areaSize = (area: PageArea): number =>
+  Math.max(0, area.maxX - area.minX) * Math.max(0, area.maxY - area.minY);
+
+export const intersectAreas = (a: PageArea, b: PageArea): PageArea => ({
+  minX: Math.max(a.minX, b.minX),
+  minY: Math.max(a.minY, b.minY),
+  maxX: Math.min(a.maxX, b.maxX),
+  maxY: Math.min(a.maxY, b.maxY),
+});

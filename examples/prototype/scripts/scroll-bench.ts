@@ -20,6 +20,7 @@ import {
   assertMeasurementPower,
   browserFromEnv,
   launchBrowser,
+  restoreScaleFactor,
 } from "../../../bench/scripts/browsers.ts";
 
 const exampleDir = fileURLToPath(new URL("..", import.meta.url));
@@ -129,6 +130,7 @@ const waitForDone = (page: Page) =>
     deviceScaleFactor: 2,
   });
   const page = await context.newPage();
+  await restoreScaleFactor(page, `${baseUrl}calibrate.html`);
   await page.goto(`${baseUrl}?file=${files[0]}&autoscroll=60&duration=100`);
   await waitForDone(page);
   await context.close();
@@ -147,6 +149,7 @@ try {
           // Stop without writing results if the machine lost AC power mid-run.
           assertMeasurementPower();
           const page = await context.newPage();
+          await restoreScaleFactor(page, `${baseUrl}calibrate.html`);
           const job = { variant: variant.name, file, speed, run };
           let result: JobResult;
           try {
@@ -175,6 +178,8 @@ try {
               () => (window as { __result?: unknown }).__result,
             )) as Omit<JobResult, "variant" | "run">;
             result = { ...payload, ...job, idle };
+            const ratio = (payload as { devicePixelRatio?: number }).devicePixelRatio;
+            if (ratio !== 2) result.error = `devicePixelRatio ${ratio}, expected 2`;
           } catch (error) {
             result = { ...job, error: error instanceof Error ? error.message : String(error) };
           }

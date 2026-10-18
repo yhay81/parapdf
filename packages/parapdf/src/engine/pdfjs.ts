@@ -133,15 +133,26 @@ export function createPdfjsEngine(options: PdfjsEngineOptions): PdfEngine {
           const { width, height } = (await getPage(pageIndex)).getViewport({ scale: 1 });
           return { width, height };
         },
-        render({ pageIndex, scale, canvas }) {
+        render({ pageIndex, scale, canvas, region }) {
           let task: Pdfjs.RenderTask | undefined;
           let cancelled = false;
           const promise = getPage(pageIndex).then((page) => {
             if (cancelled) throw new RenderCancelledError("render cancelled before it started");
             const viewport = page.getViewport({ scale });
-            canvas.width = Math.floor(viewport.width);
-            canvas.height = Math.floor(viewport.height);
-            task = page.render({ canvas, viewport });
+            if (region) {
+              // Shift the page so the region's corner lands on the canvas origin.
+              canvas.width = region.width;
+              canvas.height = region.height;
+              task = page.render({
+                canvas,
+                viewport,
+                transform: [1, 0, 0, 1, -region.x, -region.y],
+              });
+            } else {
+              canvas.width = Math.floor(viewport.width);
+              canvas.height = Math.floor(viewport.height);
+              task = page.render({ canvas, viewport });
+            }
             return task.promise;
           });
           return {

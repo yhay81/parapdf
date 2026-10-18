@@ -10,7 +10,14 @@ import type {
 } from "../engine/types.ts";
 import { acquireDocument } from "./documents.ts";
 import { SearchHighlights } from "./highlights.ts";
-import { computeLayout, type Layout, pageAt, visibleRange } from "./layout.ts";
+import {
+  computeLayout,
+  type Layout,
+  pageAt,
+  type Viewport,
+  visibleArea,
+  visibleRange,
+} from "./layout.ts";
 import { RenderScheduler, type SchedulerStats } from "./scheduler.ts";
 import { TextSelectionTracker } from "./selection.ts";
 import { Store } from "./store.ts";
@@ -88,6 +95,13 @@ const IDLE_SEARCH: SearchState = {
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
+const viewportOf = (scroller: HTMLElement): Viewport => ({
+  left: scroller.scrollLeft,
+  top: scroller.scrollTop,
+  width: scroller.clientWidth,
+  height: scroller.clientHeight,
+});
+
 const yieldToMain = (): Promise<void> => {
   const scheduler = (globalThis as { scheduler?: { yield?: () => Promise<void> } }).scheduler;
   return scheduler?.yield ? scheduler.yield() : new Promise((resolve) => setTimeout(resolve, 0));
@@ -156,7 +170,7 @@ export class PdfViewerRuntime {
     this.#maxConcurrentRenders = options.maxConcurrentRenders ?? 2;
     this.#initialScale = options.initialScale ?? "fit-width";
     this.#minScale = options.minScale ?? 0.25;
-    this.#maxScale = options.maxScale ?? 6;
+    this.#maxScale = options.maxScale ?? 10;
     this.#textLayer = options.textLayer ?? true;
     this.#annotationLayer = options.annotationLayer ?? true;
   }
@@ -350,6 +364,35 @@ export class PdfViewerRuntime {
       blank += visibleHeight * visibleWidth;
     }
     return blank / (scroller.clientHeight * scroller.clientWidth);
+  }
+
+  /**
+   * How sharp the visible pages look: the resolution of their pixels as a
+   * share of full device resolution, weighted by visible area. 1 means sharp
+   * everywhere, 0 means blank.
+   */
+  sharpness(): number {
+    const layout = this.store.get().layout;
+    const scroller = this.#scroller;
+    const scheduler = this.#scheduler;
+    if (!layout || !scroller || !scheduler || scroller.clientHeight === 0) return 0;
+    const viewport = viewportOf(scroller);
+    const needed = layout.scale * (window.devicePixelRatio || 1);
+    const { first, last } = visibleRange(layout, viewport.top, viewport.height);
+    let weighted = 0;
+    let total = 0;
+    for (let index = first; index <= last; index++) {
+      const area = visibleArea(layout, index, viewport);
+      if (!area) continue;
+      const size =
+        (area.maxX - area.minX) *
+        (layout.widths[index] ?? 0) *
+        (area.maxY - area.minY) *
+        (layout.heights[index] ?? 0);
+      weighted += size * scheduler.sharpness(index, area, needed);
+      total += size;
+    }
+    return total > 0 ? weighted / total : 0;
   }
 
   goToPage(index: number): void {
@@ -736,6 +779,7 @@ export class PdfViewerRuntime {
       first,
       last,
       focus,
+      viewport: viewportOf(scroller),
       devicePixelRatio: window.devicePixelRatio || 1,
       settled,
     });

@@ -11,11 +11,21 @@ export interface PageSize {
 
 export type PdfSource = { url: string } | { data: ArrayBuffer | Uint8Array };
 
+/** A rectangle of a page in pixels at a render's scale. */
+export interface RenderRegion {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface RenderRequest {
   pageIndex: number;
   /** Device pixels per PDF point. */
   scale: number;
   canvas: HTMLCanvasElement;
+  /** Draw only this part of the page; the canvas takes its size. The whole page when absent. */
+  region?: RenderRegion;
 }
 
 export interface RenderTask {

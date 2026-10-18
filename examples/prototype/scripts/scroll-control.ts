@@ -19,6 +19,7 @@ import {
   type BrowserName,
   browserNames,
   launchBrowser,
+  restoreScaleFactor,
 } from "../../../bench/scripts/browsers.ts";
 
 const exampleDir = fileURLToPath(new URL("..", import.meta.url));
@@ -113,6 +114,7 @@ try {
             deviceScaleFactor: 2,
           });
           const page = await context.newPage();
+          await restoreScaleFactor(page, `${baseUrl}calibrate.html`);
           await page.goto(`${baseUrl}?engine=pdfjs-next&hwa=1&file=${file}`);
           await page.waitForSelector('section[data-page="2"] .parapdf-text-layer span', {
             timeout: 30_000,
