@@ -54,9 +54,9 @@ const server = await preview({
   root: exampleDir,
   configFile: join(exampleDir, "vite.config.ts"),
   logLevel: "warn",
-  preview: { port: 4186, strictPort: false, open: false },
+  preview: { port: 4186, host: "127.0.0.1", strictPort: false, open: false },
 });
-const baseUrl = server.resolvedUrls?.local[0] ?? "http://localhost:4186/";
+const baseUrl = server.resolvedUrls?.local[0] ?? "http://127.0.0.1:4186/";
 const launched = await launchBrowser();
 console.log(`${launched.label}, engine ${engine}`);
 const context = await launched.browser.newContext({

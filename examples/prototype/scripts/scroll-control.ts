@@ -96,9 +96,9 @@ const server = await preview({
   root: exampleDir,
   configFile: join(exampleDir, "vite.config.ts"),
   logLevel: "warn",
-  preview: { port: 4187, strictPort: false, open: false },
+  preview: { port: 4187, host: "127.0.0.1", strictPort: false, open: false },
 });
-const baseUrl = server.resolvedUrls?.local[0] ?? "http://localhost:4187/";
+const baseUrl = server.resolvedUrls?.local[0] ?? "http://127.0.0.1:4187/";
 const results: { browser: string; name: BrowserName; mode: Mode; samples: Sample[] }[] = [];
 try {
   for (const name of browsers) {

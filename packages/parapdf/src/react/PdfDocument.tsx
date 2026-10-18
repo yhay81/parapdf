@@ -15,8 +15,8 @@ export interface PdfDocumentProps {
 export function PdfDocument({ engine, source, options, children }: PdfDocumentProps) {
   // The runtime lives as long as the component; options apply at creation.
   const [runtime] = useState(() => new PdfViewerRuntime(engine, options));
-  // One effect owns the document, so StrictMode's mount-unmount-mount cycle
-  // closes the first load instead of leaking it.
+  // One effect owns the document. StrictMode's mount-unmount-mount cycle and
+  // quick remounts reuse the loaded document instead of loading it again.
   useEffect(() => runtime.open(source), [runtime, source]);
   return <RuntimeContext value={runtime}>{children}</RuntimeContext>;
 }

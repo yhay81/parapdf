@@ -83,6 +83,9 @@ until the benchmark results justify the architecture.
 - `pnpm --filter @parapdf/prototype check:links` — functional checks for
   internal and external links, keyboard activation, the back stack, and the
   outline on `usrguide.pdf` (run after `build`; `BROWSER` applies here too).
+- `pnpm --filter @parapdf/prototype check:lifecycle` — functional checks for
+  document sharing under StrictMode (on the Vite development server) and for
+  closing viewers while work runs (run after `build`; `BROWSER` applies).
 - `pnpm check` — Biome lint and format check. `pnpm format` applies fixes.
 - `pnpm typecheck` — TypeScript checks for every workspace package.
 
@@ -145,10 +148,19 @@ until the benchmark results justify the architecture.
   outline jumps push the previous position (a page plus a fraction, so zoom
   does not invalidate it) onto a 50-entry back stack exposed as `canGoBack`
   and `back()`. The outline loads in the background after the first layout.
-- Browsers: `check:text` and `check:links` pass in Playwright's Chromium,
-  WebKit, and Firefox. WebKit has neither `requestIdleCallback` nor
-  `scheduler.yield`, so idle text and annotation layers fall back to a 16 ms
-  timer and search yields through `setTimeout(0)`.
+- `acquireDocument` (`runtime/documents.ts`) shares one loaded document per
+  engine and source (the URL, or the identity of the data) among viewers, so
+  StrictMode's double mount and quick remounts load it once. A document is
+  destroyed one second after the last viewer releases it. Closing a viewer
+  disposes its scheduler, which cancels renders and layers and releases its
+  pages, and moves the runtime to a new generation, so page-size passes,
+  searches, and scrolls to a match stop. Background work that fails after its
+  document closed fails quietly; while the document is open, failures are
+  logged.
+- Browsers: `check:text`, `check:links`, and `check:lifecycle` pass in
+  Playwright's Chromium, WebKit, and Firefox. WebKit has neither
+  `requestIdleCallback` nor `scheduler.yield`, so idle text and annotation
+  layers fall back to a 16 ms timer and search yields through `setTimeout(0)`.
 - Not yet implemented: form filling, structure tree (tagged PDF) semantics,
   text for pages outside the mounted window, highlight fallback for browsers
   without the CSS Custom Highlight API, optional content toggles, attachments,
@@ -169,7 +181,9 @@ until the benchmark results justify the architecture.
     to processes another app started, and Firefox then exits with "Could not
     find profile folder".
   - WebKit refuses some ports outright (4190 among them); the runners use
-    4179–4187.
+    4179–4189. Their servers bind 127.0.0.1: with `localhost` they could listen
+    on `::1` beside another session's server on 127.0.0.1, and the browser
+    would reach the other server.
 - Measure on AC power. Low Power Mode, which this Mac enables on battery,
   drops WebKit's animation frames to 30 Hz and slows every engine by about a
   quarter. The measuring scripts check `pmset` before the run and between
@@ -192,7 +206,9 @@ until the benchmark results justify the architecture.
   blocked by Cross-Origin-Embedder-Policy"), apparently when it took them
   from its cache, and pdf.js silently parsed on the main thread ("Setting up
   fake worker"). Open every document in a fresh browser context, as the
-  runners and checks do.
+  runners and checks do. The same happens to pdf.js's renderer worker when a
+  document is reopened in the same page; `check:lifecycle` reports it as a
+  note.
 - Engines: `pdfjs` (released pdfjs-dist, main-thread drawing), `pdfjs-next`
   (pdf.js master with its renderer worker), `pdfium` (the raw
   `@embedpdf/pdfium` API in a worker, without fallback fonts), and `hayro`

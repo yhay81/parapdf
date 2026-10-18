@@ -1,5 +1,6 @@
 import {
   PdfDocument,
+  type PdfEngine,
   PdfPageRect,
   type PdfSource,
   PdfViewport,
@@ -34,8 +35,45 @@ const settings = {
   preload: params.get("preload") !== "0",
 };
 
+declare global {
+  interface Window {
+    /** Hooks for scripts/check-lifecycle.ts. */
+    __lifecycle?: {
+      remount(): void;
+      unmount(): void;
+      mount(): void;
+      stats: { opens: number; destroys: number };
+      unhandled: string[];
+    };
+  }
+}
+
+// Engine work and unhandled rejections, counted for scripts/check-lifecycle.ts.
+const engineStats = { opens: 0, destroys: 0 };
+const unhandled: string[] = [];
+window.addEventListener("unhandledrejection", (event) => {
+  unhandled.push(String(event.reason));
+});
+
+function countEngineWork(engine: PdfEngine): PdfEngine {
+  return {
+    name: engine.name,
+    async open(source) {
+      engineStats.opens++;
+      const doc = await engine.open(source);
+      return {
+        ...doc,
+        destroy() {
+          engineStats.destroys++;
+          return doc.destroy();
+        },
+      };
+    },
+  };
+}
+
 // Module-level values stay referentially stable across renders.
-const enginePromise = loadEngine(settings.engine, settings.hwa);
+const enginePromise = loadEngine(settings.engine, settings.hwa).then(countEngineWork);
 const source: PdfSource = { url: `/corpus/${settings.file}` };
 const viewerOptions: ViewerOptions = {
   textLayer: settings.text,
@@ -74,9 +112,21 @@ export function App() {
   if (settings.preload && "url" in source) {
     preload(source.url, { as: "fetch", crossOrigin: "anonymous" });
   }
+  // A new key mounts a new viewer with a new runtime for the same source.
+  const [mounted, setMounted] = useState(true);
+  const [generation, setGeneration] = useState(0);
+  useEffect(() => {
+    window.__lifecycle = {
+      remount: () => setGeneration((value) => value + 1),
+      unmount: () => setMounted(false),
+      mount: () => setMounted(true),
+      stats: engineStats,
+      unhandled,
+    };
+  }, []);
   return (
     <Suspense fallback={<div className="status">Loading the engine…</div>}>
-      <Viewer />
+      {mounted ? <Viewer key={generation} /> : null}
     </Suspense>
   );
 }

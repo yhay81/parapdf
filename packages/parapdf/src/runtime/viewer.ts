@@ -8,6 +8,7 @@ import type {
   PdfSource,
   TextLayerHandle,
 } from "../engine/types.ts";
+import { acquireDocument } from "./documents.ts";
 import { SearchHighlights } from "./highlights.ts";
 import { computeLayout, type Layout, pageAt, visibleRange } from "./layout.ts";
 import { RenderScheduler, type SchedulerStats } from "./scheduler.ts";
@@ -186,10 +187,13 @@ export class PdfViewerRuntime {
     return this.#firstPaintAt;
   }
 
-  /** Open a document and return the function that closes it. */
+  /**
+   * Open a document and return the function that closes it. Viewers of the
+   * same source share one loaded document (see documents.ts).
+   */
   open(source: PdfSource): () => void {
     const generation = ++this.#generation;
-    let doc: PdfEngineDocument | null = null;
+    const lease = acquireDocument(this.#engine, source);
     let closed = false;
     this.#firstPaintAt = null;
     this.#history = [];
@@ -203,13 +207,8 @@ export class PdfViewerRuntime {
 
     void (async () => {
       try {
-        const opened = await this.#engine.open(source);
-        if (closed) {
-          // Closed while loading: nobody else will release this document.
-          void opened.destroy();
-          return;
-        }
-        doc = opened;
+        const doc = await lease.document;
+        if (closed) return;
         const firstSize = await doc.pageSize(0);
         if (closed) return;
         this.#doc = doc;
@@ -241,7 +240,7 @@ export class PdfViewerRuntime {
         this.#applyLayout(scale);
         this.store.set({ status: "ready", pageCount: doc.pageCount, scale });
         this.#update();
-        void this.#refineSizes(doc, generation);
+        this.#background(this.#refineSizes(doc, generation), "measuring page sizes", generation);
         // The outline parses in the worker; publish it whenever it is ready.
         void doc.getOutline().then(
           (outline) => {
@@ -259,6 +258,9 @@ export class PdfViewerRuntime {
     return () => {
       closed = true;
       if (this.#generation === generation) {
+        // Work still running for this document now sees a stale generation.
+        this.#generation++;
+        this.#scheduler?.dispose();
         this.#searchGeneration++;
         this.#highlights.clear();
         this.#selection.clear();
@@ -278,8 +280,8 @@ export class PdfViewerRuntime {
           canGoBack: false,
         });
       }
-      // A document still loading is destroyed by the loader once it resolves.
-      void doc?.destroy();
+      // Destroyed once no viewer uses it, even if it is still loading.
+      lease.release();
     };
   }
 
@@ -480,7 +482,11 @@ export class PdfViewerRuntime {
     this.store.set({
       search: { query, status: "searching", matches: [], current: -1, pagesSearched: 0 },
     });
-    void this.#runSearch(doc, query, normalized, generation);
+    this.#runSearch(doc, query, normalized, generation).catch((error: unknown) => {
+      if (generation !== this.#searchGeneration) return;
+      console.error("search failed", error);
+      this.store.set({ search: { ...this.store.get().search, status: "done" } });
+    });
   }
 
   nextMatch(): void {
@@ -528,7 +534,7 @@ export class PdfViewerRuntime {
       if (select || now - publishedAt > SEARCH_PUBLISH_INTERVAL) {
         publish("searching");
         const match = matches[current];
-        if (select && match) void this.#scrollToMatch(match);
+        if (select && match) this.#background(this.#scrollToMatch(match), "scrolling to a match");
         publishedAt = now;
         await yieldToMain();
         if (generation !== this.#searchGeneration) return;
@@ -537,7 +543,7 @@ export class PdfViewerRuntime {
     if (current === -1 && matches.length > 0) {
       current = 0;
       const match = matches[0];
-      if (match) void this.#scrollToMatch(match);
+      if (match) this.#background(this.#scrollToMatch(match), "scrolling to a match");
     }
     publish("done");
   }
@@ -557,7 +563,7 @@ export class PdfViewerRuntime {
     if (!match) return;
     this.store.set({ search: { ...search, current: index } });
     this.#refreshHighlights();
-    void this.#scrollToMatch(match);
+    this.#background(this.#scrollToMatch(match), "scrolling to a match");
   }
 
   /** Scroll so a match sits in the upper third of the viewport. */
@@ -612,6 +618,16 @@ export class PdfViewerRuntime {
     if (!this.#content) return;
     this.#content.style.height = `${layout.totalHeight}px`;
     this.#content.style.width = `max(100%, ${layout.totalWidth}px)`;
+  }
+
+  /**
+   * Background work may outlive its document: it then fails quietly. While the
+   * document that started it is still open, a failure is logged.
+   */
+  #background(work: Promise<unknown>, what: string, generation = this.#generation): void {
+    work.catch((error: unknown) => {
+      if (this.#generation === generation) console.error(`${what} failed`, error);
+    });
   }
 
   /** Learn the real size of every page in the background, then relayout once. */

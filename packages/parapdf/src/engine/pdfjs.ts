@@ -287,7 +287,11 @@ export function createPdfjsEngine(options: PdfjsEngineOptions): PdfEngine {
           return { pageIndex, x: left === null ? null : x, y: top === null ? null : y };
         },
         releasePage(pageIndex) {
-          void pages.get(pageIndex)?.then((page) => page.cleanup());
+          // The page may never have loaded, or the document may be gone by now.
+          pages.get(pageIndex)?.then(
+            (page) => page.cleanup(),
+            () => {},
+          );
         },
         async destroy() {
           pages.clear();
