@@ -19,10 +19,14 @@ export interface RenderRegion {
   height: number;
 }
 
+/** Clockwise view rotation in degrees, on top of any rotation the page itself has. */
+export type Rotation = 0 | 90 | 180 | 270;
+
 export interface RenderRequest {
   pageIndex: number;
   /** Device pixels per PDF point. */
   scale: number;
+  rotation?: Rotation;
   canvas: HTMLCanvasElement;
   /** Draw only this part of the page; the canvas takes its size. The whole page when absent. */
   region?: RenderRegion;
@@ -41,8 +45,9 @@ export interface PageText {
   readonly endsLine: readonly boolean[];
   /**
    * Approximate box of each item in PDF points from the page's top-left corner,
-   * rotation applied: `[x, y, width, height]` per item. Used to scroll to
-   * matches before a page's text layer exists.
+   * with the page's own rotation applied but no view rotation:
+   * `[x, y, width, height]` per item. Used to scroll to matches before a
+   * page's text layer exists.
    */
   readonly boxes: Float32Array;
 }
@@ -53,13 +58,14 @@ export interface TextLayerRequest {
   container: HTMLElement;
   /** CSS pixels per PDF point. */
   cssScale: number;
+  rotation?: Rotation;
 }
 
 export interface TextLayerHandle {
   /** One element per item of `PageText.items`, in the same order. */
   readonly elements: readonly HTMLElement[];
-  /** Re-measure the runs for a new zoom level. */
-  setScale(cssScale: number): void;
+  /** Re-measure the runs for a new zoom level, or turn them with the view. */
+  update(cssScale: number, rotation: Rotation): void;
 }
 
 export interface TextLayerTask {
@@ -70,7 +76,10 @@ export interface TextLayerTask {
 /** An engine-specific link target (a named or explicit PDF destination). */
 export type DestinationRef = unknown;
 
-/** Where a destination points: a page and an optional point in PDF points from its top-left. */
+/**
+ * Where a destination points: a page and an optional point in PDF points from
+ * its top-left corner, with the page's own rotation applied but no view rotation.
+ */
 export interface ResolvedDestination {
   pageIndex: number;
   x: number | null;
@@ -100,11 +109,12 @@ export interface AnnotationLayerRequest {
   container: HTMLElement;
   /** CSS pixels per PDF point. */
   cssScale: number;
+  rotation?: Rotation;
   links: LinkHandlers;
 }
 
 export interface AnnotationLayerHandle {
-  setScale(cssScale: number): void;
+  update(cssScale: number, rotation: Rotation): void;
 }
 
 export interface AnnotationLayerTask {
@@ -114,6 +124,12 @@ export interface AnnotationLayerTask {
 
 export interface PdfEngineDocument {
   readonly pageCount: number;
+  /**
+   * The engine's own document object, for features ParaPDF does not wrap;
+   * pdf.js engines hold a PDFDocumentProxy here (see pdfjsDocumentOf).
+   */
+  readonly native: unknown;
+  /** The page's size in PDF points with its own rotation applied. */
   pageSize(pageIndex: number): Promise<PageSize>;
   render(request: RenderRequest): RenderTask;
   getText(pageIndex: number): Promise<PageText>;

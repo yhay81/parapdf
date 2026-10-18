@@ -1,12 +1,14 @@
-import type { PageSize } from "../engine/types.ts";
+import type { PageSize, Rotation } from "../engine/types.ts";
 
 /** Immutable vertical layout of every page at one zoom level, in CSS pixels. */
 export interface Layout {
   /** CSS pixels per PDF point. */
   readonly scale: number;
+  /** Clockwise view rotation; widths and heights are the turned page boxes. */
+  readonly rotation: Rotation;
   /** Space between pages and around the document. */
   readonly gap: number;
-  /** Page sizes in PDF points. */
+  /** Page sizes in PDF points, unturned by the view. */
   readonly sizes: readonly PageSize[];
   readonly tops: Float64Array;
   readonly widths: Float64Array;
@@ -15,7 +17,12 @@ export interface Layout {
   readonly totalWidth: number;
 }
 
-export function computeLayout(sizes: readonly PageSize[], scale: number, gap: number): Layout {
+export function computeLayout(
+  sizes: readonly PageSize[],
+  scale: number,
+  gap: number,
+  rotation: Rotation = 0,
+): Layout {
   const count = sizes.length;
   const tops = new Float64Array(count);
   const widths = new Float64Array(count);
@@ -23,7 +30,7 @@ export function computeLayout(sizes: readonly PageSize[], scale: number, gap: nu
   let y = gap;
   let maxWidth = 0;
   for (let index = 0; index < count; index++) {
-    const size = sizes[index] ?? { width: 0, height: 0 };
+    const size = turnedSize(sizes[index] ?? { width: 0, height: 0 }, rotation);
     const width = Math.round(size.width * scale);
     const height = Math.round(size.height * scale);
     tops[index] = y;
@@ -34,6 +41,7 @@ export function computeLayout(sizes: readonly PageSize[], scale: number, gap: nu
   }
   return {
     scale,
+    rotation,
     gap,
     sizes,
     tops,
@@ -112,3 +120,29 @@ export const intersectAreas = (a: PageArea, b: PageArea): PageArea => ({
   maxX: Math.min(a.maxX, b.maxX),
   maxY: Math.min(a.maxY, b.maxY),
 });
+
+/** A page's size as the view shows it: a quarter turn swaps width and height. */
+export const turnedSize = (size: PageSize, rotation: Rotation): PageSize =>
+  rotation % 180 === 0 ? size : { width: size.height, height: size.width };
+
+/**
+ * Where a box given in PDF points from the top-left corner of an unturned
+ * page of `size` lands once the view turns it clockwise by `rotation`.
+ */
+export function turnBox(
+  box: { x: number; y: number; width: number; height: number },
+  size: PageSize,
+  rotation: Rotation,
+): { x: number; y: number; width: number; height: number } {
+  const { x, y, width, height } = box;
+  switch (rotation) {
+    case 90:
+      return { x: size.height - y - height, y: x, width: height, height: width };
+    case 180:
+      return { x: size.width - x - width, y: size.height - y - height, width, height };
+    case 270:
+      return { x: y, y: size.width - x - width, width: height, height: width };
+    default:
+      return box;
+  }
+}

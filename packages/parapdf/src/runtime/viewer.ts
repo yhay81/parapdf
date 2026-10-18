@@ -6,6 +6,7 @@ import type {
   PdfEngine,
   PdfEngineDocument,
   PdfSource,
+  Rotation,
   TextLayerHandle,
 } from "../engine/types.ts";
 import { acquireDocument } from "./documents.ts";
@@ -14,6 +15,7 @@ import {
   computeLayout,
   type Layout,
   pageAt,
+  turnBox,
   type Viewport,
   visibleArea,
   visibleRange,
@@ -51,6 +53,10 @@ export interface ViewerState {
   currentPage: number;
   /** CSS pixels per PDF point. */
   scale: number;
+  /** Clockwise view rotation of every page. */
+  rotation: Rotation;
+  /** The open document, for engine features ParaPDF does not wrap; null until it loads. */
+  document: PdfEngineDocument | null;
   search: SearchState;
   /** Document outline; null until loaded, empty when the PDF has none. */
   outline: readonly OutlineNode[] | null;
@@ -127,6 +133,8 @@ export class PdfViewerRuntime {
     search: IDLE_SEARCH,
     outline: null,
     canGoBack: false,
+    rotation: 0,
+    document: null,
   });
   readonly #engine: PdfEngine;
   readonly #gap: number;
@@ -217,6 +225,8 @@ export class PdfViewerRuntime {
       search: IDLE_SEARCH,
       outline: null,
       canGoBack: false,
+      rotation: 0,
+      document: null,
     });
 
     void (async () => {
@@ -252,7 +262,7 @@ export class PdfViewerRuntime {
         this.#pendingPages.clear();
         const scale = this.#resolveInitialScale(firstSize);
         this.#applyLayout(scale);
-        this.store.set({ status: "ready", pageCount: doc.pageCount, scale });
+        this.store.set({ status: "ready", pageCount: doc.pageCount, scale, document: doc });
         this.#update();
         this.#background(this.#refineSizes(doc, generation), "measuring page sizes", generation);
         // The outline parses in the worker; publish it whenever it is ready.
@@ -292,6 +302,7 @@ export class PdfViewerRuntime {
           search: IDLE_SEARCH,
           outline: null,
           canGoBack: false,
+          document: null,
         });
       }
       // Destroyed once no viewer uses it, even if it is still loading.
@@ -416,13 +427,23 @@ export class PdfViewerRuntime {
     if (target.pageIndex < 0 || target.pageIndex >= layout.tops.length) return false;
     this.#remember();
     const pageTop = layout.tops[target.pageIndex] ?? 0;
+    // The engine reports the point on the unturned page; a quarter turn makes
+    // its left coordinate the vertical one.
+    const size = layout.sizes[target.pageIndex] ?? { width: 0, height: 0 };
+    const point = turnBox(
+      { x: target.x ?? 0, y: target.y ?? 0, width: 0, height: 0 },
+      size,
+      layout.rotation,
+    );
+    const quarter = layout.rotation % 180 !== 0;
+    const hasTop = (quarter ? target.x : target.y) !== null;
+    const hasLeft = (quarter ? target.y : target.x) !== null;
     // An explicit top lands at the top edge of the viewport, as in other PDF readers.
-    scroller.scrollTop =
-      target.y === null ? pageTop - layout.gap : pageTop + target.y * layout.scale;
-    if (target.x !== null) {
+    scroller.scrollTop = hasTop ? pageTop + point.y * layout.scale : pageTop - layout.gap;
+    if (hasLeft) {
       const contentWidth = Math.max(scroller.clientWidth, layout.totalWidth);
       const left =
-        (contentWidth - (layout.widths[target.pageIndex] ?? 0)) / 2 + target.x * layout.scale;
+        (contentWidth - (layout.widths[target.pageIndex] ?? 0)) / 2 + point.x * layout.scale;
       if (left < scroller.scrollLeft || left > scroller.scrollLeft + scroller.clientWidth) {
         scroller.scrollLeft = left;
       }
@@ -478,6 +499,32 @@ export class PdfViewerRuntime {
 
   zoomBy(factor: number): void {
     this.setScale(this.store.get().scale * factor);
+  }
+
+  /** Turn every page by `degrees`, a multiple of 90: clockwise when positive. */
+  rotate(degrees = 90): void {
+    this.setRotation((this.store.get().rotation + degrees) as Rotation);
+  }
+
+  /** Show every page turned clockwise by `rotation` degrees. */
+  setRotation(rotation: Rotation): void {
+    const turned = ((((Math.round(rotation / 90) * 90) % 360) + 360) % 360) as Rotation;
+    const state = this.store.get();
+    if (turned === state.rotation) return;
+    const layout = state.layout;
+    const scroller = this.#scroller;
+    this.store.set({ rotation: turned });
+    if (!layout || !scroller) return;
+    // Keep the page at the viewport's center at the same share of its height.
+    const y = scroller.clientHeight / 2;
+    const docY = scroller.scrollTop + y;
+    const page = pageAt(layout, docY);
+    const withinPage = (docY - (layout.tops[page] ?? 0)) / (layout.heights[page] || 1);
+    const next = this.#applyLayout(layout.scale);
+    scroller.scrollTop = (next.tops[page] ?? 0) + withinPage * (next.heights[page] ?? 0) - y;
+    scroller.scrollLeft = (scroller.scrollWidth - scroller.clientWidth) / 2;
+    this.#scheduler?.rotate(turned);
+    this.#update();
   }
 
   /**
@@ -617,9 +664,20 @@ export class PdfViewerRuntime {
     const layout = this.store.get().layout;
     const scroller = this.#scroller;
     if (!layout || !scroller || this.#doc !== doc) return;
-    const box = match.start.item * 4;
-    const x = (text.boxes[box] ?? 0) * layout.scale;
-    const y = (text.boxes[box + 1] ?? 0) * layout.scale;
+    const at = match.start.item * 4;
+    const size = layout.sizes[match.pageIndex] ?? { width: 0, height: 0 };
+    const box = turnBox(
+      {
+        x: text.boxes[at] ?? 0,
+        y: text.boxes[at + 1] ?? 0,
+        width: text.boxes[at + 2] ?? 0,
+        height: text.boxes[at + 3] ?? 0,
+      },
+      size,
+      layout.rotation,
+    );
+    const x = box.x * layout.scale;
+    const y = box.y * layout.scale;
     scroller.scrollTop = (layout.tops[match.pageIndex] ?? 0) + y - scroller.clientHeight / 3;
     const contentWidth = Math.max(scroller.clientWidth, layout.totalWidth);
     const left = (contentWidth - (layout.widths[match.pageIndex] ?? 0)) / 2 + x;
@@ -651,7 +709,7 @@ export class PdfViewerRuntime {
   }
 
   #applyLayout(scale: number): Layout {
-    const layout = computeLayout(this.#sizes, scale, this.#gap);
+    const layout = computeLayout(this.#sizes, scale, this.#gap, this.store.get().rotation);
     this.#sizeContent(layout);
     this.store.set({ layout });
     return layout;

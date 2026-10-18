@@ -157,6 +157,13 @@ about 20 ms as noise.
   and 114–491 ms in Firefox, but other work kept the machine's load average
   near 400 during these runs, so the times are only indicative. The zoom now
   goes up to 10 CSS pixels per point.
+- **Rotation and the document escape hatch.** The view turns pages in
+  quarter turns: page boxes swap, pages render turned, and text layers,
+  links, overlays, search highlights, and link jumps follow.
+  [`check-rotation.ts`](examples/prototype/scripts/check-rotation.ts) verifies
+  them in all three browsers. `usePdfDocument()` exposes the open document,
+  and `pdfjsDocumentOf()` turns it into pdf.js's `PDFDocumentProxy` for the
+  APIs ParaPDF does not wrap.
 - **Not yet built.** Form filling, structure-tree semantics for tagged PDFs,
   and text for pages outside the mounted window.
 

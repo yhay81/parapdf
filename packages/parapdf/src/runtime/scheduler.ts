@@ -7,6 +7,7 @@ import {
   type PdfEngineDocument,
   type RenderRegion,
   type RenderTask,
+  type Rotation,
   type TextLayerHandle,
   type TextLayerTask,
 } from "../engine/types.ts";
@@ -15,6 +16,7 @@ import {
   intersectAreas,
   type Layout,
   type PageArea,
+  turnedSize,
   type Viewport,
   visibleArea,
 } from "./layout.ts";
@@ -47,11 +49,13 @@ interface Slot {
   job: { layer: Layer; scale: number; region: PageArea | null; task: RenderTask } | undefined;
   textTask: TextLayerTask | undefined;
   textHandle: TextLayerHandle | undefined;
-  /** CSS pixels per point the text runs were measured for. */
+  /** CSS pixels per point and view rotation the text runs were laid out for. */
   textScale: number;
+  textRotation: Rotation;
   annotationTask: AnnotationLayerTask | undefined;
   annotationHandle: AnnotationLayerHandle | undefined;
   annotationScale: number;
+  annotationRotation: Rotation;
 }
 
 export interface ScheduleInput {
@@ -173,6 +177,8 @@ export class RenderScheduler {
   #input: ScheduleInput | undefined;
   #running = 0;
   #textRunning = false;
+  /** Bumped when every canvas becomes stale, so renders started before are dropped. */
+  #epoch = 0;
   #textScheduled = false;
 
   constructor(doc: PdfEngineDocument, options: SchedulerOptions = {}) {
@@ -204,9 +210,11 @@ export class RenderScheduler {
       textTask: undefined,
       textHandle: undefined,
       textScale: 0,
+      textRotation: 0,
       annotationTask: undefined,
       annotationHandle: undefined,
       annotationScale: 0,
+      annotationRotation: 0,
     });
     this.#pump();
   }
@@ -229,6 +237,33 @@ export class RenderScheduler {
       canvas.height = 0;
     }
     this.#doc.releasePage(index);
+  }
+
+  /**
+   * The view turned: pixels drawn for the old rotation are dropped at once,
+   * and text and annotation layers, laid out unturned, only turn with CSS.
+   */
+  rotate(rotation: Rotation): void {
+    this.#epoch++;
+    for (const slot of this.#slots.values()) {
+      if (slot.job) {
+        slot.job.task.cancel();
+        slot.job = undefined;
+      }
+      slot.baseScale = 0;
+      slot.base.width = 0;
+      slot.base.height = 0;
+      this.#clearDetail(slot);
+      if (slot.textHandle) {
+        slot.textHandle.update(slot.textScale, rotation);
+        slot.textRotation = rotation;
+      }
+      if (slot.annotationHandle) {
+        slot.annotationHandle.update(slot.annotationScale, rotation);
+        slot.annotationRotation = rotation;
+      }
+    }
+    // The next update() brings the turned layout and starts the new renders.
   }
 
   /** Cancels all work and releases every page, for example when the document closes. */
@@ -401,7 +436,9 @@ export class RenderScheduler {
     const canvas = layer === "base" ? slot.base : slot.detail;
     let region = plannedRegion;
     let pixels: RenderRegion | undefined;
-    const size = this.#input?.layout.sizes[slot.index];
+    const layout = this.#input?.layout;
+    const unturned = layout?.sizes[slot.index];
+    const size = layout && unturned ? turnedSize(unturned, layout.rotation) : undefined;
     if (region && size) {
       // Snap the region to whole pixels so it lines up with the base below.
       const width = size.width * scale;
@@ -419,15 +456,18 @@ export class RenderScheduler {
     const task = this.#doc.render({
       pageIndex: slot.index,
       scale,
+      rotation: layout?.rotation ?? 0,
       canvas,
       ...(pixels ? { region: pixels } : {}),
     });
     slot.job = { layer, scale, region, task };
     this.#running++;
+    const epoch = this.#epoch;
+    const current = () => this.#slots.get(slot.index) === slot && epoch === this.#epoch;
     task.promise
       .then(
         () => {
-          if (this.#slots.get(slot.index) !== slot) return;
+          if (!current()) return;
           if (layer === "base") {
             slot.baseScale = scale;
             this.stats.base++;
@@ -444,7 +484,7 @@ export class RenderScheduler {
             this.stats.failed++;
             console.error(`page ${slot.index + 1}: ${layer} render failed`, error);
           }
-          if (layer === "detail" && this.#slots.get(slot.index) === slot) {
+          if (layer === "detail" && current()) {
             // Hide a half-drawn detail layer so the base shows through.
             this.#clearDetail(slot);
           }
@@ -473,7 +513,7 @@ export class RenderScheduler {
   #pumpText(): void {
     const input = this.#input;
     if (!input?.settled || this.#textRunning) return;
-    const scale = input.layout.scale;
+    const { scale, rotation } = input.layout;
     const slots = this.#byDistance(input);
     const visible = (slot: Slot) => slot.index >= input.first && slot.index <= input.last;
     const needsText = (slot: Slot) => slot.text !== null && !slot.textHandle && !slot.textTask;
@@ -482,36 +522,39 @@ export class RenderScheduler {
     for (const inWindow of [visible, (slot: Slot) => !visible(slot)]) {
       const text = slots.find((slot) => inWindow(slot) && needsText(slot));
       if (text) {
-        this.#startText(text, scale);
+        this.#startText(text, scale, rotation);
         return;
       }
       const links = slots.find((slot) => inWindow(slot) && needsLinks(slot));
       if (links) {
-        this.#startAnnotations(links, scale);
+        this.#startAnnotations(links, scale, rotation);
         return;
       }
     }
     // Zoom changes only need the layers re-measured; do one page per idle period.
-    const stale = slots.find(
-      (slot) =>
-        visible(slot) &&
-        ((slot.textHandle && !sameScale(slot.textScale, scale)) ||
-          (slot.annotationHandle && !sameScale(slot.annotationScale, scale))),
-    );
+    const textStale = (slot: Slot) =>
+      slot.textHandle !== undefined &&
+      (!sameScale(slot.textScale, scale) || slot.textRotation !== rotation);
+    const linksStale = (slot: Slot) =>
+      slot.annotationHandle !== undefined &&
+      (!sameScale(slot.annotationScale, scale) || slot.annotationRotation !== rotation);
+    const stale = slots.find((slot) => visible(slot) && (textStale(slot) || linksStale(slot)));
     if (stale) {
-      if (stale.textHandle && !sameScale(stale.textScale, scale)) {
-        stale.textHandle.setScale(scale);
+      if (textStale(stale)) {
+        stale.textHandle?.update(scale, rotation);
         stale.textScale = scale;
+        stale.textRotation = rotation;
       }
-      if (stale.annotationHandle && !sameScale(stale.annotationScale, scale)) {
-        stale.annotationHandle.setScale(scale);
+      if (linksStale(stale)) {
+        stale.annotationHandle?.update(scale, rotation);
         stale.annotationScale = scale;
+        stale.annotationRotation = rotation;
       }
       this.#scheduleText();
     }
   }
 
-  #startAnnotations(slot: Slot, cssScale: number): void {
+  #startAnnotations(slot: Slot, cssScale: number, rotation: Rotation): void {
     const container = slot.annotations;
     const links = this.#options.links;
     if (!container || !links) return;
@@ -520,6 +563,7 @@ export class RenderScheduler {
       pageIndex: slot.index,
       container,
       cssScale,
+      rotation,
       links,
     });
     slot.annotationTask = task;
@@ -530,6 +574,7 @@ export class RenderScheduler {
           if (this.#slots.get(slot.index) !== slot || slot.annotationTask !== task) return;
           slot.annotationHandle = handle;
           slot.annotationScale = cssScale;
+          slot.annotationRotation = rotation;
           this.stats.annotations++;
         },
         (error: unknown) => {
@@ -547,12 +592,17 @@ export class RenderScheduler {
       });
   }
 
-  #startText(slot: Slot, cssScale: number): void {
+  #startText(slot: Slot, cssScale: number, rotation: Rotation): void {
     const container = slot.text;
     if (!container) return;
     this.#options.selection?.remove(container);
     container.replaceChildren();
-    const task = this.#doc.renderTextLayer({ pageIndex: slot.index, container, cssScale });
+    const task = this.#doc.renderTextLayer({
+      pageIndex: slot.index,
+      container,
+      cssScale,
+      rotation,
+    });
     slot.textTask = task;
     this.#textRunning = true;
     task.promise
@@ -567,6 +617,7 @@ export class RenderScheduler {
           this.#options.selection?.add(container, end);
           slot.textHandle = handle;
           slot.textScale = cssScale;
+          slot.textRotation = rotation;
           this.stats.text++;
           this.#options.onTextReady?.(slot.index, handle);
         },

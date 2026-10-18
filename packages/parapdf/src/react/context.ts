@@ -1,4 +1,5 @@
 import { createContext, useContext, useSyncExternalStore } from "react";
+import type { PdfEngineDocument } from "../engine/types.ts";
 import type { PdfViewerRuntime, ViewerState } from "../runtime/viewer.ts";
 
 export const RuntimeContext = createContext<PdfViewerRuntime | null>(null);
@@ -22,4 +23,13 @@ export function usePdfState<T>(selector: (state: ViewerState) => T): T {
     () => selector(runtime.store.get()),
     () => selector(runtime.store.get()),
   );
+}
+
+/**
+ * The open document, null until it loads: an escape hatch to engine features
+ * ParaPDF does not wrap. With a pdf.js engine, pdfjsDocumentOf() turns it into
+ * pdf.js's PDFDocumentProxy.
+ */
+export function usePdfDocument(): PdfEngineDocument | null {
+  return usePdfState((state) => state.document);
 }

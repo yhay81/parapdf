@@ -4,6 +4,8 @@ import {
   PdfPageRect,
   type PdfSource,
   PdfViewport,
+  pdfjsDocumentOf,
+  usePdfDocument,
   usePdfNavigation,
   usePdfOutline,
   usePdfState,
@@ -189,6 +191,9 @@ function Toolbar({
   }, [back]);
   // Exposed for the Playwright probes; not part of the library surface.
   (window as { __viewer?: unknown }).__viewer = viewer;
+  // The escape hatch: pdf.js's own PDFDocumentProxy, for check-rotation.ts.
+  const pdfDocument = usePdfDocument();
+  (window as { __pdfDocument?: unknown }).__pdfDocument = pdfjsDocumentOf(pdfDocument) ?? undefined;
   const status = usePdfState((state) => state.status);
   const error = usePdfState((state) => state.error);
   const page = usePdfState((state) => state.currentPage);
@@ -219,6 +224,12 @@ function Toolbar({
       <span>{Math.round((scale * 72 * 100) / 96)}%</span>
       <button type="button" onClick={() => viewer.zoomBy(1.25)} aria-label="Zoom in">
         +
+      </button>
+      <button type="button" onClick={() => viewer.rotate(-90)} aria-label="Rotate counterclockwise">
+        ↺
+      </button>
+      <button type="button" onClick={() => viewer.rotate(90)} aria-label="Rotate clockwise">
+        ↻
       </button>
       {viewer.textLayer ? <SearchBox /> : null}
     </header>

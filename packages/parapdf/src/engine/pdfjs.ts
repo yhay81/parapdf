@@ -10,6 +10,7 @@ import {
   type PdfSource,
   RenderCancelledError,
   type ResolvedDestination,
+  type Rotation,
   type TextLayerHandle,
 } from "./types.ts";
 
@@ -87,6 +88,27 @@ const toOutline = (items: readonly PdfjsOutlineItem[] | null): OutlineNode[] =>
     items: toOutline(item.items),
   }));
 
+/** Every PDFDocumentProxy a pdf.js engine has opened, so pdfjsDocumentOf can vouch for it. */
+const proxies = new WeakSet<object>();
+
+/**
+ * pdf.js's own document behind a document a pdf.js engine opened, for its
+ * APIs that ParaPDF does not wrap (metadata, attachments, form fields);
+ * null for documents of other engines.
+ */
+export function pdfjsDocumentOf(
+  document: PdfEngineDocument | null | undefined,
+): Pdfjs.PDFDocumentProxy | null {
+  const native = document?.native;
+  return typeof native === "object" && native !== null && proxies.has(native)
+    ? (native as Pdfjs.PDFDocumentProxy)
+    : null;
+}
+
+/** The page at `scale` turned by the view on top of its own rotation. */
+const viewportOf = (page: Pdfjs.PDFPageProxy, scale: number, rotation: Rotation = 0) =>
+  page.getViewport({ scale, rotation: (page.rotate + rotation) % 360 });
+
 /** pdf.js through its core display API only. */
 export function createPdfjsEngine(options: PdfjsEngineOptions): PdfEngine {
   const { pdfjs, assetBase } = options;
@@ -116,6 +138,7 @@ export function createPdfjsEngine(options: PdfjsEngineOptions): PdfEngine {
           : {}),
       });
       const doc = await loadingTask.promise;
+      proxies.add(doc);
       const pages = new Map<number, Promise<Pdfjs.PDFPageProxy>>();
       const texts = new Map<number, Promise<PageText>>();
       const getPage = (pageIndex: number): Promise<Pdfjs.PDFPageProxy> => {
@@ -129,16 +152,17 @@ export function createPdfjsEngine(options: PdfjsEngineOptions): PdfEngine {
 
       return {
         pageCount: doc.numPages,
+        native: doc,
         async pageSize(pageIndex): Promise<PageSize> {
           const { width, height } = (await getPage(pageIndex)).getViewport({ scale: 1 });
           return { width, height };
         },
-        render({ pageIndex, scale, canvas, region }) {
+        render({ pageIndex, scale, rotation, canvas, region }) {
           let task: Pdfjs.RenderTask | undefined;
           let cancelled = false;
           const promise = getPage(pageIndex).then((page) => {
             if (cancelled) throw new RenderCancelledError("render cancelled before it started");
-            const viewport = page.getViewport({ scale });
+            const viewport = viewportOf(page, scale, rotation);
             if (region) {
               // Shift the page so the region's corner lands on the canvas origin.
               canvas.width = region.width;
@@ -187,7 +211,7 @@ export function createPdfjsEngine(options: PdfjsEngineOptions): PdfEngine {
           }
           return text;
         },
-        renderTextLayer({ pageIndex, container, cssScale }) {
+        renderTextLayer({ pageIndex, container, cssScale, rotation }) {
           let layer: Pdfjs.TextLayer | undefined;
           let cancelled = false;
           const promise = getPage(pageIndex).then(async (page): Promise<TextLayerHandle> => {
@@ -195,14 +219,16 @@ export function createPdfjsEngine(options: PdfjsEngineOptions): PdfEngine {
             const rendered = new pdfjs.TextLayer({
               textContentSource: page.streamTextContent(TEXT_OPTIONS),
               container,
-              viewport: page.getViewport({ scale: cssScale }),
+              // The layer is laid out unturned; pdf.js marks it with
+              // data-main-rotation and the viewer CSS turns it.
+              viewport: viewportOf(page, cssScale, rotation),
             });
             layer = rendered;
             await rendered.render();
             return {
               elements: rendered.textDivs,
-              setScale(next) {
-                rendered.update({ viewport: page.getViewport({ scale: next }) });
+              update(nextScale, nextRotation) {
+                rendered.update({ viewport: viewportOf(page, nextScale, nextRotation) });
               },
             };
           });
@@ -214,12 +240,12 @@ export function createPdfjsEngine(options: PdfjsEngineOptions): PdfEngine {
             },
           };
         },
-        renderAnnotationLayer({ pageIndex, container, cssScale, links }) {
+        renderAnnotationLayer({ pageIndex, container, cssScale, rotation, links }) {
           let cancelled = false;
           const promise = getPage(pageIndex).then(async (page): Promise<AnnotationLayerHandle> => {
             const annotations = await page.getAnnotations({ intent: "display" });
             if (cancelled) throw new RenderCancelledError("annotation layer cancelled");
-            const viewport = page.getViewport({ scale: cssScale });
+            const viewport = viewportOf(page, cssScale, rotation);
             const linkService = createLinkService(links);
             const layer = new pdfjs.AnnotationLayer({
               div: container,
@@ -246,8 +272,8 @@ export function createPdfjsEngine(options: PdfjsEngineOptions): PdfEngine {
               enableScripting: false,
             });
             return {
-              setScale(next) {
-                layer.update({ viewport: page.getViewport({ scale: next }) } as never);
+              update(nextScale, nextRotation) {
+                layer.update({ viewport: viewportOf(page, nextScale, nextRotation) } as never);
               },
             };
           });

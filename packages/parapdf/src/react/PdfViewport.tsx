@@ -1,4 +1,5 @@
 import { type CSSProperties, memo, type ReactNode, useLayoutEffect, useRef } from "react";
+import type { Rotation } from "../engine/types.ts";
 import { usePdfState, usePdfViewer } from "./context.ts";
 import { VIEWER_CSS } from "./styles.ts";
 
@@ -49,6 +50,7 @@ export function PdfViewport({
           width={layout.widths[index] ?? 0}
           height={layout.heights[index] ?? 0}
           scale={layout.scale}
+          rotation={layout.rotation}
           textLayer={runtime.textLayer}
           annotationLayer={runtime.annotationLayer}
           overlay={renderOverlay?.(index)}
@@ -87,6 +89,7 @@ interface PdfPageProps {
   height: number;
   /** CSS pixels per PDF point; pdf.js's text layer reads it as `--total-scale-factor`. */
   scale: number;
+  rotation: Rotation;
   textLayer: boolean;
   annotationLayer: boolean;
   overlay: ReactNode;
@@ -106,6 +109,7 @@ const PdfPage = memo(function PdfPage({
   width,
   height,
   scale,
+  rotation,
   textLayer,
   annotationLayer,
   overlay,
@@ -154,7 +158,15 @@ const PdfPage = memo(function PdfPage({
       {textLayer ? <div ref={textRef} className="parapdf-text-layer" /> : null}
       {annotationLayer ? <div ref={annotationRef} className="parapdf-annotation-layer" /> : null}
       {overlay ? (
-        <div style={{ ...layerStyle, pointerEvents: "none", zIndex: 2 }}>{overlay}</div>
+        // Overlays are placed on the unturned page, like the text layer, and
+        // turn with it through the viewer CSS.
+        <div
+          className="parapdf-overlay-layer"
+          data-main-rotation={rotation}
+          style={rotation % 180 === 0 ? { width, height } : { width: height, height: width }}
+        >
+          {overlay}
+        </div>
       ) : null}
     </section>
   );

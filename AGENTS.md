@@ -86,6 +86,10 @@ until the benchmark results justify the architecture.
 - `pnpm --filter @parapdf/prototype check:lifecycle` — functional checks for
   document sharing under StrictMode (on the Vite development server) and for
   closing viewers while work runs (run after `build`; `BROWSER` applies).
+- `pnpm --filter @parapdf/prototype check:rotation` — functional checks for
+  view rotation (page boxes, canvases, text, overlays, search, link jumps)
+  and the `usePdfDocument()` escape hatch (run after `build`; `BROWSER`
+  applies).
 - `node examples/prototype/scripts/zoom-bench.ts` — zoom benchmark: sharpness,
   time to sharp, and canvas memory after zooming to `SCALES` (4,8) and
   panning, on desktop and phone-sized viewports (run after `build`; `BROWSER`,
@@ -175,8 +179,21 @@ until the benchmark results justify the architecture.
   searches, and scrolls to a match stop. Background work that fails after its
   document closed fails quietly; while the document is open, failures are
   logged.
-- Browsers: `check:text`, `check:links`, and `check:lifecycle` pass in
-  Playwright's Chromium, WebKit, and Firefox. WebKit has neither
+- View rotation turns every page clockwise in quarter turns (`rotate()`,
+  `setRotation()`, published as `rotation`). The layout swaps page boxes and
+  the engine draws pages turned (pdf.js gets the page's own rotation plus the
+  view's). Text and annotation layers stay laid out unturned and turn
+  through pdf.js's `data-main-rotation` CSS, and so do overlays in
+  `.parapdf-overlay-layer`, so `PdfPageRect` keeps unturned PDF coordinates.
+  A turn drops the old canvases at once and re-renders them, while layers
+  only change their attribute. Search scrolling and destinations map unturned
+  points with `turnBox()`.
+- `usePdfDocument()` returns the open `PdfEngineDocument` (published as
+  `document`). Its `native` is the engine's own object, and
+  `pdfjsDocumentOf()` returns pdf.js's `PDFDocumentProxy` for documents a
+  pdf.js engine opened, for APIs ParaPDF does not wrap.
+- Browsers: `check:text`, `check:links`, `check:lifecycle`, and
+  `check:rotation` pass in Playwright's Chromium, WebKit, and Firefox. WebKit has neither
   `requestIdleCallback` nor `scheduler.yield`, so idle text and annotation
   layers fall back to a 16 ms timer and search yields through `setTimeout(0)`.
 - Not yet implemented: form filling, structure tree (tagged PDF) semantics,

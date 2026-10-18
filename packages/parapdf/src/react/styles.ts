@@ -63,6 +63,17 @@ export const VIEWER_CSS = `
   user-select: none;
 }
 .parapdf-text-layer.selecting .endOfContent { top: 0; }
+.parapdf-overlay-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  transform-origin: 0 0;
+  z-index: 2;
+}
+.parapdf-overlay-layer[data-main-rotation="90"] { transform: rotate(90deg) translateY(-100%); }
+.parapdf-overlay-layer[data-main-rotation="180"] { transform: rotate(180deg) translate(-100%, -100%); }
+.parapdf-overlay-layer[data-main-rotation="270"] { transform: rotate(270deg) translateX(-100%); }
 .parapdf-text-layer[data-main-rotation="90"] { transform: rotate(90deg) translateY(-100%); }
 .parapdf-text-layer[data-main-rotation="180"] { transform: rotate(180deg) translate(-100%, -100%); }
 .parapdf-text-layer[data-main-rotation="270"] { transform: rotate(270deg) translateX(-100%); }

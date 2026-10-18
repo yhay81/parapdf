@@ -1,4 +1,4 @@
-export { createPdfjsEngine, type PdfjsEngineOptions } from "./engine/pdfjs.ts";
+export { createPdfjsEngine, type PdfjsEngineOptions, pdfjsDocumentOf } from "./engine/pdfjs.ts";
 export {
   type AnnotationLayerHandle,
   type AnnotationLayerRequest,
@@ -17,11 +17,12 @@ export {
   type RenderRequest,
   type RenderTask,
   type ResolvedDestination,
+  type Rotation,
   type TextLayerHandle,
   type TextLayerRequest,
   type TextLayerTask,
 } from "./engine/types.ts";
-export { usePdfState, usePdfViewer } from "./react/context.ts";
+export { usePdfDocument, usePdfState, usePdfViewer } from "./react/context.ts";
 export { type PdfNavigation, usePdfNavigation, usePdfOutline } from "./react/navigation.ts";
 export { PdfDocument, type PdfDocumentProps } from "./react/PdfDocument.tsx";
 export { PdfPageRect, type PdfPageRectProps } from "./react/PdfPageRect.tsx";
