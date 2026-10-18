@@ -3,14 +3,17 @@ import {
   PdfPageRect,
   type PdfSource,
   PdfViewport,
+  usePdfNavigation,
+  usePdfOutline,
   usePdfState,
   usePdfViewer,
   type ViewerOptions,
 } from "parapdf";
-import { Profiler, type ProfilerOnRenderCallback, Suspense, use } from "react";
+import { Profiler, type ProfilerOnRenderCallback, Suspense, use, useEffect, useState } from "react";
 import { preload } from "react-dom";
 import { BenchDriver } from "./BenchDriver.tsx";
 import { loadEngine } from "./engines.ts";
+import { OutlinePanel } from "./OutlinePanel.tsx";
 import { SearchBox } from "./SearchBox.tsx";
 
 const params = new URLSearchParams(location.search);
@@ -19,6 +22,7 @@ const settings = {
   engine: params.get("engine") ?? "pdfjs-next",
   hwa: params.get("hwa") !== "0",
   text: params.get("text") !== "0",
+  links: params.get("links") !== "0",
   autoscroll: Number(params.get("autoscroll") ?? "0"),
   durationMs: Number(params.get("duration") ?? "4000"),
   preload: params.get("preload") !== "0",
@@ -27,7 +31,10 @@ const settings = {
 // Module-level values stay referentially stable across renders.
 const enginePromise = loadEngine(settings.engine, settings.hwa);
 const source: PdfSource = { url: `/corpus/${settings.file}` };
-const viewerOptions: ViewerOptions = { textLayer: settings.text };
+const viewerOptions: ViewerOptions = {
+  textLayer: settings.text,
+  annotationLayer: settings.links,
+};
 const commits = { count: 0 };
 const countCommit: ProfilerOnRenderCallback = () => {
   commits.count++;
@@ -37,6 +44,7 @@ const benchLabel = {
   engineKind: settings.engine,
   hwa: settings.hwa,
   text: settings.text,
+  links: settings.links,
   speed: settings.autoscroll,
   preload: settings.preload,
 };
@@ -69,11 +77,19 @@ export function App() {
 
 function Viewer() {
   const engine = use(enginePromise);
+  const [outlineOpen, setOutlineOpen] = useState(false);
   return (
     <Profiler id="viewer" onRender={countCommit}>
       <PdfDocument engine={engine} source={source} options={viewerOptions}>
-        <Toolbar />
-        <PdfViewport className="viewport" renderOverlay={renderOverlay} />
+        <Toolbar
+          outlineOpen={outlineOpen}
+          onToggleOutline={() => setOutlineOpen((open) => !open)}
+        />
+        {outlineOpen ? <OutlinePanel id="outline" /> : null}
+        <PdfViewport
+          className={outlineOpen ? "viewport with-outline" : "viewport"}
+          renderOverlay={renderOverlay}
+        />
         {settings.autoscroll > 0 ? (
           <BenchDriver
             speed={settings.autoscroll}
@@ -87,8 +103,30 @@ function Viewer() {
   );
 }
 
-function Toolbar() {
+function Toolbar({
+  outlineOpen,
+  onToggleOutline,
+}: {
+  outlineOpen: boolean;
+  onToggleOutline: () => void;
+}) {
   const viewer = usePdfViewer();
+  const navigation = usePdfNavigation();
+  const outline = usePdfOutline();
+  const hasOutline = outline !== null && outline.length > 0;
+  const { back } = navigation;
+
+  // Alt+Left returns from a link jump, as browsers do for pages.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.altKey && event.key === "ArrowLeft") {
+        event.preventDefault();
+        back();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [back]);
   // Exposed for the Playwright probes; not part of the library surface.
   (window as { __viewer?: unknown }).__viewer = viewer;
   const status = usePdfState((state) => state.status);
@@ -98,6 +136,19 @@ function Toolbar() {
   const scale = usePdfState((state) => state.scale);
   return (
     <header className="toolbar">
+      {hasOutline ? (
+        <button
+          type="button"
+          aria-expanded={outlineOpen}
+          aria-controls="outline"
+          onClick={onToggleOutline}
+        >
+          Outline
+        </button>
+      ) : null}
+      <button type="button" onClick={back} disabled={!navigation.canGoBack}>
+        Back
+      </button>
       <strong>ParaPDF prototype</strong>
       <span className="engine">{viewer.engineName}</span>
       <span>{status === "ready" ? `${page + 1} / ${pageCount}` : (error ?? status)}</span>

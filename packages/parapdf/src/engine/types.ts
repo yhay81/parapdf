@@ -57,6 +57,51 @@ export interface TextLayerTask {
   cancel(): void;
 }
 
+/** An engine-specific link target (a named or explicit PDF destination). */
+export type DestinationRef = unknown;
+
+/** Where a destination points: a page and an optional point in PDF points from its top-left. */
+export interface ResolvedDestination {
+  pageIndex: number;
+  x: number | null;
+  y: number | null;
+}
+
+export interface OutlineNode {
+  title: string;
+  /** Internal target, or null when the entry links elsewhere or nowhere. */
+  dest: DestinationRef | null;
+  url: string | null;
+  bold: boolean;
+  italic: boolean;
+  items: readonly OutlineNode[];
+}
+
+/** How activated links leave the annotation layer: always through the runtime. */
+export interface LinkHandlers {
+  navigate(dest: DestinationRef): void;
+  /** PDF named actions such as `NextPage` or `GoBack`. */
+  namedAction(action: string): void;
+}
+
+export interface AnnotationLayerRequest {
+  pageIndex: number;
+  /** Receives positioned link elements; sized by the `--total-scale-factor` CSS variable. */
+  container: HTMLElement;
+  /** CSS pixels per PDF point. */
+  cssScale: number;
+  links: LinkHandlers;
+}
+
+export interface AnnotationLayerHandle {
+  setScale(cssScale: number): void;
+}
+
+export interface AnnotationLayerTask {
+  readonly promise: Promise<AnnotationLayerHandle>;
+  cancel(): void;
+}
+
 export interface PdfEngineDocument {
   readonly pageCount: number;
   pageSize(pageIndex: number): Promise<PageSize>;
@@ -64,6 +109,11 @@ export interface PdfEngineDocument {
   getText(pageIndex: number): Promise<PageText>;
   /** Build a selectable, searchable, screen-reader-visible text layer. */
   renderTextLayer(request: TextLayerRequest): TextLayerTask;
+  /** Build focusable link elements for the page's link annotations. */
+  renderAnnotationLayer(request: AnnotationLayerRequest): AnnotationLayerTask;
+  /** The document outline (bookmarks); empty when the PDF has none. */
+  getOutline(): Promise<readonly OutlineNode[]>;
+  resolveDestination(dest: DestinationRef): Promise<ResolvedDestination | null>;
   /** Drop cached parsing results for a page that left the mounted window. */
   releasePage(pageIndex: number): void;
   destroy(): Promise<void>;

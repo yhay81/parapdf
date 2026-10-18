@@ -81,9 +81,18 @@ with a scripted scroll at devicePixelRatio 2; details in
   page per idle period. With the renderer worker on a GPU-backed canvas,
   slow scrolling blocked the main thread for 0–1 ms with text layers versus
   0 ms without; fast scrolling builds none.
-- **Not yet built.** Annotation layer, structure-tree semantics for tagged
-  PDFs, text for pages outside the mounted window, and region rendering beyond
-  the 16 MP detail cap.
+- **Links and outline.** pdf.js annotation layers make links focusable and
+  named by the text they cover; internal links, the outline, and named actions
+  go through the runtime, which keeps a back stack (`Back`, Alt+Left). On
+  `usrguide.pdf`, link and outline jumps land on the same page, and
+  [`check-links.ts`](examples/prototype/scripts/check-links.ts) verifies mouse
+  and keyboard activation, the back stack, and external link attributes.
+  Annotation layers added 3 ms of main-thread blocking during slow scrolling
+  (16 versus 13 ms, renderer worker on a GPU-backed canvas; see
+  [`links-cost.md`](examples/prototype/results/links-cost.md)).
+- **Not yet built.** Form filling, structure-tree semantics for tagged PDFs,
+  text for pages outside the mounted window, and region rendering beyond the
+  16 MP detail cap.
 
 ## License
 

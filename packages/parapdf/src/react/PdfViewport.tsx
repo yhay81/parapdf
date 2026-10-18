@@ -50,6 +50,7 @@ export function PdfViewport({
           height={layout.heights[index] ?? 0}
           scale={layout.scale}
           textLayer={runtime.textLayer}
+          annotationLayer={runtime.annotationLayer}
           overlay={renderOverlay?.(index)}
         />,
       );
@@ -87,6 +88,7 @@ interface PdfPageProps {
   /** CSS pixels per PDF point; pdf.js's text layer reads it as `--total-scale-factor`. */
   scale: number;
   textLayer: boolean;
+  annotationLayer: boolean;
   overlay: ReactNode;
 }
 
@@ -105,18 +107,20 @@ const PdfPage = memo(function PdfPage({
   height,
   scale,
   textLayer,
+  annotationLayer,
   overlay,
 }: PdfPageProps) {
   const runtime = usePdfViewer();
   const baseRef = useRef<HTMLCanvasElement>(null);
   const detailRef = useRef<HTMLCanvasElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
+  const annotationRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
     const base = baseRef.current;
     const detail = detailRef.current;
     if (!base || !detail) return;
-    return runtime.attachPage(index, base, detail, textRef.current);
+    return runtime.attachPage(index, base, detail, textRef.current, annotationRef.current);
   }, [runtime, index]);
 
   return (
@@ -148,6 +152,7 @@ const PdfPage = memo(function PdfPage({
         <canvas ref={detailRef} style={layerStyle} />
       </div>
       {textLayer ? <div ref={textRef} className="parapdf-text-layer" /> : null}
+      {annotationLayer ? <div ref={annotationRef} className="parapdf-annotation-layer" /> : null}
       {overlay ? (
         <div style={{ ...layerStyle, pointerEvents: "none", zIndex: 2 }}>{overlay}</div>
       ) : null}

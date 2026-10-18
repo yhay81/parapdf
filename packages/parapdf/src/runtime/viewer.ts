@@ -1,4 +1,7 @@
 import type {
+  DestinationRef,
+  LinkHandlers,
+  OutlineNode,
   PageSize,
   PdfEngine,
   PdfEngineDocument,
@@ -40,6 +43,10 @@ export interface ViewerState {
   /** CSS pixels per PDF point. */
   scale: number;
   search: SearchState;
+  /** Document outline; null until loaded, empty when the PDF has none. */
+  outline: readonly OutlineNode[] | null;
+  /** Whether `back()` can return to a position before a link or outline jump. */
+  canGoBack: boolean;
 }
 
 export interface ViewerOptions {
@@ -53,7 +60,12 @@ export interface ViewerOptions {
   maxScale?: number;
   /** Build selectable, searchable text layers (default true). */
   textLayer?: boolean;
+  /** Build focusable link layers (default true). */
+  annotationLayer?: boolean;
 }
+
+/** Jumps kept for `back()`. */
+const HISTORY_LIMIT = 50;
 
 /** Scrolling faster than this (CSS px/ms) defers full-resolution renders. */
 const SETTLE_VELOCITY = 2;
@@ -79,12 +91,12 @@ const yieldToMain = (): Promise<void> => {
   return scheduler?.yield ? scheduler.yield() : new Promise((resolve) => setTimeout(resolve, 0));
 };
 
-type PageElements = [HTMLCanvasElement, HTMLCanvasElement, HTMLElement | null];
+type PageElements = [HTMLCanvasElement, HTMLCanvasElement, HTMLElement | null, HTMLElement | null];
 
 /**
  * The imperative core behind the React components. It owns scrolling, layout,
- * zoom, search, and the render scheduler; React only re-renders when the
- * published store fields change.
+ * zoom, search, navigation, and the render scheduler; React only re-renders
+ * when the published store fields change.
  */
 export class PdfViewerRuntime {
   readonly store = new Store<ViewerState>({
@@ -97,6 +109,8 @@ export class PdfViewerRuntime {
     currentPage: 0,
     scale: 1,
     search: IDLE_SEARCH,
+    outline: null,
+    canGoBack: false,
   });
   readonly #engine: PdfEngine;
   readonly #gap: number;
@@ -106,6 +120,13 @@ export class PdfViewerRuntime {
   readonly #minScale: number;
   readonly #maxScale: number;
   readonly #textLayer: boolean;
+  readonly #annotationLayer: boolean;
+  readonly #links: LinkHandlers = {
+    navigate: (dest) => void this.goToDestination(dest),
+    namedAction: (action) => this.#namedAction(action),
+  };
+  /** Positions before link and outline jumps, as a page plus a fraction of it. */
+  #history: { pageIndex: number; offset: number }[] = [];
   readonly #highlights = new SearchHighlights();
   #generation = 0;
   #doc: PdfEngineDocument | null = null;
@@ -134,6 +155,7 @@ export class PdfViewerRuntime {
     this.#minScale = options.minScale ?? 0.25;
     this.#maxScale = options.maxScale ?? 6;
     this.#textLayer = options.textLayer ?? true;
+    this.#annotationLayer = options.annotationLayer ?? true;
   }
 
   get engineName(): string {
@@ -142,6 +164,10 @@ export class PdfViewerRuntime {
 
   get textLayer(): boolean {
     return this.#textLayer;
+  }
+
+  get annotationLayer(): boolean {
+    return this.#annotationLayer;
   }
 
   get scroller(): HTMLElement | null {
@@ -164,7 +190,14 @@ export class PdfViewerRuntime {
     let doc: PdfEngineDocument | null = null;
     let closed = false;
     this.#firstPaintAt = null;
-    this.store.set({ status: "loading", error: null, search: IDLE_SEARCH });
+    this.#history = [];
+    this.store.set({
+      status: "loading",
+      error: null,
+      search: IDLE_SEARCH,
+      outline: null,
+      canGoBack: false,
+    });
 
     void (async () => {
       try {
@@ -182,6 +215,7 @@ export class PdfViewerRuntime {
         this.#sizes = Array.from({ length: doc.pageCount }, () => firstSize);
         this.#scheduler = new RenderScheduler(doc, {
           maxConcurrent: this.#maxConcurrentRenders,
+          links: this.#links,
           onPainted: (pageIndex) => {
             if (pageIndex === 0 && this.#firstPaintAt === null) {
               this.#firstPaintAt = performance.now();
@@ -196,8 +230,8 @@ export class PdfViewerRuntime {
             this.#highlights.clearPage(pageIndex);
           },
         });
-        for (const [index, [base, detail, text]] of this.#pendingPages) {
-          this.#scheduler.attach(index, base, detail, text);
+        for (const [index, [base, detail, text, annotations]] of this.#pendingPages) {
+          this.#scheduler.attach(index, base, detail, text, annotations);
         }
         this.#pendingPages.clear();
         const scale = this.#resolveInitialScale(firstSize);
@@ -205,6 +239,15 @@ export class PdfViewerRuntime {
         this.store.set({ status: "ready", pageCount: doc.pageCount, scale });
         this.#update();
         void this.#refineSizes(doc, generation);
+        // The outline parses in the worker; publish it whenever it is ready.
+        void doc.getOutline().then(
+          (outline) => {
+            if (this.#generation === generation) this.store.set({ outline });
+          },
+          () => {
+            if (this.#generation === generation) this.store.set({ outline: [] });
+          },
+        );
       } catch (error) {
         if (!closed) this.store.set({ status: "error", error: String(error) });
       }
@@ -217,6 +260,7 @@ export class PdfViewerRuntime {
         this.#highlights.clear();
         this.#textPages.clear();
         this.#indexes.clear();
+        this.#history = [];
         this.#doc = null;
         this.#scheduler = null;
         this.store.set({
@@ -226,6 +270,8 @@ export class PdfViewerRuntime {
           first: 0,
           last: -1,
           search: IDLE_SEARCH,
+          outline: null,
+          canGoBack: false,
         });
       }
       // A document still loading is destroyed by the loader once it resolves.
@@ -280,11 +326,13 @@ export class PdfViewerRuntime {
     base: HTMLCanvasElement,
     detail: HTMLCanvasElement,
     text: HTMLElement | null,
+    annotations: HTMLElement | null = null,
   ): () => void {
-    const layer = this.#textLayer ? text : null;
+    const textLayer = this.#textLayer ? text : null;
+    const annotationLayer = this.#annotationLayer ? annotations : null;
     const scheduler = this.#scheduler;
-    if (scheduler) scheduler.attach(index, base, detail, layer);
-    else this.#pendingPages.set(index, [base, detail, layer]);
+    if (scheduler) scheduler.attach(index, base, detail, textLayer, annotationLayer);
+    else this.#pendingPages.set(index, [base, detail, textLayer, annotationLayer]);
     return () => {
       this.#pendingPages.delete(index);
       if (this.#scheduler === scheduler) scheduler?.detach(index);
@@ -320,6 +368,80 @@ export class PdfViewerRuntime {
     if (!layout || !this.#scroller) return;
     const target = clamp(index, 0, layout.tops.length - 1);
     this.#scroller.scrollTop = (layout.tops[target] ?? 0) - layout.gap;
+  }
+
+  /**
+   * Follow an internal link or outline entry. The position before the jump
+   * is remembered for `back()`. Resolves to false when the target is invalid.
+   */
+  async goToDestination(dest: DestinationRef): Promise<boolean> {
+    const doc = this.#doc;
+    if (!doc) return false;
+    const target = await doc.resolveDestination(dest).catch(() => null);
+    const layout = this.store.get().layout;
+    const scroller = this.#scroller;
+    if (!target || !layout || !scroller || this.#doc !== doc) return false;
+    if (target.pageIndex < 0 || target.pageIndex >= layout.tops.length) return false;
+    this.#remember();
+    const pageTop = layout.tops[target.pageIndex] ?? 0;
+    // An explicit top lands at the top edge of the viewport, as in other PDF readers.
+    scroller.scrollTop =
+      target.y === null ? pageTop - layout.gap : pageTop + target.y * layout.scale;
+    if (target.x !== null) {
+      const contentWidth = Math.max(scroller.clientWidth, layout.totalWidth);
+      const left =
+        (contentWidth - (layout.widths[target.pageIndex] ?? 0)) / 2 + target.x * layout.scale;
+      if (left < scroller.scrollLeft || left > scroller.scrollLeft + scroller.clientWidth) {
+        scroller.scrollLeft = left;
+      }
+    }
+    return true;
+  }
+
+  /** Return to the position before the most recent link or outline jump. */
+  back(): void {
+    const entry = this.#history.pop();
+    this.store.set({ canGoBack: this.#history.length > 0 });
+    const layout = this.store.get().layout;
+    if (!entry || !layout || !this.#scroller) return;
+    const top = layout.tops[entry.pageIndex] ?? 0;
+    this.#scroller.scrollTop = top + entry.offset * (layout.heights[entry.pageIndex] ?? 0);
+  }
+
+  /** Save the viewport's top as a page and fraction, which survive zoom changes. */
+  #remember(): void {
+    const layout = this.store.get().layout;
+    const scroller = this.#scroller;
+    if (!layout || !scroller) return;
+    const pageIndex = pageAt(layout, scroller.scrollTop);
+    const offset =
+      (scroller.scrollTop - (layout.tops[pageIndex] ?? 0)) / (layout.heights[pageIndex] || 1);
+    this.#history.push({ pageIndex, offset });
+    if (this.#history.length > HISTORY_LIMIT) this.#history.shift();
+    this.store.set({ canGoBack: true });
+  }
+
+  #namedAction(action: string): void {
+    const { currentPage, pageCount } = this.store.get();
+    switch (action) {
+      case "NextPage":
+        this.goToPage(currentPage + 1);
+        break;
+      case "PrevPage":
+        this.goToPage(currentPage - 1);
+        break;
+      case "FirstPage":
+        this.#remember();
+        this.goToPage(0);
+        break;
+      case "LastPage":
+        this.#remember();
+        this.goToPage(pageCount - 1);
+        break;
+      case "GoBack":
+        this.back();
+        break;
+    }
   }
 
   zoomBy(factor: number): void {

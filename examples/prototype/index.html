@@ -18,6 +18,18 @@
       .search { display: flex; gap: 4px; align-items: center; margin-left: auto; }
       .search input { width: 200px; }
       .search-summary { min-width: 9em; color: #c9cdd2; }
+      .viewport.with-outline { left: 280px; }
+      .outline {
+        position: absolute; inset: 40px auto 0 0; width: 280px; overflow: auto;
+        background: #2f3134; box-sizing: border-box; padding: 8px 4px;
+      }
+      .outline ul { list-style: none; margin: 0; padding-left: 12px; }
+      .outline > ul { padding-left: 0; }
+      .outline :is(button, a) {
+        display: block; width: 100%; text-align: left; padding: 4px 8px; border: 0;
+        background: none; color: #e8e8e8; font: inherit; cursor: pointer; border-radius: 4px;
+      }
+      .outline :is(button, a):hover, .outline :is(button, a):focus-visible { background: #45484c; }
     </style>
   </head>
   <body>

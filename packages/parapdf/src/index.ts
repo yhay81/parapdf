@@ -1,6 +1,12 @@
 export { createPdfjsEngine, type PdfjsEngineOptions } from "./engine/pdfjs.ts";
 export {
+  type AnnotationLayerHandle,
+  type AnnotationLayerRequest,
+  type AnnotationLayerTask,
+  type DestinationRef,
   isRenderCancelled,
+  type LinkHandlers,
+  type OutlineNode,
   type PageSize,
   type PageText,
   type PdfEngine,
@@ -9,11 +15,13 @@ export {
   RenderCancelledError,
   type RenderRequest,
   type RenderTask,
+  type ResolvedDestination,
   type TextLayerHandle,
   type TextLayerRequest,
   type TextLayerTask,
 } from "./engine/types.ts";
 export { usePdfState, usePdfViewer } from "./react/context.ts";
+export { type PdfNavigation, usePdfNavigation, usePdfOutline } from "./react/navigation.ts";
 export { PdfDocument, type PdfDocumentProps } from "./react/PdfDocument.tsx";
 export { PdfPageRect, type PdfPageRectProps } from "./react/PdfPageRect.tsx";
 export { PdfViewport, type PdfViewportProps } from "./react/PdfViewport.tsx";

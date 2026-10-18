@@ -1,11 +1,15 @@
 import type * as Pdfjs from "pdfjs-dist";
 import {
+  type AnnotationLayerHandle,
+  type LinkHandlers,
+  type OutlineNode,
   type PageSize,
   type PageText,
   type PdfEngine,
   type PdfEngineDocument,
   type PdfSource,
   RenderCancelledError,
+  type ResolvedDestination,
   type TextLayerHandle,
 } from "./types.ts";
 
@@ -26,6 +30,62 @@ export interface PdfjsEngineOptions {
 // The text layer and the search index must see the same items in the same
 // order, so both read text content with identical options.
 const TEXT_OPTIONS = { includeMarkedContent: true, disableNormalization: true } as const;
+
+/**
+ * The part of pdf.js's link service interface that link annotations call.
+ * Internal links and named actions go to the runtime; pdf.js's own viewer
+ * components are never involved.
+ */
+function createLinkService(links: LinkHandlers) {
+  return {
+    externalLinkEnabled: true,
+    eventBus: undefined,
+    addLinkAttributes(link: HTMLAnchorElement, url: string) {
+      link.href = url;
+      link.title = url;
+      // External pages open in a new tab so the document keeps its position.
+      link.target = "_blank";
+      link.rel = "noopener noreferrer nofollow";
+    },
+    getDestinationHash(dest: unknown) {
+      return typeof dest === "string" && dest ? `#${encodeURIComponent(dest)}` : "#";
+    },
+    getAnchorUrl(anchor: string) {
+      return `#${anchor}`;
+    },
+    goToDestination(dest: unknown) {
+      links.navigate(dest);
+    },
+    executeNamedAction(action: string) {
+      links.namedAction(action);
+    },
+    executeSetOCGState() {
+      // Optional content toggles are not supported yet.
+    },
+    async getAttachmentContent() {
+      return null;
+    },
+  };
+}
+
+interface PdfjsOutlineItem {
+  title: string;
+  dest: unknown;
+  url: string | null;
+  bold: boolean;
+  italic: boolean;
+  items: PdfjsOutlineItem[];
+}
+
+const toOutline = (items: readonly PdfjsOutlineItem[] | null): OutlineNode[] =>
+  (items ?? []).map((item) => ({
+    title: item.title,
+    dest: item.dest ?? null,
+    url: item.url ?? null,
+    bold: Boolean(item.bold),
+    italic: Boolean(item.italic),
+    items: toOutline(item.items),
+  }));
 
 /** pdf.js through its core display API only. */
 export function createPdfjsEngine(options: PdfjsEngineOptions): PdfEngine {
@@ -142,6 +202,89 @@ export function createPdfjsEngine(options: PdfjsEngineOptions): PdfEngine {
               layer?.cancel();
             },
           };
+        },
+        renderAnnotationLayer({ pageIndex, container, cssScale, links }) {
+          let cancelled = false;
+          const promise = getPage(pageIndex).then(async (page): Promise<AnnotationLayerHandle> => {
+            const annotations = await page.getAnnotations({ intent: "display" });
+            if (cancelled) throw new RenderCancelledError("annotation layer cancelled");
+            const viewport = page.getViewport({ scale: cssScale });
+            const linkService = createLinkService(links);
+            const layer = new pdfjs.AnnotationLayer({
+              div: container,
+              accessibilityManager: null,
+              annotationCanvasMap: null,
+              annotationEditorUIManager: null,
+              page,
+              viewport,
+              structTreeLayer: null,
+              commentManager: null,
+              linkService,
+              annotationStorage: doc.annotationStorage,
+            });
+            // Form widgets stay on the canvas (the default annotation mode),
+            // so only links and other non-form annotations become HTML here.
+            await layer.render({
+              annotations,
+              div: container as HTMLDivElement,
+              page,
+              viewport,
+              linkService: linkService as never,
+              annotationStorage: doc.annotationStorage,
+              renderForms: false,
+              enableScripting: false,
+            });
+            return {
+              setScale(next) {
+                layer.update({ viewport: page.getViewport({ scale: next }) } as never);
+              },
+            };
+          });
+          return {
+            promise,
+            cancel() {
+              cancelled = true;
+            },
+          };
+        },
+        async getOutline() {
+          return toOutline((await doc.getOutline()) as PdfjsOutlineItem[] | null);
+        },
+        async resolveDestination(dest): Promise<ResolvedDestination | null> {
+          const explicit = typeof dest === "string" ? await doc.getDestination(dest) : dest;
+          if (!Array.isArray(explicit)) return null;
+          const [target, mode, ...args] = explicit as [unknown, { name?: string }?, ...unknown[]];
+          let pageIndex: number;
+          if (Number.isInteger(target)) pageIndex = target as number;
+          else if (target && typeof target === "object") {
+            pageIndex = await doc.getPageIndex(target as Parameters<typeof doc.getPageIndex>[0]);
+          } else return null;
+          const num = (value: unknown) => (typeof value === "number" ? value : null);
+          // [left, top] in PDF user space, per the destination syntax (PDF 32000 12.3.2.2).
+          let left: number | null = null;
+          let top: number | null = null;
+          switch (mode?.name) {
+            case "XYZ":
+              left = num(args[0]);
+              top = num(args[1]);
+              break;
+            case "FitH":
+            case "FitBH":
+              top = num(args[0]);
+              break;
+            case "FitV":
+            case "FitBV":
+              left = num(args[0]);
+              break;
+            case "FitR":
+              left = num(args[0]);
+              top = num(args[3]);
+              break;
+          }
+          if (left === null && top === null) return { pageIndex, x: null, y: null };
+          const viewport = (await getPage(pageIndex)).getViewport({ scale: 1 });
+          const [x = 0, y = 0] = viewport.convertToViewportPoint(left ?? 0, top ?? 0);
+          return { pageIndex, x: left === null ? null : x, y: top === null ? null : y };
         },
         releasePage(pageIndex) {
           void pages.get(pageIndex)?.then((page) => page.cleanup());

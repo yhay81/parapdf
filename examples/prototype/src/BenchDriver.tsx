@@ -44,7 +44,14 @@ export function BenchDriver({ speed, durationMs, commits, label }: BenchDriverPr
       if (cancelled || !scroller) return;
 
       const before = {
-        ...(viewer.stats ?? { base: 0, detail: 0, text: 0, cancelled: 0, failed: 0 }),
+        ...(viewer.stats ?? {
+          base: 0,
+          detail: 0,
+          text: 0,
+          annotations: 0,
+          cancelled: 0,
+          failed: 0,
+        }),
       };
       const commitsBefore = commits.count;
       const startPage = viewer.store.get().currentPage;
@@ -96,6 +103,7 @@ export function BenchDriver({ speed, durationMs, commits, label }: BenchDriverPr
           base: after.base - before.base,
           detail: after.detail - before.detail,
           text: after.text - before.text,
+          annotations: after.annotations - before.annotations,
           cancelled: after.cancelled - before.cancelled,
           failed: after.failed - before.failed,
         },

@@ -11,7 +11,7 @@ The full license text is in
 
 | ParaPDF file | Derived from | Notes |
 |---|---|---|
-| `packages/parapdf/src/react/styles.ts` | `web/pdf_viewer.css` (pdfjs-dist 6.4.299), `.textLayer` rules | Renamed to `.parapdf-text-layer`; editing and image rules omitted. |
+| `packages/parapdf/src/react/styles.ts` | `web/pdf_viewer.css` (pdfjs-dist 6.4.299), `.textLayer` and `.annotationLayer` rules | Renamed to `.parapdf-text-layer` and `.parapdf-annotation-layer`; editing, form, popup, and image rules omitted. |
 | `packages/parapdf/src/runtime/scheduler.ts` | `web/text_layer_builder.js` | The `endOfContent` element appended after each text layer. |
 | `packages/parapdf/src/runtime/viewer.ts` | `web/text_layer_builder.js` | Toggling `selecting` on the text layer while a pointer drags. |
 

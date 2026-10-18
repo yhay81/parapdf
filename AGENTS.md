@@ -63,11 +63,14 @@ until the benchmark results justify the architecture.
   select `engine` (`pdfjs` or `pdfjs-next`), `hwa`, `text`, `file`, and
   `preload`.
 - `pnpm --filter @parapdf/prototype build && pnpm --filter @parapdf/prototype bench`
-  — scripted scroll benchmark; `VARIANTS`, `TEXT`, `FILES`, `SPEEDS`, `RUNS`,
-  `DURATION`, `PRELOAD`, and `OUTPUT` narrow or rename a run.
+  — scripted scroll benchmark; `VARIANTS`, `TEXT`, `LINKS`, `FILES`, `SPEEDS`,
+  `RUNS`, `DURATION`, `PRELOAD`, and `OUTPUT` narrow or rename a run.
 - `pnpm --filter @parapdf/prototype check:text` — functional checks for text
   selection, search highlights, normalization, and accessibility semantics
   (run after `build`).
+- `pnpm --filter @parapdf/prototype check:links` — functional checks for
+  internal and external links, keyboard activation, the back stack, and the
+  outline on `usrguide.pdf` (run after `build`).
 - `pnpm check` — Biome lint and format check. `pnpm format` applies fixes.
 - `pnpm typecheck` — TypeScript checks for every workspace package.
 
@@ -108,10 +111,23 @@ until the benchmark results justify the architecture.
   pages are labelled sections (region landmarks, as in pdf.js); canvases sit in
   an `aria-hidden` wrapper so assistive technology reads the text layer. The
   demo announces result counts through an `aria-live` `<output>`.
-- Not yet implemented: annotation layer, structure tree (tagged PDF)
-  semantics, text for pages outside the mounted window, highlight fallback for
-  browsers without the CSS Custom Highlight API, and region rendering above the
-  pixel cap.
+- Annotation layers use pdf.js's core `AnnotationLayer` inside
+  `.parapdf-annotation-layer`, after the page's text layer in the same idle
+  pipeline, with `renderForms: false`: form widgets stay on the canvas. A
+  ParaPDF implementation of the link service methods pdf.js calls routes
+  internal links and named actions (`NextPage`, `PrevPage`, `FirstPage`,
+  `LastPage`, `GoBack`) to the runtime; external links get `target="_blank"`
+  and `rel="noopener noreferrer nofollow"`. pdf.js puts the linked text in
+  each internal link's `title`, its accessible name.
+- `goToDestination` resolves named and explicit destinations through the
+  engine and places an explicit top at the viewport's top edge. Link and
+  outline jumps push the previous position (a page plus a fraction, so zoom
+  does not invalidate it) onto a 50-entry back stack exposed as `canGoBack`
+  and `back()`. The outline loads in the background after the first layout.
+- Not yet implemented: form filling, structure tree (tagged PDF) semantics,
+  text for pages outside the mounted window, highlight fallback for browsers
+  without the CSS Custom Highlight API, optional content toggles, attachments,
+  and region rendering above the pixel cap.
 
 ## Benchmark methodology
 

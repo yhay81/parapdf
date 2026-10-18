@@ -1,10 +1,12 @@
 /**
  * Viewer styles, injected once through React 19's `<style href precedence>`.
  *
- * The `.parapdf-text-layer` rules are derived from the `.textLayer` rules in
- * PDF.js `web/pdf_viewer.css` (Copyright Mozilla Foundation, Apache License
- * 2.0; see NOTICE.md). pdf.js's `TextLayer` sizes and positions its runs
- * through these custom properties, so the rules must match its expectations.
+ * The `.parapdf-text-layer` and `.parapdf-annotation-layer` rules are derived
+ * from the `.textLayer` and `.annotationLayer` rules in PDF.js
+ * `web/pdf_viewer.css` (Copyright Mozilla Foundation, Apache License 2.0; see
+ * NOTICE.md). pdf.js's `TextLayer` and `AnnotationLayer` size and position
+ * their elements through these classes and custom properties, so the rules
+ * must match its expectations.
  */
 export const VIEWER_CSS = `
 .parapdf-text-layer {
@@ -64,6 +66,57 @@ export const VIEWER_CSS = `
 .parapdf-text-layer[data-main-rotation="90"] { transform: rotate(90deg) translateY(-100%); }
 .parapdf-text-layer[data-main-rotation="180"] { transform: rotate(180deg) translate(-100%, -100%); }
 .parapdf-text-layer[data-main-rotation="270"] { transform: rotate(270deg) translateX(-100%); }
+.parapdf-annotation-layer {
+  color-scheme: only light;
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  transform-origin: 0 0;
+  z-index: 3;
+}
+@media screen and (forced-colors: active) {
+  .parapdf-annotation-layer .linkAnnotation { outline: 1.5px solid LinkText; }
+}
+.parapdf-annotation-layer[data-main-rotation="90"] { transform: rotate(90deg) translateY(-100%); }
+.parapdf-annotation-layer[data-main-rotation="180"] { transform: rotate(180deg) translate(-100%, -100%); }
+.parapdf-annotation-layer[data-main-rotation="270"] { transform: rotate(270deg) translateX(-100%); }
+.parapdf-annotation-layer section {
+  position: absolute;
+  text-align: initial;
+  pointer-events: auto;
+  box-sizing: border-box;
+  transform-origin: 0 0;
+  user-select: none;
+}
+.parapdf-annotation-layer section .overlaidText {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  display: inline-block;
+  overflow: hidden;
+}
+.parapdf-text-layer.selecting ~ .parapdf-annotation-layer section { pointer-events: none; }
+.parapdf-annotation-layer .linkAnnotation > a {
+  position: absolute;
+  font-size: 1em;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+.parapdf-annotation-layer .linkAnnotation:not(.hasBorder) > a:hover {
+  opacity: 0.2;
+  background-color: rgb(255 255 0);
+}
+.parapdf-annotation-layer .linkAnnotation.hasBorder:hover { background-color: rgb(255 255 0 / 0.2); }
+.parapdf-annotation-layer .hasBorder { background-size: 100% 100%; }
+.parapdf-annotation-layer .linkAnnotation > a:focus-visible {
+  outline: 2px solid Highlight;
+  outline-offset: 1px;
+}
 ::highlight(parapdf-search) { background-color: rgb(255 200 0 / 0.45); }
 ::highlight(parapdf-search-current) { background-color: rgb(255 110 0 / 0.65); }
 .parapdf-viewport:focus-visible { outline: 2px solid Highlight; outline-offset: -2px; }
