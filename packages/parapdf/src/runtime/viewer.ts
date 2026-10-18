@@ -11,6 +11,7 @@ import type {
 import { SearchHighlights } from "./highlights.ts";
 import { computeLayout, type Layout, pageAt, visibleRange } from "./layout.ts";
 import { RenderScheduler, type SchedulerStats } from "./scheduler.ts";
+import { TextSelectionTracker } from "./selection.ts";
 import { Store } from "./store.ts";
 import {
   buildPageIndex,
@@ -128,6 +129,7 @@ export class PdfViewerRuntime {
   /** Positions before link and outline jumps, as a page plus a fraction of it. */
   #history: { pageIndex: number; offset: number }[] = [];
   readonly #highlights = new SearchHighlights();
+  readonly #selection = new TextSelectionTracker();
   #generation = 0;
   #doc: PdfEngineDocument | null = null;
   #scheduler: RenderScheduler | null = null;
@@ -216,6 +218,7 @@ export class PdfViewerRuntime {
         this.#scheduler = new RenderScheduler(doc, {
           maxConcurrent: this.#maxConcurrentRenders,
           links: this.#links,
+          selection: this.#selection,
           onPainted: (pageIndex) => {
             if (pageIndex === 0 && this.#firstPaintAt === null) {
               this.#firstPaintAt = performance.now();
@@ -258,6 +261,7 @@ export class PdfViewerRuntime {
       if (this.#generation === generation) {
         this.#searchGeneration++;
         this.#highlights.clear();
+        this.#selection.clear();
         this.#textPages.clear();
         this.#indexes.clear();
         this.#history = [];
@@ -285,31 +289,14 @@ export class PdfViewerRuntime {
     this.#content = content;
     const layout = this.store.get().layout;
     if (layout) this.#sizeContent(layout);
-    // While a pointer drags inside a text layer, pdf.js's CSS stretches the
-    // layer's end element over the page so the selection does not jump.
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target instanceof Element ? event.target : null;
-      target?.closest(".parapdf-text-layer")?.classList.add("selecting");
-    };
-    const onPointerUp = () => {
-      for (const layer of scroller.querySelectorAll(".parapdf-text-layer.selecting")) {
-        layer.classList.remove("selecting");
-      }
-    };
     scroller.addEventListener("scroll", this.#onScroll, { passive: true });
     scroller.addEventListener("wheel", this.#onWheel, { passive: false });
-    scroller.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("pointerup", onPointerUp);
-    window.addEventListener("pointercancel", onPointerUp);
     const resize = new ResizeObserver(() => this.#requestUpdate());
     resize.observe(scroller);
     this.#requestUpdate();
     return () => {
       scroller.removeEventListener("scroll", this.#onScroll);
       scroller.removeEventListener("wheel", this.#onWheel);
-      scroller.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("pointerup", onPointerUp);
-      window.removeEventListener("pointercancel", onPointerUp);
       resize.disconnect();
       if (this.#frame) cancelAnimationFrame(this.#frame);
       this.#frame = 0;

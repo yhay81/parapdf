@@ -100,6 +100,15 @@ until the benchmark results justify the architecture.
   settles, during idle periods; zoom re-measures one page per idle period.
   Text layer items and the search index read text content with identical
   options so element order matches item order.
+- `TextSelectionTracker` (`runtime/selection.ts`, ported from pdf.js's
+  `TextLayerBuilder` and attributed in `NOTICE.md`) gives every text layer a
+  selection touches the `selecting` class, which stretches its
+  `.endOfContent` over the page. In WebKit and Chromium before 148 it also
+  moves `.endOfContent` next to the changing end of the selection, so a drag
+  past a line's end does not select the rest of the page. Each viewer owns
+  its listeners, so closing one viewer leaves the others working (pdf.js
+  issue 22129). In WebKit a drag across the gap between two pages still jumps
+  to the end of the next page.
 - Search indexes each page with per-character NFKC normalization, case folding,
   and whitespace collapsing, mapped back to UTF-16 offsets in text items.
   Results stream page by page; the first match at or after the current page is

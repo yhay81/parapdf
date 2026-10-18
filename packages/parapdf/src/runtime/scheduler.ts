@@ -9,6 +9,7 @@ import {
   type TextLayerTask,
 } from "../engine/types.ts";
 import type { Layout } from "./layout.ts";
+import type { TextSelectionTracker } from "./selection.ts";
 
 type Layer = "base" | "detail";
 
@@ -69,6 +70,8 @@ export interface SchedulerOptions {
   maxDetailPixels?: number;
   /** Where activated links in annotation layers go. */
   links?: LinkHandlers;
+  /** Keeps drag selections inside rendered text layers. */
+  selection?: TextSelectionTracker;
   onPainted?: (pageIndex: number, layer: Layer) => void;
   onTextReady?: (pageIndex: number, handle: TextLayerHandle) => void;
   onTextRemoved?: (pageIndex: number) => void;
@@ -143,6 +146,7 @@ export class RenderScheduler {
     slot.textTask?.cancel();
     slot.annotationTask?.cancel();
     if (slot.textHandle) this.#options.onTextRemoved?.(index);
+    if (slot.text) this.#options.selection?.remove(slot.text);
     slot.text?.replaceChildren();
     slot.annotations?.replaceChildren();
     // Zero-sized canvases hand their backing memory back immediately, which
@@ -366,6 +370,7 @@ export class RenderScheduler {
   #startText(slot: Slot, cssScale: number): void {
     const container = slot.text;
     if (!container) return;
+    this.#options.selection?.remove(container);
     container.replaceChildren();
     const task = this.#doc.renderTextLayer({ pageIndex: slot.index, container, cssScale });
     slot.textTask = task;
@@ -379,6 +384,7 @@ export class RenderScheduler {
           const end = document.createElement("div");
           end.className = "endOfContent";
           container.append(end);
+          this.#options.selection?.add(container, end);
           slot.textHandle = handle;
           slot.textScale = cssScale;
           this.stats.text++;

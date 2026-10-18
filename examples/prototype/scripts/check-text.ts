@@ -163,6 +163,63 @@ try {
     `${fullWidth.total} matches for ＣＭａｐ`,
   );
 
+  // Dragging into the blank space past a line's end must select the dragged
+  // lines, not the rest of the page: WebKit extends such a selection to
+  // wherever the text layer's .endOfContent element sits.
+  await openViewer(page, baseUrl, "synthetic-text-1000.pdf");
+  const drag = await page.evaluate(() => {
+    const section = document.querySelector('section[data-page="1"]');
+    const lines: { top: number; height: number; left: number; right: number; chars: number }[] = [];
+    for (const span of section?.querySelectorAll(".parapdf-text-layer span") ?? []) {
+      const chars = (span.textContent ?? "").replace(/\s/g, "").length;
+      if (chars === 0) continue;
+      const rect = span.getBoundingClientRect();
+      const line = lines.find((entry) => Math.abs(entry.top - rect.top) < rect.height / 2);
+      if (line) {
+        line.left = Math.min(line.left, rect.left);
+        line.right = Math.max(line.right, rect.right);
+        line.chars += chars;
+      } else {
+        lines.push({
+          top: rect.top,
+          height: rect.height,
+          left: rect.left,
+          right: rect.right,
+          chars,
+        });
+      }
+    }
+    lines.sort((a, b) => a.top - b.top);
+    const count = (from: number, to: number) =>
+      lines.slice(from, to).reduce((sum, line) => sum + line.chars, 0);
+    const fifth = lines[4];
+    const ninth = lines[8];
+    const pageRight = section?.getBoundingClientRect().right ?? 0;
+    return fifth && ninth
+      ? {
+          start: { x: fifth.left + 1, y: fifth.top + fifth.height / 2 },
+          end: { x: Math.min(pageRight - 20, ninth.right + 120), y: ninth.top + ninth.height / 2 },
+          min: count(4, 7),
+          max: count(4, 10),
+        }
+      : null;
+  });
+  if (drag) {
+    await page.mouse.move(drag.start.x, drag.start.y);
+    await page.mouse.down();
+    await page.mouse.move(drag.end.x, drag.end.y, { steps: 20 });
+    await page.mouse.up();
+  }
+  const dragged = (await page.evaluate(() => window.getSelection()?.toString() ?? "")).replace(
+    /\s/g,
+    "",
+  ).length;
+  check(
+    "dragging past a line's end selects only the dragged lines",
+    drag !== null && dragged >= drag.min && dragged <= drag.max,
+    `${dragged} characters; lines 5–7 hold ${drag?.min}, lines 5–10 hold ${drag?.max}`,
+  );
+
   check("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));
 } finally {
   await browser.close();
