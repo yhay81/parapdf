@@ -103,13 +103,16 @@ about 20 ms as noise.
   [`startup-preload.md`](examples/prototype/results/startup-preload.md) and
   [`startup-no-preload.md`](examples/prototype/results/startup-no-preload.md)).
 - **Text, search, and accessibility.** pdf.js text layers make pages
-  selectable and readable by screen readers; whole-document search normalizes
-  full-width characters and case, and paints results with the CSS Custom
-  Highlight API without touching the text layer DOM. Pages are labelled
-  regions and the viewport is a focusable document.
+  selectable and readable by screen readers. Whole-document search normalizes
+  text the way pdf.js's find controller does: it ignores full-width forms,
+  case, and diacritics, and matches words that a line end splits, such as
+  厚生労働 broken after 厚生 or "divi-" / "sions". Results are painted with the
+  CSS Custom Highlight API without touching the text layer DOM. Pages are
+  labelled regions and the viewport is a focusable document.
   [`check-text.ts`](examples/prototype/scripts/check-text.ts) verifies
-  selection, including a drag past a line's end, search, Japanese and
-  full-width matching, and these semantics in all three browsers.
+  selection, including a drag past a line's end, search, Japanese,
+  full-width, diacritic, and line-break matching, and these semantics in all
+  three browsers.
 - **Text layer cost.** Text layers are built only after scrolling settles, one
   page per idle period. With the renderer worker on a GPU-backed canvas in
   Chromium, slow scrolling blocked the main thread for 3–18 ms with text

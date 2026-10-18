@@ -124,8 +124,14 @@ until the benchmark results justify the architecture.
   its listeners, so closing one viewer leaves the others working (pdf.js
   issue 22129). In WebKit a drag across the gap between two pages still jumps
   to the end of the next page.
-- Search indexes each page with per-character NFKC normalization, case folding,
-  and whitespace collapsing, mapped back to UTF-16 offsets in text items.
+- Search indexes each page with the normalization of pdf.js's
+  `PDFFindController` (ported in `runtime/text-search.ts`, attributed in
+  `NOTICE.md`) at its default options: compatibility forms, case, and
+  diacritics are ignored except marks that make a different letter (Japanese
+  voiced sound marks, viramas); a line end after a CJK character or inside a
+  hyphenated word joins the lines, a dash before a line end stays, and any
+  other line end reads as a space. Whitespace collapses, and every indexed
+  character maps back to UTF-16 offsets in text items.
   Results stream page by page; the first match at or after the current page is
   selected. Scrolling to a match uses text item boxes, so it works before the
   page's text layer exists. Highlights use the CSS Custom Highlight API

@@ -162,6 +162,15 @@ try {
   );
   if (process.env.SCREENSHOT) await page.screenshot({ path: process.env.SCREENSHOT });
 
+  // Page 1 breaks "divi-" / "sions" across lines; the hyphen and line end
+  // must not keep the word from matching.
+  const divisions = await searchFor(page, "divisions");
+  check(
+    "a word hyphenated across lines matches",
+    divisions.total === 3,
+    `${divisions.total} matches for divisions, 3 expected`,
+  );
+
   // Japanese text in a non-embedded CID font, plus compatibility normalization.
   page = await newPage();
   await openViewer(page, baseUrl, "synthetic-cjk-nonembedded.pdf");
@@ -173,6 +182,27 @@ try {
     "full-width query matches ASCII text",
     fullWidth.total >= 6,
     `${fullWidth.total} matches for ＣＭａｐ`,
+  );
+
+  // Japanese has no spaces, so a line can end inside a word: page 1 of the
+  // MHLW notice breaks 厚生労働 after 厚生, its only occurrence.
+  page = await newPage();
+  await openViewer(page, baseUrl, "mhlw-doc.pdf");
+  const kosei = await searchFor(page, "厚生労働");
+  check(
+    "a Japanese word broken across lines matches",
+    kosei.total === 1 && (await currentHighlightText(page)) === "厚生労働",
+    `${kosei.total} matches, highlighted ${JSON.stringify(await currentHighlightText(page))}`,
+  );
+
+  // Page 24 of the LaTeX guide shows ßüé; a query without the diacritics finds it.
+  page = await newPage();
+  await openViewer(page, baseUrl, "usrguide.pdf");
+  const diacritics = await searchFor(page, "ßue");
+  check(
+    "a query without diacritics matches letters with them",
+    diacritics.total === 5 && (await currentHighlightText(page)) === "ßüé",
+    `${diacritics.total} matches, highlighted ${JSON.stringify(await currentHighlightText(page))}`,
   );
 
   // Dragging into the blank space past a line's end must select the dragged
