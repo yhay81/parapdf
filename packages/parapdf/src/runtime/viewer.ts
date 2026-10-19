@@ -605,6 +605,11 @@ export class PdfViewerRuntime {
     this.#zoomTo((scroller.clientWidth - 2 * this.#gap) / width);
   }
 
+  /**
+   * Zoom keeping the point under `anchor` there, as a share of the same page:
+   * pages are centered in the viewport, so a share of the content's width
+   * moved points on narrower pages sideways.
+   */
   #zoomTo(requested: number, anchor?: { x: number; y: number }): void {
     const state = this.store.get();
     const scale = clamp(requested, this.#minScale, this.#maxScale);
@@ -617,15 +622,18 @@ export class PdfViewerRuntime {
     if (Math.abs(scale - state.scale) < 1e-4) return;
     const x = anchor?.x ?? scroller.clientWidth / 2;
     const y = anchor?.y ?? scroller.clientHeight / 2;
+    const docX = scroller.scrollLeft + x;
     const docY = scroller.scrollTop + y;
     const page = pageAt(layout, docY);
-    const withinPage = (docY - (layout.tops[page] ?? 0)) / (layout.heights[page] || 1);
-    const ratioX = (scroller.scrollLeft + x) / Math.max(1, scroller.scrollWidth);
+    const viewportWidth = scroller.clientWidth;
+    const withinX = (docX - pageLeft(layout, page, viewportWidth)) / (layout.widths[page] || 1);
+    const withinY = (docY - (layout.tops[page] ?? 0)) / (layout.heights[page] || 1);
     const next = this.#applyLayout(scale);
     // The content is resized imperatively, so the scroll position can be
     // restored before React re-renders the mounted pages.
-    scroller.scrollTop = (next.tops[page] ?? 0) + withinPage * (next.heights[page] ?? 0) - y;
-    scroller.scrollLeft = ratioX * scroller.scrollWidth - x;
+    scroller.scrollTop = (next.tops[page] ?? 0) + withinY * (next.heights[page] ?? 0) - y;
+    scroller.scrollLeft =
+      pageLeft(next, page, viewportWidth) + withinX * (next.widths[page] ?? 0) - x;
     this.store.set({ scale });
     this.#update();
   }
