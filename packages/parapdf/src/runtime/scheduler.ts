@@ -122,6 +122,15 @@ export interface SchedulerOptions {
 const BASE_FACTOR = 0.5;
 
 /**
+ * Once scrolling settles, a visible page with no pixels yet gets its
+ * whole-page detail without a base first when that detail holds at most this
+ * many times maxBasePixels (8.4 MP by default, an A4 page about 1,200 CSS
+ * pixels wide at devicePixelRatio 2). A base repeats all of the page's drawing
+ * work, most of the cost of vector drawings, and delays the sharp page.
+ */
+const QUICK_DETAIL_BASES = 4;
+
+/**
  * Zooming in past this multiple of the zoom a text layer was laid out for
  * lays it out again. CSS scaling keeps runs where they were laid out, but
  * runs laid out small carry rounding errors that it magnifies: in Chromium,
@@ -527,6 +536,17 @@ export class RenderScheduler {
       slot.baseScale === 0 &&
       !(slot.detailScale > 0 && slot.detailRegion === null && !needsDetail(slot));
     const detailFirst = (slot: Slot) => input.settled && planOf(slot)?.region === null;
+    // See QUICK_DETAIL_BASES.
+    const quickDetail = (slot: Slot) => {
+      if (!input.settled || slot.baseScale > 0 || slot.detailScale > 0) return false;
+      const plan = planOf(slot);
+      return (
+        plan !== null &&
+        plan.region === null &&
+        this.#pixels(slot.index, plan.scale, null, input) <=
+          this.#maxBasePixels * QUICK_DETAIL_BASES
+      );
+    };
     // Pages outside the viewport render only within maxCanvasPixels.
     const total = this.#canvasPixels(input);
     const fits = (slot: Slot, layer: Layer) => {
@@ -541,7 +561,7 @@ export class RenderScheduler {
     };
 
     const phases: [(slot: Slot) => boolean, Layer][] = [
-      [(slot) => visible(slot) && needsBase(slot), "base"],
+      [(slot) => visible(slot) && needsBase(slot) && !quickDetail(slot), "base"],
       [(slot) => input.settled && visible(slot) && needsDetail(slot), "detail"],
       [
         (slot) => !visible(slot) && needsBase(slot) && !detailFirst(slot) && fits(slot, "base"),
@@ -662,6 +682,14 @@ export class RenderScheduler {
   #pumpText(): void {
     const input = this.#input;
     if (!input?.settled || this.#textRunning) return;
+    // Text and annotations are parsed again in the engine's worker, so they
+    // wait while a visible page renders its first pixels: on a page of
+    // 200,000 segments, the text layer used to delay them by 48 ms. The
+    // render's completion pumps again.
+    for (let index = input.first; index <= input.last; index++) {
+      const slot = this.#slots.get(index);
+      if (slot?.job && slot.baseScale === 0 && slot.detailScale === 0) return;
+    }
     const { scale, rotation } = input.layout;
     const slots = this.#byDistance(input);
     const visible = (slot: Slot) => slot.index >= input.first && slot.index <= input.last;
