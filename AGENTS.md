@@ -82,7 +82,8 @@ until the benchmark results justify the architecture.
   `ENGINES`, `FILES`, `RUNS`, `PAGES`, and `SCALE` narrow a run.
 - `pnpm --filter @parapdf/prototype dev` — run the demo; query parameters
   select `engine` (`pdfjs` or `pdfjs-next`), `hwa`, `text`, `file`,
-  `preload`, and `lang` (the page's language, `en` by default).
+  `preload`, `lang` (the page's language, `en` by default), and `source`
+  (`data` opens the PDF from bytes the demo fetched instead of its URL).
 - `pnpm --filter @parapdf/prototype build && pnpm --filter @parapdf/prototype bench`
   — scripted scroll benchmark; `BROWSER` picks the browser, and `VARIANTS`,
   `TEXT`, `LINKS`, `FILES`, `SPEEDS` (CSS px per second), `RUNS`, `DURATION`,
@@ -97,8 +98,11 @@ until the benchmark results justify the architecture.
   internal and external links, keyboard activation, the back stack, and the
   outline on `usrguide.pdf` (run after `build`; `BROWSER` applies here too).
 - `pnpm --filter @parapdf/prototype check:lifecycle` — functional checks for
-  document sharing under StrictMode (on the Vite development server) and for
-  closing viewers while work runs (run after `build`; `BROWSER` applies).
+  document sharing under StrictMode (on the Vite development server), for
+  closing viewers while work runs, for keeping the document under a new but
+  equal source object, and for data sources, whose bytes must stay the
+  application's and open again after their document was destroyed (run
+  after `build`; `BROWSER` applies).
 - `pnpm --filter @parapdf/prototype check:rotation` — functional checks for
   view rotation (page boxes, canvases, text, overlays, search, link jumps)
   and the `usePdfDocument()` escape hatch (run after `build`; `BROWSER`
@@ -339,7 +343,13 @@ until the benchmark results justify the architecture.
 - `acquireDocument` (`runtime/documents.ts`) shares one loaded document per
   engine and source (the URL, or the identity of the data) among viewers, so
   StrictMode's double mount and quick remounts load it once. A document is
-  destroyed one second after the last viewer releases it. Closing a viewer
+  destroyed one second after the last viewer releases it. `PdfDocument`
+  reopens only when that key changes, so a new object for the same URL, such
+  as an inline `{ url }`, keeps the open document; it used to reopen at every
+  render, resetting the view. pdf.js transfers the bytes of a data source to
+  its worker, which detached the application's buffer and kept the same
+  bytes from opening again once their document was destroyed: the pdf.js
+  adapter passes a copy. Closing a viewer
   disposes its scheduler, which cancels renders and layers and releases its
   pages, and moves the runtime to a new generation, so page-size passes,
   searches, and scrolls to a match stop. Background work that fails after its

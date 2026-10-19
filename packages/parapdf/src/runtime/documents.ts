@@ -25,8 +25,12 @@ export interface DocumentLease {
 
 const registries = new WeakMap<PdfEngine, Map<unknown, Entry>>();
 
-/** URL sources share by URL; data sources by the identity of their bytes. */
-const keyOf = (source: PdfSource): unknown => ("url" in source ? `url:${source.url}` : source.data);
+/**
+ * What identifies a source: its URL, or the identity of its bytes. Sources
+ * with equal keys share one loaded document.
+ */
+export const sourceKey = (source: PdfSource): unknown =>
+  "url" in source ? `url:${source.url}` : source.data;
 
 function registryOf(engine: PdfEngine): Map<unknown, Entry> {
   let registry = registries.get(engine);
@@ -39,7 +43,7 @@ function registryOf(engine: PdfEngine): Map<unknown, Entry> {
 
 export function acquireDocument(engine: PdfEngine, source: PdfSource): DocumentLease {
   const registry = registryOf(engine);
-  const key = keyOf(source);
+  const key = sourceKey(source);
   let entry = registry.get(key);
   if (entry) {
     clearTimeout(entry.releaseTimer);

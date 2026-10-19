@@ -40,6 +40,8 @@ const settings = {
     frameIntervalMs: Number(params.get("idleFrame") ?? "16.7"),
   },
   preload: params.get("preload") !== "0",
+  /** "data" opens the PDF from bytes the application fetched instead of from its URL. */
+  source: params.get("source") === "data" ? "data" : "url",
   /** CSS pixels per PDF point the zoom may reach; the runtime's default when absent. */
   maxScale: params.has("maxScale") ? Number(params.get("maxScale")) : undefined,
   /** More pdf.js getDocument parameters, as JSON. */
@@ -66,6 +68,10 @@ declare global {
       remount(): void;
       unmount(): void;
       mount(): void;
+      /** Renders the viewer again, which passes it a new but equal source object. */
+      rerender(): void;
+      /** The length of the bytes a data source opened, which pdf.js must leave intact. */
+      sourceBytes(): number | null;
       stats: { opens: number; destroys: number };
       unhandled: string[];
     };
@@ -100,7 +106,15 @@ function countEngineWork(engine: PdfEngine): PdfEngine {
 const enginePromise = loadEngine(settings.engine, settings.hwa, settings.documentOptions).then(
   countEngineWork,
 );
-const source: PdfSource = { url: `/corpus/${settings.file}` };
+const url = `/corpus/${settings.file}`;
+const bytesPromise: Promise<Uint8Array | null> =
+  settings.source === "data"
+    ? fetch(url).then(async (response) => new Uint8Array(await response.arrayBuffer()))
+    : Promise.resolve(null);
+let bytes: Uint8Array | null = null;
+void bytesPromise.then((loaded) => {
+  bytes = loaded;
+});
 const viewerOptions: ViewerOptions = {
   textLayer: settings.text,
   annotationLayer: settings.links,
@@ -138,31 +152,39 @@ const renderOverlay = (pageIndex: number) =>
 export function App() {
   // Start downloading the PDF while the engine module loads. The request
   // matches the CORS mode pdf.js uses, so its fetch reuses this response.
-  if (settings.preload && "url" in source) {
-    preload(source.url, { as: "fetch", crossOrigin: "anonymous" });
+  if (settings.preload && settings.source === "url") {
+    preload(url, { as: "fetch", crossOrigin: "anonymous" });
   }
   // A new key mounts a new viewer with a new runtime for the same source.
   const [mounted, setMounted] = useState(true);
   const [generation, setGeneration] = useState(0);
+  const [renders, setRenders] = useState(0);
   useEffect(() => {
     window.__lifecycle = {
       remount: () => setGeneration((value) => value + 1),
       unmount: () => setMounted(false),
       mount: () => setMounted(true),
+      rerender: () => setRenders((value) => value + 1),
+      sourceBytes: () => bytes?.byteLength ?? null,
       stats: engineStats,
       unhandled,
     };
   }, []);
   return (
     <Suspense fallback={<div className="status">Loading the engine…</div>}>
-      {mounted ? <Viewer key={generation} /> : null}
+      {mounted ? <Viewer key={generation} renders={renders} /> : null}
     </Suspense>
   );
 }
 
-function Viewer() {
+/** A new `renders` only renders the viewer again (see `__lifecycle.rerender`). */
+function Viewer(_props: { renders: number }) {
   const engine = use(enginePromise);
+  const data = use(bytesPromise);
   const [outlineOpen, setOutlineOpen] = useState(false);
+  // A new object at every render: the document stays open while its URL or
+  // its bytes stay the same.
+  const source: PdfSource = data ? { data } : { url };
   return (
     <Profiler id="viewer" onRender={countCommit}>
       <PdfDocument engine={engine} source={source} options={viewerOptions}>

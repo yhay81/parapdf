@@ -200,7 +200,10 @@ export function createPdfjsEngine(options: PdfjsEngineOptions): PdfEngine {
             }
           : {}),
         ...options.documentOptions,
-        ...("url" in source ? { url: source.url } : { data: source.data }),
+        // pdf.js transfers the bytes to its worker, which detaches the
+        // caller's buffer. A copy leaves the application its data and lets the
+        // same source open again after its document was destroyed.
+        ...("url" in source ? { url: source.url } : { data: source.data.slice(0) }),
         worker,
       });
       const doc = await loadingTask.promise;

@@ -1,9 +1,11 @@
 /**
  * Functional checks for the document lifecycle: React StrictMode's double
  * mount and quick remounts share one loaded document, the document is
- * destroyed only after the last viewer has been gone for a moment, and work
- * that outlives a closed viewer neither fails noisily nor raises unhandled
- * rejections. The StrictMode part runs on the Vite development server,
+ * destroyed only after the last viewer has been gone for a moment, work that
+ * outlives a closed viewer neither fails noisily nor raises unhandled
+ * rejections, an equal source object keeps the open document, and a data
+ * source keeps the application's bytes and opens again after its document
+ * was destroyed. The StrictMode part runs on the Vite development server,
  * because production React does not double-mount.
  *
  * Usage: pnpm --filter @parapdf/prototype build && pnpm --filter @parapdf/prototype check:lifecycle
@@ -198,6 +200,67 @@ try {
       [...settled.unhandled, ...errors].slice(0, 3).join(" | "),
     );
     await page.context().close();
+
+    // The demo passes a new source object at every render. An equal one must
+    // keep the open document, and with it the view's rotation, which opening
+    // a document resets.
+    const equal = await openPage(
+      launched.browser,
+      `${baseUrl}?engine=${engine}&file=bill-hr815.pdf`,
+    );
+    const rotation = () =>
+      equal.page.evaluate(() => {
+        const state = (
+          window as { __viewer?: { store: { get(): { rotation: number; status: string } } } }
+        ).__viewer?.store.get();
+        return state ? { rotation: state.rotation, status: state.status } : null;
+      });
+    await equal.page.evaluate(() => {
+      (window as { __viewer?: { rotate(degrees: number): void } }).__viewer?.rotate(90);
+      window.__lifecycle?.rerender();
+    });
+    await equal.page.waitForTimeout(500);
+    const kept = await rotation();
+    check(
+      "a new but equal source keeps the open document",
+      kept?.rotation === 90 && kept.status === "ready",
+      JSON.stringify(kept),
+    );
+    await equal.page.context().close();
+
+    // Bytes the application passes stay its own: pdf.js transfers what it
+    // gets to its worker, which used to leave the application's buffer empty,
+    // and the same bytes could not open again once their document was gone.
+    const data = await openPage(
+      launched.browser,
+      `${baseUrl}?engine=${engine}&file=bill-hr815.pdf&source=data`,
+    );
+    const bytes = () => data.page.evaluate(() => window.__lifecycle?.sourceBytes() ?? null);
+    const loadedBytes = await bytes();
+    check(
+      "a data source keeps the application's bytes",
+      loadedBytes !== null && loadedBytes > 0,
+      `${loadedBytes} bytes left`,
+    );
+    await call(data.page, "unmount");
+    await data.page.waitForTimeout(2500);
+    await call(data.page, "mount");
+    let reopenedData = true;
+    await waitForNewViewer(data.page).catch(() => {
+      reopenedData = false;
+    });
+    const again = await snapshot(data.page);
+    check(
+      "the same bytes open again after their document was destroyed",
+      reopenedData && again.opens === 2 && again.destroys === 1,
+      `${again.opens} loads, ${again.destroys} destroyed${reopenedData ? "" : ", no pixels within 30 s"}`,
+    );
+    check(
+      "data sources raise no unhandled rejections or errors",
+      again.unhandled.length === 0 && data.errors.length === 0,
+      [...again.unhandled, ...data.errors].slice(0, 3).join(" | "),
+    );
+    await data.page.context().close();
   } finally {
     await server.close();
   }
