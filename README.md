@@ -111,7 +111,8 @@ about 20 ms as noise.
   labelled regions and the viewport is a focusable document.
   [`check-text.ts`](examples/prototype/scripts/check-text.ts) verifies
   selection, including drags past a line's end, across the gap between two
-  pages in both directions, and from beside or between pages, search,
+  pages in both directions, quickly and in 1 px steps, and from beside or
+  between pages, search,
   Japanese, full-width, diacritic, and line-break matching, and these
   semantics in all three browsers.
 - **Text layer cost.** Text layers are built only after scrolling settles, one
@@ -155,7 +156,12 @@ about 20 ms as noise.
   browsers started a drag pressed beside or between pages at the start of the
   first mounted page: 3,357 characters where the dragged line holds 49. Drags
   now hold beside a page too, and a drag pressed there starts at the nearest
-  text.
+  text. A page's box, rounded to whole pixels, can be a pixel wider and taller
+  than its text layer, which pdf.js rounds down, and Chromium and WebKit sent
+  a slow drag over that pixel to the page's start; during a drag only text
+  layers are selectable now. In Firefox, re-inserting a text layer's
+  `.endOfContent` at every selection change, as pdf.js does, made a quick drag
+  into the page above select all of it; ParaPDF leaves the element in place.
 - **Not yet built.** Form filling, structure-tree semantics for tagged PDFs,
   text for pages outside the mounted window, and region rendering beyond the
   16 MP detail cap.

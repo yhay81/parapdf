@@ -17,15 +17,17 @@
  * element rather than at the nearest text. The space between and beside the
  * pages belongs to the pages element: WebKit and Firefox send it to the start
  * of the first mounted page, and Chromium the space beside a page to that
- * page's start. Over the blank space of a page above the selection, which the
- * pointer enters from below, WebKit and Firefox use that page's start. So
- * during a primary-button drag, until the pointer is released, the pages
- * element has the `selecting` class, which makes the space around the pages
- * unselectable, and in WebKit and Firefox every text layer above the
- * selection has `selecting` and `before-selection`, which make its
- * `.endOfContent` selectable, so its blank space selects up to the page's
- * end. Pages below the selection keep the browser's behaviour, which selects
- * up to their start.
+ * page's start. A page's box, rounded to whole pixels, can be a pixel wider
+ * and taller than its text layer, which pdf.js rounds down; Chromium and
+ * WebKit send that last column and row to the page's start. Over the blank
+ * space of a page above the selection, which the pointer enters from below,
+ * WebKit and Firefox use that page's start. So during a primary-button drag,
+ * until the pointer is released, the pages element has the `selecting` class,
+ * which leaves only the text layers in it selectable, and in WebKit and
+ * Firefox every text layer above the selection has `selecting` and
+ * `before-selection`, which make its `.endOfContent` selectable, so its blank
+ * space selects up to the page's end. Pages below the selection keep the
+ * browser's behaviour, which selects up to their start.
  *
  * A press on the pages element itself, beside or between the pages, would
  * start the selection at that same wrong place. A drag from there starts at
@@ -109,8 +111,10 @@ export class TextSelectionTracker {
 
   /** Returns `.endOfContent` to the end of its layer at its own size. */
   #putBack(layer: HTMLElement, end: HTMLElement): void {
-    // Re-inserting it in place would rebuild the box the pointer may be over:
-    // Firefox then ends the selection at the layer's start.
+    // Re-inserting it in place, as pdf.js does at every selectionchange, leaves
+    // it without a box until the next style flush, and Firefox hit-tests a
+    // pointer move that comes first against the bare layer: the selection ends
+    // at the layer's start, all of the page above for a quick drag into it.
     if (layer.lastChild !== end) layer.append(end);
     end.style.width = "";
     end.style.height = "";

@@ -70,7 +70,10 @@ interface TextLine {
   chars: number;
 }
 
-/** A page's box and the lines of its text layer, top to bottom, in viewport coordinates. */
+/**
+ * A page's box, the right and bottom edges of its text layer, and the lines of
+ * that layer, top to bottom, in viewport coordinates.
+ */
 const pageLines = (page: Page, pageNumber: number) =>
   page.evaluate((pageNumber) => {
     const section = document.querySelector(`section[data-page="${pageNumber}"]`);
@@ -96,12 +99,15 @@ const pageLines = (page: Page, pageNumber: number) =>
     }
     lines.sort((a, b) => a.top - b.top);
     const box = section?.getBoundingClientRect();
+    const text = section?.querySelector(".parapdf-text-layer")?.getBoundingClientRect();
     return {
       lines,
       top: box?.top ?? 0,
       bottom: box?.bottom ?? 0,
       left: box?.left ?? 0,
       right: box?.right ?? 0,
+      textRight: text?.right ?? 0,
+      textBottom: text?.bottom ?? 0,
     };
   }, pageNumber);
 
@@ -113,9 +119,36 @@ const middle = (line: TextLine): number => line.top + line.height / 2;
 const selectedChars = (page: Page) =>
   page.evaluate(() => (window.getSelection()?.toString() ?? "").replace(/\s/g, "").length);
 
+interface Point {
+  x: number;
+  y: number;
+}
+
+/**
+ * Moves the mouse in a straight line to `to` through whole pixels, at most a
+ * pixel along each axis per move, and runs `step` after each move.
+ */
+async function moveInPixelSteps(
+  page: Page,
+  from: Point,
+  to: Point,
+  step?: () => Promise<void>,
+): Promise<void> {
+  const x = Math.round(from.x);
+  const y = Math.round(from.y);
+  const dx = Math.round(to.x) - x;
+  const dy = Math.round(to.y) - y;
+  const steps = Math.max(Math.abs(dx), Math.abs(dy), 1);
+  for (let i = 1; i <= steps; i++) {
+    await page.mouse.move(x + Math.round((dx * i) / steps), y + Math.round((dy * i) / steps));
+    await step?.();
+  }
+}
+
 interface ViewerProbe {
   scroller: HTMLElement | null;
   store: { get(): { scale: number; layout: { tops: number[] } | null } };
+  setScale(scale: number): void;
 }
 
 /** Scrolls the boundary between pages 1 and 2 to the middle of the viewport. */
@@ -393,6 +426,29 @@ try {
     `${upward} characters; page 2's first three lines hold ${up?.min}, page 1's last line ${up?.last}`,
   );
 
+  // The same drag without a pause: one move onto page 2's first line, then
+  // one straight into page 1's margin. Re-inserting page 1's .endOfContent at
+  // every selectionchange, as pdf.js's reset does, left it without a box until
+  // the next style flush, and Firefox hit-tested the second move against the
+  // bare text layer: all of page 1, 3,631 characters, in 7 of 7 runs. The
+  // press lands on the previous selection, so nothing is selected first.
+  const head = lower.lines[0];
+  let quick = -1;
+  if (up && head) {
+    await page.evaluate(() => window.getSelection()?.removeAllRanges());
+    await page.mouse.move(up.start.x, up.start.y);
+    await page.mouse.down();
+    await page.mouse.move((head.left + head.right) / 2, middle(head));
+    await page.mouse.move(up.x, up.end);
+    await page.mouse.up();
+    quick = await selectedChars(page);
+  }
+  check(
+    "a quick drag up from page 2's text into page 1's margin selects only the dragged lines",
+    up !== null && quick >= up.min && quick <= up.min + up.last,
+    `${quick} characters; page 2's first three lines hold ${up?.min}, page 1's last line ${up?.last}`,
+  );
+
   // Drags that start beside a page or in the gap between pages must start at
   // the nearest text. That space belongs to the element that holds the
   // absolutely positioned pages, and all three browsers started a selection
@@ -477,6 +533,90 @@ try {
     "a click beside a page clears the selection",
     sideways > 0 && afterClick === 0,
     `${afterClick} characters selected after the click`,
+  );
+
+  // The drags between and out of pages once more, a pixel at a time, and to
+  // keep that short, straight from the pressed point, sideways from the
+  // middle of a line. pdf.js's pages have a 2 px strip along their bottom
+  // edge, outside the text layer, where every browser puts the selection's
+  // end at the start of the page, and larger steps tend to skip it. Here a
+  // page's box is rounded to whole pixels and pdf.js rounds its text layer
+  // down, so at scale 1.3 page 1 (795.6 by 1,029.6 px) is 796 by 1,030 px
+  // around a 795 by 1,029 px text layer. While sections were selectable
+  // during a drag, Chromium and WebKit put the selection's end at the page's
+  // start over that last row and column: all of page 1 (3,631 characters)
+  // dragging up, page 1 up to the pressed line (3,308) on the way down until
+  // the pointer reached page 2, and page 1 up to the middle of the line
+  // (3,333) sideways.
+  await page.evaluate(() => (window as { __viewer?: ViewerProbe }).__viewer?.setScale(1.3));
+  await centerFirstBoundary(page);
+  const roundUpper = await settledLines(page, 1);
+  const roundLower = await settledLines(page, 2);
+  const below = (roundUpper.bottom - roundUpper.textBottom).toFixed(1);
+  const beyond = (roundUpper.right - roundUpper.textRight).toFixed(1);
+
+  // Down from the start of page 1's third-to-last line to the height of page
+  // 2's second line, reading the selection after every move.
+  const stepPressed = roundUpper.lines.at(-3);
+  const stepTarget = roundLower.lines[1];
+  const stepRest = count(roundUpper.lines, -3);
+  const stepNext = count(roundLower.lines, 0, 2);
+  let stepDown = -1;
+  let stepDownLargest = -1;
+  if (stepPressed && stepTarget) {
+    const start = { x: stepPressed.left + 1, y: middle(stepPressed) };
+    await page.evaluate(() => window.getSelection()?.removeAllRanges());
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await moveInPixelSteps(page, start, { x: start.x, y: middle(stepTarget) }, async () => {
+      stepDownLargest = Math.max(stepDownLargest, await selectedChars(page));
+    });
+    await page.mouse.up();
+    stepDown = await selectedChars(page);
+  }
+  check(
+    "dragging down across the gap in 1 px steps selects only the dragged lines at every step",
+    stepDown >= stepRest &&
+      stepDown <= stepRest + stepNext &&
+      stepDownLargest <= stepRest + stepNext,
+    `${stepDown} characters, at most ${stepDownLargest} on the way; page 1 holds ${stepRest} from the pressed line on, page 2's first two lines ${stepNext}; page 1's box reaches ${below} px below its text layer`,
+  );
+
+  // Up from the end of page 2's third line to 20 px below page 1's last line.
+  const stepLifted = roundLower.lines[2];
+  const stepLast = roundUpper.lines.at(-1);
+  const stepMin = count(roundLower.lines, 0, 3);
+  let stepUp = -1;
+  if (stepLifted && stepLast) {
+    const start = { x: stepLifted.right - 1, y: middle(stepLifted) };
+    await page.evaluate(() => window.getSelection()?.removeAllRanges());
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await moveInPixelSteps(page, start, { x: start.x, y: stepLast.top + stepLast.height + 20 });
+    await page.mouse.up();
+    stepUp = await selectedChars(page);
+  }
+  check(
+    "dragging up across the gap in 1 px steps selects only the dragged lines",
+    stepLast !== undefined && stepUp >= stepMin && stepUp <= stepMin + stepLast.chars,
+    `${stepUp} characters; page 2's first three lines hold ${stepMin}, page 1's last line ${stepLast?.chars}; page 1's box reaches ${below} px below its text layer`,
+  );
+
+  // Right from the middle of page 1's third-to-last line to 40 px beside the page.
+  let stepSideways = -1;
+  if (stepPressed) {
+    const start = { x: (stepPressed.left + stepPressed.right) / 2, y: middle(stepPressed) };
+    await page.evaluate(() => window.getSelection()?.removeAllRanges());
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await moveInPixelSteps(page, start, { x: roundUpper.right + 40, y: start.y });
+    await page.mouse.up();
+    stepSideways = await selectedChars(page);
+  }
+  check(
+    "a drag out of a page sideways in 1 px steps holds beside it",
+    stepPressed !== undefined && stepSideways > 0 && stepSideways < stepPressed.chars,
+    `${stepSideways} characters; the line holds ${stepPressed?.chars}; page 1's box reaches ${beyond} px right of its text layer`,
   );
 
   check("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));

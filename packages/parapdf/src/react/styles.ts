@@ -14,7 +14,9 @@
  * The `.before-selection` and `.parapdf-pages.selecting` rules are ParaPDF's
  * own, for drag selections (see `TextSelectionTracker`): the first makes a
  * text layer's `.endOfContent` selectable in WebKit and Firefox, the second
- * makes the space between and beside the pages unselectable.
+ * leaves only the text layers selectable, not the space between and beside
+ * the pages, nor the last pixel row or column of a page whose box, rounded to
+ * whole pixels, is larger than its text layer, which pdf.js rounds down.
  */
 export const VIEWER_CSS = `
 .parapdf-text-layer {
@@ -130,7 +132,7 @@ export const VIEWER_CSS = `
   outline-offset: 1px;
 }
 .parapdf-pages.selecting { -webkit-user-select: none; user-select: none; }
-.parapdf-pages.selecting > section { -webkit-user-select: text; user-select: text; }
+.parapdf-pages.selecting .parapdf-text-layer { -webkit-user-select: text; user-select: text; }
 ::highlight(parapdf-search) { background-color: rgb(255 200 0 / 0.45); }
 ::highlight(parapdf-search-current) { background-color: rgb(255 110 0 / 0.65); }
 .parapdf-viewport:focus-visible { outline: 2px solid Highlight; outline-offset: -2px; }

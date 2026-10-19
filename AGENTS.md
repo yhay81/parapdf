@@ -121,8 +121,13 @@ until the benchmark results justify the architecture.
   `.endOfContent` over the page, so a drag past a line's end does not select
   the rest of the page. In browsers other than Firefox and Chromium 148 or
   later it also moves `.endOfContent` next to the changing end of the
-  selection, as pdf.js does. Each viewer owns its listeners, so closing one
-  viewer leaves the others working (pdf.js issue 22129).
+  selection, as pdf.js does. Unlike pdf.js, it leaves `.endOfContent` alone
+  when it already is the layer's last child: re-inserting it at every
+  `selectionchange` left it without a box until the next style flush, and
+  Firefox hit-tested a quick move from page 2's text into page 1's margin
+  against the bare text layer, selecting all of page 1. Each viewer owns its
+  listeners, so closing one viewer leaves the others working (pdf.js issue
+  22129).
 - The viewer CSS declares `-webkit-user-select` next to every `user-select`,
   as pdf.js's does: Playwright's WebKit 27.2 parses `user-select` but its
   mouse selection follows only the prefixed property. Without it,
@@ -133,8 +138,13 @@ until the benchmark results justify the architecture.
   pages belongs to the pages element (`.parapdf-pages`): WebKit and Firefox
   send it to the start of the first mounted page, and Chromium the space
   beside a page to that page's start. So during a primary-button drag, until
-  release, the pages element has `selecting`, which makes that space
-  unselectable: a drag holds over a gap and beside a page. In WebKit and
+  release, the pages element has `selecting`, which leaves only the text
+  layers in it selectable: a drag holds over a gap, beside a page, and over
+  the last pixel column and row of a page whose box, rounded to whole pixels,
+  is larger than its text layer, which pdf.js rounds down (796 by 1,030 px
+  around 795 by 1,029 at scale 1.3 on a US Letter page). Chromium and WebKit
+  sent that column and row to the page's start, and a drag in 1 px steps
+  reaches them: dragging up selected all of the page above. In WebKit and
   Firefox, text layers above the selection also have `selecting` and
   `before-selection`, whose selectable `.endOfContent` sends their blank space
   to the page's end, so a drag entering a page from either side selects up to
