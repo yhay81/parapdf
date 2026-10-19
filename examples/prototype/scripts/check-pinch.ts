@@ -1,8 +1,9 @@
 /**
  * Functional checks for pinch zoom: two touches zoom the document around the
- * point between them and pan with it instead of zooming the whole page, one
- * finger still scrolls natively, Safari's gesture events zoom the document
- * and are prevented, and ctrl+wheel still zooms around the pointer.
+ * point between them and pan with it instead of zooming the whole page, the
+ * pages their preview brings into view mount and draw before the fingers
+ * lift, one finger still scrolls natively, Safari's gesture events zoom the
+ * document and are prevented, and ctrl+wheel still zooms around the pointer.
  *
  * In Chromium the touches come from the DevTools protocol, which feeds them
  * through the browser's own input handling, touch-action and page zoom
@@ -266,6 +267,94 @@ const dispatchTwoFingers = (
     pointer("pointerup", 12, to.x + toHalf, to.y);
     gesture("gestureend", toHalf / half);
     return prevented;
+  }, options);
+
+/**
+ * Two touches dispatched as touch pointer events, one move per animation
+ * frame like a real drag, from `from` ± `half` to `to` ± `toHalf`
+ * horizontally. The fingers stay down until every page in the viewport, as
+ * the preview shows it, is mounted and has pixels, or `timeout` milliseconds
+ * after the last move. Returns the widest band at the viewport's top or
+ * bottom edge that no mounted page reached during the moves, and how long
+ * after the last move the pages took, null on timeout.
+ */
+const dragTwoFingers = (
+  page: Page,
+  options: { from: Point; to: Point; half: number; toHalf: number; steps: number; timeout: number },
+): Promise<{ band: number; drawnAfter: number | null }> =>
+  page.evaluate(async ({ from, to, half, toHalf, steps, timeout }) => {
+    const viewer = (
+      window as unknown as {
+        __viewer: { hasPixels(index: number): boolean; store: { get(): { pageCount: number } } };
+      }
+    ).__viewer;
+    const scroller = document.querySelector(".parapdf-viewport") as HTMLElement;
+    const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+    const coverage = () => {
+      const top = scroller.getBoundingClientRect().top + scroller.clientTop;
+      const bottom = top + scroller.clientHeight;
+      const pages = [...scroller.querySelectorAll<HTMLElement>("section[data-page]")]
+        .map((section) => ({
+          index: Number(section.dataset.page) - 1,
+          rect: section.getBoundingClientRect(),
+        }))
+        .sort((a, b) => a.index - b.index);
+      const first = pages[0];
+      const last = pages.at(-1);
+      if (!first || !last) return { band: scroller.clientHeight, drawn: false };
+      // The document's own margins above page 1 and below the last page are no band.
+      const band = Math.max(
+        0,
+        first.index === 0 ? 0 : first.rect.top - top,
+        last.index === viewer.store.get().pageCount - 1 ? 0 : bottom - last.rect.bottom,
+      );
+      const drawn = pages
+        .filter(({ rect }) => rect.bottom > top && rect.top < bottom)
+        .every(({ index }) => viewer.hasPixels(index));
+      return { band, drawn };
+    };
+    const target = document.elementFromPoint(from.x, from.y) ?? document.body;
+    const pointer = (type: string, id: number, x: number, y: number) =>
+      target.dispatchEvent(
+        new PointerEvent(type, {
+          pointerId: id,
+          pointerType: "touch",
+          isPrimary: id === 31,
+          clientX: x,
+          clientY: y,
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+        }),
+      );
+    const fingers = (t: number) => ({
+      x: from.x + (to.x - from.x) * t,
+      y: from.y + (to.y - from.y) * t,
+      spread: half + (toHalf - half) * t,
+    });
+    pointer("pointerdown", 31, from.x - half, from.y);
+    pointer("pointerdown", 32, from.x + half, from.y);
+    let band = 0;
+    for (let step = 1; step <= steps; step++) {
+      const { x, y, spread } = fingers(step / steps);
+      pointer("pointermove", 31, x - spread, y);
+      pointer("pointermove", 32, x + spread, y);
+      await frame();
+      band = Math.max(band, coverage().band);
+    }
+    const lastMove = performance.now();
+    let drawnAfter: number | null = null;
+    while (performance.now() - lastMove < timeout) {
+      const { band: gap, drawn } = coverage();
+      if (gap === 0 && drawn) {
+        drawnAfter = Math.round(performance.now() - lastMove);
+        break;
+      }
+      await frame();
+    }
+    pointer("pointerup", 31, to.x - toHalf, to.y);
+    pointer("pointerup", 32, to.x + toHalf, to.y);
+    return { band: Math.round(band), drawnAfter };
   }, options);
 
 /** Safari's gesture events of a trackpad pinch at `point`, with no touches. */
@@ -597,6 +686,74 @@ try {
       within(landed.left - previewed.left) &&
       within(landed.top - previewed.top),
     JSON.stringify({ ratio: after.scale / before.scale, previewed, landed }),
+  );
+
+  // A long two-finger drag at the lowest zoom pans the preview past the
+  // mounted pages: two pages of overscan reach at most three page heights
+  // and two gaps, 834 CSS pixels here, past the viewport's bottom edge, and
+  // the drag moves the content by 96% of the viewport's height. The pages it
+  // brought into view used to mount only once the fingers lifted, leaving a
+  // blank band that grew to 218 CSS pixels in Safari in the iPadOS simulator.
+  await page.evaluate(() =>
+    (window as unknown as { __viewer: { setScale(scale: number): void } }).__viewer.setScale(0.25),
+  );
+  await settle(page);
+  const edges = await page.evaluate(() => {
+    const scroller = document.querySelector(".parapdf-viewport") as HTMLElement;
+    const rect = scroller.getBoundingClientRect();
+    const top = rect.top + scroller.clientTop;
+    return {
+      x: Math.round(rect.left + scroller.clientLeft + scroller.clientWidth / 2),
+      top: Math.round(top + scroller.clientHeight / 50),
+      bottom: Math.round(top + (scroller.clientHeight * 49) / 50),
+    };
+  });
+  const up = { from: { x: edges.x, y: edges.bottom }, to: { x: edges.x, y: edges.top } };
+  before = await viewState(page);
+  const panned = await dragTwoFingers(page, {
+    ...up,
+    half: 75,
+    toHalf: 75,
+    steps: 30,
+    timeout: 5_000,
+  });
+  await committed(page);
+  after = await viewState(page);
+  check(
+    "a long two-finger drag at the lowest zoom mounts and draws the pages it shows before the fingers lift",
+    panned.band === 0 && panned.drawnAfter !== null,
+    JSON.stringify(panned),
+  );
+  check(
+    "the long drag then scrolls by its distance",
+    after.scale === before.scale &&
+      Math.abs(after.scrollTop - before.scrollTop - (edges.bottom - edges.top)) <= 2,
+    JSON.stringify({
+      dragged: edges.bottom - edges.top,
+      scrolled: after.scrollTop - before.scrollTop,
+    }),
+  );
+
+  // A pinch in that drags as well shows more of the document still: its
+  // preview also shrinks the content around the point between the fingers.
+  await page.evaluate(() =>
+    (window as unknown as { __viewer: { setScale(scale: number): void } }).__viewer.setScale(0.5),
+  );
+  await settle(page);
+  before = await viewState(page);
+  const pinched = await dragTwoFingers(page, {
+    ...up,
+    half: 150,
+    toHalf: 75,
+    steps: 30,
+    timeout: 5_000,
+  });
+  await committed(page);
+  after = await viewState(page);
+  check(
+    "a pinch in that also drags mounts and draws the pages it shows before the fingers lift",
+    after.scale < before.scale * 0.6 && pinched.band === 0 && pinched.drawnAfter !== null,
+    JSON.stringify({ ratio: after.scale / before.scale, ...pinched }),
   );
 
   await page.context().close();

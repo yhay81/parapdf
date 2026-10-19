@@ -73,9 +73,19 @@ describe("pageLeft and visibleArea", () => {
   });
 
   it("gives the part of a page in the viewport as fractions of the page", () => {
-    const viewport = { left: 0, top: 10, width: 1000, height: 396 };
+    const viewport = { left: 0, top: 10, width: 1000, height: 396, scrollerWidth: 1000 };
     assert.deepEqual(visibleArea(layout, 0, viewport), { minX: 0, minY: 0, maxX: 1, maxY: 0.5 });
     assert.equal(visibleArea(layout, 1, viewport), null);
+  });
+
+  it("keeps pages centered in the scroller while a zoom preview shows less of the content", () => {
+    const viewport = { left: 347, top: 208, width: 306, height: 396, scrollerWidth: 1000 };
+    assert.deepEqual(visibleArea(layout, 0, viewport), {
+      minX: 0.25,
+      minY: 0.25,
+      maxX: 0.75,
+      maxY: 0.75,
+    });
   });
 
   it("measures and intersects areas", () => {

@@ -88,12 +88,17 @@ export interface PageArea {
   maxY: number;
 }
 
-/** The viewport in the CSS pixels of the scrolled content. */
+/** The part of the scrolled content the viewport shows, in the content's CSS pixels. */
 export interface Viewport {
   left: number;
   top: number;
   width: number;
   height: number;
+  /**
+   * The scroller's width, which pages are centered in (see pageLeft). It
+   * differs from `width` while a zoom preview scales the content.
+   */
+  scrollerWidth: number;
 }
 
 /**
@@ -113,7 +118,7 @@ export function visibleArea(layout: Layout, index: number, viewport: Viewport): 
   const height = layout.heights[index] ?? 0;
   if (width === 0 || height === 0) return null;
   const top = layout.tops[index] ?? 0;
-  const left = pageLeft(layout, index, viewport.width);
+  const left = pageLeft(layout, index, viewport.scrollerWidth);
   const minX = Math.max(0, viewport.left - left) / width;
   const maxX = Math.min(width, viewport.left + viewport.width - left) / width;
   const minY = Math.max(0, viewport.top - top) / height;
