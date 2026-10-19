@@ -31,3 +31,6 @@ Generated stress documents live in `generated/`, are recreated with
   operator-heavy drawings such as maps and plans.
 - `synthetic-cjk-nonembedded.pdf` — Japanese text in a non-embedded
   Adobe-Japan1 CID font, the common case for older Word-generated documents.
+- `synthetic-scan-40.pdf` — the four pages of `patent-us223898.pdf` ten
+  times over, each page with its own copies of its image and font objects,
+  for scrolling through a scan longer than the mounted page window.

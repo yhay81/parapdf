@@ -2,12 +2,13 @@
  * Writes deterministic stress documents to bench/corpus/generated/.
  * Usage: pnpm --filter @parapdf/bench corpus
  */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PDFDocument, PDFName, PDFString, StandardFonts } from "pdf-lib";
 
 const outDir = fileURLToPath(new URL("../corpus/generated/", import.meta.url));
+const corpusDir = fileURLToPath(new URL("../corpus/", import.meta.url));
 
 /** mulberry32: a tiny seeded PRNG so every run writes identical bytes. */
 function seeded(seed: number): () => number {
@@ -142,11 +143,31 @@ async function cjkNonEmbedded(): Promise<Uint8Array> {
   return doc.save();
 }
 
+/**
+ * A 40-page scan: the four pages of the public-domain patent-us223898.pdf ten
+ * times over. Each page is copied on its own, so every page has its own image
+ * objects, as in a real scanned book, and no engine can reuse another page's
+ * decoded image.
+ */
+async function longScan(): Promise<Uint8Array> {
+  const source = await PDFDocument.load(readFileSync(join(corpusDir, "patent-us223898.pdf")), {
+    updateMetadata: false,
+  });
+  // No creation or modification dates, so every run writes identical bytes.
+  const doc = await PDFDocument.create({ updateMetadata: false });
+  for (let pageIndex = 0; pageIndex < 40; pageIndex++) {
+    const [page] = await doc.copyPages(source, [pageIndex % source.getPageCount()]);
+    if (page) doc.addPage(page);
+  }
+  return doc.save({ useObjectStreams: true });
+}
+
 mkdirSync(outDir, { recursive: true });
 for (const [name, build] of [
   ["synthetic-text-1000.pdf", longText],
   ["synthetic-vector-200k.pdf", vectorHeavy],
   ["synthetic-cjk-nonembedded.pdf", cjkNonEmbedded],
+  ["synthetic-scan-40.pdf", longScan],
 ] as const) {
   const bytes = await build();
   writeFileSync(join(outDir, name), bytes);

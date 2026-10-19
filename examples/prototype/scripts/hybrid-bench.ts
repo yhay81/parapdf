@@ -1,10 +1,16 @@
 /**
  * Hybrid engine benchmark. Runs the scripted scroll of scroll-bench.ts with
- * pdf.js master and its renderer worker (`pdfjs-next-hwa`) and with the hybrid
- * engine (`hybrid-hwa`), alternating their order run by run, and records what
- * the hybrid engine changes: when page 1 got its first and its
- * full-resolution pixels, the main thread's longest stall from startup on,
- * render times per canvas layer and engine, the classifier's cost, hayro's
+ * pdf.js master and its renderer worker (`pdfjs-next-hwa`) and with the
+ * hybrid engine in each of its ways to draw a hayro page's two canvas layers
+ * (`hybrid-once-hwa`, `hybrid-basefirst-hwa`, and `hybrid-twice-hwa`, the
+ * engine's earlier behavior; see `detailRender` in engine/hybrid.ts),
+ * alternating their order run by run. Text documents (TEXT_FILES,
+ * bill-hr815.pdf) run only with pdf.js and `hybrid-once-hwa`: every hybrid
+ * variant leaves their pages to pdf.js. It records what the hybrid engine
+ * changes: when page 1 got its first and its full-resolution pixels,
+ * the main thread's longest stall from startup on, render times per canvas
+ * layer and engine, hayro's time per pass in its worker, the full-resolution
+ * bitmaps kept between a page's two layers, the classifier's cost, hayro's
  * load time, WebAssembly memory, and the payload in dist/.
  *
  * Usage: pnpm bench:build && pnpm --filter @parapdf/prototype build &&
@@ -40,16 +46,34 @@ const exampleDir = fileURLToPath(new URL("..", import.meta.url));
 const resultsDir = join(exampleDir, "results");
 const distDir = join(exampleDir, "dist");
 
-const variants = [
+// `scansOnly` variants differ from `hybrid-once-hwa` only on hayro pages.
+const variants: {
+  name: string;
+  engine: string;
+  query?: Record<string, string>;
+  scansOnly?: boolean;
+}[] = [
+  { name: "hybrid-twice-hwa", engine: "hybrid", query: { detail: "separate" }, scansOnly: true },
   { name: "pdfjs-next-hwa", engine: "pdfjs-next" },
-  { name: "hybrid-hwa", engine: "hybrid" },
+  {
+    name: "hybrid-basefirst-hwa",
+    engine: "hybrid",
+    query: { detail: "base-first" },
+    scansOnly: true,
+  },
+  { name: "hybrid-once-hwa", engine: "hybrid", query: { detail: "once" } },
 ].filter(
   (variant) => !process.env.VARIANTS || process.env.VARIANTS.split(",").includes(variant.name),
 );
+// synthetic-scan-40.pdf (pnpm --filter @parapdf/bench corpus) is the only scan
+// long enough for the scroll to reach pages that were not rendered at startup.
 const files = (
   process.env.FILES ??
-  "bunka-kokugo-series-019-p4.pdf,patent-us223898.pdf,wdl6812-manuscript.pdf,bill-hr815.pdf"
+  "bunka-kokugo-series-019-p4.pdf,patent-us223898.pdf,wdl6812-manuscript.pdf,synthetic-scan-40.pdf,bill-hr815.pdf"
 ).split(",");
+const textFiles = new Set((process.env.TEXT_FILES ?? "bill-hr815.pdf").split(","));
+const variantsFor = (file: string) =>
+  variants.filter((variant) => !(variant.scansOnly && textFiles.has(file)));
 const speeds = (process.env.SPEEDS ?? "900,3600").split(",").map(Number);
 const runs = Number(process.env.RUNS ?? "5");
 const durationMs = Number(process.env.DURATION ?? "4000");
@@ -75,6 +99,14 @@ interface TimeSummary {
   count: number;
   p50Ms: number;
   maxMs: number;
+}
+
+/** hayro's time in the worker for one kind of pass: `base`, `detail`, or `once` (both layers). */
+interface HayroPass {
+  raster: TimeSummary;
+  reduce: TimeSummary;
+  bitmap: TimeSummary;
+  fullBitmap?: TimeSummary;
 }
 
 interface JobResult {
@@ -111,6 +143,8 @@ interface JobResult {
     fallbacks: string[];
     classifierMiB: number | null;
     rendererMiB: number | null;
+    hayroPasses?: Record<string, HayroPass>;
+    kept?: { used: number; dropped: Record<string, number>; peakMiB: number };
   } | null;
 }
 
@@ -292,6 +326,7 @@ async function runJob(
       () => (window as { __result?: unknown }).__result,
     )) as JobResult["idle"] & {};
     const query = new URLSearchParams({
+      ...variant.query,
       engine: variant.engine,
       hwa: "1",
       file,
@@ -315,7 +350,14 @@ async function runJob(
 
 // Saved after every job so an interrupted run can continue (RESUME=1).
 const partialPath = join(resultsDir, "raw", `${output}-partial.json`);
-const settingsKey = JSON.stringify({ variants, files, speeds, runs, durationMs });
+const settingsKey = JSON.stringify({
+  variants,
+  files,
+  textFiles: [...textFiles],
+  speeds,
+  runs,
+  durationMs,
+});
 const resumed: JobResult[] = [];
 if (process.env.RESUME && existsSync(partialPath)) {
   const saved = JSON.parse(readFileSync(partialPath, "utf8")) as {
@@ -343,8 +385,8 @@ try {
   for (const file of files) {
     for (const speed of speeds) {
       for (let run = 0; run < runs; run++) {
-        // Alternate which variant goes first so drift affects both alike.
-        const ordered = run % 2 ? [...variants].reverse() : variants;
+        // Alternate the order so drift affects every variant alike.
+        const ordered = run % 2 ? [...variantsFor(file)].reverse() : variantsFor(file);
         for (const variant of ordered) {
           if (finished(variant.name, file, speed, run)) continue;
           let result: JobResult | undefined;
@@ -381,13 +423,15 @@ try {
 }
 
 const ok = results.filter((result) => !result.error);
+const baseRenders = (result: JobResult) =>
+  result.renderTimes?.["base hayro"] ?? result.renderTimes?.["base pdfjs"];
 const pick = (subset: JobResult[], read: (result: JobResult) => number | null | undefined) =>
   median(subset.map(read));
 const renderKeys = [...new Set(ok.flatMap((result) => Object.keys(result.renderTimes ?? {})))];
 
 // Startup does not depend on the scroll speed, so it pools every job of a variant.
 const startup = files.flatMap((file) =>
-  variants.map((variant) => {
+  variantsFor(file).map((variant) => {
     const jobs = ok.filter((result) => result.file === file && result.variant === variant.name);
     const hybrid = (read: (h: NonNullable<JobResult["hybrid"]>) => number | null | undefined) =>
       pick(jobs, (result) => (result.hybrid ? read(result.hybrid) : undefined));
@@ -425,6 +469,28 @@ const startup = files.flatMap((file) =>
             hayroParseMs: hybrid((h) => h.rendererLoad?.parseMs),
             classifierMiB: hybrid((h) => h.classifierMiB),
             hayroMiB: hybrid((h) => h.rendererMiB),
+            passes: Object.fromEntries(
+              ["base", "detail", "once"].map((pass) => [
+                pass,
+                {
+                  rasterMs: hybrid((h) => h.hayroPasses?.[pass]?.raster.p50Ms),
+                  reduceMs: hybrid((h) => h.hayroPasses?.[pass]?.reduce.p50Ms),
+                  bitmapMs: hybrid((h) => h.hayroPasses?.[pass]?.bitmap.p50Ms),
+                  fullBitmapMs: hybrid((h) => h.hayroPasses?.[pass]?.fullBitmap?.p50Ms),
+                  count: hybrid((h) => h.hayroPasses?.[pass]?.raster.count),
+                },
+              ]),
+            ),
+            keptUsed: hybrid((h) => h.kept?.used),
+            keptDropped: hybrid((h) =>
+              h.kept
+                ? Object.values(h.kept.dropped).reduce((sum, count) => sum + count, 0)
+                : undefined,
+            ),
+            keptDropReasons: [
+              ...new Set(jobs.flatMap((result) => Object.keys(result.hybrid?.kept?.dropped ?? {}))),
+            ],
+            keptPeakMiB: hybrid((h) => h.kept?.peakMiB),
             fallbacks: [...new Set(jobs.flatMap((result) => result.hybrid?.fallbacks ?? []))],
           }
         : null,
@@ -434,7 +500,7 @@ const startup = files.flatMap((file) =>
 
 const scrolling = files.flatMap((file) =>
   speeds.flatMap((speed) =>
-    variants.map((variant) => {
+    variantsFor(file).map((variant) => {
       const jobs = ok.filter(
         (result) =>
           result.file === file && result.speed === speed && result.variant === variant.name,
@@ -450,6 +516,15 @@ const scrolling = files.flatMap((file) =>
         stallMs: pick(jobs, (result) => result.lag?.maxMs),
         droppedFrames: pick(jobs, (result) => result.frames?.dropped),
         frames: pick(jobs, (result) => result.frames?.frames),
+        // Every base render of the job, startup and scroll; hayro's when it drew any.
+        baseRenderMs: pick(jobs, (result) => baseRenders(result)?.p50Ms),
+        baseRenderMaxMs: pick(jobs, (result) => baseRenders(result)?.maxMs),
+        keptDropped: pick(jobs, (result) =>
+          result.hybrid?.kept
+            ? Object.values(result.hybrid.kept.dropped).reduce((sum, count) => sum + count, 0)
+            : undefined,
+        ),
+        keptPeakMiB: pick(jobs, (result) => result.hybrid?.kept?.peakMiB),
       };
     }),
   ),
@@ -556,7 +631,7 @@ function renderReport(): string {
             .join(", ")}.`,
         ]
       : []),
-    `- Variants: \`pdfjs-next-hwa\` is pdf.js master with its renderer worker on a GPU-backed canvas; \`hybrid-hwa\` is the same engine with image-only pages rendered by hayro (wasm, simd128) in the hybrid worker. Text, links, and search come from pdf.js in both.`,
+    `- Variants: \`pdfjs-next-hwa\` is pdf.js master with its renderer worker on a GPU-backed canvas. The \`hybrid-*\` variants are the same engine with image-only pages rendered by hayro (wasm, simd128) in the hybrid worker, and differ in how a hayro page gets its two canvas layers: \`hybrid-once-hwa\` renders it once at full resolution, sends a reduced copy as the base layer and the full bitmap right after it for the detail layer; \`hybrid-basefirst-hwa\` renders the base layer, then the detail layer right away, ahead of other queued renders; \`hybrid-twice-hwa\` renders each layer when the scheduler asks for it, as the hybrid engine did before. Text, links, and search come from pdf.js in all of them. ${[...textFiles].join(", ")} ran only with \`pdfjs-next-hwa\` and \`hybrid-once-hwa\`: every hybrid variant leaves its pages to pdf.js.`,
     `- Method: fresh browser context per job, 1280×900 viewport at devicePixelRatio 2, fit-width zoom; ${runs} runs per file, speed, and variant, alternating which variant goes first; startup numbers pool both speeds (${runs * speeds.length} jobs per cell). Medians throughout.${environment.resumedJobs ? ` ${environment.resumedJobs} jobs come from an interrupted run of the same build and settings.` : ""}`,
     ...(browserName === "firefox"
       ? [
@@ -565,7 +640,7 @@ function renderReport(): string {
       : []),
     "- First paint: navigation start until page 1 shows pixels (its low-resolution base layer). Page 1 sharp: until page 1's full-resolution layer is on the canvas.",
     "- Longest stall: the largest lateness of a 4 ms timer on the main thread, from startup until the scroll begins (startup) or during the scroll. Blocked: summed lateness beyond 2 ms or the idle page's 95th percentile, whichever is larger.",
-    "- Render: from the scheduler's request until the pixels are on the canvas, per canvas layer (base at half a device pixel per CSS pixel, detail at full resolution) and per engine; median of each job's median. Renders overlap (two at a time), so this is latency, not CPU time.",
+    "- Render: from the scheduler's request until the pixels are on the canvas, per canvas layer (base at half a device pixel per CSS pixel, detail at full resolution) and per engine; median of each job's median. Renders overlap (two at a time), so this is latency, not CPU time. With `hybrid-once-hwa` and `hybrid-basefirst-hwa`, a hayro page's detail render waits only for the bitmap the worker sends with the base layer.",
     `- Reproduce: \`pnpm bench:build && pnpm --filter @parapdf/prototype build && BROWSER=${browserName} pnpm --filter @parapdf/prototype bench:hybrid\``,
     ...(environment.errors.length
       ? ["", "Errors:", ...environment.errors.map((e) => `- ${e}`)]
@@ -598,13 +673,37 @@ function renderReport(): string {
         return `| ${row.file} | ${fmt(h.pagesHayro)} / ${fmt(h.pagesBase)} | ${fmt(h.classifierReadyAt)} | ${fmt(h.fetchMs, 1)} / ${fmt(h.classifierWaitMs, 1)} / ${fmt(h.parseMs, 1)} | ${fmt(h.classifyWorkerP50Ms, 2)} / ${fmt(h.classifyWorkerMaxMs, 2)} | ${fmt(h.classifyRoundTripP50Ms, 1)} | ${fmt(h.hayroLoadMs)} / ${fmt(h.hayroParseMs, 1)} | ${fmt(h.hayroLoadedAt)} | ${fmt(h.classifierMiB, 1)} / ${fmt(h.hayroMiB, 1)} | ${h.fallbacks.length ? h.fallbacks.join("; ") : "none"} |`;
       }),
     "",
+    "## hayro in the worker",
+    "",
+    "Medians across jobs of each job's median, per kind of pass: a base or a detail layer rendered on its own, or one pass at the detail scale that serves both layers (`once`). Raster: hayro's rendering in WebAssembly. Reduce: averaging the full-resolution pixels into the base layer. Bitmap: creating the ImageBitmap of the layer the pass sends first; Full bitmap: the full-resolution bitmap a `once` pass sends after its base layer. Kept bitmaps: detail-layer bitmaps the worker sent with a base render, used by the page's detail render or dropped unused, and the most memory they held at once while waiting for it.",
+    "",
+    "| File | Variant | Passes base / detail / once | Raster base / detail / once (ms) | Reduce (ms) | Bitmap base / detail / once (ms) | Full bitmap (ms) | Kept used / dropped | Kept peak (MiB) |",
+    "|---|---|---:|---:|---:|---:|---:|---:|---:|",
+    ...startup
+      .filter(
+        (row) => row.hybrid && Number.isFinite(row.hybrid.pagesHayro) && row.hybrid.pagesHayro > 0,
+      )
+      .map((row) => {
+        const h = row.hybrid as NonNullable<(typeof row)["hybrid"]>;
+        const passes = (read: (pass: (typeof h.passes)[string]) => number, digits = 0) =>
+          ["base", "detail", "once"]
+            .map((pass) => {
+              const cell = h.passes[pass];
+              return cell ? fmt(read(cell), digits) : "—";
+            })
+            .join(" / ");
+        return `| ${row.file} | ${row.variant} | ${passes((pass) => pass.count)} | ${passes((pass) => pass.rasterMs, 1)} | ${fmt(h.passes.once?.reduceMs, 1)} | ${passes((pass) => pass.bitmapMs, 1)} | ${fmt(h.passes.once?.fullBitmapMs, 1)} | ${fmt(h.keptUsed)} / ${fmt(h.keptDropped)}${h.keptDropReasons.length ? ` (${h.keptDropReasons.join(", ")})` : ""} | ${fmt(h.keptPeakMiB, 1)} |`;
+      }),
+    "",
     "## Scrolling",
     "",
-    "| File | Speed (px/s) | Variant | Pages crossed | Blank (%) | Blocked (ms) | Longest stall (ms) | Dropped frames |",
-    "|---|---:|---|---:|---:|---:|---:|---:|",
+    "Base render: every base render of the job (startup and scroll), hayro's on scans; median of each job's median and maximum. Kept: detail-layer bitmaps dropped unused, and the most memory kept bitmaps held at once.",
+    "",
+    "| File | Speed (px/s) | Variant | Pages crossed | Blank (%) | Blocked (ms) | Longest stall (ms) | Dropped frames | Base render p50 / max (ms) | Kept dropped / peak (MiB) |",
+    "|---|---:|---|---:|---:|---:|---:|---:|---:|---:|",
     ...scrolling.map(
       (row) =>
-        `| ${row.file} | ${row.speed} | ${row.variant} | ${fmt(row.pagesCrossed)} | ${fmt(row.blankMeanPct, 1)} | ${fmt(row.blockedMs)} | ${fmt(row.stallMs, 1)} | ${fmt(row.droppedFrames)} / ${fmt(row.frames)} |`,
+        `| ${row.file} | ${row.speed} | ${row.variant} | ${fmt(row.pagesCrossed)} | ${fmt(row.blankMeanPct, 1)} | ${fmt(row.blockedMs)} | ${fmt(row.stallMs, 1)} | ${fmt(row.droppedFrames)} / ${fmt(row.frames)} | ${fmt(row.baseRenderMs)} / ${fmt(row.baseRenderMaxMs)} | ${fmt(row.keptDropped)} / ${fmt(row.keptPeakMiB, 1)} |`,
     ),
     "",
     ...payloadTable(),
@@ -643,8 +742,12 @@ function renderComparison(): string {
     ),
     "",
   ];
-  const scrollTable = (speed: number) => [
-    `## Main thread while scrolling at ${speed} px/s: blocked / longest stall (ms)`,
+  const scrollTable = (
+    speed: number,
+    title: string,
+    read: (row: StoredResults["scrolling"][number]) => string,
+  ) => [
+    `## ${title} at ${speed} px/s`,
     "",
     header,
     rule,
@@ -660,7 +763,7 @@ function renderComparison(): string {
                   candidate.variant === row.variant &&
                   candidate.speed === speed,
               );
-              return match ? `${fmt(match.blockedMs)} / ${fmt(match.stallMs, 1)}` : "—";
+              return match ? read(match) : "—";
             })
             .join(" | ")} |`,
       ),
@@ -685,7 +788,7 @@ function renderComparison(): string {
     ...(all.some((results) => results.environment.browserName === "firefox")
       ? [
           "",
-          "Firefox ran at devicePixelRatio 1: Playwright's Firefox ignores `deviceScaleFactor` on cross-origin-isolated pages, so its canvases hold a quarter of the pixels of the other two browsers'. Compare Firefox's two variants with each other, not Firefox with the other browsers.",
+          "Firefox ran at devicePixelRatio 1: Playwright's Firefox ignores `deviceScaleFactor` on cross-origin-isolated pages, so its canvases hold a quarter of the pixels of the other two browsers'. Compare Firefox's variants with each other, not Firefox with the other browsers.",
         ]
       : []),
     "",
@@ -694,9 +797,32 @@ function renderComparison(): string {
     ...table("Longest main-thread stall during startup (ms)", (row) => fmt(row.startupStallMs, 1)),
     ...table("Detail render per page, p50 (ms, engine)", (row) => render(row, "detail")),
     ...table("Base render per page, p50 (ms, engine)", (row) => render(row, "base")),
+    ...table("hayro raster per pass, p50: base / detail / once (ms)", (row) =>
+      row.hybrid && row.hybrid.pagesHayro > 0
+        ? ["base", "detail", "once"]
+            .map((pass) => fmt(row.hybrid?.passes?.[pass]?.rasterMs, 1))
+            .join(" / ")
+        : "—",
+    ),
+    ...table("Kept full-resolution bitmaps: used / dropped, peak MiB", (row) =>
+      row.hybrid && row.hybrid.pagesHayro > 0 && row.hybrid.keptUsed !== undefined
+        ? `${fmt(row.hybrid.keptUsed)} / ${fmt(row.hybrid.keptDropped)}, ${fmt(row.hybrid.keptPeakMiB, 1)}`
+        : "—",
+    ),
     ...table("WebAssembly memory: classifier / hayro (MiB)", (row) =>
       row.hybrid ? `${fmt(row.hybrid.classifierMiB, 1)} / ${fmt(row.hybrid.hayroMiB, 1)}` : "—",
     ),
-    ...[...new Set((all[0]?.scrolling ?? []).map((row) => row.speed))].flatMap(scrollTable),
+    ...[...new Set((all[0]?.scrolling ?? []).map((row) => row.speed))].flatMap((speed) => [
+      ...scrollTable(
+        speed,
+        "Main thread while scrolling: blocked / longest stall (ms)",
+        (row) => `${fmt(row.blockedMs)} / ${fmt(row.stallMs, 1)}`,
+      ),
+      ...scrollTable(
+        speed,
+        "Blank area while scrolling (%) / base render p50 (ms)",
+        (row) => `${fmt(row.blankMeanPct, 1)} / ${fmt(row.baseRenderMs)}`,
+      ),
+    ]),
   ].join("\n");
 }
