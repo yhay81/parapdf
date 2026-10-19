@@ -1184,6 +1184,8 @@ export class PdfViewerRuntime {
     zoom.translateY = zoom.panY + target.top - clamp(target.top, 0, target.maxTop);
     content.style.transformOrigin = `${zoom.originX}px ${zoom.originY}px`;
     content.style.transform = `translate(${zoom.translateX}px, ${zoom.translateY}px) scale(${zoom.factor})`;
+    // Mount and draw the pages the preview brings into view.
+    this.#requestUpdate();
   }
 
   #commitZoom = (): void => {
@@ -1204,6 +1206,8 @@ export class PdfViewerRuntime {
       // A two-finger drag that never pinched only scrolls.
       scroller.scrollLeft = left - zoom.panX;
       scroller.scrollTop = top - zoom.panY;
+      // Settled again, also when the drag ends where it started.
+      this.#requestUpdate();
       return;
     }
     this.store.set({ zoomMode: "custom" });
@@ -1240,8 +1244,17 @@ export class PdfViewerRuntime {
     const layout = this.store.get().layout;
     const scroller = this.#scroller;
     if (!layout || !scroller) return;
-    const top = scroller.scrollTop;
-    const height = scroller.clientHeight;
+    let top = scroller.scrollTop;
+    let height = scroller.clientHeight;
+    const zoom = this.#zoom;
+    if (zoom) {
+      // A preview shows another band of the content: the viewport mapped back
+      // through its transform. Pages a two-finger drag or a zoom out brings
+      // into view mount and render before the commit, not after it.
+      const shownY = zoom.originY - top + zoom.translateY;
+      top = zoom.originY - shownY / zoom.factor;
+      height /= zoom.factor;
+    }
     const { first, last } = visibleRange(layout, top, height);
     const lastIndex = layout.tops.length - 1;
     const focus = pageAt(layout, top + height / 2);
@@ -1252,7 +1265,9 @@ export class PdfViewerRuntime {
       currentPage: focus,
     });
     const quiet = performance.now() - this.#lastScrollAt > SETTLE_DELAY;
-    const settled = quiet || Math.abs(this.#velocity) < SETTLE_VELOCITY;
+    // Full resolution for the scale a preview leaves would be redrawn at the commit.
+    const settled =
+      (quiet || Math.abs(this.#velocity) < SETTLE_VELOCITY) && (zoom?.factor ?? 1) === 1;
     this.#scheduler?.update({
       layout,
       first,
