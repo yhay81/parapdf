@@ -297,7 +297,7 @@ const server = await preview({
   preview: { port: 4182, strictPort: false, open: false },
 });
 const baseUrl = server.resolvedUrls?.local[0] ?? "http://localhost:4182/";
-const launched = await launchBrowser(browserName);
+const launched = await launchBrowser(browserName, { deviceScaleFactor: 2 });
 const { browser } = launched;
 
 const waitForDone = (page: Page) =>
@@ -340,7 +340,10 @@ async function runJob(
     const payload = (await page.evaluate(
       () => (window as { __result?: unknown }).__result,
     )) as Omit<JobResult, "variant" | "run">;
-    return { ...payload, ...job, idle };
+    const result: JobResult = { ...payload, ...job, idle };
+    const ratio = (payload as { devicePixelRatio?: number }).devicePixelRatio;
+    if (ratio !== 2) result.error = `devicePixelRatio ${ratio}, expected 2`;
+    return result;
   } catch (error) {
     return { ...job, error: error instanceof Error ? error.message : String(error) };
   } finally {
@@ -635,7 +638,7 @@ function renderReport(): string {
     `- Method: fresh browser context per job, 1280×900 viewport at devicePixelRatio 2, fit-width zoom; ${runs} runs per file, speed, and variant, alternating which variant goes first; startup numbers pool both speeds (${runs * speeds.length} jobs per cell). Medians throughout.${environment.resumedJobs ? ` ${environment.resumedJobs} jobs come from an interrupted run of the same build and settings.` : ""}`,
     ...(browserName === "firefox"
       ? [
-          "- **Firefox renders at devicePixelRatio 1 here**: Playwright's Firefox ignores `deviceScaleFactor` on cross-origin-isolated pages, so its detail canvases hold a quarter of the pixels of the Chromium and WebKit runs. Compare Firefox's variants with each other, not with other browsers.",
+          "- Firefox renders at devicePixelRatio 2 through the `layout.css.devPixelsPerPx` pref, which the launcher sets: Playwright's `deviceScaleFactor` alone only overrides the ratio that pages report, and cross-origin-isolated pages such as the demo lose even that.",
         ]
       : []),
     "- First paint: navigation start until page 1 shows pixels (its low-resolution base layer). Page 1 sharp: until page 1's full-resolution layer is on the canvas.",
@@ -785,12 +788,6 @@ function renderComparison(): string {
       .join(
         ", ",
       )}. Medians of ${all[0]?.environment.settings.runs ?? "?"} runs at each of ${all[0]?.environment.settings.speeds.join(" and ") ?? "?"} px/s, pooled; Playwright's WebKit is not Safari.`,
-    ...(all.some((results) => results.environment.browserName === "firefox")
-      ? [
-          "",
-          "Firefox ran at devicePixelRatio 1: Playwright's Firefox ignores `deviceScaleFactor` on cross-origin-isolated pages, so its canvases hold a quarter of the pixels of the other two browsers'. Compare Firefox's variants with each other, not Firefox with the other browsers.",
-        ]
-      : []),
     "",
     ...table("First paint (ms)", (row) => fmt(row.firstPaintMs)),
     ...table("Page 1 sharp (ms)", (row) => fmt(row.page1DetailMs)),

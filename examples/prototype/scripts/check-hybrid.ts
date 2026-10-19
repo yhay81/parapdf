@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Page } from "playwright";
 import { preview } from "vite";
-import { launchBrowser } from "../../../bench/scripts/browsers.ts";
+import { browserFromEnv, launchBrowser } from "../../../bench/scripts/browsers.ts";
 
 const exampleDir = fileURLToPath(new URL("..", import.meta.url));
 let failures = 0;
@@ -46,7 +46,7 @@ const server = await preview({
   preview: { port: 4184, strictPort: false, open: false },
 });
 const baseUrl = server.resolvedUrls?.local[0] ?? "http://localhost:4184/";
-const launched = await launchBrowser();
+const launched = await launchBrowser(browserFromEnv(), { deviceScaleFactor: 2 });
 console.log(launched.label);
 const errors: string[] = [];
 

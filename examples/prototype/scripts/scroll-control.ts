@@ -102,7 +102,7 @@ const baseUrl = server.resolvedUrls?.local[0] ?? "http://localhost:4187/";
 const results: { browser: string; name: BrowserName; mode: Mode; samples: Sample[] }[] = [];
 try {
   for (const name of browsers) {
-    const launched = await launchBrowser(name);
+    const launched = await launchBrowser(name, { deviceScaleFactor: 2 });
     try {
       for (const mode of modes) {
         const samples: Sample[] = [];
