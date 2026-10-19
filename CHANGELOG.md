@@ -4,6 +4,12 @@ Changes to the `parapdf` package. It follows
 [Semantic Versioning](https://semver.org/); until 1.0, a minor release may
 change the API.
 
+## Unreleased
+
+- A detail canvas without a margin around the visible area, which a
+  `maxDetailPixels` below the viewport's device pixels leaves, is drawn once:
+  it was drawn again about 60 times a second while the view stood still.
+
 ## 0.1.0 — 2026-10-20
 
 The first release, from Phase 0 of the project: the API is experimental.

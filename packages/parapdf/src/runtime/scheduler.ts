@@ -154,6 +154,15 @@ interface DetailPlan {
  */
 const LOPSIDED_MARGIN = 3;
 
+/**
+ * Margins narrower than this share of the visible span never make a region
+ * lopsided. A region without a margin, which a detail budget smaller than the
+ * visible area leaves, keeps only the pixel or so that snapping to whole
+ * pixels adds on each side, unevenly: counted as lopsided, it was drawn again
+ * and again, about 60 times a second, while the view stood still.
+ */
+const MIN_LOPSIDED_MARGIN = 0.02;
+
 function shouldRedrawRegion(region: PageArea, visible: PageArea): boolean {
   if (
     visible.minX < region.minX ||
@@ -167,11 +176,13 @@ function shouldRedrawRegion(region: PageArea, visible: PageArea): boolean {
   const right = region.maxX - visible.maxX;
   const top = visible.minY - region.minY;
   const bottom = region.maxY - visible.maxY;
+  const width = (visible.maxX - visible.minX) * MIN_LOPSIDED_MARGIN;
+  const height = (visible.maxY - visible.minY) * MIN_LOPSIDED_MARGIN;
   return (
-    (region.minX > 0 && right / left > LOPSIDED_MARGIN) ||
-    (region.maxX < 1 && left / right > LOPSIDED_MARGIN) ||
-    (region.minY > 0 && bottom / top > LOPSIDED_MARGIN) ||
-    (region.maxY < 1 && top / bottom > LOPSIDED_MARGIN)
+    (region.minX > 0 && right > width && right / left > LOPSIDED_MARGIN) ||
+    (region.maxX < 1 && left > width && left / right > LOPSIDED_MARGIN) ||
+    (region.minY > 0 && bottom > height && bottom / top > LOPSIDED_MARGIN) ||
+    (region.maxY < 1 && top > height && top / bottom > LOPSIDED_MARGIN)
   );
 }
 

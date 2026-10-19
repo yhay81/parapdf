@@ -237,7 +237,10 @@ with the API.
   visible pages get detail, drawn through the engine's `region` request for
   the visible area grown by up to its own size on each side within the 16 MP
   budget, and redrawn when the view leaves that region or sits three times
-  closer to one side than the other; pages that leave the viewport drop their
+  closer to one side than the other, margins under 2% of the visible span
+  aside: a region without a margin, which a budget below the visible area
+  leaves, was drawn about 60 times a second in a still view, its sides
+  uneven by the pixel snapping adds. Pages leaving the viewport drop their
   detail canvases. Priority: visible base, visible detail once scrolling
   settles (120 ms quiet or below 2 px/ms), overscan base, overscan detail, then
   stale base. Once scrolling settles, overscan pages that get whole-page detail
