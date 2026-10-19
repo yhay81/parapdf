@@ -1,9 +1,11 @@
 /**
  * Functional checks for the hybrid engine (`?engine=hybrid`): image-only
  * pages render with hayro and every other page with pdf.js, the hayro module
- * loads only for documents with image-only pages, hayro's pixels match
- * pdf.js's, and text layers, search, and selection on scans still come from
- * pdf.js. Exits non-zero on failure.
+ * loads only for documents with image-only pages, hayro renders a scan's
+ * page 1 once for both canvas layers (and in two passes with
+ * `detail=base-first` and `detail=separate`), hayro's pixels on both layers
+ * match pdf.js's, and text layers, search, and selection on scans still come
+ * from pdf.js. Exits non-zero on failure.
  *
  * Usage: pnpm bench:build && pnpm --filter @parapdf/prototype build &&
  * pnpm --filter @parapdf/prototype check:hybrid
@@ -31,6 +33,10 @@ interface Opened {
 interface HybridState {
   renderers: Record<number, string>;
   fallbacks: string[];
+  /** hayro's renders of page 1, in order. */
+  page1: { scale: number; rasterScale?: number; kept?: boolean }[];
+  /** Kept full-resolution bitmaps of page 1 that the detail render used. */
+  page1KeptUsed: number;
 }
 
 const server = await preview({
@@ -45,7 +51,7 @@ console.log(launched.label);
 const errors: string[] = [];
 
 /** Opens `file` in a fresh context and waits until page 1 has full-resolution pixels. */
-async function open(file: string, engine = "hybrid"): Promise<Opened> {
+async function open(file: string, engine = "hybrid", query = ""): Promise<Opened> {
   const context = await launched.browser.newContext({
     viewport: { width: 1280, height: 900 },
     deviceScaleFactor: 2,
@@ -54,7 +60,7 @@ async function open(file: string, engine = "hybrid"): Promise<Opened> {
   page.on("pageerror", (error) => errors.push(`${file}: ${error.message}`));
   const requests: string[] = [];
   page.on("request", (request) => requests.push(request.url()));
-  await page.goto(`${baseUrl}?engine=${engine}&file=${file}`);
+  await page.goto(`${baseUrl}?engine=${engine}&file=${file}${query}`);
   await page.waitForFunction(
     () => {
       const detail = document.querySelectorAll<HTMLCanvasElement>(
@@ -75,27 +81,46 @@ const hybridState = (page: Page): Promise<HybridState> =>
     const records = (
       window as {
         __benchRecords?: {
-          hybrid: { type: string; pageIndex: number | null; renderer?: string; reason?: string }[];
+          hybrid: {
+            type: string;
+            pageIndex: number | null;
+            renderer?: string;
+            reason?: string;
+            scale: number;
+            rasterScale?: number;
+            kept?: boolean;
+            used?: boolean;
+          }[];
         };
       }
     ).__benchRecords;
     const renderers: Record<number, string> = {};
     const fallbacks: string[] = [];
+    const page1: HybridState["page1"] = [];
+    let page1KeptUsed = 0;
     for (const event of records?.hybrid ?? []) {
       if (event.type === "classified" && event.pageIndex !== null && event.renderer) {
         renderers[event.pageIndex] = event.renderer;
       }
       if (event.type === "fallback") fallbacks.push(`${event.pageIndex}: ${event.reason}`);
+      if (event.type === "rendered" && event.pageIndex === 0 && event.renderer === "hayro") {
+        page1.push({ scale: event.scale, rasterScale: event.rasterScale, kept: event.kept });
+      }
+      if (event.type === "kept-released" && event.pageIndex === 0 && event.used) page1KeptUsed++;
     }
-    return { renderers, fallbacks };
+    return { renderers, fallbacks, page1, page1KeptUsed };
   });
 
-/** Page 1 scaled to 240 CSS pixels wide, as RGBA, from its sharpest painted canvas. */
-const thumbnail = (page: Page): Promise<number[] | null> =>
-  page.evaluate(() => {
-    const canvases = [
-      ...document.querySelectorAll<HTMLCanvasElement>('section[data-page="1"] canvas'),
-    ].filter((canvas) => canvas.width > 0);
+/**
+ * Page 1 scaled to 240 CSS pixels wide, as RGBA, from its sharpest painted
+ * canvas, or from its base layer with `layer: "base"`.
+ */
+const thumbnail = (page: Page, layer: "sharpest" | "base" = "sharpest"): Promise<number[] | null> =>
+  page.evaluate((layer) => {
+    const all = [...document.querySelectorAll<HTMLCanvasElement>('section[data-page="1"] canvas')];
+    const canvases = (layer === "base" ? all.slice(0, 1) : all).filter(
+      (canvas) => canvas.width > 0,
+    );
     const source = canvases.at(-1);
     if (!source) return null;
     const probe = document.createElement("canvas");
@@ -105,7 +130,7 @@ const thumbnail = (page: Page): Promise<number[] | null> =>
     if (!context) return null;
     context.drawImage(source, 0, 0, probe.width, probe.height);
     return [...context.getImageData(0, 0, probe.width, probe.height).data];
-  });
+  }, layer);
 
 const inkRatio = (pixels: number[]): number => {
   let dark = 0;
@@ -187,8 +212,24 @@ try {
     check(`${file}: the hayro module loaded`, hayroRequested(hybrid.requests));
     check(`${file}: no fallbacks`, state.fallbacks.length === 0, state.fallbacks.join(" | "));
     const pixels = await thumbnail(hybrid.page);
+    const basePixels = await thumbnail(hybrid.page, "base");
     const ink = pixels ? inkRatio(pixels) : 0;
     check(`${file}: hayro painted page 1`, ink > 0.005 && ink < 0.99, `ink ${ink.toFixed(3)}`);
+    // One full-resolution pass for both layers: the base render rasterized
+    // at the detail scale, and the detail render showed the kept bitmap.
+    const [baseRender, detailRender] = state.page1;
+    check(
+      `${file}: hayro rendered page 1 once for both layers`,
+      state.page1.length >= 2 &&
+        baseRender?.kept !== true &&
+        baseRender !== undefined &&
+        detailRender !== undefined &&
+        (baseRender.rasterScale ?? 0) > baseRender.scale * 1.5 &&
+        Math.abs((baseRender.rasterScale ?? 0) - detailRender.scale) <= detailRender.scale * 0.01 &&
+        detailRender.kept === true &&
+        state.page1KeptUsed === 1,
+      JSON.stringify(state.page1),
+    );
 
     if (file === "patent-us223898.pdf") {
       // The OCR text layer is invisible in the PDF, so the canvas came from
@@ -271,8 +312,43 @@ try {
       difference < 12,
       `mean difference ${difference.toFixed(1)} of 255 per channel`,
     );
+    // The base layer is the reduced copy of the full-resolution pass.
+    const referenceBase = await thumbnail(reference.page, "base");
+    const baseDifference =
+      basePixels && referenceBase ? meanDifference(basePixels, referenceBase) : Number.NaN;
+    check(
+      `${file}: hayro's base layer of page 1 matches pdf.js's`,
+      baseDifference < 12,
+      `mean difference ${baseDifference.toFixed(1)} of 255 per channel`,
+    );
     await hybrid.page.context().close();
     await reference.page.context().close();
+
+    // The other modes render the two layers with two hayro passes: the
+    // detail pass right after the base pass and sent with it, or only when
+    // the detail render asks.
+    for (const [mode, sentWithBase] of [
+      ["base-first", true],
+      ["separate", false],
+    ] as const) {
+      const other = await open(file, "hybrid", `&detail=${mode}`);
+      const otherState = await hybridState(other.page);
+      const [base, detail] = otherState.page1;
+      check(
+        `${file}: with detail=${mode}, hayro renders page 1's layers in two passes`,
+        base !== undefined &&
+          detail !== undefined &&
+          base.rasterScale === base.scale &&
+          detail.rasterScale === detail.scale &&
+          detail.scale > base.scale * 1.5 &&
+          !base.kept &&
+          (detail.kept ?? false) === sentWithBase &&
+          otherState.page1KeptUsed === (sentWithBase ? 1 : 0) &&
+          otherState.fallbacks.length === 0,
+        JSON.stringify(otherState.page1),
+      );
+      await other.page.context().close();
+    }
   }
 
   check("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));
