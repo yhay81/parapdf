@@ -11,6 +11,7 @@
     "bench": "pnpm --filter @parapdf/bench run bench",
     "check": "biome check .",
     "format": "biome check --write .",
+    "test": "pnpm --filter parapdf test",
     "typecheck": "pnpm -r run typecheck"
   },
   "devDependencies": {

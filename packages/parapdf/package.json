@@ -28,7 +28,8 @@
     "build": "tsc -p tsconfig.build.json && node scripts/declaration-imports.ts",
     "prepack": "pnpm run build && node scripts/legal-files.ts copy",
     "postpack": "node scripts/legal-files.ts remove",
-    "typecheck": "tsc -p ."
+    "test": "node --test \"test/*.test.ts\"",
+    "typecheck": "tsc -p . && tsc -p test"
   },
   "peerDependencies": {
     "pdfjs-dist": ">=6.4.299",
@@ -36,6 +37,7 @@
     "react-dom": ">=19.2.0"
   },
   "devDependencies": {
+    "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "pdfjs-dist": "6.4.299",
