@@ -638,7 +638,7 @@ function renderReport(): string {
     `- Method: fresh browser context per job, 1280×900 viewport at devicePixelRatio 2, fit-width zoom; ${runs} runs per file, speed, and variant, alternating which variant goes first; startup numbers pool both speeds (${runs * speeds.length} jobs per cell). Medians throughout.${environment.resumedJobs ? ` ${environment.resumedJobs} jobs come from an interrupted run of the same build and settings.` : ""}`,
     ...(browserName === "firefox"
       ? [
-          "- Firefox renders at devicePixelRatio 2 through the `layout.css.devPixelsPerPx` pref, which the launcher sets: Playwright's `deviceScaleFactor` alone only overrides the ratio that pages report, and cross-origin-isolated pages such as the demo lose even that.",
+          "- Firefox renders at devicePixelRatio 2 through the `layout.css.devPixelsPerPx` pref, which the launcher sets: Playwright's `deviceScaleFactor` alone only overrides the ratio that pages report, and cross-origin-isolated pages such as the demo lose even that. The launcher change is commit 0451e04 of the firefox-dpr branch, cherry-picked onto this branch. Firefox results of this benchmark committed before it ran at ratio 1 and do not compare with these.",
         ]
       : []),
     "- First paint: navigation start until page 1 shows pixels (its low-resolution base layer). Page 1 sharp: until page 1's full-resolution layer is on the canvas.",
