@@ -1,4 +1,9 @@
-export { createPdfjsEngine, type PdfjsEngineOptions, pdfjsDocumentOf } from "./engine/pdfjs.ts";
+export {
+  createPdfjsEngine,
+  type PdfjsDocumentOptions,
+  type PdfjsEngineOptions,
+  pdfjsDocumentOf,
+} from "./engine/pdfjs.ts";
 export {
   type AnnotationLayerHandle,
   type AnnotationLayerRequest,

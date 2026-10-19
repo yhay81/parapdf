@@ -14,8 +14,23 @@ import {
   type TextLayerHandle,
 } from "./types.ts";
 
+/**
+ * pdf.js getDocument parameters that ParaPDF does not set from the source,
+ * such as canvasMaxAreaInBytes, maxImageSize, or disableAutoFetch.
+ */
+export type PdfjsDocumentOptions = Omit<
+  Exclude<
+    Parameters<(typeof Pdfjs)["getDocument"]>[0],
+    string | URL | ArrayBuffer | ArrayBufferView | undefined
+  >,
+  "url" | "data" | "range" | "worker"
+>;
+
 export interface PdfjsEngineOptions {
-  /** The pdf.js module; the application owns its version. */
+  /**
+   * The pdf.js module; the application owns its version. The legacy build
+   * (`pdfjs-dist/legacy/build/pdf.mjs`), which older Safari needs, fits as is.
+   */
   pdfjs: typeof Pdfjs;
   workerSrc: string;
   /**
@@ -26,6 +41,12 @@ export interface PdfjsEngineOptions {
   /** Base URL of the pdf.js cmaps/, standard_fonts/, wasm/, and iccs/ directories. */
   assetBase?: string;
   enableHWA?: boolean;
+  /**
+   * More getDocument parameters for every document this engine opens. They
+   * override enableHWA and the asset URLs from assetBase; the source and the
+   * engine's worker always come from ParaPDF.
+   */
+  documentOptions?: PdfjsDocumentOptions;
 }
 
 // The text layer and the search index must see the same items in the same
@@ -128,8 +149,6 @@ export function createPdfjsEngine(options: PdfjsEngineOptions): PdfEngine {
     name: options.rendererSrc ? "pdf.js (renderer worker)" : "pdf.js (main-thread drawing)",
     async open(source: PdfSource): Promise<PdfEngineDocument> {
       const loadingTask = pdfjs.getDocument({
-        ...("url" in source ? { url: source.url } : { data: source.data }),
-        worker,
         enableHWA: options.enableHWA ?? false,
         ...(assetBase
           ? {
@@ -140,6 +159,9 @@ export function createPdfjsEngine(options: PdfjsEngineOptions): PdfEngine {
               iccUrl: `${assetBase}iccs/`,
             }
           : {}),
+        ...options.documentOptions,
+        ...("url" in source ? { url: source.url } : { data: source.data }),
+        worker,
       });
       const doc = await loadingTask.promise;
       proxies.add(doc);

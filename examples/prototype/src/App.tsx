@@ -1,6 +1,7 @@
 import {
   PdfDocument,
   type PdfEngine,
+  type PdfjsDocumentOptions,
   PdfPageRect,
   type PdfSource,
   PdfViewport,
@@ -41,6 +42,10 @@ const settings = {
   preload: params.get("preload") !== "0",
   /** CSS pixels per PDF point the zoom may reach; the runtime's default when absent. */
   maxScale: params.has("maxScale") ? Number(params.get("maxScale")) : undefined,
+  /** More pdf.js getDocument parameters, as JSON. */
+  documentOptions: params.has("documentOptions")
+    ? (JSON.parse(params.get("documentOptions") ?? "{}") as PdfjsDocumentOptions)
+    : undefined,
   /** Canvas pixel limits (ViewerOptions); the runtime's defaults when absent. */
   canvasLimits: Object.fromEntries(
     ["maxDetailPixels", "maxBasePixels", "maxCanvasPixels"].flatMap((name) =>
@@ -87,7 +92,9 @@ function countEngineWork(engine: PdfEngine): PdfEngine {
 }
 
 // Module-level values stay referentially stable across renders.
-const enginePromise = loadEngine(settings.engine, settings.hwa).then(countEngineWork);
+const enginePromise = loadEngine(settings.engine, settings.hwa, settings.documentOptions).then(
+  countEngineWork,
+);
 const source: PdfSource = { url: `/corpus/${settings.file}` };
 const viewerOptions: ViewerOptions = {
   textLayer: settings.text,
