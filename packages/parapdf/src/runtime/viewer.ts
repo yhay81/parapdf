@@ -15,6 +15,7 @@ import {
   computeLayout,
   type Layout,
   pageAt,
+  pageLeft,
   turnBox,
   turnedSize,
   type Viewport,
@@ -455,9 +456,8 @@ export class PdfViewerRuntime {
     // An explicit top lands at the top edge of the viewport, as in other PDF readers.
     scroller.scrollTop = hasTop ? pageTop + point.y * layout.scale : pageTop - layout.gap;
     if (hasLeft) {
-      const contentWidth = Math.max(scroller.clientWidth, layout.totalWidth);
       const left =
-        (contentWidth - (layout.widths[target.pageIndex] ?? 0)) / 2 + point.x * layout.scale;
+        pageLeft(layout, target.pageIndex, scroller.clientWidth) + point.x * layout.scale;
       if (left < scroller.scrollLeft || left > scroller.scrollLeft + scroller.clientWidth) {
         scroller.scrollLeft = left;
       }
@@ -720,8 +720,7 @@ export class PdfViewerRuntime {
     const x = box.x * layout.scale;
     const y = box.y * layout.scale;
     scroller.scrollTop = (layout.tops[match.pageIndex] ?? 0) + y - scroller.clientHeight / 3;
-    const contentWidth = Math.max(scroller.clientWidth, layout.totalWidth);
-    const left = (contentWidth - (layout.widths[match.pageIndex] ?? 0)) / 2 + x;
+    const left = pageLeft(layout, match.pageIndex, scroller.clientWidth) + x;
     if (left < scroller.scrollLeft || left > scroller.scrollLeft + scroller.clientWidth) {
       scroller.scrollLeft = left - scroller.clientWidth / 3;
     }
