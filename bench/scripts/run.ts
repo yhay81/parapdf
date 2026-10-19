@@ -16,7 +16,13 @@ import { fileURLToPath } from "node:url";
 import { brotliCompressSync, constants, gzipSync } from "node:zlib";
 import type { Browser } from "playwright";
 import { preview } from "vite";
-import { assertMeasurementPower, browserFromEnv, launchBrowser } from "./browsers.ts";
+import {
+  assertMeasurementPower,
+  browserFromEnv,
+  launchBrowser,
+  measureInTurn,
+  turnTakingSummary,
+} from "./browsers.ts";
 import { writeComparison, writeReport } from "./report.ts";
 
 const benchDir = fileURLToPath(new URL("..", import.meta.url));
@@ -122,20 +128,28 @@ const server = await preview({
 });
 const baseUrl = server.resolvedUrls?.local[0] ?? "http://127.0.0.1:4179/";
 const browserName = browserFromEnv();
-const launched = await launchBrowser(browserName);
-const { browser } = launched;
+// After every launch, one discarded job warms the GPU process, fonts, and HTTP
+// cache so the first measured job is not penalized.
+const launched = await launchBrowser(browserName, {
+  async warmUp(browser) {
+    await runJob(browser, baseUrl, {
+      engine: engines[0] ?? "pdfjs",
+      file: files[0] ?? "",
+      run: -1,
+    });
+  },
+});
 
 const results: JobResult[] = [];
 try {
-  // One discarded job warms the GPU process, fonts, and HTTP cache so the first
-  // measured job is not penalized.
-  await runJob(browser, baseUrl, { engine: engines[0] ?? "pdfjs", file: files[0] ?? "", run: -1 });
   for (const file of files) {
-    // Stop without writing results if the machine lost AC power mid-run.
-    assertMeasurementPower();
     for (const engine of engines) {
       for (let run = 0; run < runs; run++) {
-        const result = await runJob(browser, baseUrl, { engine, file, run });
+        // Waits its turn with other Playwright browsers, and stops without
+        // writing results if the machine lost AC power mid-run.
+        const result = await measureInTurn(launched, (browser) =>
+          runJob(browser, baseUrl, { engine, file, run }),
+        );
         results.push(result);
         const summary = result.error
           ? `ERROR ${result.error.split("\n")[0]}`
@@ -196,6 +210,7 @@ const environment = {
   browser: launched.label,
   headless: launched.headless,
   power,
+  turnTaking: turnTakingSummary(),
   gpu: firstOk?.environment?.gpu ?? "unknown",
   crossOriginIsolated: firstOk?.environment?.crossOriginIsolated ?? false,
   // Medians of each job's idle baseline, measured before its engine loaded.

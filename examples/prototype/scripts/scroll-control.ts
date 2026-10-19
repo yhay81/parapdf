@@ -19,7 +19,10 @@ import {
   type BrowserName,
   browserNames,
   launchBrowser,
+  measureInTurn,
   restoreScaleFactor,
+  turnTaking,
+  turnTakingSummary,
 } from "../../../bench/scripts/browsers.ts";
 
 const exampleDir = fileURLToPath(new URL("..", import.meta.url));
@@ -108,25 +111,29 @@ try {
       for (const mode of modes) {
         const samples: Sample[] = [];
         for (let run = 0; run < runs; run++) {
-          assertMeasurementPower();
-          const context = await launched.browser.newContext({
-            viewport: { width: 1280, height: 900 },
-            deviceScaleFactor: 2,
+          const sample = await measureInTurn(launched, async (browser) => {
+            const context = await browser.newContext({
+              viewport: { width: 1280, height: 900 },
+              deviceScaleFactor: 2,
+            });
+            try {
+              const page = await context.newPage();
+              await restoreScaleFactor(page, `${baseUrl}calibrate.html`);
+              await page.goto(`${baseUrl}?engine=pdfjs-next&hwa=1&file=${file}`);
+              await page.waitForSelector('section[data-page="2"] .parapdf-text-layer span', {
+                timeout: 30_000,
+              });
+              // Let detail renders, text layers, and annotation layers finish.
+              await page.waitForTimeout(3000);
+              return await measure(page, mode);
+            } finally {
+              await context.close();
+            }
           });
-          const page = await context.newPage();
-          await restoreScaleFactor(page, `${baseUrl}calibrate.html`);
-          await page.goto(`${baseUrl}?engine=pdfjs-next&hwa=1&file=${file}`);
-          await page.waitForSelector('section[data-page="2"] .parapdf-text-layer span', {
-            timeout: 30_000,
-          });
-          // Let detail renders, text layers, and annotation layers finish.
-          await page.waitForTimeout(3000);
-          const sample = await measure(page, mode);
           samples.push(sample);
           console.log(
             `${launched.label} · ${mode} · run ${run + 1}/${runs}: blocked ${sample.blockedMs.toFixed(0)} ms, longest ${sample.maxLagMs.toFixed(1)} ms, renders ${sample.renders}`,
           );
-          await context.close();
         }
         results.push({ browser: launched.label, name, mode, samples });
       }
@@ -152,7 +159,7 @@ const markdown = [
   "# ParaPDF runtime prototype: scroll control",
   "",
   `- Run at: ${runAt}`,
-  `- Machine: ${platform()} ${release()} ${arch()}, ${cpus()[0]?.model ?? "unknown"}; Playwright's headless browsers.`,
+  `- Machine: ${platform()} ${release()} ${arch()}, ${cpus()[0]?.model ?? "unknown"}; Playwright's headless browsers; the run ${turnTakingSummary()}.`,
   `- Method: ${file} with pdf.js master's renderer worker on a GPU-backed canvas, 1280×900 at devicePixelRatio 2. After page 2's text layer exists and 3 more seconds pass, a 4 ms timer runs for 1 second idle (the baseline) and then for 4 seconds while the page stays still or scrolls back and forth over 600 px at 900 CSS px per second inside the mounted pages. Nothing renders and React does not commit in either mode. Blocked counts lateness beyond 2 ms or the idle 95th percentile, whichever is larger, as in the scroll benchmark. Fresh context per run, ${runs} runs.`,
   "- Reproduce: `pnpm --filter @parapdf/prototype build && node examples/prototype/scripts/scroll-control.ts`",
   "",
@@ -170,6 +177,6 @@ const markdown = [
 writeFileSync(join(resultsDir, "control.md"), `${markdown.join("\n")}\n`);
 writeFileSync(
   join(resultsDir, "control.json"),
-  `${JSON.stringify({ runAt, file, runs, results }, (_key, value) => (typeof value === "number" && !Number.isInteger(value) ? Math.round(value * 10) / 10 : value), 2)}\n`,
+  `${JSON.stringify({ runAt, file, runs, turnTaking, results }, (_key, value) => (typeof value === "number" && !Number.isInteger(value) ? Math.round(value * 10) / 10 : value), 2)}\n`,
 );
 console.log(`\nWrote ${join(resultsDir, "control.md")}`);

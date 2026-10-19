@@ -20,7 +20,10 @@ import {
   assertMeasurementPower,
   browserFromEnv,
   launchBrowser,
+  measureInTurn,
   restoreScaleFactor,
+  turnTaking,
+  turnTakingSummary,
 } from "../../../bench/scripts/browsers.ts";
 
 const exampleDir = fileURLToPath(new URL("..", import.meta.url));
@@ -122,44 +125,45 @@ try {
     for (const scale of scales) {
       for (const variant of variants) {
         for (let run = 0; run < runs; run++) {
-          assertMeasurementPower();
-          const context = await launched.browser.newContext({
-            viewport: device.viewport,
-            deviceScaleFactor: device.deviceScaleFactor,
-          });
-          const page = await context.newPage();
-          await restoreScaleFactor(page, `${baseUrl}calibrate.html`);
           const job = { device: device.name, variant: variant.name, scale, run };
-          let result: JobResult;
-          try {
-            const query = new URLSearchParams({
-              engine: variant.engine,
-              hwa: "1",
-              file,
-              maxScale: "10",
+          const result = await measureInTurn(launched, async (browser): Promise<JobResult> => {
+            const context = await browser.newContext({
+              viewport: device.viewport,
+              deviceScaleFactor: device.deviceScaleFactor,
             });
-            await page.goto(`${baseUrl}?${query}`);
-            // Start from a settled, sharp first page at the fit-width zoom.
-            await page.waitForFunction(
-              (sharp) =>
-                ((
-                  window as unknown as { __viewer?: { sharpness(): number } }
-                ).__viewer?.sharpness() ?? 0) >= sharp,
-              SHARP,
-              { timeout: 30_000 },
-            );
-            await page.waitForTimeout(500);
-            const ratio = await page.evaluate(() => devicePixelRatio);
-            if (ratio !== device.deviceScaleFactor) {
-              throw new Error(`devicePixelRatio ${ratio}, expected ${device.deviceScaleFactor}`);
+            try {
+              const page = await context.newPage();
+              await restoreScaleFactor(page, `${baseUrl}calibrate.html`);
+              const query = new URLSearchParams({
+                engine: variant.engine,
+                hwa: "1",
+                file,
+                maxScale: "10",
+              });
+              await page.goto(`${baseUrl}?${query}`);
+              // Start from a settled, sharp first page at the fit-width zoom.
+              await page.waitForFunction(
+                (sharp) =>
+                  ((
+                    window as unknown as { __viewer?: { sharpness(): number } }
+                  ).__viewer?.sharpness() ?? 0) >= sharp,
+                SHARP,
+                { timeout: 30_000 },
+              );
+              await page.waitForTimeout(500);
+              const ratio = await page.evaluate(() => devicePixelRatio);
+              if (ratio !== device.deviceScaleFactor) {
+                throw new Error(`devicePixelRatio ${ratio}, expected ${device.deviceScaleFactor}`);
+              }
+              const zoom = await measure(page, { zoom: scale });
+              const pan = await measure(page, { pan: true });
+              return { ...job, zoom, pan };
+            } catch (error) {
+              return { ...job, error: error instanceof Error ? error.message : String(error) };
+            } finally {
+              await context.close();
             }
-            const zoom = await measure(page, { zoom: scale });
-            const pan = await measure(page, { pan: true });
-            result = { ...job, zoom, pan };
-          } catch (error) {
-            result = { ...job, error: error instanceof Error ? error.message : String(error) };
-          }
-          await context.close();
+          });
           results.push(result);
           const format = (phase?: Phase) =>
             phase
@@ -225,6 +229,7 @@ const environment = {
   browser: launched.label,
   power,
   loadAverage: { start: loadAtStart, end: loadavg()[0] ?? 0 },
+  turnTaking: { ...turnTaking },
   settings: { file, runs, devices },
 };
 const round = (_key: string, value: unknown) =>
@@ -247,7 +252,7 @@ const markdown = [
   "",
   `- Run at: ${environment.runAt}`,
   `- Machine: ${environment.os}, ${environment.cpu}; ${environment.browser} (Playwright build, ${launched.headless ? "headless" : "headed"}); power: ${power.source === "ac" && !power.lowPowerMode ? "AC" : `**${power.source}; not comparable with AC runs**`}`,
-  `- One-minute load average: ${environment.loadAverage.start.toFixed(1)} at the start, ${environment.loadAverage.end.toFixed(1)} at the end, on ${cpus().length} cores; times are only comparable between quiet runs.`,
+  `- One-minute load average: ${environment.loadAverage.start.toFixed(1)} at the start, ${environment.loadAverage.end.toFixed(1)} at the end, on ${cpus().length} cores; times are only comparable between quiet runs. The run ${turnTakingSummary()}.`,
   `- Method: ${file} opens at the fit-width zoom on a desktop (1280×900, devicePixelRatio 2) and a phone-sized viewport (390×844, devicePixelRatio 3). Once page 1 is sharp, the view zooms around its center to the given scale in CSS pixels per PDF point, then pans by 60% of the viewport height and 30% of its width. Median of ${runs} runs.`,
   "- Sharpness: the resolution of the visible pixels as a share of full device resolution, weighted by area, when the measurement ended (it ends after half a second of sharpness or after 8 seconds). Time to sharp: until sharpness reached 0.99 and stayed there.",
   "- Canvas memory: width × height × 4 bytes for every canvas in the document when the measurement ended, with the peak in parentheses; pixels held inside workers are not included.",

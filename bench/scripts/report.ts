@@ -37,6 +37,8 @@ export interface BrowserResults {
     browser: string;
     headless: boolean;
     power?: { source: string; lowPowerMode: boolean | null };
+    /** How the run took turns with other Playwright browsers on the machine. */
+    turnTaking?: string;
     gpu: string;
     crossOriginIsolated: boolean;
     idle: { timerLagP50Ms: number; timerLagP95Ms: number; frameIntervalMs: number };
@@ -103,7 +105,7 @@ export function renderReport({ environment, payload, summaries }: BrowserResults
     `- Run at: ${environment.runAt}`,
     `- Machine: ${environment.os}, ${environment.cpu}, ${environment.memoryGiB} GiB`,
     `- Browser: ${environment.browser} (Playwright build, ${environment.headless ? "headless" : "headed"}), WebGL renderer: ${environment.gpu}, crossOriginIsolated: ${environment.crossOriginIsolated}`,
-    `- Power: ${powerLine(environment)}. Idle baseline: ${idleLine(environment)}.`,
+    `- Power: ${powerLine(environment)}. Idle baseline: ${idleLine(environment)}.${environment.turnTaking ? ` The run ${environment.turnTaking}.` : ""}`,
     `- Engines: ${engineLine(environment.versions)}`,
     `- Method: scale ${settings.scale} (100% zoom at devicePixelRatio 2), first ${settings.pages} pages rendered one after another, fresh page per job, median of ${settings.runs} runs. "Visible" waits two animation frames after the pixels are committed to the canvas.`,
     `- Reproduce: \`pnpm bench:build && BROWSER=${environment.browserName} pnpm bench\``,

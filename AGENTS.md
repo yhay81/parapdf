@@ -232,6 +232,19 @@ until the benchmark results justify the architecture.
   quarter. The measuring scripts check `pmset` before the run and between
   jobs and stop without writing results on battery or in Low Power Mode;
   `ALLOW_BATTERY=1` overrides, and reports then flag the run.
+- Measuring scripts take turns with other Playwright browsers, which other
+  sessions run on this machine: a job measured beside one competed for the
+  same cores and GPU. `measureInTurn()` in `bench/scripts/browsers.ts` starts
+  each job once no other Playwright browser or test runner is open, waiting
+  with the script's own browser closed so that two waiting scripts cannot
+  block each other, plus a random 5–20 s so that they do not restart
+  together. A job that another browser overlapped runs again, up to ten
+  times. Other browsers are main processes under `ms-playwright` that do not
+  descend from the script; their child processes and WebKit's helpers, which
+  belong to launchd, are skipped. `MAX_LOAD` also waits for the one-minute
+  load average, `IGNORE_PIDS` ignores the browsers of the listed processes
+  (a stuck runner), `ALLOW_PARALLEL=1` measures regardless, and reports say
+  how often a run waited and repeated a job.
 - Each job first measures an idle baseline: timer lateness and the
   animation-frame interval of a page doing nothing (the engine benchmark
   before its engine loads, the scroll benchmark on `calibrate.html`). An idle

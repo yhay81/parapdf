@@ -11,7 +11,7 @@
  * OUTPUT (the browser name).
  */
 import { mkdirSync, writeFileSync } from "node:fs";
-import { arch, cpus, platform, release } from "node:os";
+import { arch, cpus, loadavg, platform, release } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Page } from "playwright";
@@ -20,7 +20,10 @@ import {
   assertMeasurementPower,
   browserFromEnv,
   launchBrowser,
+  measureInTurn,
   restoreScaleFactor,
+  turnTaking,
+  turnTakingSummary,
 } from "../../../bench/scripts/browsers.ts";
 
 const exampleDir = fileURLToPath(new URL("..", import.meta.url));
@@ -107,6 +110,8 @@ const median = (values: number[]): number => {
 };
 
 const power = assertMeasurementPower();
+// Timing depends on what else the machine runs; record the one-minute load.
+const loadAtStart = loadavg()[0] ?? 0;
 const server = await preview({
   root: exampleDir,
   configFile: join(exampleDir, "vite.config.ts"),
@@ -114,27 +119,26 @@ const server = await preview({
   preview: { port: 4183, host: "127.0.0.1", strictPort: false, open: false },
 });
 const baseUrl = server.resolvedUrls?.local[0] ?? "http://127.0.0.1:4183/";
-const launched = await launchBrowser(browserName);
-const { browser } = launched;
-
 const waitForDone = (page: Page) =>
   page.waitForFunction(() => (window as { __done?: boolean }).__done === true, undefined, {
     timeout: 120_000,
   });
 
-// One discarded navigation warms the GPU process and HTTP cache so the first
-// measured job is not penalized.
-{
-  const context = await browser.newContext({
-    viewport: { width: 1280, height: 900 },
-    deviceScaleFactor: 2,
-  });
-  const page = await context.newPage();
-  await restoreScaleFactor(page, `${baseUrl}calibrate.html`);
-  await page.goto(`${baseUrl}?file=${files[0]}&autoscroll=60&duration=100`);
-  await waitForDone(page);
-  await context.close();
-}
+// After every launch, one discarded navigation warms the GPU process and HTTP
+// cache so the first measured job is not penalized.
+const launched = await launchBrowser(browserName, {
+  async warmUp(browser) {
+    const context = await browser.newContext({
+      viewport: { width: 1280, height: 900 },
+      deviceScaleFactor: 2,
+    });
+    const page = await context.newPage();
+    await restoreScaleFactor(page, `${baseUrl}calibrate.html`);
+    await page.goto(`${baseUrl}?file=${files[0]}&autoscroll=60&duration=100`);
+    await waitForDone(page);
+    await context.close();
+  },
+});
 
 const results: JobResult[] = [];
 try {
@@ -142,48 +146,51 @@ try {
     for (const speed of speeds) {
       for (const variant of variants) {
         for (let run = 0; run < runs; run++) {
-          const context = await browser.newContext({
-            viewport: { width: 1280, height: 900 },
-            deviceScaleFactor: 2,
-          });
-          // Stop without writing results if the machine lost AC power mid-run.
-          assertMeasurementPower();
-          const page = await context.newPage();
-          await restoreScaleFactor(page, `${baseUrl}calibrate.html`);
           const job = { variant: variant.name, file, speed, run };
-          let result: JobResult;
-          try {
-            // The idle baseline comes from a page without the viewer, in the
-            // same context, right before the job.
-            await page.goto(`${baseUrl}calibrate.html`);
-            await waitForDone(page);
-            const idle = (await page.evaluate(
-              () => (window as { __result?: unknown }).__result,
-            )) as IdleBaseline;
-            const query = new URLSearchParams({
-              engine: variant.engine,
-              hwa: variant.hwa ? "1" : "0",
-              text: variant.text ? "1" : "0",
-              links: variant.links ? "1" : "0",
-              file,
-              autoscroll: String(speed),
-              duration: String(durationMs),
-              preload: preloadPdf ? "1" : "0",
-              idleLag: String(idle.timerLagP95Ms),
-              idleFrame: String(idle.frameIntervalMs),
+          // Waits its turn with other Playwright browsers, and stops without
+          // writing results if the machine lost AC power mid-run.
+          const result = await measureInTurn(launched, async (browser): Promise<JobResult> => {
+            const context = await browser.newContext({
+              viewport: { width: 1280, height: 900 },
+              deviceScaleFactor: 2,
             });
-            await page.goto(`${baseUrl}?${query}`);
-            await waitForDone(page);
-            const payload = (await page.evaluate(
-              () => (window as { __result?: unknown }).__result,
-            )) as Omit<JobResult, "variant" | "run">;
-            result = { ...payload, ...job, idle };
-            const ratio = (payload as { devicePixelRatio?: number }).devicePixelRatio;
-            if (ratio !== 2) result.error = `devicePixelRatio ${ratio}, expected 2`;
-          } catch (error) {
-            result = { ...job, error: error instanceof Error ? error.message : String(error) };
-          }
-          await context.close();
+            try {
+              const page = await context.newPage();
+              await restoreScaleFactor(page, `${baseUrl}calibrate.html`);
+              // The idle baseline comes from a page without the viewer, in the
+              // same context, right before the job.
+              await page.goto(`${baseUrl}calibrate.html`);
+              await waitForDone(page);
+              const idle = (await page.evaluate(
+                () => (window as { __result?: unknown }).__result,
+              )) as IdleBaseline;
+              const query = new URLSearchParams({
+                engine: variant.engine,
+                hwa: variant.hwa ? "1" : "0",
+                text: variant.text ? "1" : "0",
+                links: variant.links ? "1" : "0",
+                file,
+                autoscroll: String(speed),
+                duration: String(durationMs),
+                preload: preloadPdf ? "1" : "0",
+                idleLag: String(idle.timerLagP95Ms),
+                idleFrame: String(idle.frameIntervalMs),
+              });
+              await page.goto(`${baseUrl}?${query}`);
+              await waitForDone(page);
+              const payload = (await page.evaluate(
+                () => (window as { __result?: unknown }).__result,
+              )) as Omit<JobResult, "variant" | "run">;
+              const measured: JobResult = { ...payload, ...job, idle };
+              const ratio = (payload as { devicePixelRatio?: number }).devicePixelRatio;
+              if (ratio !== 2) measured.error = `devicePixelRatio ${ratio}, expected 2`;
+              return measured;
+            } catch (error) {
+              return { ...job, error: error instanceof Error ? error.message : String(error) };
+            } finally {
+              await context.close();
+            }
+          });
           results.push(result);
           console.log(
             `${file} · ${speed} px/s · ${variant.name} · run ${run + 1}/${runs}: ${
@@ -248,6 +255,8 @@ const environment = {
   browser: launched.label,
   headless: launched.headless,
   power,
+  loadAverage: { start: loadAtStart, end: loadavg()[0] ?? 0 },
+  turnTaking: { ...turnTaking },
   // Medians of the per-job idle baselines from calibrate.html.
   idle: {
     timerLagP50Ms: median(okResults.map((result) => result.idle?.timerLagP50Ms ?? Number.NaN)),
@@ -273,7 +282,7 @@ const markdown = [
   `# ParaPDF runtime prototype: scripted scroll, ${environment.browser}`,
   "",
   `- Run at: ${environment.runAt}`,
-  `- Machine: ${environment.os}, ${environment.cpu}; ${environment.browser} (Playwright build, ${environment.headless ? "headless" : "headed"}); power: ${power.source === "ac" && !power.lowPowerMode ? "AC" : `**${power.source}${power.lowPowerMode ? ", Low Power Mode" : ""}; not comparable with AC runs**`}`,
+  `- Machine: ${environment.os}, ${environment.cpu}; ${environment.browser} (Playwright build, ${environment.headless ? "headless" : "headed"}); power: ${power.source === "ac" && !power.lowPowerMode ? "AC" : `**${power.source}${power.lowPowerMode ? ", Low Power Mode" : ""}; not comparable with AC runs**`}; one-minute load average ${environment.loadAverage.start.toFixed(1)} at the start, ${environment.loadAverage.end.toFixed(1)} at the end; ${turnTakingSummary()}`,
   `- Idle baseline (calibrate.html, median of jobs): 4 ms timer late by ${fmt(environment.idle.timerLagP50Ms, 1)} ms (median) / ${fmt(environment.idle.timerLagP95Ms, 1)} ms (p95); animation frames every ${fmt(environment.idle.frameIntervalMs, 1)} ms.`,
   `- Method: 1280×900 viewport at devicePixelRatio 2, fit-width zoom, ${durationMs} ms of scrolling at a constant speed in CSS pixels per second after the first page is painted, median of ${runs} runs. PDF preload: ${preloadPdf ? "on" : "off"}.`,
   "- First paint: time from navigation start until page 1 shows pixels.",
