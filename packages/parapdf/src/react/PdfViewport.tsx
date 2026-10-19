@@ -67,11 +67,14 @@ export function PdfViewport({
       // The scroller is the query container whose width `cqw` measures for
       // page placement. A stable gutter keeps that width from changing as the
       // scrollbar comes and goes, which would refit "fit-width" back and forth.
+      // Touches pan it natively, but pinches zoom the document through the
+      // runtime instead of zooming the whole page.
       style={{
         overflow: "auto",
         contain: "strict",
         containerType: "inline-size",
         scrollbarGutter: "stable",
+        touchAction: "pan-x pan-y",
         ...style,
       }}
       // biome-ignore lint/a11y/noNoninteractiveTabindex: a focusable scroll container is what lets keyboard users scroll it.

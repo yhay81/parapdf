@@ -117,8 +117,16 @@ const HISTORY_LIMIT = 50;
 const SETTLE_VELOCITY = 2;
 /** Scrolling is considered stopped after this many milliseconds without events. */
 const SETTLE_DELAY = 120;
-/** A ctrl/pinch wheel gesture commits this long after its last event. */
+/** A ctrl/pinch wheel gesture or a Safari gesture commits this long after its last event. */
 const ZOOM_COMMIT_DELAY = 150;
+/**
+ * Two touches start zooming once the distance between them changed by this
+ * many CSS pixels, and only pan before: otherwise the jitter of a two-finger
+ * drag or tap changed the zoom by a fraction and rendered every page again.
+ */
+const PINCH_SLOP = 16;
+/** Safari's events for trackpad pinches, which iPadOS also sends for touch pinches. */
+const GESTURE_EVENTS = ["gesturestart", "gesturechange", "gestureend"] as const;
 /** Search publishes partial results at most this often. */
 const SEARCH_PUBLISH_INTERVAL = 100;
 
@@ -145,6 +153,46 @@ const yieldToMain = (): Promise<void> => {
 };
 
 type PageElements = [HTMLCanvasElement, HTMLCanvasElement, HTMLElement | null, HTMLElement | null];
+
+/**
+ * A zoom gesture in progress: the wheel with ctrl or meta (also trackpad
+ * pinches in Chromium and Firefox), two touches, or Safari's gesture events.
+ * A CSS transform previews it until it commits.
+ */
+interface ZoomGesture {
+  source: "wheel" | "touch" | "gesture";
+  /** Zoom relative to the committed scale. */
+  factor: number;
+  /** The point the gesture zooms around, in the content's unscaled CSS pixels. */
+  originX: number;
+  originY: number;
+  /** How far a two-finger drag moved that point on screen. */
+  panX: number;
+  panY: number;
+  /** Pending commit of a wheel or Safari gesture. */
+  timer: number;
+}
+
+/** Two touches on the viewport, zooming around their midpoint and panning with it. */
+interface Pinch {
+  ids: readonly [number, number];
+  zoom: ZoomGesture;
+  /** Midpoint of the touches when the pinch started, in client coordinates. */
+  startX: number;
+  startY: number;
+  startDistance: number;
+  /** The distance the zoom is relative to, from when the touches moved past PINCH_SLOP; 0 before. */
+  baseDistance: number;
+}
+
+/** Safari's GestureEvent, which TypeScript's DOM library does not declare. */
+interface SafariGestureEvent extends UIEvent {
+  /** The distance between the touches, or the trackpad's magnification, relative to the start. */
+  readonly scale: number;
+  /** The pointer's position on macOS. */
+  readonly clientX?: number;
+  readonly clientY?: number;
+}
 
 /**
  * The imperative core behind the React components. It owns scrolling, layout,
@@ -201,7 +249,16 @@ export class PdfViewerRuntime {
   #lastTop = 0;
   #lastScrollAt = 0;
   #velocity = 0;
-  #zoom: { factor: number; x: number; y: number; timer: number } | null = null;
+  #zoom: ZoomGesture | null = null;
+  /** Touch pointers down on the viewport, in client coordinates. */
+  readonly #touches = new Map<number, { x: number; y: number }>();
+  #pinch: Pinch | null = null;
+  /** Removes the window listeners that follow the touches down on the viewport. */
+  #touchListeners: AbortController | null = null;
+  /** The scale of Safari's gesture in progress at its latest event; null without one. */
+  #gestureScale: number | null = null;
+  /** The gesture scale at which a gesture zoom's factor is 1. */
+  #gestureBase = 1;
   #firstPaintAt: number | null = null;
   /** Viewport width the "fit-width" scale was last computed for. */
   #fittedWidth = 0;
@@ -366,16 +423,24 @@ export class PdfViewerRuntime {
     if (layout) this.#sizeContent(layout);
     scroller.addEventListener("scroll", this.#onScroll, { passive: true });
     scroller.addEventListener("wheel", this.#onWheel, { passive: false });
+    scroller.addEventListener("pointerdown", this.#onPointerDown, { passive: true });
+    // Not passive: Safari zooms the whole page unless they are prevented.
+    for (const type of GESTURE_EVENTS) {
+      scroller.addEventListener(type, this.#onGesture, { passive: false });
+    }
     const resize = new ResizeObserver(this.#onResize);
     resize.observe(scroller);
     this.#requestUpdate();
     return () => {
       scroller.removeEventListener("scroll", this.#onScroll);
       scroller.removeEventListener("wheel", this.#onWheel);
+      scroller.removeEventListener("pointerdown", this.#onPointerDown);
+      for (const type of GESTURE_EVENTS) scroller.removeEventListener(type, this.#onGesture);
       resize.disconnect();
       if (this.#frame) cancelAnimationFrame(this.#frame);
       this.#frame = 0;
       if (this.#scroller === scroller) {
+        this.#dropZoom();
         this.#scroller = null;
         this.#content = null;
       }
@@ -545,6 +610,7 @@ export class PdfViewerRuntime {
   }
 
   zoomBy(factor: number): void {
+    this.#finishZoom();
     this.setScale(this.store.get().scale * factor);
   }
 
@@ -556,8 +622,9 @@ export class PdfViewerRuntime {
   /** Show every page turned clockwise by `rotation` degrees. */
   setRotation(rotation: Rotation): void {
     const turned = ((((Math.round(rotation / 90) * 90) % 360) + 360) % 360) as Rotation;
+    if (turned === this.store.get().rotation) return;
+    this.#finishZoom();
     const state = this.store.get();
-    if (turned === state.rotation) return;
     const layout = state.layout;
     const scroller = this.#scroller;
     this.store.set({ rotation: turned });
@@ -584,6 +651,7 @@ export class PdfViewerRuntime {
    * that.
    */
   setScale(requested: number | "fit-width", anchor?: { x: number; y: number }): void {
+    this.#finishZoom();
     if (requested === "fit-width") {
       this.store.set({ zoomMode: "fit-width" });
       this.#fitWidth();
@@ -606,11 +674,16 @@ export class PdfViewerRuntime {
   }
 
   /**
-   * Zoom keeping the point under `anchor` there, as a share of the same page:
-   * pages are centered in the viewport, so a share of the content's width
-   * moved points on narrower pages sideways.
+   * Zoom keeping the content point `point`, by default the one under
+   * `anchor`, under `anchor`, as a share of the same page: pages are centered
+   * in the viewport, so a share of the content's width moved points on
+   * narrower pages sideways.
    */
-  #zoomTo(requested: number, anchor?: { x: number; y: number }): void {
+  #zoomTo(
+    requested: number,
+    anchor?: { x: number; y: number },
+    point?: { x: number; y: number },
+  ): void {
     const state = this.store.get();
     const scale = clamp(requested, this.#minScale, this.#maxScale);
     const layout = state.layout;
@@ -622,8 +695,8 @@ export class PdfViewerRuntime {
     if (Math.abs(scale - state.scale) < 1e-4) return;
     const x = anchor?.x ?? scroller.clientWidth / 2;
     const y = anchor?.y ?? scroller.clientHeight / 2;
-    const docX = scroller.scrollLeft + x;
-    const docY = scroller.scrollTop + y;
+    const docX = point?.x ?? scroller.scrollLeft + x;
+    const docY = point?.y ?? scroller.scrollTop + y;
     const page = pageAt(layout, docY);
     const viewportWidth = scroller.clientWidth;
     const withinX = (docX - pageLeft(layout, page, viewportWidth)) / (layout.widths[page] || 1);
@@ -837,6 +910,7 @@ export class PdfViewerRuntime {
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
     if (!changed || this.#generation !== generation) return;
+    this.#finishZoom();
     const scroller = this.#scroller;
     const layout = this.store.get().layout;
     const anchorPage = layout && scroller ? pageAt(layout, scroller.scrollTop) : 0;
@@ -851,7 +925,14 @@ export class PdfViewerRuntime {
 
   #onResize = (): void => {
     const scroller = this.#scroller;
-    if (scroller && scroller.clientWidth !== this.#fittedWidth) this.#fitWidth();
+    if (
+      scroller &&
+      scroller.clientWidth !== this.#fittedWidth &&
+      this.store.get().zoomMode === "fit-width"
+    ) {
+      this.#finishZoom();
+      this.#fitWidth();
+    }
     this.#requestUpdate();
   };
 
@@ -871,38 +952,224 @@ export class PdfViewerRuntime {
 
   #onWheel = (event: WheelEvent): void => {
     if (!event.ctrlKey && !event.metaKey) return;
-    const scroller = this.#scroller;
-    const content = this.#content;
-    if (!scroller || !content) return;
     event.preventDefault();
-    const rect = scroller.getBoundingClientRect();
-    const scale = this.store.get().scale;
-    const zoom = this.#zoom ?? {
-      factor: 1,
-      x: event.clientX - rect.left,
-      y: event.clientY - rect.top,
-      timer: 0,
-    };
-    this.#zoom = zoom;
-    zoom.factor = clamp(
-      zoom.factor * Math.exp(-event.deltaY * 0.01),
-      this.#minScale / scale,
-      this.#maxScale / scale,
-    );
-    // Preview the gesture on the compositor; layout and rendering wait for the commit.
-    content.style.transformOrigin = `${scroller.scrollLeft + zoom.x}px ${scroller.scrollTop + zoom.y}px`;
-    content.style.transform = `scale(${zoom.factor})`;
+    const zoom =
+      this.#zoom?.source === "wheel"
+        ? this.#zoom
+        : this.#startZoom("wheel", event.clientX, event.clientY);
+    if (!zoom) return;
+    zoom.factor = this.#zoomFactor(zoom.factor * Math.exp(-event.deltaY * 0.01));
+    this.#previewZoom(zoom);
     clearTimeout(zoom.timer);
     zoom.timer = window.setTimeout(this.#commitZoom, ZOOM_COMMIT_DELAY);
   };
+
+  /**
+   * Touches pinch through pointer events. The viewport's `touch-action:
+   * pan-x pan-y` keeps the browser from zooming the page instead; Chromium
+   * then does not scroll with two fingers either, so it does not cancel
+   * their pointers, and a two-finger drag pans through the pinch.
+   */
+  #onPointerDown = (event: PointerEvent): void => {
+    if (event.pointerType !== "touch") return;
+    this.#touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (!this.#touchListeners) {
+      // On the window, so that a finger is followed after it leaves the
+      // viewport or the element it went down on is removed.
+      this.#touchListeners = new AbortController();
+      const options = { capture: true, passive: true, signal: this.#touchListeners.signal };
+      window.addEventListener("pointermove", this.#onTouchMove, options);
+      window.addEventListener("pointerup", this.#onTouchEnd, options);
+      window.addEventListener("pointercancel", this.#onTouchEnd, options);
+    }
+    if (!this.#pinch && this.#touches.size >= 2) this.#startPinch();
+  };
+
+  #onTouchMove = (event: PointerEvent): void => {
+    const touch = this.#touches.get(event.pointerId);
+    if (!touch) return;
+    touch.x = event.clientX;
+    touch.y = event.clientY;
+    const pinch = this.#pinch;
+    if (!pinch?.ids.includes(event.pointerId)) return;
+    if (this.#zoom !== pinch.zoom) {
+      // Something else committed the preview, a resize for one: pinch on from here.
+      this.#startPinch();
+      return;
+    }
+    const a = this.#touches.get(pinch.ids[0]);
+    const b = this.#touches.get(pinch.ids[1]);
+    if (!a || !b) return;
+    const zoom = pinch.zoom;
+    zoom.panX = (a.x + b.x) / 2 - pinch.startX;
+    zoom.panY = (a.y + b.y) / 2 - pinch.startY;
+    const distance = Math.hypot(b.x - a.x, b.y - a.y);
+    if (
+      pinch.baseDistance === 0 &&
+      distance > 0 &&
+      Math.abs(distance - pinch.startDistance) >= PINCH_SLOP
+    ) {
+      pinch.baseDistance = distance;
+    }
+    if (pinch.baseDistance > 0) zoom.factor = this.#zoomFactor(distance / pinch.baseDistance);
+    this.#previewZoom(zoom);
+  };
+
+  #onTouchEnd = (event: PointerEvent): void => {
+    if (!this.#touches.delete(event.pointerId)) return;
+    if (this.#touches.size === 0) {
+      this.#touchListeners?.abort();
+      this.#touchListeners = null;
+    }
+    const pinch = this.#pinch;
+    if (!pinch?.ids.includes(event.pointerId)) return;
+    this.#pinch = null;
+    const zoom = pinch.zoom;
+    if (this.#zoom === zoom) {
+      if (event.type === "pointercancel" && this.#gestureScale !== null) {
+        // Safari took the touches over, for a pan of its own perhaps, and
+        // still reports the pinch through gesture events: they finish it.
+        zoom.source = "gesture";
+        this.#gestureBase = this.#gestureScale / zoom.factor;
+        zoom.timer = window.setTimeout(this.#commitZoom, ZOOM_COMMIT_DELAY);
+      } else {
+        this.#commitZoom();
+      }
+    }
+    // Two fingers still down go on pinching.
+    if (this.#touches.size >= 2) this.#startPinch();
+  };
+
+  /** Start pinching with the first two touches down on the viewport. */
+  #startPinch(): void {
+    this.#pinch = null;
+    const [first, second] = this.#touches;
+    if (!first || !second) return;
+    const [[firstId, a], [secondId, b]] = [first, second];
+    const startX = (a.x + b.x) / 2;
+    const startY = (a.y + b.y) / 2;
+    const zoom = this.#startZoom("touch", startX, startY);
+    if (!zoom) return;
+    this.#pinch = {
+      ids: [firstId, secondId],
+      zoom,
+      startX,
+      startY,
+      startDistance: Math.hypot(b.x - a.x, b.y - a.y),
+      baseDistance: 0,
+    };
+  }
+
+  /**
+   * Safari's gesture events: trackpad pinches on macOS, where they are the
+   * only report of the pinch, and touch pinches on iPadOS, which pointer
+   * events report too. Preventing them is what stops Safari's page zoom.
+   */
+  #onGesture = (event: Event): void => {
+    event.preventDefault();
+    const { type, scale, clientX, clientY } = event as SafariGestureEvent;
+    if (type === "gestureend") this.#gestureScale = null;
+    else if (scale > 0) this.#gestureScale = scale;
+    if (this.#pinch || !(scale > 0)) return;
+    let zoom = this.#zoom;
+    if (zoom?.source !== "gesture") {
+      const scroller = this.#scroller;
+      if (type === "gestureend" || !scroller) return;
+      const rect = scroller.getBoundingClientRect();
+      zoom = this.#startZoom(
+        "gesture",
+        clientX ?? rect.left + rect.width / 2,
+        clientY ?? rect.top + rect.height / 2,
+      );
+      if (!zoom) return;
+      this.#gestureBase = scale;
+    }
+    zoom.factor = this.#zoomFactor(scale / this.#gestureBase);
+    this.#previewZoom(zoom);
+    clearTimeout(zoom.timer);
+    if (type === "gestureend") this.#commitZoom();
+    else zoom.timer = window.setTimeout(this.#commitZoom, ZOOM_COMMIT_DELAY);
+  };
+
+  /**
+   * Start previewing a zoom gesture around a point in client coordinates.
+   * Another gesture still in progress commits first.
+   */
+  #startZoom(source: ZoomGesture["source"], clientX: number, clientY: number): ZoomGesture | null {
+    if (this.#zoom) this.#commitZoom();
+    const scroller = this.#scroller;
+    if (!scroller || !this.#content || !this.store.get().layout) return null;
+    const rect = scroller.getBoundingClientRect();
+    this.#zoom = {
+      source,
+      factor: 1,
+      originX: scroller.scrollLeft + clientX - rect.left - scroller.clientLeft,
+      originY: scroller.scrollTop + clientY - rect.top - scroller.clientTop,
+      panX: 0,
+      panY: 0,
+      timer: 0,
+    };
+    return this.#zoom;
+  }
+
+  /** A gesture's zoom factor, kept within the scale limits. */
+  #zoomFactor(factor: number): number {
+    const scale = this.store.get().scale;
+    return clamp(factor, this.#minScale / scale, this.#maxScale / scale);
+  }
+
+  /** Preview a gesture on the compositor; layout and rendering wait for the commit. */
+  #previewZoom(zoom: ZoomGesture): void {
+    const content = this.#content;
+    if (!content) return;
+    content.style.transformOrigin = `${zoom.originX}px ${zoom.originY}px`;
+    content.style.transform = `translate(${zoom.panX}px, ${zoom.panY}px) scale(${zoom.factor})`;
+  }
 
   #commitZoom = (): void => {
     const zoom = this.#zoom;
     this.#zoom = null;
     if (!zoom) return;
-    if (this.#content) this.#content.style.transform = "";
-    this.setScale(this.store.get().scale * zoom.factor, { x: zoom.x, y: zoom.y });
+    clearTimeout(zoom.timer);
+    const scroller = this.#scroller;
+    const content = this.#content;
+    if (!scroller || !content) return;
+    // Where the gesture's point shows, read while the preview still scales
+    // the content: the viewport may have scrolled past the unscaled end.
+    const left = scroller.scrollLeft;
+    const top = scroller.scrollTop;
+    content.style.transform = "";
+    const scale = this.store.get().scale;
+    if (Math.abs(scale * zoom.factor - scale) < 1e-4) {
+      // A two-finger drag that never pinched only scrolls.
+      scroller.scrollLeft = left - zoom.panX;
+      scroller.scrollTop = top - zoom.panY;
+      return;
+    }
+    this.store.set({ zoomMode: "custom" });
+    this.#zoomTo(
+      scale * zoom.factor,
+      { x: zoom.originX + zoom.panX - left, y: zoom.originY + zoom.panY - top },
+      { x: zoom.originX, y: zoom.originY },
+    );
   };
+
+  /** Commit a gesture in progress before something else changes the layout under its preview. */
+  #finishZoom(): void {
+    if (this.#zoom) this.#commitZoom();
+  }
+
+  /** Forget a gesture without committing it: its viewport goes away. */
+  #dropZoom(): void {
+    if (this.#zoom) clearTimeout(this.#zoom.timer);
+    this.#zoom = null;
+    this.#pinch = null;
+    this.#touches.clear();
+    this.#touchListeners?.abort();
+    this.#touchListeners = null;
+    this.#gestureScale = null;
+    if (this.#content) this.#content.style.transform = "";
+  }
 
   #requestUpdate(): void {
     if (!this.#frame) this.#frame = requestAnimationFrame(this.#update);
