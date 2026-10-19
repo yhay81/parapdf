@@ -38,10 +38,14 @@ const TEXT_OPTIONS = { includeMarkedContent: true, disableNormalization: true } 
  * components are never involved.
  */
 function createLinkService(links: LinkHandlers) {
+  const external = links.externalLinks !== "disabled";
   return {
-    externalLinkEnabled: true,
+    externalLinkEnabled: external,
     eventBus: undefined,
     addLinkAttributes(link: HTMLAnchorElement, url: string) {
+      // Without an href the element is neither focusable nor a link, and the
+      // text it covered stays readable in the text layer.
+      if (!external) return;
       link.href = url;
       link.title = url;
       // External pages open in a new tab so the document keeps its position.

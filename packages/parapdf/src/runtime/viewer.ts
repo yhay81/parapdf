@@ -88,6 +88,12 @@ export interface ViewerOptions {
   /** Build focusable link layers (default true). */
   annotationLayer?: boolean;
   /**
+   * What links to other documents do: open in a new tab (the default), or
+   * nothing, for apps that must not lead away from the document. Internal
+   * links and the outline keep working.
+   */
+  externalLinks?: "new-tab" | "disabled";
+  /**
    * The most pixels one page's detail canvas holds (default 16 777 216, the
    * canvas area limit of iOS). A page larger at full resolution gets detail
    * only for its visible area plus a margin, still at full resolution.
@@ -175,10 +181,7 @@ export class PdfViewerRuntime {
     ViewerOptions,
     "maxDetailPixels" | "maxBasePixels" | "maxCanvasPixels"
   >;
-  readonly #links: LinkHandlers = {
-    navigate: (dest) => void this.goToDestination(dest),
-    namedAction: (action) => this.#namedAction(action),
-  };
+  readonly #links: LinkHandlers;
   /** Positions before link and outline jumps, as a page plus a fraction of it. */
   #history: { pageIndex: number; offset: number }[] = [];
   readonly #highlights = new SearchHighlights();
@@ -213,6 +216,11 @@ export class PdfViewerRuntime {
     this.#maxScale = options.maxScale ?? 10;
     this.#textLayer = options.textLayer ?? true;
     this.#annotationLayer = options.annotationLayer ?? true;
+    this.#links = {
+      navigate: (dest) => void this.goToDestination(dest),
+      namedAction: (action) => this.#namedAction(action),
+      externalLinks: options.externalLinks ?? "new-tab",
+    };
     this.#canvasLimits = {
       maxDetailPixels: options.maxDetailPixels,
       maxBasePixels: options.maxBasePixels,

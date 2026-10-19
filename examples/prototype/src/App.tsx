@@ -26,6 +26,10 @@ const settings = {
   hwa: params.get("hwa") !== "0",
   text: params.get("text") !== "0",
   links: params.get("links") !== "0",
+  /** "disabled" leaves links to other documents inert. */
+  externalLinks: (params.get("externalLinks") === "disabled"
+    ? "disabled"
+    : "new-tab") as ViewerOptions["externalLinks"],
   /** Scripted scroll speed in CSS pixels per second; 0 disables the benchmark driver. */
   autoscroll: Number(params.get("autoscroll") ?? "0"),
   durationMs: Number(params.get("duration") ?? "4000"),
@@ -88,6 +92,7 @@ const source: PdfSource = { url: `/corpus/${settings.file}` };
 const viewerOptions: ViewerOptions = {
   textLayer: settings.text,
   annotationLayer: settings.links,
+  externalLinks: settings.externalLinks,
   ...(settings.maxScale ? { maxScale: settings.maxScale } : {}),
   ...settings.canvasLimits,
 };

@@ -101,6 +101,8 @@ export interface LinkHandlers {
   navigate(dest: DestinationRef): void;
   /** PDF named actions such as `NextPage` or `GoBack`. */
   namedAction(action: string): void;
+  /** Links to other documents open in a new tab (the default) or stay inert. */
+  externalLinks?: "new-tab" | "disabled";
 }
 
 export interface AnnotationLayerRequest {
