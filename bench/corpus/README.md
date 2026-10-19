@@ -31,3 +31,6 @@ Generated stress documents live in `generated/`, are recreated with
   operator-heavy drawings such as maps and plans.
 - `synthetic-cjk-nonembedded.pdf` — Japanese text in a non-embedded
   Adobe-Japan1 CID font, the common case for older Word-generated documents.
+- `synthetic-mixed-sizes.pdf` — eight pages of different sizes and
+  orientations (A4, A3 landscape, Letter, A5, and an A4 page shown landscape
+  by /Rotate 90), for page placement and fitting the page width.

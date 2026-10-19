@@ -10,6 +10,7 @@
     "check:links": "node scripts/check-links.ts",
     "check:lifecycle": "node scripts/check-lifecycle.ts",
     "check:rotation": "node scripts/check-rotation.ts",
+    "check:options": "node scripts/check-options.ts",
     "typecheck": "tsc -p ."
   },
   "dependencies": {
