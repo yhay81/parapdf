@@ -18,7 +18,8 @@
  * IGNORE_PIDS lists processes whose Playwright browsers do not count, such as
  * an idle runner stuck holding its browser; the report names them. Results are
  * saved after every job, and RESUME=1 continues an interrupted run with the
- * same settings instead of starting over.
+ * same settings instead of starting over. REPORT_ONLY=1 rewrites
+ * results/hybrid.md from the stored hybrid-<browser>.json files and exits.
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -55,6 +56,11 @@ const durationMs = Number(process.env.DURATION ?? "4000");
 const browserName = browserFromEnv();
 const output = process.env.OUTPUT ?? `hybrid-${browserName}`;
 const maxLoad = Number(process.env.MAX_LOAD ?? String(cpus().length / 2));
+if (process.env.REPORT_ONLY) {
+  writeFileSync(join(resultsDir, "hybrid.md"), `${renderComparison()}\n`);
+  console.log(`Wrote ${join(resultsDir, "hybrid.md")}`);
+  process.exit(0);
+}
 const ignoredRoots = new Set(
   (process.env.IGNORE_PIDS ?? "").split(",").filter(Boolean).map(Number),
 );
@@ -608,6 +614,7 @@ function renderReport(): string {
 interface StoredResults {
   environment: typeof environment;
   startup: typeof startup;
+  scrolling: typeof scrolling;
 }
 
 /** Side-by-side summary of every browser's hybrid-<browser>.json. */
@@ -636,6 +643,29 @@ function renderComparison(): string {
     ),
     "",
   ];
+  const scrollTable = (speed: number) => [
+    `## Main thread while scrolling at ${speed} px/s: blocked / longest stall (ms)`,
+    "",
+    header,
+    rule,
+    ...(all[0]?.scrolling ?? [])
+      .filter((row) => row.speed === speed)
+      .map(
+        (row) =>
+          `| ${row.file} | ${row.variant} | ${all
+            .map((results) => {
+              const match = results.scrolling.find(
+                (candidate) =>
+                  candidate.file === row.file &&
+                  candidate.variant === row.variant &&
+                  candidate.speed === speed,
+              );
+              return match ? `${fmt(match.blockedMs)} / ${fmt(match.stallMs, 1)}` : "—";
+            })
+            .join(" | ")} |`,
+      ),
+    "",
+  ];
   const render = (row: StoredResults["startup"][number], layer: string) =>
     Object.entries(row.renders)
       .filter(([key, cell]) => key.startsWith(layer) && Number.isFinite(cell.p50Ms))
@@ -652,6 +682,12 @@ function renderComparison(): string {
       .join(
         ", ",
       )}. Medians of ${all[0]?.environment.settings.runs ?? "?"} runs at each of ${all[0]?.environment.settings.speeds.join(" and ") ?? "?"} px/s, pooled; Playwright's WebKit is not Safari.`,
+    ...(all.some((results) => results.environment.browserName === "firefox")
+      ? [
+          "",
+          "Firefox ran at devicePixelRatio 1: Playwright's Firefox ignores `deviceScaleFactor` on cross-origin-isolated pages, so its canvases hold a quarter of the pixels of the other two browsers'. Compare Firefox's two variants with each other, not Firefox with the other browsers.",
+        ]
+      : []),
     "",
     ...table("First paint (ms)", (row) => fmt(row.firstPaintMs)),
     ...table("Page 1 sharp (ms)", (row) => fmt(row.page1DetailMs)),
@@ -661,5 +697,6 @@ function renderComparison(): string {
     ...table("WebAssembly memory: classifier / hayro (MiB)", (row) =>
       row.hybrid ? `${fmt(row.hybrid.classifierMiB, 1)} / ${fmt(row.hybrid.hayroMiB, 1)}` : "—",
     ),
+    ...[...new Set((all[0]?.scrolling ?? []).map((row) => row.speed))].flatMap(scrollTable),
   ].join("\n");
 }
