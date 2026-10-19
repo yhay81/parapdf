@@ -78,8 +78,9 @@ until the benchmark results justify the architecture.
   `PRELOAD`, and `OUTPUT` narrow or rename a run. `node
   examples/prototype/scripts/compare.ts` then rewrites `results/browsers.md`.
 - `pnpm --filter @parapdf/prototype check:text` — functional checks for text
-  selection, search highlights, normalization, and accessibility semantics
-  (run after `build`; `BROWSER` applies here too).
+  selection, search highlights, normalization, accessibility semantics, and
+  text runs staying on their glyphs after zooming (run after `build`;
+  `BROWSER` applies here too).
 - `pnpm --filter @parapdf/prototype check:links` — functional checks for
   internal and external links, keyboard activation, the back stack, and the
   outline on `usrguide.pdf` (run after `build`; `BROWSER` applies here too).
@@ -94,6 +95,14 @@ until the benchmark results justify the architecture.
   time to sharp, and canvas memory after zooming to `SCALES` (4,8) and
   panning, on desktop and phone-sized viewports (run after `build`; `BROWSER`,
   `VARIANTS`, `FILE`, `RUNS`, and `OUTPUT` apply).
+- `node examples/prototype/scripts/main-thread-bench.ts` — main-thread cost of
+  zooming and slow scrolling in Chromium: task, script, layout, and style time
+  from the DevTools protocol, a JavaScript CPU profile, and the renders the
+  scheduler completed. Run after `build`, or after `pnpm --filter
+  @parapdf/prototype exec vite build --minify false` to read function names in
+  the profile. `SCENARIOS`, `VARIANTS`, `TEXT`, `LINKS`, `FILE`, `DPR`,
+  `START_SCALE`, `ZOOM` (zoom factors), `SPEED`, `DURATION`, `RUNS`, and
+  `OUTPUT` apply.
 - `pnpm check` — Biome lint and format check. `pnpm format` applies fixes.
 - `pnpm typecheck` — TypeScript checks for every workspace package.
 
@@ -118,7 +127,15 @@ until the benchmark results justify the architecture.
   closer to one side than the other; pages that leave the viewport drop their
   detail canvases. Priority: visible base, visible detail once scrolling
   settles (120 ms quiet or below 2 px/ms), overscan base, overscan detail, then
-  stale base. Unmounted pages zero their canvases and release pdf.js page data.
+  stale base. Once scrolling settles, overscan pages that get whole-page detail
+  skip the base, and no page draws a base under current whole-page detail:
+  slow scrolling used to render every page it brought in twice. Such a page
+  gets a base only once it needs one: in view while its detail is stale, or
+  when a zoom drops its detail. If it scrolls into view during fast scrolling
+  before its detail render finishes, the render is cancelled for a quick base.
+  A render clears its canvas, so the page counts that layer as empty until
+  the render completes.
+  Unmounted pages zero their canvases and release pdf.js page data.
   `sharpness()` reports the resolution of the visible pixels as a share of
   full device resolution. The zoom goes up to 10 CSS pixels per point.
 - The pdf.js adapter starts its parsing worker when the engine is created, and
@@ -128,7 +145,15 @@ until the benchmark results justify the architecture.
   by rules derived from pdf.js's viewer CSS (attributed in `NOTICE.md`). Pages
   set `--total-scale-factor` and `--scale-round-x/y`, which `TextLayer` sizes
   against. The scheduler builds one text layer at a time, only after scrolling
-  settles, during idle periods; zoom re-measures one page per idle period.
+  settles, during idle periods. Each text layer then carries the
+  `--total-scale-factor` it was laid out for, and later zooms scale it with
+  the CSS `scale` property: laying out every mounted page's runs again at each
+  zoom step was most of the main thread's zoom cost. A visible page is laid
+  out again, one per idle period, only after zooming in past twice its layout
+  zoom, because runs laid out small carry rounding errors that scaling
+  magnifies; zooming out keeps the finer layout. `content-visibility: auto` on
+  text layers saved another 5–8 ms over four zoom steps but was dropped: a
+  selection in Firefox then serializes off-screen text layers as blank lines.
   Text layer items and the search index read text content with identical
   options so element order matches item order.
 - `TextSelectionTracker` (`runtime/selection.ts`, ported from pdf.js's

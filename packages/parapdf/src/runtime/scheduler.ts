@@ -29,11 +29,20 @@ type Layer = "base" | "detail";
  * low-resolution render that fills the page as soon as it scrolls in; the
  * detail layer covers it at full device resolution once scrolling settles.
  * Because the base stays underneath, re-rendering the detail layer (for
- * example after zooming) never flashes an empty page.
+ * example after zooming) never flashes an empty page. Pages that slow
+ * scrolling brings into the mounted window render their detail before they
+ * scroll in and get a base only once they need one in view.
  *
  * The text and annotation layers are DOM built on the main thread, so they
  * are the last things a page gets: one layer at a time, only after scrolling
  * settles, during idle periods, text before links.
+ *
+ * A text layer keeps the zoom it was laid out for: it carries its own
+ * `--total-scale-factor`, and later zooms scale the laid-out layer with CSS.
+ * Laying out every mounted page's text runs again at each zoom step was most
+ * of the main thread's work while zooming. A visible page is laid out again,
+ * one per idle period, only once the zoom goes in past TEXT_RELAYOUT_ZOOM
+ * times the zoom its text was laid out for.
  */
 interface Slot {
   readonly index: number;
@@ -49,7 +58,7 @@ interface Slot {
   job: { layer: Layer; scale: number; region: PageArea | null; task: RenderTask } | undefined;
   textTask: TextLayerTask | undefined;
   textHandle: TextLayerHandle | undefined;
-  /** CSS pixels per point and view rotation the text runs were laid out for. */
+  /** CSS pixels per point and view rotation the text runs were laid out for; 0 before any. */
   textScale: number;
   textRotation: Rotation;
   annotationTask: AnnotationLayerTask | undefined;
@@ -75,6 +84,8 @@ export interface SchedulerStats {
   base: number;
   detail: number;
   text: number;
+  /** Text layers laid out again for a new zoom. */
+  textUpdates: number;
   annotations: number;
   cancelled: number;
   failed: number;
@@ -100,6 +111,15 @@ export interface SchedulerOptions {
 
 /** Base renders use half a device pixel per CSS pixel at most: fast, and fine as a placeholder. */
 const BASE_FACTOR = 0.5;
+
+/**
+ * Zooming in past this multiple of the zoom a text layer was laid out for
+ * lays it out again. CSS scaling keeps runs where they were laid out, but
+ * runs laid out small carry rounding errors that it magnifies: in Chromium,
+ * up to 2.4 points at 0.25 CSS pixels per point against 0.04 at 4. Zooming
+ * out keeps the finer layout.
+ */
+const TEXT_RELAYOUT_ZOOM = 2;
 
 /** What a page's detail layer should hold. */
 interface DetailPlan {
@@ -154,6 +174,22 @@ function placeDetail(canvas: HTMLCanvasElement, region: PageArea | null): void {
   style.height = `${(area.maxY - area.minY) * 100}%`;
 }
 
+/**
+ * Keeps a text layer at the zoom it is laid out for, `scale` CSS pixels per
+ * point, whatever its page shows; null hands it back to the page's zoom.
+ */
+function pinTextLayer(container: HTMLElement, scale: number | null): void {
+  if (scale === null) container.style.removeProperty("--total-scale-factor");
+  else container.style.setProperty("--total-scale-factor", String(scale));
+  container.style.scale = "";
+}
+
+/** Scales a pinned text layer with CSS to the page's zoom, `scale`, without laying it out. */
+function followZoom(slot: Slot, scale: number): void {
+  if (!slot.text || slot.textScale === 0) return;
+  slot.text.style.scale = scale === slot.textScale ? "" : String(scale / slot.textScale);
+}
+
 const whenIdle: (callback: () => void) => void =
   typeof requestIdleCallback === "function"
     ? (callback) => requestIdleCallback(callback, { timeout: 300 })
@@ -164,6 +200,7 @@ export class RenderScheduler {
     base: 0,
     detail: 0,
     text: 0,
+    textUpdates: 0,
     annotations: 0,
     cancelled: 0,
     failed: 0,
@@ -227,8 +264,11 @@ export class RenderScheduler {
     slot.textTask?.cancel();
     slot.annotationTask?.cancel();
     if (slot.textHandle) this.#options.onTextRemoved?.(index);
-    if (slot.text) this.#options.selection?.remove(slot.text);
-    slot.text?.replaceChildren();
+    if (slot.text) {
+      this.#options.selection?.remove(slot.text);
+      slot.text.replaceChildren();
+      pinTextLayer(slot.text, null);
+    }
     slot.annotations?.replaceChildren();
     // Zero-sized canvases hand their backing memory back immediately, which
     // matters on iOS where total canvas memory is capped.
@@ -272,11 +312,21 @@ export class RenderScheduler {
   }
 
   update(input: ScheduleInput): void {
+    const zoomed = input.layout.scale !== this.#input?.layout.scale;
     this.#input = input;
     for (const slot of this.#slots.values()) {
+      if (zoomed) followZoom(slot, input.layout.scale);
       const plan = this.#detailPlan(slot.index, input);
       const job = slot.job;
-      if (job?.layer === "detail" && (!plan || !sameScale(job.scale, plan.scale))) {
+      // A page that scrolls in during a fling while its first render, a
+      // detail render, is still running gets a quick base instead.
+      const blankInView =
+        !input.settled &&
+        slot.baseScale === 0 &&
+        slot.detailScale === 0 &&
+        slot.index >= input.first &&
+        slot.index <= input.last;
+      if (job?.layer === "detail" && (!plan || !sameScale(job.scale, plan.scale) || blankInView)) {
         job.task.cancel();
       }
       if (!plan && slot.detailScale > 0) {
@@ -403,10 +453,20 @@ export class RenderScheduler {
       return slot.baseScale > 0 && (slot.baseScale > target * 2 || slot.baseScale < target / 2);
     };
 
+    // A base under current whole-page detail would never show. Once scrolling
+    // settles, a page outside the viewport that gets whole-page detail renders
+    // it without a base first: the detail has time to arrive before the page
+    // scrolls in, and drawing both doubled the work for every page that slow
+    // scrolling brought in.
+    const needsBase = (slot: Slot) =>
+      slot.baseScale === 0 &&
+      !(slot.detailScale > 0 && slot.detailRegion === null && !needsDetail(slot));
+    const detailFirst = (slot: Slot) => input.settled && planOf(slot)?.region === null;
+
     const phases: [(slot: Slot) => boolean, Layer][] = [
-      [(slot) => visible(slot) && slot.baseScale === 0, "base"],
+      [(slot) => visible(slot) && needsBase(slot), "base"],
       [(slot) => input.settled && visible(slot) && needsDetail(slot), "detail"],
-      [(slot) => !visible(slot) && slot.baseScale === 0, "base"],
+      [(slot) => !visible(slot) && needsBase(slot) && !detailFirst(slot), "base"],
       [(slot) => input.settled && !visible(slot) && needsDetail(slot), "detail"],
       [(slot) => input.settled && staleBase(slot), "base"],
     ];
@@ -451,8 +511,13 @@ export class RenderScheduler {
       region = { minX: x / width, minY: y / height, maxX: right / width, maxY: bottom / height };
     }
     // The canvas is resized, which clears it, before the page next paints, so
-    // moving it now never shows old pixels in the new place.
-    if (layer === "detail") placeDetail(canvas, region);
+    // moving it now never shows old pixels in the new place, and the page has
+    // none of this layer's pixels until the render completes.
+    if (layer === "detail") {
+      placeDetail(canvas, region);
+      slot.detailScale = 0;
+      slot.detailRegion = null;
+    } else slot.baseScale = 0;
     const task = this.#doc.render({
       pageIndex: slot.index,
       scale,
@@ -531,19 +596,24 @@ export class RenderScheduler {
         return;
       }
     }
-    // Zoom changes only need the layers re-measured; do one page per idle period.
+    // Lay visible text out again, one page per idle period, once the zoom has
+    // gone in past TEXT_RELAYOUT_ZOOM times its layout zoom; CSS scales it
+    // until then (see followZoom). Pages outside the viewport wait until they
+    // scroll in.
     const textStale = (slot: Slot) =>
       slot.textHandle !== undefined &&
-      (!sameScale(slot.textScale, scale) || slot.textRotation !== rotation);
+      (scale > slot.textScale * TEXT_RELAYOUT_ZOOM || slot.textRotation !== rotation);
     const linksStale = (slot: Slot) =>
       slot.annotationHandle !== undefined &&
       (!sameScale(slot.annotationScale, scale) || slot.annotationRotation !== rotation);
     const stale = slots.find((slot) => visible(slot) && (textStale(slot) || linksStale(slot)));
     if (stale) {
-      if (textStale(stale)) {
+      if (textStale(stale) && stale.text) {
+        pinTextLayer(stale.text, scale);
         stale.textHandle?.update(scale, rotation);
         stale.textScale = scale;
         stale.textRotation = rotation;
+        this.stats.textUpdates++;
       }
       if (linksStale(stale)) {
         stale.annotationHandle?.update(scale, rotation);
@@ -597,6 +667,8 @@ export class RenderScheduler {
     if (!container) return;
     this.#options.selection?.remove(container);
     container.replaceChildren();
+    pinTextLayer(container, cssScale);
+    slot.textScale = cssScale;
     const task = this.#doc.renderTextLayer({
       pageIndex: slot.index,
       container,
@@ -616,7 +688,6 @@ export class RenderScheduler {
           container.append(end);
           this.#options.selection?.add(container, end);
           slot.textHandle = handle;
-          slot.textScale = cssScale;
           slot.textRotation = rotation;
           this.stats.text++;
           this.#options.onTextReady?.(slot.index, handle);

@@ -164,6 +164,73 @@ about 20 ms as noise.
   them in all three browsers. `usePdfDocument()` exposes the open document,
   and `pdfjsDocumentOf()` turns it into pdf.js's `PDFDocumentProxy` for the
   APIs ParaPDF does not wrap.
+- **Zoom cost.** Against a React wrapper of pdf.js's own viewer
+  (`PDFViewer`), measured in another project's harness, the main thread was
+  1.4–5.6 times busier while zooming.
+  [`main-thread-bench.ts`](examples/prototype/scripts/main-thread-bench.ts)
+  traced it in Chromium. Zooming did not redraw base canvases: four 1.25×
+  steps on bill-hr815 rendered six detail canvases and no base. The text
+  layers were the cost. Every step changed `--total-scale-factor` on every
+  mounted page, and Chromium recomputed style for all their runs and laid
+  them out again: 20 ms of style and 12 ms of layout over the four steps with
+  the renderer worker, while all JavaScript, pdf.js's re-measuring in
+  `TextLayer.update` included, took 5 ms. Text layers now keep the zoom they
+  were laid out for and follow later zooms with a CSS `scale`. A visible page
+  is laid out again only after zooming in past twice that zoom, because
+  Chromium places runs laid out small up to 2.4 points off where 4 CSS pixels
+  per point gives 0.04. The four steps then took 35 instead of 64 ms of
+  main-thread time with the renderer worker and 155 instead of 180 ms with
+  released pdf.js; one 2× step from 100% at devicePixelRatio 1, the setting
+  of that comparison, took 10 instead of 20 ms and 31 instead of 46 ms (see
+  [`main-thread-before.md`](examples/prototype/results/main-thread-before.md),
+  [`main-thread.md`](examples/prototype/results/main-thread.md),
+  [`main-thread-dpr1-before.md`](examples/prototype/results/main-thread-dpr1-before.md),
+  and [`main-thread-dpr1.md`](examples/prototype/results/main-thread-dpr1.md)).
+  [`check-text.ts`](examples/prototype/scripts/check-text.ts) verifies that
+  runs stay on their glyphs after a 3× zoom. With released pdf.js, most of
+  what remains is pdf.js drawing on the main thread. The profile put most of
+  it in `drawImage` calls of pdf.js's knockout-group compositing on page 1
+  of bill-hr815, but a closer look found that the first of them mostly
+  flushes the drawing Chromium has recorded on the GPU canvas, which
+  presenting the canvas would do anyway; that flush took 16.8 ms for a
+  5000×3360 detail canvas at 8 device pixels per point and 0.9 ms for the
+  whole page at 4. `content-visibility: auto` on text layers
+  saved another 5–8 ms over the four steps but was dropped, because Firefox
+  then copies off-screen text layers as blank lines.
+- **Slow-scroll cost.** The same comparison found slow scrolling up to 2.6
+  times busier. Every page that slow scrolling brought into the mounted
+  window got a base render and then a detail render; once scrolling settles,
+  it now gets only the detail. Base renders fell from 4 to 0 at 1,200 CSS
+  pixels per second for 3 seconds at devicePixelRatio 1, and from 2 to 0 at
+  900 for 4 seconds at devicePixelRatio 2. Released pdf.js, which draws on
+  the main thread, then spent 110 ms of main-thread time where it spent 120
+  ms before and 136 ms in this build without the skip, and 68 ms where it
+  spent 76 and 107: savings about as large as the variation between runs.
+  With the renderer worker, which draws off the main thread, the times
+  stayed within noise. A skipped base is drawn once a page needs one: in the
+  four-step zoom, two pages outside the viewport needed theirs when region
+  rendering dropped their detail, so the work moved rather than grew (155
+  against 152 ms with released pdf.js; see
+  [`main-thread-no-base-skip.md`](examples/prototype/results/main-thread-no-base-skip.md)
+  and
+  [`main-thread-dpr1-no-base-skip.md`](examples/prototype/results/main-thread-dpr1-no-base-skip.md)).
+  The scroll benchmark still found no blank area at 900 and 3,600 CSS pixels
+  per second on bill-hr815 and synthetic-text-1000, before and after (see
+  [`scroll-skip-base-before.md`](examples/prototype/results/scroll-skip-base-before.md)
+  and [`scroll-skip-base.md`](examples/prototype/results/scroll-skip-base.md)).
+  The main-thread runs in this and the previous item took turns with the
+  other Playwright browsers on the machine: the first waited 58 minutes for
+  them, no job overlapped one, and the one-minute load average stayed
+  between 5 and 7 on 12 cores.
+- **Firefox text runs.** In Firefox, text layer runs on bill-hr815 come out
+  about 15% narrower than the glyphs they cover, at every zoom, so the end of
+  a selection falls short of the glyphs; Chromium stays within 2.4 points and
+  WebKit within 0.1. pdf.js measures each run on a canvas whose `lang` is the
+  PDF's language, empty for this PDF, and Firefox picks generic fonts for an
+  empty `lang` by the system's language (Japanese on this machine, where
+  `serif` measured 18% wider), while the text layer itself follows the page's
+  `lang="en"`. Chromium treats an empty `lang` as the page's language. Not
+  fixed yet.
 - **Not yet built.** Form filling, structure-tree semantics for tagged PDFs,
   and text for pages outside the mounted window.
 

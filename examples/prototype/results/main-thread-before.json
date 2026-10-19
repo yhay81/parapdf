@@ -1,0 +1,132 @@
+{
+  "environment": {
+    "runAt": "2026-10-19T09:39:11.898Z",
+    "os": "darwin 27.0.0 arm64",
+    "cpu": "Apple M2 Pro (12 logical cores)",
+    "browser": "Chromium 156.0.8078.4",
+    "power": {
+      "source": "ac",
+      "lowPowerMode": false
+    },
+    "loadAverage": {
+      "start": 6.1,
+      "end": 6.3
+    },
+    "turnTaking": {
+      "waits": 1,
+      "waitedMs": 3474121,
+      "repeatedJobs": 0
+    },
+    "code": "6317d3f, before this change",
+    "settings": {
+      "file": "bill-hr815.pdf",
+      "dpr": 2,
+      "startScale": null,
+      "zoom": "1.25,1.25,1.25,1.25",
+      "speed": 900,
+      "durationMs": 4000,
+      "runs": 3
+    }
+  },
+  "summaries": [
+    {
+      "scenario": "zoom",
+      "variant": "pdfjs-hwa",
+      "runs": 3,
+      "taskMs": 180.4,
+      "scriptMs": 106.6,
+      "layoutMs": 13.1,
+      "styleMs": 20.5,
+      "renders": {
+        "base": 0,
+        "detail": 6,
+        "text": 0,
+        "textUpdates": 0,
+        "annotations": 0,
+        "cancelled": 0
+      },
+      "profile": {
+        "(browser) › drawImage": 86.7,
+        "pdf.js › resetCtxToDefault": 19.7,
+        "main.js › #onScroll": 13.8,
+        "(browser) › (garbage collector)": 5.5,
+        "(browser) › measureText": 4.5,
+        "(browser) › fillText": 4.2
+      }
+    },
+    {
+      "scenario": "zoom",
+      "variant": "pdfjs-next-hwa",
+      "runs": 3,
+      "taskMs": 64,
+      "scriptMs": 4.7,
+      "layoutMs": 12.4,
+      "styleMs": 20,
+      "renders": {
+        "base": 0,
+        "detail": 6,
+        "text": 0,
+        "textUpdates": 0,
+        "annotations": 0,
+        "cancelled": 0
+      },
+      "profile": {
+        "main.js › #onScroll": 32.5,
+        "(browser) › (garbage collector)": 3.2,
+        "main.js › setScale": 1.2
+      }
+    },
+    {
+      "scenario": "slow scroll",
+      "variant": "pdfjs-hwa",
+      "runs": 3,
+      "taskMs": 76.1,
+      "scriptMs": 23,
+      "layoutMs": 2.2,
+      "styleMs": 4.2,
+      "renders": {
+        "base": 2,
+        "detail": 2,
+        "text": 2,
+        "textUpdates": 0,
+        "annotations": 2,
+        "cancelled": 0
+      },
+      "profile": {
+        "main.js › #onScroll": 7.3,
+        "(browser) › fillText": 4,
+        "(browser) › (garbage collector)": 2.2,
+        "(browser) › tick": 1.8,
+        "main.js › #update": 1.4,
+        "main.js › dispatchContinuousEvent": 1.3,
+        "(browser) › requestAnimationFrame": 1.2,
+        "main.js › (anonymous)": 1.2
+      }
+    },
+    {
+      "scenario": "slow scroll",
+      "variant": "pdfjs-next-hwa",
+      "runs": 3,
+      "taskMs": 69.7,
+      "scriptMs": 20.2,
+      "layoutMs": 2,
+      "styleMs": 4.4,
+      "renders": {
+        "base": 2,
+        "detail": 2,
+        "text": 2,
+        "textUpdates": 0,
+        "annotations": 2,
+        "cancelled": 0
+      },
+      "profile": {
+        "main.js › #onScroll": 7.3,
+        "(browser) › (garbage collector)": 3,
+        "main.js › dispatchContinuousEvent": 1.9,
+        "(browser) › tick": 1.8,
+        "main.js › (anonymous)": 1.5,
+        "(browser) › requestIdleCallback": 1.2
+      }
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 /**
  * Functional checks for the text layer: selection, search highlights,
- * normalization, and accessibility semantics. Exits non-zero on failure.
+ * normalization, accessibility semantics, and text runs staying on their
+ * glyphs after zooming. Exits non-zero on failure.
  *
  * Usage: pnpm --filter @parapdf/prototype build && pnpm --filter @parapdf/prototype check:text
  * SCREENSHOT=path.png saves the search view for visual review.
@@ -60,6 +61,76 @@ const currentHighlightText = (page: Page) =>
     const [range] = highlight ? [...highlight] : [];
     return range instanceof Range ? range.toString() : null;
   });
+
+interface RunOffsets {
+  /** Text runs compared with pdf.js's own glyph boxes. */
+  runs: number;
+  /** Largest and mean horizontal distance between a run's ends and its glyphs, in PDF points. */
+  worst: number;
+  mean: number;
+  /** The CSS scale the page's text layer follows its zoom with, "" when laid out for it. */
+  cssScale: string;
+}
+
+/**
+ * How far the text runs of page `number` sit from the glyphs pdf.js draws:
+ * the left and right ends of each run of two or more characters against the
+ * item's origin and width.
+ */
+const runOffsets = (page: Page, number: number): Promise<RunOffsets> =>
+  page.evaluate(async (number) => {
+    interface Item {
+      str?: string;
+      transform: number[];
+      width: number;
+    }
+    const state = window as unknown as {
+      __viewer: { store: { get(): { layout: { scale: number } } } };
+      __pdfDocument: {
+        getPage(number: number): Promise<{
+          getViewport(options: { scale: number }): {
+            convertToViewportPoint(x: number, y: number): number[];
+          };
+          getTextContent(options: object): Promise<{ items: Item[] }>;
+        }>;
+      };
+    };
+    const { scale } = state.__viewer.store.get().layout;
+    const pdfPage = await state.__pdfDocument.getPage(number);
+    const viewport = pdfPage.getViewport({ scale });
+    const { items } = await pdfPage.getTextContent({
+      includeMarkedContent: true,
+      disableNormalization: true,
+    });
+    const section = document.querySelector(`section[data-page="${number}"]`);
+    const origin = section?.getBoundingClientRect().left ?? 0;
+    const spans = [
+      ...(section?.querySelectorAll(".parapdf-text-layer span:not(.markedContent)") ?? []),
+    ];
+    let cursor = 0;
+    let worst = 0;
+    let sum = 0;
+    let runs = 0;
+    for (const item of items) {
+      if (!item.str || item.str.length < 2) continue;
+      while (cursor < spans.length && spans[cursor]?.textContent !== item.str) cursor++;
+      const rect = spans[cursor++]?.getBoundingClientRect();
+      if (!rect) break;
+      const [x = 0] = viewport.convertToViewportPoint(
+        item.transform[4] ?? 0,
+        item.transform[5] ?? 0,
+      );
+      const left = rect.left - origin;
+      const offset =
+        Math.max(Math.abs(left - x), Math.abs(left + rect.width - (x + item.width * scale))) /
+        scale;
+      worst = Math.max(worst, offset);
+      sum += offset;
+      runs++;
+    }
+    const layer = section?.querySelector<HTMLElement>(".parapdf-text-layer");
+    return { runs, worst, mean: runs ? sum / runs : 0, cssScale: layer?.style.scale ?? "" };
+  }, number);
 
 const server = await preview({
   root: exampleDir,
@@ -140,6 +211,55 @@ try {
     /Making emergency supplemental/.test(selected),
     JSON.stringify(selected.slice(0, 60)),
   );
+
+  // Zooming scales laid-out text layers with CSS. Zooming in 3× lays page 1,
+  // in view, out again at the new zoom, while page 2, outside the viewport,
+  // keeps its layout under a CSS scale. Either way the runs must stay on the
+  // glyphs pdf.js draws.
+  await page.waitForSelector('section[data-page="2"] .parapdf-text-layer span', {
+    timeout: 30_000,
+  });
+  const fitted = [await runOffsets(page, 1), await runOffsets(page, 2)];
+  const fitScale = await page.evaluate(() => {
+    const viewer = (
+      window as unknown as {
+        __viewer: {
+          store: { get(): { scale: number } };
+          setScale(scale: number, anchor: { x: number; y: number }): void;
+        };
+      }
+    ).__viewer;
+    const scale = viewer.store.get().scale;
+    viewer.setScale(scale * 3, { x: 0, y: 0 });
+    return scale;
+  });
+  await page.waitForTimeout(1200);
+  const zoomed = [await runOffsets(page, 1), await runOffsets(page, 2)];
+  const aligned = zoomed.every((after, index) => {
+    const before = fitted[index];
+    return (
+      before !== undefined &&
+      before.runs > 20 &&
+      after.runs === before.runs &&
+      after.worst <= before.worst + 0.25 &&
+      after.mean <= before.mean + 0.1
+    );
+  });
+  const describe = (offsets: RunOffsets) =>
+    `${offsets.runs} runs, worst ${offsets.worst.toFixed(2)} pt, mean ${offsets.mean.toFixed(2)} pt${offsets.cssScale ? `, CSS scale ${Number(offsets.cssScale).toFixed(2)}` : ""}`;
+  check(
+    "text runs stay on their glyphs after zooming in 3×",
+    aligned,
+    `page 1: ${describe(fitted[0] as RunOffsets)} -> ${describe(zoomed[0] as RunOffsets)}; page 2: ${describe(fitted[1] as RunOffsets)} -> ${describe(zoomed[1] as RunOffsets)}`,
+  );
+  await page.evaluate((scale) => {
+    (
+      window as unknown as {
+        __viewer: { setScale(scale: number, anchor: { x: number; y: number }): void };
+      }
+    ).__viewer.setScale(scale, { x: 0, y: 0 });
+  }, fitScale);
+  await page.waitForTimeout(800);
 
   // Search across the whole document and land on the first match.
   const israel = await searchFor(page, "israel");
