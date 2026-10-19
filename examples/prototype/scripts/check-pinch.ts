@@ -124,6 +124,23 @@ const settle = (page: Page) =>
     { timeout: 30_000, polling: 50 },
   );
 
+/** Waits until the viewport's scroll position held for 300 ms, a fling included. */
+const scrollStopped = (page: Page) =>
+  page.waitForFunction(
+    () => {
+      const scroller = document.querySelector(".parapdf-viewport") as HTMLElement;
+      const holder = window as unknown as { __scrollHeld?: { top: number; since: number } };
+      const held = holder.__scrollHeld;
+      if (!held || held.top !== scroller.scrollTop) {
+        holder.__scrollHeld = { top: scroller.scrollTop, since: performance.now() };
+        return false;
+      }
+      return performance.now() - held.since > 300;
+    },
+    null,
+    { timeout: 10_000, polling: 50 },
+  );
+
 /** Waits until a gesture's preview committed, then for the pages to settle. */
 async function committed(page: Page): Promise<void> {
   await page.waitForFunction(
@@ -418,16 +435,29 @@ try {
       }),
     );
 
-    // One finger still scrolls natively.
+    // One finger still scrolls natively. The touches go through the DevTools
+    // protocol one by one, like the two-finger ones: in Chromium on Linux,
+    // Input.synthesizeScrollGesture scrolled nothing at all. The finger
+    // stops before it lifts, so no fling scrolls on into the next check.
     before = after;
-    await cdp.send("Input.synthesizeScrollGesture", {
-      x: point.x,
-      y: point.y,
-      yDistance: -300,
-      gestureSourceType: "touch",
-      speed: 1200,
+    const finger = (y: number) => [{ x: point.x, y, id: 0 }];
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: finger(point.y),
     });
-    await page.waitForTimeout(300);
+    for (let step = 1; step <= 15; step++) {
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: finger(point.y - 20 * step),
+      });
+    }
+    await page.waitForTimeout(150);
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: finger(point.y - 300),
+    });
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await scrollStopped(page);
     after = await viewState(page);
     check(
       "one finger still scrolls natively",
@@ -523,6 +553,7 @@ try {
     viewer.setScale("fit-width");
     viewer.goToPage(0);
   });
+  await scrollStopped(page);
   await settle(page);
   before = await viewState(page);
   const previewed = await page.evaluate(({ x, y }) => {
