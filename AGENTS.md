@@ -49,7 +49,10 @@ until the benchmark results justify the architecture.
     `browsers.md`.
 - `packages/parapdf/` — the runtime prototype: engine boundary (`engine/`),
   layout, scheduler, and viewer runtime (`runtime/`), and React bindings
-  (`react/`). Consumed as TypeScript source through the workspace.
+  (`react/`). The workspace consumes its TypeScript source. `build` emits
+  JavaScript and declarations to `dist/`, and packing ships `dist/` (through
+  `publishConfig`), `src/` for the source maps, and the license and notices
+  the pdf.js code it derives from requires. The package stays private.
 - `examples/prototype/` — Vite + React 19 demo, the scripted scroll
   benchmark (`scripts/scroll-bench.ts`, results per browser in `results/`,
   summarized by `scripts/compare.ts` in `results/browsers.md`), and
@@ -91,6 +94,15 @@ until the benchmark results justify the architecture.
   view rotation (page boxes, canvases, text, overlays, search, link jumps)
   and the `usePdfDocument()` escape hatch (run after `build`; `BROWSER`
   applies).
+- `pnpm --filter @parapdf/prototype check:options` — functional checks for
+  the options an embedding app sets: pages of mixed sizes centered in the
+  viewport, "fit-width" following resizes and turns, per-canvas and total
+  canvas pixel limits, one render for the first paint of a small page, inert
+  external links, and getDocument parameters (run after `pnpm --filter
+  @parapdf/bench corpus` and `build`; `BROWSER` and `ENGINE` apply).
+- `pnpm --filter parapdf build` — JavaScript and declarations in
+  `packages/parapdf/dist/`; `pnpm --filter parapdf pack` builds and packs the
+  tarball.
 - `node examples/prototype/scripts/zoom-bench.ts` — zoom benchmark: sharpness,
   time to sharp, and canvas memory after zooming to `SCALES` (4,8) and
   panning, on desktop and phone-sized viewports (run after `build`; `BROWSER`,
@@ -110,13 +122,27 @@ until the benchmark results justify the architecture.
 
 - `PdfViewerRuntime` owns scrolling, layout, zoom, and the render scheduler.
   It publishes only `status`, `layout`, the mounted window (`first`/`last`),
-  `currentPage`, and `scale` through a small store read with
+  `currentPage`, `scale`, and `zoomMode` through a small store read with
   `useSyncExternalStore`; scrolling recomputes every frame but publishes only
   changes.
 - Layouts are immutable per zoom level. The runtime sizes the content element
   imperatively so zoom can restore the anchored scroll position before React
   re-renders the mounted pages. Ctrl or pinch wheel gestures preview with a CSS
   transform and commit 150 ms after the last event.
+- `setScale("fit-width")`, which `initialScale` defaults to, sets `zoomMode`
+  to "fit-width": the page at the viewport's center is fitted to the
+  viewport's width again whenever that width changes, the view turns, or the
+  background pass learns that page's real size, like pdf.js's "page-width".
+  A numeric `setScale`, `zoomBy`, and wheel zoom set it to "custom". The
+  scroller keeps a stable scrollbar gutter, so a scrollbar that comes and
+  goes cannot refit back and forth.
+- Each page is centered in the viewport, and a page wider than the viewport
+  starts at the gap: `pageLeft()` in `layout.ts`, used for visible areas,
+  destinations, and search scrolling. `PdfViewport` places pages by the same
+  rule in CSS against the scroller's width (`100cqw`; the scroller is an
+  inline-size query container), so a resize moves pages without a React
+  render. Centering pages in the widest page's width pushed narrower pages
+  past the viewport's right edge.
 - Each mounted page stacks a base canvas (half a device pixel per CSS pixel,
   at most 2 MP) under a detail canvas at full device resolution. A page whose
   full-resolution render fits in 16 MP gets detail for the whole page. Beyond
@@ -133,6 +159,14 @@ until the benchmark results justify the architecture.
   gets a base only once it needs one: in view while its detail is stale, or
   when a zoom drops its detail. If it scrolls into view during fast scrolling
   before its detail render finishes, the render is cancelled for a quick base.
+  Once scrolling settles, a visible page without pixels also gets its
+  whole-page detail without a base when that holds at most four times the
+  base budget (`QUICK_DETAIL_BASES`): a base repeats the page's drawing work.
+  `ViewerOptions` sets the two budgets (`maxDetailPixels`, `maxBasePixels`)
+  and `maxCanvasPixels`, a budget for all of a viewer's canvases: pages
+  outside the viewport render only within it and give their pixels back,
+  farthest first and detail before base, when visible pages need more
+  (`stats.trimmed`); visible pages always keep theirs.
   A render clears its canvas, so the page counts that layer as empty until
   the render completes.
   Unmounted pages zero their canvases and release pdf.js page data.
@@ -140,13 +174,19 @@ until the benchmark results justify the architecture.
   full device resolution. The zoom goes up to 10 CSS pixels per point.
 - The pdf.js adapter starts its parsing worker when the engine is created, and
   the demo preloads the PDF with React's `preload()`, matching the CORS mode
-  pdf.js fetches with.
+  pdf.js fetches with. `documentOptions` (typed `PdfjsDocumentOptions`) adds
+  getDocument parameters for every document, overriding `enableHWA` and the
+  asset URLs from `assetBase`; the source and the worker stay the adapter's.
+  The `pdfjs` option takes the legacy build as is.
 - Text layers use pdf.js's core `TextLayer` inside `.parapdf-text-layer`, styled
   by rules derived from pdf.js's viewer CSS (attributed in `NOTICE.md`). Pages
   set `--total-scale-factor` and `--scale-round-x/y`, which `TextLayer` sizes
   against. The scheduler builds one text layer at a time, only after scrolling
-  settles, during idle periods. Each text layer then carries the
-  `--total-scale-factor` it was laid out for, and later zooms scale it with
+  settles, during idle periods, and not while a visible page still renders
+  its first pixels: the engine's worker parses the page again for text, which
+  delayed the first pixels of a 200,000-segment page by 48 ms. Each text
+  layer then carries the `--total-scale-factor` it was laid out for, and
+  later zooms scale it with
   the CSS `scale` property: laying out every mounted page's runs again at each
   zoom step was most of the main thread's zoom cost. A visible page is laid
   out again, one per idle period, only after zooming in past twice its layout
@@ -188,7 +228,9 @@ until the benchmark results justify the architecture.
   ParaPDF implementation of the link service methods pdf.js calls routes
   internal links and named actions (`NextPage`, `PrevPage`, `FirstPage`,
   `LastPage`, `GoBack`) to the runtime; external links get `target="_blank"`
-  and `rel="noopener noreferrer nofollow"`. pdf.js puts the linked text in
+  and `rel="noopener noreferrer nofollow"`, or, with `externalLinks:
+  "disabled"`, no `href` at all, which leaves them neither focusable nor
+  followable while internal links keep working. pdf.js puts the linked text in
   each internal link's `title`, its accessible name.
 - `goToDestination` resolves named and explicit destinations through the
   engine and places an explicit top at the viewport's top edge. Link and
@@ -217,8 +259,9 @@ until the benchmark results justify the architecture.
   `document`). Its `native` is the engine's own object, and
   `pdfjsDocumentOf()` returns pdf.js's `PDFDocumentProxy` for documents a
   pdf.js engine opened, for APIs ParaPDF does not wrap.
-- Browsers: `check:text`, `check:links`, `check:lifecycle`, and
-  `check:rotation` pass in Playwright's Chromium, WebKit, and Firefox. WebKit has neither
+- Browsers: `check:text`, `check:links`, `check:lifecycle`,
+  `check:rotation`, and `check:options` pass in Playwright's Chromium, WebKit,
+  and Firefox. WebKit has neither
   `requestIdleCallback` nor `scheduler.yield`, so idle text and annotation
   layers fall back to a 16 ms timer and search yields through `setTimeout(0)`.
 - Not yet implemented: form filling, structure tree (tagged PDF) semantics,
