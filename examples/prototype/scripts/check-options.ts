@@ -84,6 +84,7 @@ const canvasPixels = (page: Page) =>
       window as unknown as {
         __viewer: {
           sharpness(): number;
+          blankFraction(): number;
           stats: { trimmed?: number } | null;
           store: { get(): { layout: { tops: Float64Array; heights: Float64Array } | null } };
         };
@@ -116,25 +117,51 @@ const canvasPixels = (page: Page) =>
       largestBase,
       largestDetail,
       sharpness: viewer.sharpness(),
+      blank: viewer.blankFraction(),
       viewportPixels: scroller.clientWidth * scroller.clientHeight * window.devicePixelRatio ** 2,
       trimmed: viewer.stats?.trimmed ?? 0,
     };
   });
 
-/** Waits until the visible pages are sharp and nothing changed for 300 ms. */
-const settle = (page: Page) =>
+/**
+ * Waits until the visible pages are sharp and nothing changed for 300 ms, or,
+ * with `quiet`, until nothing is blank and no render finished for a second: a
+ * tight budget keeps pages below full resolution on purpose.
+ */
+const settle = (page: Page, { quiet = false } = {}) =>
   page.waitForFunction(
-    () => {
-      const viewer = (window as unknown as { __viewer?: { sharpness(): number } }).__viewer;
-      const holder = window as unknown as { __settledSince?: number | null };
-      if (!viewer || viewer.sharpness() < 0.99) {
+    (quiet) => {
+      const viewer = (
+        window as unknown as {
+          __viewer?: {
+            sharpness(): number;
+            blankFraction(): number;
+            stats: Record<string, number> | null;
+          };
+        }
+      ).__viewer;
+      const holder = window as unknown as { __settledSince?: number | null; __settledKey?: string };
+      if (!viewer) return false;
+      const now = performance.now();
+      if (quiet) {
+        const stats = viewer.stats ?? {};
+        const key = `${stats.base}/${stats.detail}/${stats.cancelled}`;
+        if (viewer.blankFraction() > 0 || key !== holder.__settledKey) {
+          holder.__settledKey = key;
+          holder.__settledSince = null;
+          return false;
+        }
+        holder.__settledSince ??= now;
+        return now - holder.__settledSince > 1000;
+      }
+      if (viewer.sharpness() < 0.99) {
         holder.__settledSince = null;
         return false;
       }
-      holder.__settledSince ??= performance.now();
-      return performance.now() - holder.__settledSince > 300;
+      holder.__settledSince ??= now;
+      return now - holder.__settledSince > 300;
     },
-    null,
+    quiet,
     { timeout: 30_000, polling: 50 },
   );
 
@@ -344,11 +371,31 @@ try {
   await limited.waitForTimeout(1500);
   canvases = await canvasPixels(limited);
   check(
-    "zooming past the budget clears pages outside the viewport, visible pages stay sharp",
-    canvases.visible > budget && canvases.outside === 0 && canvases.trimmed > 0,
+    "zooming in keeps all canvases within maxCanvasPixels, visible pages first and sharp",
+    canvases.total <= budget * 1.01 && canvases.outside === 0 && canvases.sharpness >= 0.99,
     JSON.stringify(canvases),
   );
   await limited.context().close();
+
+  // A budget smaller than the visible area lowers the visible detail's resolution, never blanks it.
+  // Sharp at fit width; at 4 CSS pixels per point the visible area needs more than is left.
+  const tight = 4_000_000;
+  const squeezed = await newPage(`file=synthetic-vector-200k.pdf&maxCanvasPixels=${tight}`);
+  await squeezed.evaluate(() =>
+    (window as unknown as { __viewer: { setScale(scale: number): void } }).__viewer.setScale(4),
+  );
+  await settle(squeezed, { quiet: true });
+  canvases = await canvasPixels(squeezed);
+  check(
+    "a budget below the visible area lowers the detail's resolution, and the page stays drawn",
+    canvases.total <= tight * 1.05 &&
+      canvases.largestDetail > 0 &&
+      canvases.sharpness > 0.3 &&
+      canvases.sharpness < 0.99 &&
+      canvases.blank === 0,
+    JSON.stringify(canvases),
+  );
+  await squeezed.context().close();
 
   // maxDetailViewports sizes the detail by the viewport: smaller viewport, smaller detail.
   const viewports = 1.5;

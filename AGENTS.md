@@ -255,10 +255,21 @@ with the API.
   `ViewerOptions` sets the two budgets (`maxDetailPixels`, `maxBasePixels`),
   `maxDetailViewports`, which caps the detail at a multiple of the viewport's
   device pixels so that its margin follows the viewport's size, and
-  `maxCanvasPixels`, a budget for all of a viewer's canvases: pages
-  outside the viewport render only within it and give their pixels back,
-  farthest first and detail before base, when visible pages need more
-  (`stats.trimmed`); visible pages always keep theirs.
+  `maxCanvasPixels`, a budget for all of a viewer's canvases, visible pages
+  included. Visible pages come first: their bases count whether drawn or not,
+  and each one's detail gets a share of the rest by visible area. A detail
+  that does not fit its share loses its margin first and then resolution, in
+  quarter-octave steps (`REDUCED_DETAIL_STEP`) that small changes of the share
+  do not cross, with what a step leaves spent on its margin again; a detail
+  no sharper than its base is not drawn, and one 25% over its share is drawn
+  again, smaller. Pages outside the viewport render only within what is left
+  and give their pixels back, farthest first and detail before base
+  (`stats.trimmed`). Visible bases are never given back, so a visible page
+  never goes blank. Lowering the resolution, rather than letting visible
+  pages exceed the budget, keeps it a bound an application can rely on: the
+  budget exists for browsers that cap all canvases together, as iOS Safari
+  does, where going past the cap leaves canvases blank. Visible pages used to
+  keep all the detail `maxDetailPixels` allowed, whatever the budget.
   A render clears its canvas, so the page counts that layer as empty until
   the render completes.
   Unmounted pages zero their canvases and release pdf.js page data.

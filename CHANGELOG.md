@@ -10,6 +10,11 @@ change the API.
   viewport's device pixels: the margin drawn sharp around the visible area
   then follows the viewport's size, small on a phone and large on a wide
   panel. `maxDetailPixels` still caps it.
+- `maxCanvasPixels` counts visible pages too: their low-resolution canvases
+  always stay, and each one's sharp canvas gets a share of what they leave,
+  by visible area, losing its margin first and then resolution. Visible pages
+  used to keep all the detail `maxDetailPixels` allowed, whatever the budget,
+  and only pages outside the viewport gave pixels back.
 - A detail canvas without a margin around the visible area, which a
   `maxDetailPixels` below the viewport's device pixels leaves, is drawn once:
   it was drawn again about 60 times a second while the view stood still.

@@ -111,9 +111,14 @@ export interface ViewerOptions {
   maxBasePixels?: number;
   /**
    * The most pixels all of this viewer's canvases hold together (default
-   * unlimited), for memory-capped browsers such as iOS Safari. Pages outside
-   * the viewport render only within it and give their pixels back first,
-   * detail before base; visible pages always keep theirs.
+   * unlimited), for memory-capped browsers such as iOS Safari. Visible pages
+   * come first: after their bases, each visible page's detail gets a share of
+   * the rest by visible area, losing its margin first and then resolution, in
+   * quarter-octave steps down to its base's. Pages outside the viewport
+   * render only within what is left and give their pixels back, farthest
+   * first and detail before base. Visible bases are never given back, so a
+   * visible page never goes blank, and a budget smaller than they are is
+   * exceeded by them.
    */
   maxCanvasPixels?: number;
 }

@@ -111,9 +111,12 @@ export interface SchedulerOptions {
   maxBasePixels?: number;
   /**
    * The most pixels all canvases hold together. Pages outside the viewport
-   * render only within it and give their pixels back, farthest first and
-   * detail before base, when visible pages need more; visible pages always
-   * get theirs.
+   * render only within what visible pages leave and give their pixels back,
+   * farthest first and detail before base. Visible pages count too: after
+   * their bases, each gets detail for its share of the rest, by visible area,
+   * losing margin first and then resolution (see REDUCED_DETAIL_STEP). Their
+   * bases are never given back, so a visible page never goes blank, and a
+   * budget smaller than the visible bases is exceeded by them.
    */
   maxCanvasPixels?: number;
   /** Where activated links in annotation layers go. */
@@ -136,6 +139,19 @@ const BASE_FACTOR = 0.5;
  * work, most of the cost of vector drawings, and delays the sharp page.
  */
 const QUICK_DETAIL_BASES = 4;
+
+/**
+ * A page whose detail budget cannot hold its visible area at full resolution,
+ * a visible page's share of maxCanvasPixels or a viewport larger than
+ * maxDetailPixels, gets detail at a lower one, in steps of a quarter octave
+ * (2^-1/4, 16% fewer pixels per side) so that small changes of the budget as
+ * the view moves do not redraw it. A detail no sharper than the base is not
+ * drawn: the page shows its base alone.
+ */
+const REDUCED_DETAIL_STEP = 2 ** -0.25;
+
+/** A detail canvas holding this much more than its page's budget allows is drawn again, smaller. */
+const OVER_BUDGET = 1.25;
 
 /**
  * Zooming in past this multiple of the zoom a text layer was laid out for
@@ -412,49 +428,89 @@ export class RenderScheduler {
     );
   }
 
-  /** The most pixels a detail may hold: maxDetailPixels, at most maxDetailViewports viewports' worth. */
-  #detailBudget(input: ScheduleInput): number {
+  /**
+   * The most pixels page `index`'s detail may hold: maxDetailPixels, at most
+   * maxDetailViewports viewports' worth of device pixels, and, while the page
+   * is visible and maxCanvasPixels is set, its share of what the visible
+   * pages' bases leave of that budget, by visible area. Every visible page is
+   * counted with its base, drawn or not, so a share does not change when a
+   * base arrives.
+   */
+  #detailBudget(index: number, input: ScheduleInput): number {
     const { viewport, devicePixelRatio } = input;
     const viewportPixels = viewport.width * viewport.height * devicePixelRatio ** 2;
-    return Math.min(this.#maxDetailPixels, this.#maxDetailViewports * viewportPixels);
+    const budget = Math.min(this.#maxDetailPixels, this.#maxDetailViewports * viewportPixels);
+    if (this.#maxCanvasPixels === Number.POSITIVE_INFINITY) return budget;
+    if (index < input.first || index > input.last) return budget;
+    const scale = input.layout.scale * devicePixelRatio;
+    let bases = 0;
+    let visibleTotal = 0;
+    let own = 0;
+    for (let page = input.first; page <= input.last; page++) {
+      const area = visibleArea(input.layout, page, viewport);
+      if (!area) continue;
+      const visiblePixels = areaSize(area) * this.#pixels(page, scale, null, input);
+      bases += this.#pixels(page, this.#baseScale(page, input), null, input);
+      visibleTotal += visiblePixels;
+      if (page === index) own = visiblePixels;
+    }
+    const left = Math.max(0, this.#maxCanvasPixels - bases);
+    return Math.min(budget, visibleTotal > 0 ? (left * own) / visibleTotal : left);
   }
 
   /**
    * A page whose full-resolution render fits its detail budget gets detail
    * for the whole page. A larger one gets detail only while visible, for the
    * visible area grown by up to its own size on each side as far as the
-   * budget allows, as in pdf.js's PDFPageDetailView. Null: no detail layer.
+   * budget allows, as in pdf.js's PDFPageDetailView; when the visible area
+   * alone does not fit, at a lower resolution (REDUCED_DETAIL_STEP), with
+   * what that leaves of the budget as its margin. Null: no detail layer.
    */
   #detailPlan(index: number, input: ScheduleInput): DetailPlan | null {
     const { layout, devicePixelRatio } = input;
     const size = layout.sizes[index];
     if (!size) return null;
-    const scale = layout.scale * devicePixelRatio;
-    const pagePixels = size.width * scale * (size.height * scale);
-    const budget = this.#detailBudget(input);
+    let scale = layout.scale * devicePixelRatio;
+    let pagePixels = size.width * scale * (size.height * scale);
+    const budget = this.#detailBudget(index, input);
     if (pagePixels <= budget) return { scale, region: null };
     const visible = visibleArea(layout, index, input.viewport);
     if (!visible) return null;
-    const visiblePixels = areaSize(visible) * pagePixels;
-    const overflow = Math.min(1, Math.max(0, (Math.sqrt(budget / visiblePixels) - 1) / 2));
+    const share = areaSize(visible);
+    // Decided from the visible area, not from the grown region: a region
+    // grown to fill the budget exactly came out over it by rounding in about
+    // a third of the cases, which cost a whole step of resolution.
+    if (share * pagePixels > budget) {
+      const steps = Math.ceil(
+        Math.log(Math.sqrt(budget / (share * pagePixels))) / Math.log(REDUCED_DETAIL_STEP),
+      );
+      scale *= REDUCED_DETAIL_STEP ** steps;
+      if (scale <= this.#baseScale(index, input)) return null;
+      pagePixels = size.width * scale * (size.height * scale);
+    }
+    const overflow = Math.min(1, Math.max(0, (Math.sqrt(budget / (share * pagePixels)) - 1) / 2));
     const growX = (visible.maxX - visible.minX) * overflow;
     const growY = (visible.maxY - visible.minY) * overflow;
-    const region = {
-      minX: Math.max(0, visible.minX - growX),
-      minY: Math.max(0, visible.minY - growY),
-      maxX: Math.min(1, visible.maxX + growX),
-      maxY: Math.min(1, visible.maxY + growY),
-    };
-    // A visible area larger than the budget gets its detail at lower resolution.
-    const regionPixels = areaSize(region) * pagePixels;
     return {
-      scale: regionPixels > budget ? scale * Math.sqrt(budget / regionPixels) : scale,
-      region,
+      scale,
+      region: {
+        minX: Math.max(0, visible.minX - growX),
+        minY: Math.max(0, visible.minY - growY),
+        maxX: Math.min(1, visible.maxX + growX),
+        maxY: Math.min(1, visible.maxY + growY),
+      },
     };
   }
 
   #needsDetail(slot: Slot, plan: DetailPlan, input: ScheduleInput): boolean {
     if (!sameScale(slot.detailScale, plan.scale)) return true;
+    // A detail far over the page's budget, say after its share shrank, is drawn again smaller.
+    if (
+      slot.detail.width * slot.detail.height >
+      this.#detailBudget(slot.index, input) * OVER_BUDGET
+    ) {
+      return true;
+    }
     if (!plan.region) return slot.detailRegion !== null;
     if (!slot.detailRegion) return true;
     const visible = visibleArea(input.layout, slot.index, input.viewport);
