@@ -87,6 +87,16 @@ try {
   // Layout, pixels, text, overlays, and search on a portrait bill.
   const page = await newPage("bill-hr815.pdf");
   const section = 'section[data-page="1"]';
+  // Turn at a fixed zoom: in "fit-width" mode a turn fits the turned page's
+  // width instead of swapping the box (check-options.ts covers that).
+  await page.evaluate(() => {
+    const viewer = (
+      window as unknown as {
+        __viewer: { setScale(scale: number): void; store: { get(): { scale: number } } };
+      }
+    ).__viewer;
+    viewer.setScale(viewer.store.get().scale);
+  });
   const portrait = await boxOf(page, section);
   const geometry = await page.evaluate(() => {
     const viewer = (
@@ -114,13 +124,17 @@ try {
     `${portrait?.width}×${portrait?.height} -> ${landscape?.width}×${landscape?.height}`,
   );
   const canvas = await page.evaluate(() => {
-    const base = document.querySelector('section[data-page="1"] canvas') as HTMLCanvasElement;
-    return { width: base.width, height: base.height };
+    const [base, detail] = document.querySelectorAll<HTMLCanvasElement>(
+      'section[data-page="1"] canvas',
+    );
+    // A page may show only its detail layer: read the layer that holds pixels.
+    const drawn = detail && detail.width > 0 ? detail : base;
+    return { width: drawn?.width ?? 0, height: drawn?.height ?? 0 };
   });
   check(
     "pages render turned",
     canvas.width > canvas.height,
-    `base canvas ${canvas.width}×${canvas.height}`,
+    `canvas ${canvas.width}×${canvas.height}`,
   );
   const run = await page.evaluate(() => {
     const span = [
