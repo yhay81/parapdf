@@ -9,7 +9,25 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "LICENSE",
+    "NOTICE.md",
+    "LICENSES"
+  ],
   "scripts": {
+    "build": "tsc -p tsconfig.build.json && node scripts/declaration-imports.ts",
+    "prepack": "pnpm run build && node scripts/legal-files.ts copy",
+    "postpack": "node scripts/legal-files.ts remove",
     "typecheck": "tsc -p ."
   },
   "peerDependencies": {
