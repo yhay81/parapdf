@@ -122,16 +122,19 @@ with the API.
 - `pnpm --filter @parapdf/prototype check:pinch` — functional checks for zoom
   gestures: touch pinches zoom the document around the point between the
   fingers and pan with it while the page itself stays unzoomed, two fingers
-  that keep their distance scroll, one finger still scrolls natively, Safari's
-  gesture events are prevented and zoom the document, ctrl+wheel zooms
-  around the pointer, a pinch in at the document's start previews page 1
-  where its commit puts it, and a long two-finger drag at the lowest zoom, or
-  a pinch in that drags as far, mounts and draws the pages its preview shows
-  before the fingers lift (run after `build`; `BROWSER` and `ENGINE`
-  apply).
+  that keep their distance only scroll, side by side or one above the other
+  and however fast they move, with the preview following them in every
+  frame, one finger still scrolls natively, Safari's gesture events are
+  prevented and zoom the document, ctrl+wheel zooms around the pointer, a
+  pinch in at the document's start previews page 1 where its commit puts
+  it, and a long two-finger drag at the lowest zoom, or a pinch in that
+  drags as far, mounts and draws the pages its preview shows before the
+  fingers lift (run after `build`; `BROWSER` and `ENGINE` apply).
   Chromium gets real touches through the DevTools protocol; Playwright cannot
   put two fingers down in WebKit or Firefox, so there the check dispatches
-  touch pointer events, and in WebKit gesture events.
+  touch pointer events, and in WebKit gesture events. Dispatched pointers,
+  which Chromium gets too, move one finger and then the other in each
+  animation frame, as browsers deliver a gesture.
 - `pnpm --filter parapdf build` — JavaScript and declarations in
   `packages/parapdf/dist/`; `pnpm --filter parapdf pack` builds and packs the
   tarball.
@@ -196,6 +199,20 @@ with the API.
     does not scroll with two fingers either and keeps their pointers, so the
     preview pans with their midpoint; their zoom starts once their distance
     changed by 16 CSS pixels, so a two-finger drag or tap only scrolls.
+    The touches are read once a frame, before the update in the animation
+    frame callback, and before a lift or another commit (`#readTouches()`).
+    Browsers deliver the two fingers' moves one after the other, so read at
+    each move, the distance measured the moved finger against where the
+    other was a frame before, and a two-finger drag zoomed once one frame's
+    movement changed that by 16 pixels: at 17 CSS pixels a frame with one
+    finger above the other but not at 15, and from 100 side by side 300
+    pixels apart, in all three browsers. A pinch now starts zooming relative
+    to the distance of its first frame past the 16 pixels, so its ratio
+    depends on how its moves fall into frames: Chromium's synthesized pinch
+    out by 2 committed 2.04 to 2.14 over three runs, 2.14 each time when read
+    at each move. `#update()` called directly, from a relayout, reads no
+    touches: a pinch that started again there would preview against the
+    layout being replaced.
   - Safari's `gesturestart`, `gesturechange`, and `gestureend` are always
     prevented, which keeps Safari from zooming the page. With no touches,
     as for macOS trackpad pinches, their `scale` zooms around their

@@ -10,6 +10,11 @@ change the API.
   or by zooming out, mount and draw before the gesture commits: a long
   two-finger drag at a low zoom showed a blank band below the mounted pages
   until the fingers lifted.
+- A two-finger drag only scrolls, however fast it moves and however the
+  fingers sit. The distance between the touches was measured at each
+  finger's move, against where the other finger had been a frame before,
+  so a drag zoomed once one frame's movement changed it by 16 CSS pixels:
+  with one finger above the other, at about one pixel per millisecond.
 
 ## 0.1.0 — 2026-10-20
 

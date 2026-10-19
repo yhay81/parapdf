@@ -237,6 +237,8 @@ interface Pinch {
   startDistance: number;
   /** The distance the zoom is relative to, from when the touches moved past PINCH_SLOP; 0 before. */
   baseDistance: number;
+  /** Whether the touches moved since they were last read (see #readTouches). */
+  moved: boolean;
 }
 
 /** Safari's GestureEvent, which TypeScript's DOM library does not declare. */
@@ -1035,6 +1037,26 @@ export class PdfViewerRuntime {
     touch.y = event.clientY;
     const pinch = this.#pinch;
     if (!pinch?.ids.includes(event.pointerId)) return;
+    // Read at the next frame, once the other touch's move has arrived too.
+    pinch.moved = true;
+    this.#requestUpdate();
+  };
+
+  /**
+   * Pan the pinch's preview with the midpoint of its touches, and zoom it
+   * once their distance changed by PINCH_SLOP. The touches are read once a
+   * frame, after all of their moves arrived, and before the pinch commits:
+   * browsers deliver the moves of two fingers one after the other, so at
+   * each move the distance measured the moved finger against where the other
+   * was a frame before. A two-finger drag then zoomed once one frame's
+   * movement changed that by PINCH_SLOP: at 17 CSS pixels a frame with one
+   * finger above the other, and at 100 with the fingers side by side and 300
+   * apart, where a flick of 150 a frame committed a zoom of 0.894.
+   */
+  #readTouches(): void {
+    const pinch = this.#pinch;
+    if (!pinch?.moved) return;
+    pinch.moved = false;
     if (this.#zoom !== pinch.zoom) {
       // Something else committed the preview, a resize for one: pinch on from here.
       this.#startPinch();
@@ -1056,10 +1078,13 @@ export class PdfViewerRuntime {
     }
     if (pinch.baseDistance > 0) zoom.factor = this.#zoomFactor(distance / pinch.baseDistance);
     this.#previewZoom(zoom);
-  };
+  }
 
   #onTouchEnd = (event: PointerEvent): void => {
-    if (!this.#touches.delete(event.pointerId)) return;
+    if (!this.#touches.has(event.pointerId)) return;
+    // Moves that no frame has read yet came before the lift.
+    if (this.#pinch?.ids.includes(event.pointerId)) this.#readTouches();
+    this.#touches.delete(event.pointerId);
     if (this.#touches.size === 0) {
       this.#touchListeners?.abort();
       this.#touchListeners = null;
@@ -1100,6 +1125,7 @@ export class PdfViewerRuntime {
       startY,
       startDistance: Math.hypot(b.x - a.x, b.y - a.y),
       baseDistance: 0,
+      moved: false,
     };
   }
 
@@ -1234,6 +1260,8 @@ export class PdfViewerRuntime {
   }
 
   #commitZoom = (): void => {
+    // A pinch commits with the moves of its touches that no frame read yet.
+    if (this.#zoom && this.#pinch?.zoom === this.#zoom) this.#readTouches();
     const zoom = this.#zoom;
     this.#zoom = null;
     if (!zoom) return;
@@ -1279,8 +1307,20 @@ export class PdfViewerRuntime {
   }
 
   #requestUpdate(): void {
-    if (!this.#frame) this.#frame = requestAnimationFrame(this.#update);
+    if (!this.#frame) this.#frame = requestAnimationFrame(this.#onFrame);
   }
+
+  /**
+   * Once a frame: the touches' moves since the last one, then the update.
+   * #frame is still set while the touches are read, so the preview they
+   * change requests no frame of its own. Direct calls of #update, from a
+   * relayout, read no touches: a pinch that starts again there would
+   * preview against the layout the relayout replaces.
+   */
+  #onFrame = (): void => {
+    this.#readTouches();
+    this.#update();
+  };
 
   #update = (): void => {
     this.#frame = 0;
