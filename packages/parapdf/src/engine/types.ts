@@ -54,7 +54,11 @@ export interface PageText {
 
 export interface TextLayerRequest {
   pageIndex: number;
-  /** Receives the positioned text runs; sized by the `--total-scale-factor` CSS variable. */
+  /**
+   * Receives the positioned text runs; sized by the `--total-scale-factor`
+   * CSS variable. The engine sets its `lang` to the language the runs are
+   * sized in: the PDF's, or the language it inherits when the PDF has none.
+   */
   container: HTMLElement;
   /** CSS pixels per PDF point. */
   cssScale: number;

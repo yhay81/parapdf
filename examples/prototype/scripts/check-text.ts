@@ -1,7 +1,8 @@
 /**
  * Functional checks for the text layer: selection, search highlights,
- * normalization, accessibility semantics, and text runs staying on their
- * glyphs after zooming. Exits non-zero on failure.
+ * normalization, accessibility semantics including the text's language, and
+ * text runs ending on their glyphs on English and Japanese pages and after
+ * zooming. Exits non-zero on failure.
  *
  * Usage: pnpm --filter @parapdf/prototype build && pnpm --filter @parapdf/prototype check:text
  * SCREENSHOT=path.png saves the search view for visual review.
@@ -22,8 +23,9 @@ function check(name: string, ok: boolean, detail = ""): void {
   if (!ok) failures++;
 }
 
-async function openViewer(page: Page, baseUrl: string, file: string): Promise<void> {
-  await page.goto(`${baseUrl}?engine=${engine}&file=${file}`);
+/** Opens `file` in the demo; `query` adds parameters such as `&lang=ja`. */
+async function openViewer(page: Page, baseUrl: string, file: string, query = ""): Promise<void> {
+  await page.goto(`${baseUrl}?engine=${engine}&file=${file}${query}`);
   await page.waitForSelector('section[data-page="1"] .parapdf-text-layer span', {
     timeout: 30_000,
   });
@@ -132,6 +134,29 @@ const runOffsets = (page: Page, number: number): Promise<RunOffsets> =>
     return { runs, worst, mean: runs ? sum / runs : 0, cssScale: layer?.style.scale ?? "" };
   }, number);
 
+const describe = (offsets: RunOffsets | undefined) =>
+  offsets
+    ? `${offsets.runs} runs, worst ${offsets.worst.toFixed(2)} pt, mean ${offsets.mean.toFixed(2)} pt${offsets.cssScale ? `, CSS scale ${Number(offsets.cssScale).toFixed(2)}` : ""}`
+    : "not measured";
+
+/**
+ * Whether a page's runs end on their glyphs: within 3 points, a quarter of a
+ * 12-point em, and half a point on average. Chromium places runs laid out at
+ * small zooms up to 2.4 points off.
+ */
+const onGlyphs = (offsets: RunOffsets | undefined) =>
+  offsets !== undefined && offsets.runs > 20 && offsets.worst <= 3 && offsets.mean <= 0.5;
+
+/** The `lang` attribute of page `number`'s text layer. */
+const textLanguage = (page: Page, number: number) =>
+  page.evaluate(
+    (number) =>
+      document
+        .querySelector(`section[data-page="${number}"] .parapdf-text-layer`)
+        ?.getAttribute("lang") ?? null,
+    number,
+  );
+
 const server = await preview({
   root: exampleDir,
   configFile: join(exampleDir, "vite.config.ts"),
@@ -193,6 +218,13 @@ try {
     semantics.textRuns > 20 && /Making emergency supplemental/.test(semantics.textContent ?? ""),
     `${semantics.textRuns} runs`,
   );
+  // bill-hr815 declares no language, so its text keeps the page's.
+  const inherited = await textLanguage(page, 1);
+  check(
+    "text of a PDF without a language takes the page's",
+    inherited === "en",
+    `lang ${JSON.stringify(inherited)}`,
+  );
 
   // Drag-select a line with the mouse, as a user would.
   const run = page
@@ -212,14 +244,26 @@ try {
     JSON.stringify(selected.slice(0, 60)),
   );
 
-  // Zooming scales laid-out text layers with CSS. Zooming in 3× lays page 1,
-  // in view, out again at the new zoom, while page 2, outside the viewport,
-  // keeps its layout under a CSS scale. Either way the runs must stay on the
-  // glyphs pdf.js draws.
+  // pdf.js sizes each run by measuring it on a canvas in the text content's
+  // language. Runs drawn in another language's fonts end short of or past
+  // their glyphs: in Firefox on a Japanese system, which resolves an unknown
+  // language to the system's, runs of this PDF, which declares none, ended
+  // 12–15% short, up to 49 points on page 1 and 53 on page 2, until text
+  // layers took the language pdf.js measures in.
   await page.waitForSelector('section[data-page="2"] .parapdf-text-layer span', {
     timeout: 30_000,
   });
   const fitted = [await runOffsets(page, 1), await runOffsets(page, 2)];
+  check(
+    "text runs end on their glyphs",
+    fitted.every(onGlyphs),
+    `page 1: ${describe(fitted[0])}; page 2: ${describe(fitted[1])}`,
+  );
+
+  // Zooming scales laid-out text layers with CSS. Zooming in 3× lays page 1,
+  // in view, out again at the new zoom, while page 2, outside the viewport,
+  // keeps its layout under a CSS scale. Either way the runs must stay on the
+  // glyphs pdf.js draws.
   const fitScale = await page.evaluate(() => {
     const viewer = (
       window as unknown as {
@@ -245,12 +289,10 @@ try {
       after.mean <= before.mean + 0.1
     );
   });
-  const describe = (offsets: RunOffsets) =>
-    `${offsets.runs} runs, worst ${offsets.worst.toFixed(2)} pt, mean ${offsets.mean.toFixed(2)} pt${offsets.cssScale ? `, CSS scale ${Number(offsets.cssScale).toFixed(2)}` : ""}`;
   check(
     "text runs stay on their glyphs after zooming in 3×",
     aligned,
-    `page 1: ${describe(fitted[0] as RunOffsets)} -> ${describe(zoomed[0] as RunOffsets)}; page 2: ${describe(fitted[1] as RunOffsets)} -> ${describe(zoomed[1] as RunOffsets)}`,
+    `page 1: ${describe(fitted[0])} -> ${describe(zoomed[0])}; page 2: ${describe(fitted[1])} -> ${describe(zoomed[1])}`,
   );
   await page.evaluate((scale) => {
     (
@@ -292,6 +334,24 @@ try {
     `${divisions.total} matches for divisions, 3 expected`,
   );
 
+  // On a Japanese page the same PDF's text takes Japanese, whose generic
+  // fonts are wider. Chromium and WebKit resolve an unknown language to
+  // their default fonts, so before text layers took the language pdf.js
+  // measures in, they drew these runs 14–18% too wide, up to 57 points.
+  page = await newPage();
+  await openViewer(page, baseUrl, "bill-hr815.pdf", "&lang=ja");
+  // The scheduler appends .endOfContent once the layer holds every run.
+  await page.waitForSelector('section[data-page="1"] .parapdf-text-layer .endOfContent', {
+    state: "attached",
+  });
+  const onJapanesePage = await runOffsets(page, 1);
+  const japanesePageLanguage = await textLanguage(page, 1);
+  check(
+    "text runs on a Japanese page end on their glyphs",
+    japanesePageLanguage === "ja" && onGlyphs(onJapanesePage),
+    `lang ${JSON.stringify(japanesePageLanguage)}, ${describe(onJapanesePage)}`,
+  );
+
   // Japanese text in a non-embedded CID font, plus compatibility normalization.
   page = await newPage();
   await openViewer(page, baseUrl, "synthetic-cjk-nonembedded.pdf");
@@ -309,6 +369,14 @@ try {
   // MHLW notice breaks 厚生労働 after 厚生, its only occurrence.
   page = await newPage();
   await openViewer(page, baseUrl, "mhlw-doc.pdf");
+  // The notice declares Japanese (/Lang ja), so assistive technology reads
+  // its text as Japanese on this English page.
+  const declared = await textLanguage(page, 1);
+  check(
+    "text takes the language the PDF declares",
+    declared === "ja",
+    `lang ${JSON.stringify(declared)}`,
+  );
   const kosei = await searchFor(page, "厚生労働");
   check(
     "a Japanese word broken across lines matches",
@@ -328,7 +396,11 @@ try {
 
   // Dragging into the blank space past a line's end must select the dragged
   // lines, not the rest of the page: WebKit extends such a selection to
-  // wherever the text layer's .endOfContent element sits.
+  // wherever the text layer's .endOfContent element sits. The drag crosses
+  // line 9's text before it leaves past the line's end: over blank space
+  // Firefox keeps the selection's end where the pointer last touched text,
+  // and a straight drag from line 5 slipped between the boxes of lines 7 and
+  // 8 by a tenth of a pixel once Firefox's runs had their full width.
   page = await newPage();
   await openViewer(page, baseUrl, "synthetic-text-1000.pdf");
   const drag = await page.evaluate(() => {
@@ -362,6 +434,7 @@ try {
     return fifth && ninth
       ? {
           start: { x: fifth.left + 1, y: fifth.top + fifth.height / 2 },
+          via: { x: (ninth.left + ninth.right) / 2, y: ninth.top + ninth.height / 2 },
           end: { x: Math.min(pageRight - 20, ninth.right + 120), y: ninth.top + ninth.height / 2 },
           min: count(4, 7),
           max: count(4, 10),
@@ -371,7 +444,8 @@ try {
   if (drag) {
     await page.mouse.move(drag.start.x, drag.start.y);
     await page.mouse.down();
-    await page.mouse.move(drag.end.x, drag.end.y, { steps: 20 });
+    await page.mouse.move(drag.via.x, drag.via.y, { steps: 12 });
+    await page.mouse.move(drag.end.x, drag.end.y, { steps: 8 });
     await page.mouse.up();
   }
   const dragged = (await page.evaluate(() => window.getSelection()?.toString() ?? "")).replace(

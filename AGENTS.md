@@ -33,6 +33,14 @@ until the benchmark results justify the architecture.
   text, cancellation) keeps alternative engines measurable. Another engine
   replaces pdf.js only after the benchmark shows a reproducible win.
 - Performance claims must be measured. Publish wins and losses together.
+- Domain-neutral. ParaPDF shows PDFs as documents (reading, search,
+  selection, links, annotations, forms) and knows nothing of drawings or any
+  other domain: no scales, real-world lengths, measuring tools, or CAD layers.
+  Libraries for such domains draw PDFs with a PDF engine and add those
+  themselves; ParaPDF never depends on them. A feature belongs here if people
+  who never treat a PDF as a drawing need it: optional content toggles do,
+  measurement does not. Whether the engine boundary becomes a public API for
+  such libraries is decided after Phase 0.
 
 ## Repository layout
 
@@ -70,17 +78,18 @@ until the benchmark results justify the architecture.
   `BROWSER` (`chromium`, `webkit`, or `firefox`) picks the browser;
   `ENGINES`, `FILES`, `RUNS`, `PAGES`, and `SCALE` narrow a run.
 - `pnpm --filter @parapdf/prototype dev` — run the demo; query parameters
-  select `engine` (`pdfjs` or `pdfjs-next`), `hwa`, `text`, `file`, and
-  `preload`.
+  select `engine` (`pdfjs` or `pdfjs-next`), `hwa`, `text`, `file`,
+  `preload`, and `lang` (the page's language, `en` by default).
 - `pnpm --filter @parapdf/prototype build && pnpm --filter @parapdf/prototype bench`
   — scripted scroll benchmark; `BROWSER` picks the browser, and `VARIANTS`,
   `TEXT`, `LINKS`, `FILES`, `SPEEDS` (CSS px per second), `RUNS`, `DURATION`,
   `PRELOAD`, and `OUTPUT` narrow or rename a run. `node
   examples/prototype/scripts/compare.ts` then rewrites `results/browsers.md`.
 - `pnpm --filter @parapdf/prototype check:text` — functional checks for text
-  selection, search highlights, normalization, accessibility semantics, and
-  text runs staying on their glyphs after zooming (run after `build`;
-  `BROWSER` applies here too).
+  selection, search highlights, normalization, accessibility semantics
+  including the text's language, and text runs ending on their glyphs on
+  English and Japanese pages and after zooming (run after `build`; `BROWSER`
+  applies here too).
 - `pnpm --filter @parapdf/prototype check:links` — functional checks for
   internal and external links, keyboard activation, the back stack, and the
   outline on `usrguide.pdf` (run after `build`; `BROWSER` applies here too).
@@ -156,6 +165,20 @@ until the benchmark results justify the architecture.
   selection in Firefox then serializes off-screen text layers as blank lines.
   Text layer items and the search index read text content with identical
   options so element order matches item order.
+- `TextLayer` sizes each run by measuring it on a hidden canvas whose `lang`
+  is the PDF's /Lang, or empty when the PDF declares none, and the generic
+  fonts runs are drawn in resolve by language. An empty `lang` means an
+  unknown language, which Firefox resolves to the operating system's and
+  Chromium and WebKit to their default, while the runs inherit the page's.
+  Runs therefore ended 12–15% short of their glyphs in Firefox on a Japanese
+  system under the demo's `lang="en"`, and 14–18% past them in Chromium and
+  WebKit under `lang="ja"`. The pdf.js adapter (`inLayerLanguage()` in
+  `engine/pdfjs.ts`) passes the text content through a `TransformStream` that
+  fills an empty `lang` with the language the layer inherits, and gives the
+  layer the same `lang`: the PDF's, or the inherited one. pdf.js's own viewer
+  measures PDFs without /Lang the same way and is affected too, Firefox's
+  built-in viewer included when its UI language differs from the system's;
+  not reported upstream yet.
 - `TextSelectionTracker` (`runtime/selection.ts`, ported from pdf.js's
   `TextLayerBuilder` and attributed in `NOTICE.md`) gives every text layer a
   selection touches the `selecting` class, which stretches its
@@ -181,7 +204,10 @@ until the benchmark results justify the architecture.
 - Accessibility: the viewport is a focusable, labelled `role="document"`;
   pages are labelled sections (region landmarks, as in pdf.js); canvases sit in
   an `aria-hidden` wrapper so assistive technology reads the text layer. The
-  demo announces result counts through an `aria-live` `<output>`.
+  text layer's `lang` is the PDF's /Lang, so its text is announced in the
+  document's language while page labels keep the page's; for PDFs without
+  one it is the language the layer inherits. The demo announces result
+  counts through an `aria-live` `<output>`.
 - Annotation layers use pdf.js's core `AnnotationLayer` inside
   `.parapdf-annotation-layer`, after the page's text layer in the same idle
   pipeline, with `renderForms: false`: form widgets stay on the canvas. A

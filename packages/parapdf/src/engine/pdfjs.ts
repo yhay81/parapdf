@@ -32,6 +32,46 @@ export interface PdfjsEngineOptions {
 // order, so both read text content with identical options.
 const TEXT_OPTIONS = { includeMarkedContent: true, disableNormalization: true } as const;
 
+/** The language `element` inherits, "" when none is declared. */
+function inheritedLanguage(element: Element): string {
+  let node: Element | null = element;
+  while (node) {
+    const lang = node.getAttribute("lang");
+    if (lang !== null) return lang;
+    const root = node.getRootNode();
+    node = node.parentElement ?? (root instanceof ShadowRoot ? root.host : null);
+  }
+  return "";
+}
+
+/**
+ * pdf.js's `TextLayer` sizes each run by measuring it on a hidden canvas
+ * whose `lang` is the text content's: the PDF's /Lang, or empty, an unknown
+ * language, when the PDF declares none. The generic families runs are drawn
+ * in, such as `serif`, resolve by language, and an unknown language resolves
+ * apart from the page's: to the operating system's in Firefox, to the
+ * browser's default in Chromium and WebKit. Runs drawn in other fonts than
+ * they were measured in end short of their glyphs or past them: 12–15% short
+ * in Firefox on a Japanese system under an English page, 12–18% past in
+ * Chromium and WebKit under a Japanese page. So the text content declares the
+ * PDF's language or, when it has none, the one the layer inherits, and the
+ * layer carries that language itself. For PDFs without a language, assistive
+ * technology keeps announcing the page's.
+ */
+function inLayerLanguage(source: ReadableStream, container: HTMLElement): ReadableStream {
+  const inherited = container.parentElement ? inheritedLanguage(container.parentElement) : "";
+  container.lang = inherited;
+  return source.pipeThrough(
+    new TransformStream<{ lang: string | null }, { lang: string | null }>({
+      transform(chunk, controller) {
+        chunk.lang ||= inherited;
+        if (container.lang !== chunk.lang) container.lang = chunk.lang;
+        controller.enqueue(chunk);
+      },
+    }),
+  );
+}
+
 /**
  * The part of pdf.js's link service interface that link annotations call.
  * Internal links and named actions go to the runtime; pdf.js's own viewer
@@ -217,7 +257,7 @@ export function createPdfjsEngine(options: PdfjsEngineOptions): PdfEngine {
           const promise = getPage(pageIndex).then(async (page): Promise<TextLayerHandle> => {
             if (cancelled) throw new RenderCancelledError("text layer cancelled before it started");
             const rendered = new pdfjs.TextLayer({
-              textContentSource: page.streamTextContent(TEXT_OPTIONS),
+              textContentSource: inLayerLanguage(page.streamTextContent(TEXT_OPTIONS), container),
               container,
               // The layer is laid out unturned; pdf.js marks it with
               // data-main-rotation and the viewer CSS turns it.

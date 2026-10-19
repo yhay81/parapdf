@@ -39,6 +39,11 @@ const settings = {
   maxScale: params.has("maxScale") ? Number(params.get("maxScale")) : undefined,
 };
 
+// The page's language, which the text layers of PDFs that declare none
+// inherit: ?lang=ja shows them on a Japanese page.
+const pageLanguage = params.get("lang");
+if (pageLanguage !== null) document.documentElement.lang = pageLanguage;
+
 declare global {
   interface Window {
     /** Hooks for scripts/check-lifecycle.ts. */

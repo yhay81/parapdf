@@ -222,15 +222,28 @@ about 20 ms as noise.
   other Playwright browsers on the machine: the first waited 58 minutes for
   them, no job overlapped one, and the one-minute load average stayed
   between 5 and 7 on 12 cores.
-- **Firefox text runs.** In Firefox, text layer runs on bill-hr815 come out
-  about 15% narrower than the glyphs they cover, at every zoom, so the end of
-  a selection falls short of the glyphs; Chromium stays within 2.4 points and
-  WebKit within 0.1. pdf.js measures each run on a canvas whose `lang` is the
-  PDF's language, empty for this PDF, and Firefox picks generic fonts for an
-  empty `lang` by the system's language (Japanese on this machine, where
-  `serif` measured 18% wider), while the text layer itself follows the page's
-  `lang="en"`. Chromium treats an empty `lang` as the page's language. Not
-  fixed yet.
+- **Firefox text runs.** In Firefox, text layer runs on bill-hr815 came out
+  12–15% narrower than the glyphs they cover, at every zoom and up to 49
+  points short on page 1, so the end of a selection fell short of the glyphs.
+  pdf.js measures each run on a canvas whose `lang` is the PDF's language, and
+  for a PDF that declares none, like this one, that `lang` is empty: an
+  unknown language. Generic fonts resolve by language, and Firefox resolves an
+  unknown one to the system's (Japanese on this machine, where `serif` is 18%
+  wider), while the runs follow the page's `lang="en"`. Chromium and WebKit
+  resolve it to their default fonts instead, which matched on this English
+  page but not on a Japanese one: under `lang="ja"` they drew the runs 14–18%
+  too wide. The pdf.js adapter now measures in the language the runs are
+  drawn in: the text content and the text layer both take the PDF's language
+  or, when it declares none, the one the layer inherits from the page. Runs
+  now end within 0.4 points of their glyphs in Firefox, 1.6 in Chromium, and
+  0.04 in WebKit, on English and Japanese pages, and
+  [`check-text.ts`](examples/prototype/scripts/check-text.ts) asserts it. A
+  PDF that declares its language now has its text announced in it: the MHLW
+  notice in Japanese on the English demo page. pdf.js's own viewer measures
+  the same way and misplaces runs of PDFs without a language on a page whose
+  `lang` resolves apart from an unknown one, Firefox's built-in viewer
+  included when its UI language differs from the system's; not reported
+  upstream yet.
 - **Not yet built.** Form filling, structure-tree semantics for tagged PDFs,
   and text for pages outside the mounted window.
 
