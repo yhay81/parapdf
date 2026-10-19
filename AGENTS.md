@@ -99,7 +99,10 @@ until the benchmark results justify the architecture.
   `SPEEDS`, `RUNS`, `DURATION`, and `OUTPUT` narrow or rename a run. Before
   every job it waits until no Playwright browser started by another process
   is open and the 1-minute load average is at most `MAX_LOAD` (half the
-  logical cores), and it gives up after two hours of waiting.
+  logical cores), and it gives up after two hours of waiting; `IGNORE_PIDS`
+  exempts an idle runner stuck holding its browser. Results are saved after
+  every job, `RESUME=1` continues an interrupted run with the same settings,
+  and `REPORT_ONLY=1` rewrites `results/hybrid.md` from the stored JSON.
 - `pnpm check` — Biome lint and format check. `pnpm format` applies fixes.
 - `pnpm typecheck` — TypeScript checks for every workspace package.
 
@@ -187,7 +190,11 @@ until the benchmark results justify the architecture.
 - Hybrid engine costs: the worker downloads the PDF again (from the HTTP
   cache when the response allows it), the classifier and hayro parse it again,
   and hayro decodes a page's images for every render (base and detail),
-  where pdf.js keeps decoded images between renders of a page. The benchmark
+  where pdf.js keeps decoded images between renders of a page; on the
+  JBIG2 and JPEG manuscript this makes page 1 sharp 36–47 ms later in
+  Chromium and Firefox. hayro's wasm memory grows to 51–103 MiB per scanned
+  document at devicePixelRatio 2 and never shrinks. Results in
+  `examples/prototype/results/hybrid.md`. The benchmark
   wrapper in `bench/hayro-wasm` leaks each parsed document (`Box::leak`),
   which is fine for one document per page but not for an application.
 - Not yet implemented: form filling, structure tree (tagged PDF) semantics,

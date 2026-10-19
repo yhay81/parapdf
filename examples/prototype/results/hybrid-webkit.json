@@ -1,0 +1,565 @@
+{
+  "environment": {
+    "runAt": "2026-10-19T00:04:03.266Z",
+    "os": "darwin 27.0.0 arm64",
+    "cpu": "Apple M2 Pro (12 logical cores)",
+    "browserName": "webkit",
+    "browser": "WebKit 27.2",
+    "headless": true,
+    "power": {
+      "source": "ac",
+      "lowPowerMode": false
+    },
+    "idle": {
+      "timerLagP50Ms": 3.9,
+      "timerLagP95Ms": 5.6,
+      "frameIntervalMs": 13.9
+    },
+    "settings": {
+      "runs": 5,
+      "speeds": [900, 3600],
+      "durationMs": 4000,
+      "viewport": "1280x900",
+      "devicePixelRatio": 2,
+      "maxLoad": 6
+    },
+    "resumedJobs": 0,
+    "load": {
+      "median": 4.4,
+      "max": 5.9
+    },
+    "ignored": [],
+    "errors": []
+  },
+  "payload": {
+    "withEveryDocument": [
+      {
+        "name": "hybrid.worker-9WMFxH8H.js",
+        "raw": 5976,
+        "brotli": 2236
+      },
+      {
+        "name": "hayro_classify_bg-C4wq2lu2.wasm",
+        "raw": 284314,
+        "brotli": 95444
+      }
+    ],
+    "withFirstScan": [
+      {
+        "name": "hayro_wasm_bench-CppHVCme.js",
+        "raw": 4160,
+        "brotli": 1441
+      },
+      {
+        "name": "hayro_wasm_bench_bg-B6N7ImOe.wasm",
+        "raw": 4056270,
+        "brotli": 1394355
+      }
+    ],
+    "pdfjsNext": [
+      {
+        "name": "pdf-29Jl64SC.js",
+        "raw": 440025,
+        "brotli": 108480
+      },
+      {
+        "name": "pdf.worker-A5U9OorG.mjs",
+        "raw": 2238397,
+        "brotli": 381380
+      },
+      {
+        "name": "pdf.renderer-GA8x22nu.mjs",
+        "raw": 241981,
+        "brotli": 43672
+      }
+    ]
+  },
+  "startup": [
+    {
+      "file": "bunka-kokugo-series-019-p4.pdf",
+      "variant": "pdfjs-next-hwa",
+      "jobs": 10,
+      "firstPaintMs": 535.2,
+      "page1DetailMs": 571.2,
+      "startupStallMs": 31.8,
+      "startupBlockedMs": 42.9,
+      "renders": {
+        "base pdfjs": {
+          "p50Ms": 176.2,
+          "count": 1
+        },
+        "detail pdfjs": {
+          "p50Ms": 32.6,
+          "count": 1
+        },
+        "base hayro": {
+          "p50Ms": null,
+          "count": null
+        },
+        "detail hayro": {
+          "p50Ms": null,
+          "count": null
+        }
+      },
+      "hybrid": null
+    },
+    {
+      "file": "bunka-kokugo-series-019-p4.pdf",
+      "variant": "hybrid-hwa",
+      "jobs": 10,
+      "firstPaintMs": 411,
+      "page1DetailMs": 469.3,
+      "startupStallMs": 13.9,
+      "startupBlockedMs": 13.7,
+      "renders": {
+        "base pdfjs": {
+          "p50Ms": null,
+          "count": null
+        },
+        "detail pdfjs": {
+          "p50Ms": null,
+          "count": null
+        },
+        "base hayro": {
+          "p50Ms": 48,
+          "count": 1
+        },
+        "detail hayro": {
+          "p50Ms": 58.3,
+          "count": 1
+        }
+      },
+      "hybrid": {
+        "classifierReadyAt": 350.8,
+        "fetchMs": 6.5,
+        "classifierWaitMs": 0,
+        "parseMs": 2.2,
+        "classifyWorkerP50Ms": 0.5,
+        "classifyWorkerMaxMs": 0.5,
+        "classifyRoundTripP50Ms": 1.1,
+        "firstClassifiedAt": 361.5,
+        "pagesHayro": 1,
+        "pagesBase": 0,
+        "hayroLoadedAt": 410.8,
+        "hayroLoadMs": 19.4,
+        "hayroParseMs": 1.8,
+        "classifierMiB": 1.3,
+        "hayroMiB": 102.9,
+        "fallbacks": []
+      }
+    },
+    {
+      "file": "patent-us223898.pdf",
+      "variant": "pdfjs-next-hwa",
+      "jobs": 10,
+      "firstPaintMs": 498.3,
+      "page1DetailMs": 543,
+      "startupStallMs": 29.4,
+      "startupBlockedMs": 70.7,
+      "renders": {
+        "base pdfjs": {
+          "p50Ms": 121.2,
+          "count": 4
+        },
+        "detail pdfjs": {
+          "p50Ms": 37.9,
+          "count": 3.5
+        },
+        "base hayro": {
+          "p50Ms": null,
+          "count": null
+        },
+        "detail hayro": {
+          "p50Ms": null,
+          "count": null
+        }
+      },
+      "hybrid": null
+    },
+    {
+      "file": "patent-us223898.pdf",
+      "variant": "hybrid-hwa",
+      "jobs": 10,
+      "firstPaintMs": 408.4,
+      "page1DetailMs": 466.4,
+      "startupStallMs": 14.7,
+      "startupBlockedMs": 24.1,
+      "renders": {
+        "base pdfjs": {
+          "p50Ms": null,
+          "count": null
+        },
+        "detail pdfjs": {
+          "p50Ms": null,
+          "count": null
+        },
+        "base hayro": {
+          "p50Ms": 45.5,
+          "count": 4
+        },
+        "detail hayro": {
+          "p50Ms": 33.8,
+          "count": 3.5
+        }
+      },
+      "hybrid": {
+        "classifierReadyAt": 350.4,
+        "fetchMs": 5.1,
+        "classifierWaitMs": 0,
+        "parseMs": 1.9,
+        "classifyWorkerP50Ms": 0.7,
+        "classifyWorkerMaxMs": 1.5,
+        "classifyRoundTripP50Ms": 2.4,
+        "firstClassifiedAt": 361.6,
+        "pagesHayro": 4,
+        "pagesBase": 0,
+        "hayroLoadedAt": 408.2,
+        "hayroLoadMs": 18,
+        "hayroParseMs": 1.1,
+        "classifierMiB": 1.6,
+        "hayroMiB": 83.9,
+        "fallbacks": []
+      }
+    },
+    {
+      "file": "wdl6812-manuscript.pdf",
+      "variant": "pdfjs-next-hwa",
+      "jobs": 10,
+      "firstPaintMs": 476.7,
+      "page1DetailMs": 522.7,
+      "startupStallMs": 16.1,
+      "startupBlockedMs": 16.5,
+      "renders": {
+        "base pdfjs": {
+          "p50Ms": 114.4,
+          "count": 2
+        },
+        "detail pdfjs": {
+          "p50Ms": 49.2,
+          "count": 2
+        },
+        "base hayro": {
+          "p50Ms": null,
+          "count": null
+        },
+        "detail hayro": {
+          "p50Ms": null,
+          "count": null
+        }
+      },
+      "hybrid": null
+    },
+    {
+      "file": "wdl6812-manuscript.pdf",
+      "variant": "hybrid-hwa",
+      "jobs": 10,
+      "firstPaintMs": 424.6,
+      "page1DetailMs": 514.2,
+      "startupStallMs": 14.2,
+      "startupBlockedMs": 13.1,
+      "renders": {
+        "base pdfjs": {
+          "p50Ms": null,
+          "count": null
+        },
+        "detail pdfjs": {
+          "p50Ms": null,
+          "count": null
+        },
+        "base hayro": {
+          "p50Ms": 65,
+          "count": 2
+        },
+        "detail hayro": {
+          "p50Ms": 92.3,
+          "count": 2
+        }
+      },
+      "hybrid": {
+        "classifierReadyAt": 348.6,
+        "fetchMs": 6,
+        "classifierWaitMs": 0,
+        "parseMs": 1.5,
+        "classifyWorkerP50Ms": 0.2,
+        "classifyWorkerMaxMs": 0.6,
+        "classifyRoundTripP50Ms": 1.3,
+        "firstClassifiedAt": 359.6,
+        "pagesHayro": 2,
+        "pagesBase": 0,
+        "hayroLoadedAt": 424.4,
+        "hayroLoadMs": 19.7,
+        "hayroParseMs": 1.2,
+        "classifierMiB": 1.4,
+        "hayroMiB": 51.3,
+        "fallbacks": []
+      }
+    },
+    {
+      "file": "bill-hr815.pdf",
+      "variant": "pdfjs-next-hwa",
+      "jobs": 10,
+      "firstPaintMs": 439.2,
+      "page1DetailMs": 505.4,
+      "startupStallMs": 12.4,
+      "startupBlockedMs": 28.5,
+      "renders": {
+        "base pdfjs": {
+          "p50Ms": 43.9,
+          "count": 7.5
+        },
+        "detail pdfjs": {
+          "p50Ms": 48.6,
+          "count": 4
+        },
+        "base hayro": {
+          "p50Ms": null,
+          "count": null
+        },
+        "detail hayro": {
+          "p50Ms": null,
+          "count": null
+        }
+      },
+      "hybrid": null
+    },
+    {
+      "file": "bill-hr815.pdf",
+      "variant": "hybrid-hwa",
+      "jobs": 10,
+      "firstPaintMs": 447.6,
+      "page1DetailMs": 505.2,
+      "startupStallMs": 13.1,
+      "startupBlockedMs": 30.7,
+      "renders": {
+        "base pdfjs": {
+          "p50Ms": 41.1,
+          "count": 7.5
+        },
+        "detail pdfjs": {
+          "p50Ms": 51.3,
+          "count": 4
+        },
+        "base hayro": {
+          "p50Ms": null,
+          "count": null
+        },
+        "detail hayro": {
+          "p50Ms": null,
+          "count": null
+        }
+      },
+      "hybrid": {
+        "classifierReadyAt": 345.8,
+        "fetchMs": 6.4,
+        "classifierWaitMs": 0,
+        "parseMs": 4.4,
+        "classifyWorkerP50Ms": 0.2,
+        "classifyWorkerMaxMs": 1.6,
+        "classifyRoundTripP50Ms": 1.8,
+        "firstClassifiedAt": 357.3,
+        "pagesHayro": 0,
+        "pagesBase": 8,
+        "hayroLoadedAt": null,
+        "hayroLoadMs": null,
+        "hayroParseMs": null,
+        "classifierMiB": 1.7,
+        "hayroMiB": 0,
+        "fallbacks": []
+      }
+    }
+  ],
+  "scrolling": [
+    {
+      "file": "bunka-kokugo-series-019-p4.pdf",
+      "speed": 900,
+      "variant": "pdfjs-next-hwa",
+      "jobs": 5,
+      "pagesCrossed": 0,
+      "blankMeanPct": 0,
+      "blockedMs": 1,
+      "stallMs": 5.9,
+      "droppedFrames": 0,
+      "frames": 77
+    },
+    {
+      "file": "bunka-kokugo-series-019-p4.pdf",
+      "speed": 900,
+      "variant": "hybrid-hwa",
+      "jobs": 5,
+      "pagesCrossed": 0,
+      "blankMeanPct": 0,
+      "blockedMs": 1.4,
+      "stallMs": 6,
+      "droppedFrames": 0,
+      "frames": 77
+    },
+    {
+      "file": "bunka-kokugo-series-019-p4.pdf",
+      "speed": 3600,
+      "variant": "pdfjs-next-hwa",
+      "jobs": 5,
+      "pagesCrossed": 0,
+      "blankMeanPct": 0,
+      "blockedMs": 0.2,
+      "stallMs": 5.9,
+      "droppedFrames": 0,
+      "frames": 21
+    },
+    {
+      "file": "bunka-kokugo-series-019-p4.pdf",
+      "speed": 3600,
+      "variant": "hybrid-hwa",
+      "jobs": 5,
+      "pagesCrossed": 0,
+      "blankMeanPct": 0,
+      "blockedMs": 0.4,
+      "stallMs": 5.8,
+      "droppedFrames": 0,
+      "frames": 21
+    },
+    {
+      "file": "patent-us223898.pdf",
+      "speed": 900,
+      "variant": "pdfjs-next-hwa",
+      "jobs": 5,
+      "pagesCrossed": 2,
+      "blankMeanPct": 0,
+      "blockedMs": 28.4,
+      "stallMs": 15.4,
+      "droppedFrames": 1,
+      "frames": 289
+    },
+    {
+      "file": "patent-us223898.pdf",
+      "speed": 900,
+      "variant": "hybrid-hwa",
+      "jobs": 5,
+      "pagesCrossed": 2,
+      "blankMeanPct": 0,
+      "blockedMs": 27.2,
+      "stallMs": 11.7,
+      "droppedFrames": 0,
+      "frames": 289
+    },
+    {
+      "file": "patent-us223898.pdf",
+      "speed": 3600,
+      "variant": "pdfjs-next-hwa",
+      "jobs": 5,
+      "pagesCrossed": 3,
+      "blankMeanPct": 0,
+      "blockedMs": 13.7,
+      "stallMs": 13.4,
+      "droppedFrames": 2,
+      "frames": 133
+    },
+    {
+      "file": "patent-us223898.pdf",
+      "speed": 3600,
+      "variant": "hybrid-hwa",
+      "jobs": 5,
+      "pagesCrossed": 3,
+      "blankMeanPct": 0,
+      "blockedMs": 3.7,
+      "stallMs": 8,
+      "droppedFrames": 4,
+      "frames": 132
+    },
+    {
+      "file": "wdl6812-manuscript.pdf",
+      "speed": 900,
+      "variant": "pdfjs-next-hwa",
+      "jobs": 5,
+      "pagesCrossed": 1,
+      "blankMeanPct": 0,
+      "blockedMs": 3.2,
+      "stallMs": 6,
+      "droppedFrames": 0,
+      "frames": 197
+    },
+    {
+      "file": "wdl6812-manuscript.pdf",
+      "speed": 900,
+      "variant": "hybrid-hwa",
+      "jobs": 5,
+      "pagesCrossed": 1,
+      "blankMeanPct": 0,
+      "blockedMs": 1.1,
+      "stallMs": 6,
+      "droppedFrames": 0,
+      "frames": 197
+    },
+    {
+      "file": "wdl6812-manuscript.pdf",
+      "speed": 3600,
+      "variant": "pdfjs-next-hwa",
+      "jobs": 5,
+      "pagesCrossed": 1,
+      "blankMeanPct": 0,
+      "blockedMs": 0.2,
+      "stallMs": 5,
+      "droppedFrames": 0,
+      "frames": 51
+    },
+    {
+      "file": "wdl6812-manuscript.pdf",
+      "speed": 3600,
+      "variant": "hybrid-hwa",
+      "jobs": 5,
+      "pagesCrossed": 1,
+      "blankMeanPct": 0,
+      "blockedMs": 0.2,
+      "stallMs": 5,
+      "droppedFrames": 0,
+      "frames": 51
+    },
+    {
+      "file": "bill-hr815.pdf",
+      "speed": 900,
+      "variant": "pdfjs-next-hwa",
+      "jobs": 5,
+      "pagesCrossed": 2,
+      "blankMeanPct": 0,
+      "blockedMs": 25.5,
+      "stallMs": 13.1,
+      "droppedFrames": 0,
+      "frames": 289
+    },
+    {
+      "file": "bill-hr815.pdf",
+      "speed": 900,
+      "variant": "hybrid-hwa",
+      "jobs": 5,
+      "pagesCrossed": 2,
+      "blankMeanPct": 0,
+      "blockedMs": 29.4,
+      "stallMs": 12.2,
+      "droppedFrames": 0,
+      "frames": 289
+    },
+    {
+      "file": "bill-hr815.pdf",
+      "speed": 3600,
+      "variant": "pdfjs-next-hwa",
+      "jobs": 5,
+      "pagesCrossed": 7,
+      "blankMeanPct": 0,
+      "blockedMs": 6.3,
+      "stallMs": 7.1,
+      "droppedFrames": 0,
+      "frames": 289
+    },
+    {
+      "file": "bill-hr815.pdf",
+      "speed": 3600,
+      "variant": "hybrid-hwa",
+      "jobs": 5,
+      "pagesCrossed": 7,
+      "blankMeanPct": 0,
+      "blockedMs": 8.3,
+      "stallMs": 8.4,
+      "droppedFrames": 0,
+      "frames": 289
+    }
+  ]
+}

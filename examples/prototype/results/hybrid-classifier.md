@@ -15,8 +15,9 @@ Timings are the native release build (`cargo run --release --example classify
 quiet (1-minute load average 14–16), so maxima include scheduling delays
 (the 18 ms maximum on `synthetic-text-1000.pdf` is one of them); the
 medians matched two earlier runs within a few microseconds. In the browser
-the classifier runs as WebAssembly in the hybrid worker; its per-page cost
-there is part of the hybrid benchmark, which has not run yet.
+the classifier runs as WebAssembly in the hybrid worker, where a page took
+0.0–0.9 ms (median per document and browser) and the round trip from the
+main thread 1.1–4.3 ms; see [`hybrid.md`](hybrid.md).
 
 | File | Pages | Parse (ms) | Pages to hayro | Classify p50 / max (µs) | Why pages stay on pdf.js |
 |---|---:|---:|---:|---:|---|
