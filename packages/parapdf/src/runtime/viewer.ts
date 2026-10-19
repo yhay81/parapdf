@@ -155,6 +155,29 @@ const yieldToMain = (): Promise<void> => {
 type PageElements = [HTMLCanvasElement, HTMLCanvasElement, HTMLElement | null, HTMLElement | null];
 
 /**
+ * The scroll position at which the content point `point` of `layout` shows
+ * at `anchor` (viewport coordinates) in `next`, as a share of the same page
+ * along both axes: pages are centered in the viewport, so a share of the
+ * content's width moved points on narrower pages sideways. The browser
+ * clamps it to the scrollable range.
+ */
+function zoomTarget(
+  layout: Layout,
+  next: Layout,
+  viewportWidth: number,
+  anchor: { x: number; y: number },
+  point: { x: number; y: number },
+): { left: number; top: number } {
+  const page = pageAt(layout, point.y);
+  const withinX = (point.x - pageLeft(layout, page, viewportWidth)) / (layout.widths[page] || 1);
+  const withinY = (point.y - (layout.tops[page] ?? 0)) / (layout.heights[page] || 1);
+  return {
+    left: pageLeft(next, page, viewportWidth) + withinX * (next.widths[page] ?? 0) - anchor.x,
+    top: (next.tops[page] ?? 0) + withinY * (next.heights[page] ?? 0) - anchor.y,
+  };
+}
+
+/**
  * A zoom gesture in progress: the wheel with ctrl or meta (also trackpad
  * pinches in Chromium and Firefox), two touches, or Safari's gesture events.
  * A CSS transform previews it until it commits.
@@ -189,7 +212,7 @@ interface Pinch {
 interface SafariGestureEvent extends UIEvent {
   /** The distance between the touches, or the trackpad's magnification, relative to the start. */
   readonly scale: number;
-  /** The pointer's position on macOS. */
+  /** The pointer's position on macOS, the midpoint of the touches on iPadOS. */
   readonly clientX?: number;
   readonly clientY?: number;
 }
@@ -697,18 +720,13 @@ export class PdfViewerRuntime {
     if (Math.abs(scale - state.scale) < 1e-4) return;
     const x = anchor?.x ?? scroller.clientWidth / 2;
     const y = anchor?.y ?? scroller.clientHeight / 2;
-    const docX = point?.x ?? scroller.scrollLeft + x;
-    const docY = point?.y ?? scroller.scrollTop + y;
-    const page = pageAt(layout, docY);
-    const viewportWidth = scroller.clientWidth;
-    const withinX = (docX - pageLeft(layout, page, viewportWidth)) / (layout.widths[page] || 1);
-    const withinY = (docY - (layout.tops[page] ?? 0)) / (layout.heights[page] || 1);
+    const docPoint = point ?? { x: scroller.scrollLeft + x, y: scroller.scrollTop + y };
     const next = this.#applyLayout(scale);
+    const target = zoomTarget(layout, next, scroller.clientWidth, { x, y }, docPoint);
     // The content is resized imperatively, so the scroll position can be
     // restored before React re-renders the mounted pages.
-    scroller.scrollTop = (next.tops[page] ?? 0) + withinY * (next.heights[page] ?? 0) - y;
-    scroller.scrollLeft =
-      pageLeft(next, page, viewportWidth) + withinX * (next.widths[page] ?? 0) - x;
+    scroller.scrollTop = target.top;
+    scroller.scrollLeft = target.left;
     this.store.set({ scale });
     this.#update();
   }
@@ -1120,12 +1138,42 @@ export class PdfViewerRuntime {
     return clamp(factor, this.#minScale / scale, this.#maxScale / scale);
   }
 
-  /** Preview a gesture on the compositor; layout and rendering wait for the commit. */
+  /**
+   * Preview a gesture on the compositor; layout and rendering wait for the
+   * commit. The preview shows the content where the commit will put it: the
+   * gesture's point stays under it unless that would scroll past the start
+   * or end of the document, or a page the zoom narrows below the viewport's
+   * width is centered again. Previewing the unconstrained place made the
+   * content jump when the gesture committed, by 334 CSS pixels on an iPad
+   * pinching in near the document's start.
+   */
   #previewZoom(zoom: ZoomGesture): void {
     const content = this.#content;
-    if (!content) return;
+    const scroller = this.#scroller;
+    const layout = this.store.get().layout;
+    if (!content || !scroller || !layout) return;
+    const left = scroller.scrollLeft;
+    const top = scroller.scrollTop;
+    // The scroll position the commit asks for, and the one it gets.
+    let next = layout;
+    let target = { left: left - zoom.panX, top: top - zoom.panY };
+    const scale = layout.scale * zoom.factor;
+    if (Math.abs(scale - layout.scale) >= 1e-4) {
+      next = computeLayout(this.#sizes, scale, this.#gap, layout.rotation);
+      target = zoomTarget(
+        layout,
+        next,
+        scroller.clientWidth,
+        { x: zoom.originX + zoom.panX - left, y: zoom.originY + zoom.panY - top },
+        { x: zoom.originX, y: zoom.originY },
+      );
+    }
+    const maxLeft = Math.max(0, next.totalWidth - scroller.clientWidth);
+    const maxTop = Math.max(0, next.totalHeight - scroller.clientHeight);
+    const shiftX = target.left - clamp(target.left, 0, maxLeft);
+    const shiftY = target.top - clamp(target.top, 0, maxTop);
     content.style.transformOrigin = `${zoom.originX}px ${zoom.originY}px`;
-    content.style.transform = `translate(${zoom.panX}px, ${zoom.panY}px) scale(${zoom.factor})`;
+    content.style.transform = `translate(${zoom.panX + shiftX}px, ${zoom.panY + shiftY}px) scale(${zoom.factor})`;
   }
 
   #commitZoom = (): void => {

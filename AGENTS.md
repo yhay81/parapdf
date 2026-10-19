@@ -123,8 +123,10 @@ with the API.
   gestures: touch pinches zoom the document around the point between the
   fingers and pan with it while the page itself stays unzoomed, two fingers
   that keep their distance scroll, one finger still scrolls natively, Safari's
-  gesture events are prevented and zoom the document, and ctrl+wheel zooms
-  around the pointer (run after `build`; `BROWSER` and `ENGINE` apply).
+  gesture events are prevented and zoom the document, ctrl+wheel zooms
+  around the pointer, and a pinch in at the document's start previews page 1
+  where its commit puts it (run after `build`; `BROWSER` and `ENGINE`
+  apply).
   Chromium gets real touches through the DevTools protocol; Playwright cannot
   put two fingers down in WebKit or Firefox, so there the check dispatches
   touch pointer events, and in WebKit gesture events.
@@ -202,6 +204,18 @@ with the API.
   - A relayout during a preview (a resize that refits, a turn, the page-size
     pass, a button) commits the gesture first; a pinch whose preview another
     gesture committed starts again from its fingers' current positions.
+  - The preview shows the content where the commit puts it: it computes the
+    commit's scroll position (`zoomTarget()`, shared with `setScale`) and
+    shifts the transform by what the scroll range clamps off it. The
+    gesture's point then stays under the fingers except where scrolling
+    cannot keep it there: at the document's start or end, or once a page
+    narrower than the viewport is centered. Previewing the unconstrained
+    place made the content jump at the commit, 334 CSS pixels down and 96
+    sideways in Safari in the iPadOS simulator.
+  - In Safari on iPadOS, a pinch that starts while a fling still scrolls
+    reaches the page through no event at all: the fling stops, the zoom does
+    not change, and a second pinch works. A long two-finger drag at a low
+    zoom pans only the preview, so pages it brings in mount at the commit.
 - `setScale("fit-width")`, which `initialScale` defaults to, sets `zoomMode`
   to "fit-width": the page at the viewport's center is fitted to the
   viewport's width again whenever that width changes, the view turns, or the
@@ -406,10 +420,15 @@ with the API.
   pdf.js engine opened, for APIs ParaPDF does not wrap.
 - Browsers: `check:text`, `check:links`, `check:lifecycle`,
   `check:rotation`, `check:options`, and `check:pinch` pass in Playwright's
-  Chromium, WebKit, and Firefox. Touch and Safari's gesture events are not
-  verified in Safari or on iPadOS devices: Playwright's WebKit cannot put two
-  fingers down, and its `GestureEvent` is a function whose objects are not
-  events. WebKit has neither
+  Chromium, WebKit, and Firefox. Playwright's WebKit cannot put two fingers
+  down, and its `GestureEvent` is a function whose objects are not events, so
+  touch and Safari's gesture events were checked by hand in Safari 27 in the
+  iPadOS 27 simulator (iPad Pro 11-inch): pinches, the point between the
+  fingers, one-finger scrolling, long-press text selection, and two-finger
+  drags behave as described here, pointer events drive pinches there, Safari
+  never cancelled their pointers, and its gesture events carry `clientX` and
+  `clientY` at the fingers' midpoint. Safari on macOS and real iOS and iPadOS
+  devices are not verified yet. WebKit has neither
   `requestIdleCallback` nor `scheduler.yield`, so idle text and annotation
   layers fall back to a 16 ms timer and search yields through `setTimeout(0)`.
 - Not yet implemented: form filling, structure tree (tagged PDF) semantics,

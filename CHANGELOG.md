@@ -36,5 +36,6 @@ The first release, from Phase 0 of the project: the API is experimental.
 
 Not yet supported: form filling, tagged-PDF structure, optional content
 toggles, attachments, per-document passwords, and drawing off the main thread
-with released pdfjs-dist. Safari itself and iOS and iPadOS devices are not
+with released pdfjs-dist. Gestures were checked by hand in Safari in the
+iPadOS simulator; Safari on macOS and real iOS and iPadOS devices are not
 verified yet.

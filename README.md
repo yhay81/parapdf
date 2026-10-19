@@ -243,11 +243,18 @@ about 20 ms as noise.
   the document instead of the page.
   [`check-pinch.ts`](examples/prototype/scripts/check-pinch.ts) verifies this
   in Chromium with touches the DevTools protocol feeds through the browser's
-  own input handling, and with dispatched events in WebKit and Firefox;
-  Safari and iPadOS themselves are not verified yet. Zooming also keeps its
-  anchor on the same point of its page sideways now: one "Zoom in" on an A5
-  page beside a wider landscape sheet used to move the viewport's center from
-  half the page's width to 0.64 of it.
+  own input handling, and with dispatched events in WebKit and Firefox.
+  Zooming also keeps its anchor on the same point of its page sideways now:
+  one "Zoom in" on an A5 page beside a wider landscape sheet used to move the
+  viewport's center from half the page's width to 0.64 of it. In Safari 27 in
+  the iPadOS 27 simulator, pinches zoomed from 84 to 147% and back with the
+  page itself at a zoom of 1 throughout, and the point between the fingers
+  moved by less than a pixel. A pinch in at the document's start, though,
+  previewed page 1 where scrolling could not keep it, and the page jumped 334
+  CSS pixels when the fingers lifted, 96 sideways where a narrower page was
+  centered again; the preview now shows the content where the commit puts
+  it. A pinch that starts while a fling still scrolls reaches the page
+  through no event in iPadOS Safari, so it does nothing until the next one.
 - **Zoom cost.** Against a React wrapper of pdf.js's own viewer
   (`PDFViewer`), measured in another project's harness, the main thread was
   1.4–5.6 times busier while zooming.

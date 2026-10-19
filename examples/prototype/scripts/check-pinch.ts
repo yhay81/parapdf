@@ -509,6 +509,65 @@ try {
     );
   }
 
+  // A pinch in at the document's start used to preview page 1 where the
+  // commit cannot keep it: lower than the top of the scroll range allows,
+  // and off the center the commit puts a page narrower than the viewport at.
+  // The page then jumped when the fingers lifted, 334 CSS pixels on an iPad.
+  // The preview must show it where the commit puts it.
+  await page.evaluate(() => {
+    const viewer = (
+      window as unknown as {
+        __viewer: { setScale(scale: "fit-width"): void; goToPage(index: number): void };
+      }
+    ).__viewer;
+    viewer.setScale("fit-width");
+    viewer.goToPage(0);
+  });
+  await settle(page);
+  before = await viewState(page);
+  const previewed = await page.evaluate(({ x, y }) => {
+    const target = document.elementFromPoint(x, y) ?? document.body;
+    const pointer = (type: string, id: number, at: number) =>
+      target.dispatchEvent(
+        new PointerEvent(type, {
+          pointerId: id,
+          pointerType: "touch",
+          isPrimary: id === 21,
+          clientX: at,
+          clientY: y,
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+        }),
+      );
+    pointer("pointerdown", 21, x - 150);
+    pointer("pointerdown", 22, x + 150);
+    for (let step = 1; step <= 10; step++) {
+      const spread = 150 - 11 * step;
+      pointer("pointermove", 21, x - spread);
+      pointer("pointermove", 22, x + spread);
+    }
+    const shown = document.querySelector('section[data-page="1"]')?.getBoundingClientRect();
+    pointer("pointerup", 21, x - 40);
+    pointer("pointerup", 22, x + 40);
+    return shown ? { left: shown.left, top: shown.top } : null;
+  }, point);
+  await committed(page);
+  after = await viewState(page);
+  const landed = await page.evaluate(() => {
+    const shown = document.querySelector('section[data-page="1"]')?.getBoundingClientRect();
+    return shown ? { left: shown.left, top: shown.top } : null;
+  });
+  check(
+    "a pinch in at the document's start previews page 1 where the commit puts it",
+    after.scale < before.scale * 0.5 &&
+      previewed !== null &&
+      landed !== null &&
+      within(landed.left - previewed.left) &&
+      within(landed.top - previewed.top),
+    JSON.stringify({ ratio: after.scale / before.scale, previewed, landed }),
+  );
+
   await page.context().close();
   check("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));
 } finally {

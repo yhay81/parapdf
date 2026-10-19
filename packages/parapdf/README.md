@@ -289,8 +289,11 @@ its pages in your application's language with `label` and `pageLabel`.
 - Search highlights need the CSS Custom Highlight API; browsers without it
   find and scroll to matches without painting them.
 - One `PdfViewport` per `PdfDocument`.
-- Tested in Playwright's builds of Chromium, WebKit, and Firefox; Safari
-  itself and iOS and iPadOS devices are not verified yet.
+- In Safari on iPadOS, a pinch that starts while a fling still scrolls does
+  not reach the page; the next pinch zooms.
+- Tested in Playwright's builds of Chromium, WebKit, and Firefox, and by hand
+  in Safari in the iPadOS simulator; Safari on macOS and real iOS and iPadOS
+  devices are not verified yet.
 
 ## License
 
