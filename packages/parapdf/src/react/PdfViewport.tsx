@@ -8,11 +8,19 @@ import { VIEWER_CSS } from "./styles.ts";
 export interface PdfViewportProps {
   className?: string;
   style?: CSSProperties;
-  /** Accessible name of the scroll container. */
+  /** Accessible name of the scroll container (default "PDF document"). */
   label?: string;
+  /**
+   * Accessible name of each page, in the application's language (default
+   * "Page 3 of 12"). Called while rendering, for every mounted page.
+   */
+  pageLabel?: (pageNumber: number, pageCount: number) => string;
   /** Content drawn over a page, positioned with `<PdfPageRect>`. */
   renderOverlay?: (pageIndex: number) => ReactNode;
 }
+
+const defaultPageLabel = (pageNumber: number, pageCount: number) =>
+  `Page ${pageNumber} of ${pageCount}`;
 
 /**
  * The scroll container. Only the pages in the runtime's window are mounted,
@@ -23,6 +31,7 @@ export function PdfViewport({
   className,
   style,
   label = "PDF document",
+  pageLabel = defaultPageLabel,
   renderOverlay,
 }: PdfViewportProps) {
   const runtime = usePdfViewer();
@@ -47,7 +56,7 @@ export function PdfViewport({
         <PdfPage
           key={index}
           index={index}
-          pageCount={pageCount}
+          label={pageLabel(index + 1, pageCount)}
           top={layout.tops[index] ?? 0}
           gap={layout.gap}
           width={layout.widths[index] ?? 0}
@@ -98,7 +107,8 @@ export function PdfViewport({
 
 interface PdfPageProps {
   index: number;
-  pageCount: number;
+  /** Accessible name of the page. */
+  label: string;
   top: number;
   /** Space between pages and around the document, in CSS pixels. */
   gap: number;
@@ -121,7 +131,7 @@ const layerStyle: CSSProperties = {
 
 const PdfPage = memo(function PdfPage({
   index,
-  pageCount,
+  label,
   top,
   gap,
   width,
@@ -149,7 +159,7 @@ const PdfPage = memo(function PdfPage({
     // A labelled section is a region landmark, the role pdf.js gives its pages.
     <section
       data-page={index + 1}
-      aria-label={`Page ${index + 1} of ${pageCount}`}
+      aria-label={label}
       style={
         {
           position: "absolute",

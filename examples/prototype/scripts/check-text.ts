@@ -469,6 +469,16 @@ try {
     japanesePageLanguage === "ja" && onGlyphs(onJapanesePage),
     `lang ${JSON.stringify(japanesePageLanguage)}, ${describe(onJapanesePage)}`,
   );
+  // The demo labels the viewport and its pages in Japanese there.
+  const japaneseLabels = await page.evaluate(() => ({
+    viewport: document.querySelector(".parapdf-viewport")?.getAttribute("aria-label"),
+    page: document.querySelector('section[data-page="1"]')?.getAttribute("aria-label"),
+  }));
+  check(
+    "the viewport and its pages take the application's labels",
+    japaneseLabels.viewport === "PDF 文書" && japaneseLabels.page === "110 ページ中 1 ページ目",
+    JSON.stringify(japaneseLabels),
+  );
 
   // Japanese text in a non-embedded CID font, plus compatibility normalization.
   page = await newPage();

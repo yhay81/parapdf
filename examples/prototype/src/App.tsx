@@ -57,9 +57,13 @@ const settings = {
 };
 
 // The page's language, which the text layers of PDFs that declare none
-// inherit: ?lang=ja shows them on a Japanese page.
+// inherit: ?lang=ja shows them on a Japanese page, with Japanese labels.
 const pageLanguage = params.get("lang");
 if (pageLanguage !== null) document.documentElement.lang = pageLanguage;
+const japanese = pageLanguage === "ja";
+const pageLabel = japanese
+  ? (pageNumber: number, pageCount: number) => `${pageCount} ページ中 ${pageNumber} ページ目`
+  : undefined;
 
 declare global {
   interface Window {
@@ -195,6 +199,7 @@ function Viewer(_props: { renders: number }) {
         {outlineOpen ? <OutlinePanel id="outline" /> : null}
         <PdfViewport
           className={outlineOpen ? "viewport with-outline" : "viewport"}
+          {...(japanese ? { label: "PDF 文書", pageLabel } : {})}
           renderOverlay={renderOverlay}
         />
         {settings.autoscroll > 0 ? (

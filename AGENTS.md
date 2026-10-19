@@ -323,8 +323,11 @@ until the benchmark results justify the architecture.
   an `aria-hidden` wrapper so assistive technology reads the text layer. The
   text layer's `lang` is the PDF's /Lang, so its text is announced in the
   document's language while page labels keep the page's; for PDFs without
-  one it is the language the layer inherits. The demo announces result
-  counts through an `aria-live` `<output>`.
+  one it is the language the layer inherits. `PdfViewport`'s `label` and
+  `pageLabel` name the document and its pages in the application's language
+  ("PDF document" and "Page 3 of 12" by default); the demo's `?lang=ja` uses
+  Japanese ones. The demo announces result counts through an `aria-live`
+  `<output>`.
 - Annotation layers use pdf.js's core `AnnotationLayer` inside
   `.parapdf-annotation-layer`, after the page's text layer in the same idle
   pipeline, with `renderForms: false`: form widgets stay on the canvas. A
