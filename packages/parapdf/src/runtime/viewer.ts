@@ -16,6 +16,7 @@ import {
   type Layout,
   pageAt,
   turnBox,
+  turnedSize,
   type Viewport,
   visibleArea,
   visibleRange,
@@ -53,6 +54,11 @@ export interface ViewerState {
   currentPage: number;
   /** CSS pixels per PDF point. */
   scale: number;
+  /**
+   * "fit-width" keeps fitting the width of the page at the viewport's center
+   * as the viewport resizes or the view turns; "custom" keeps `scale`.
+   */
+  zoomMode: ZoomMode;
   /** Clockwise view rotation of every page. */
   rotation: Rotation;
   /** The open document, for engine features ParaPDF does not wrap; null until it loads. */
@@ -64,12 +70,15 @@ export interface ViewerState {
   canGoBack: boolean;
 }
 
+export type ZoomMode = "fit-width" | "custom";
+
 export interface ViewerOptions {
   /** Space between pages in CSS pixels. */
   gap?: number;
   /** Pages mounted beyond each edge of the viewport. */
   overscan?: number;
   maxConcurrentRenders?: number;
+  /** A scale in CSS pixels per point, or "fit-width" (the default) to keep fitting the page width. */
   initialScale?: number | "fit-width";
   minScale?: number;
   maxScale?: number;
@@ -130,6 +139,7 @@ export class PdfViewerRuntime {
     last: -1,
     currentPage: 0,
     scale: 1,
+    zoomMode: "custom",
     search: IDLE_SEARCH,
     outline: null,
     canGoBack: false,
@@ -170,6 +180,8 @@ export class PdfViewerRuntime {
   #velocity = 0;
   #zoom: { factor: number; x: number; y: number; timer: number } | null = null;
   #firstPaintAt: number | null = null;
+  /** Viewport width the "fit-width" scale was last computed for. */
+  #fittedWidth = 0;
 
   constructor(engine: PdfEngine, options: ViewerOptions = {}) {
     this.#engine = engine;
@@ -181,6 +193,7 @@ export class PdfViewerRuntime {
     this.#maxScale = options.maxScale ?? 10;
     this.#textLayer = options.textLayer ?? true;
     this.#annotationLayer = options.annotationLayer ?? true;
+    this.store.set({ zoomMode: this.#initialZoomMode() });
   }
 
   get engineName(): string {
@@ -226,6 +239,7 @@ export class PdfViewerRuntime {
       outline: null,
       canGoBack: false,
       rotation: 0,
+      zoomMode: this.#initialZoomMode(),
       document: null,
     });
 
@@ -318,7 +332,7 @@ export class PdfViewerRuntime {
     if (layout) this.#sizeContent(layout);
     scroller.addEventListener("scroll", this.#onScroll, { passive: true });
     scroller.addEventListener("wheel", this.#onWheel, { passive: false });
-    const resize = new ResizeObserver(() => this.#requestUpdate());
+    const resize = new ResizeObserver(this.#onResize);
     resize.observe(scroller);
     this.#requestUpdate();
     return () => {
@@ -525,13 +539,40 @@ export class PdfViewerRuntime {
     scroller.scrollLeft = (scroller.scrollWidth - scroller.clientWidth) / 2;
     this.#scheduler?.rotate(turned);
     this.#update();
+    // A turned page has another width to fit.
+    this.#fitWidth();
   }
 
   /**
    * Change the zoom level, keeping the point under `anchor` (viewport
-   * coordinates, default center) in place.
+   * coordinates, default center) in place. "fit-width" fits the width of the
+   * page at the viewport's center and keeps fitting it as the viewport
+   * resizes or the view turns, like pdf.js's "page-width"; a number stops
+   * that.
    */
-  setScale(requested: number, anchor?: { x: number; y: number }): void {
+  setScale(requested: number | "fit-width", anchor?: { x: number; y: number }): void {
+    if (requested === "fit-width") {
+      this.store.set({ zoomMode: "fit-width" });
+      this.#fitWidth();
+      return;
+    }
+    this.store.set({ zoomMode: "custom" });
+    this.#zoomTo(requested, anchor);
+  }
+
+  /** Fit the page at the viewport's center to the viewport's width, in "fit-width" mode only. */
+  #fitWidth(): void {
+    const scroller = this.#scroller;
+    const state = this.store.get();
+    if (state.zoomMode !== "fit-width" || !scroller || scroller.clientWidth === 0) return;
+    const size = this.#sizes[state.currentPage] ?? this.#sizes[0];
+    const width = size ? turnedSize(size, state.rotation).width : 0;
+    if (width === 0) return;
+    this.#fittedWidth = scroller.clientWidth;
+    this.#zoomTo((scroller.clientWidth - 2 * this.#gap) / width);
+  }
+
+  #zoomTo(requested: number, anchor?: { x: number; y: number }): void {
     const state = this.store.get();
     const scale = clamp(requested, this.#minScale, this.#maxScale);
     const layout = state.layout;
@@ -701,10 +742,15 @@ export class PdfViewerRuntime {
     this.#highlights.setPage(pageIndex, handle.elements, pageMatches, matches[current] ?? null);
   }
 
+  #initialZoomMode(): ZoomMode {
+    return this.#initialScale === "fit-width" ? "fit-width" : "custom";
+  }
+
   #resolveInitialScale(firstPage: PageSize): number {
     if (typeof this.#initialScale === "number") return this.#initialScale;
     const width = this.#scroller?.clientWidth ?? 0;
     if (width === 0 || firstPage.width === 0) return 1;
+    this.#fittedWidth = width;
     return clamp((width - 2 * this.#gap) / firstPage.width, this.#minScale, this.#maxScale);
   }
 
@@ -759,7 +805,15 @@ export class PdfViewerRuntime {
     const next = this.#applyLayout(this.store.get().scale);
     if (scroller) scroller.scrollTop = (next.tops[anchorPage] ?? 0) + offset;
     this.#update();
+    // The page at the center may turn out wider or narrower than the first.
+    this.#fitWidth();
   }
+
+  #onResize = (): void => {
+    const scroller = this.#scroller;
+    if (scroller && scroller.clientWidth !== this.#fittedWidth) this.#fitWidth();
+    this.#requestUpdate();
+  };
 
   #onScroll = (): void => {
     const scroller = this.#scroller;

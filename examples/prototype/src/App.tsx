@@ -199,6 +199,7 @@ function Toolbar({
   const page = usePdfState((state) => state.currentPage);
   const pageCount = usePdfState((state) => state.pageCount);
   const scale = usePdfState((state) => state.scale);
+  const zoomMode = usePdfState((state) => state.zoomMode);
   return (
     <header className="toolbar">
       {hasOutline ? (
@@ -224,6 +225,13 @@ function Toolbar({
       <span>{Math.round((scale * 72 * 100) / 96)}%</span>
       <button type="button" onClick={() => viewer.zoomBy(1.25)} aria-label="Zoom in">
         +
+      </button>
+      <button
+        type="button"
+        aria-pressed={zoomMode === "fit-width"}
+        onClick={() => viewer.setScale("fit-width")}
+      >
+        Fit width
       </button>
       <button type="button" onClick={() => viewer.rotate(-90)} aria-label="Rotate counterclockwise">
         ↺

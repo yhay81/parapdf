@@ -36,4 +36,5 @@ export {
   type SearchState,
   type ViewerOptions,
   type ViewerState,
+  type ZoomMode,
 } from "./runtime/viewer.ts";

@@ -63,7 +63,9 @@ export function PdfViewport({
     <div
       ref={scrollerRef}
       className={className ? `parapdf-viewport ${className}` : "parapdf-viewport"}
-      style={{ overflow: "auto", contain: "strict", ...style }}
+      // A stable gutter keeps the width from changing as the scrollbar comes
+      // and goes, which would refit "fit-width" back and forth.
+      style={{ overflow: "auto", contain: "strict", scrollbarGutter: "stable", ...style }}
       // biome-ignore lint/a11y/noNoninteractiveTabindex: a focusable scroll container is what lets keyboard users scroll it.
       tabIndex={0}
       role="document"
