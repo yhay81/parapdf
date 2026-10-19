@@ -113,7 +113,7 @@ const server = await preview({
   preview: { port: 4183, strictPort: false, open: false },
 });
 const baseUrl = server.resolvedUrls?.local[0] ?? "http://localhost:4183/";
-const launched = await launchBrowser(browserName);
+const launched = await launchBrowser(browserName, { deviceScaleFactor: 2 });
 const { browser } = launched;
 
 const waitForDone = (page: Page) =>
@@ -175,6 +175,8 @@ try {
               () => (window as { __result?: unknown }).__result,
             )) as Omit<JobResult, "variant" | "run">;
             result = { ...payload, ...job, idle };
+            const ratio = (payload as { devicePixelRatio?: number }).devicePixelRatio;
+            if (ratio !== 2) result.error = `devicePixelRatio ${ratio}, expected 2`;
           } catch (error) {
             result = { ...job, error: error instanceof Error ? error.message : String(error) };
           }

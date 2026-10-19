@@ -69,6 +69,17 @@ export function assertMeasurementPower(): PowerState {
   );
 }
 
+export interface LaunchOptions {
+  /**
+   * The deviceScaleFactor of every context the caller creates. Firefox needs
+   * it at launch: Playwright's Firefox only overrides the devicePixelRatio
+   * that pages report, lays them out at one device pixel per CSS pixel, and
+   * loses even the override when a page navigates into a cross-origin-isolated
+   * process (COOP and COEP), so the demo reported 1. Other browsers ignore it.
+   */
+  deviceScaleFactor?: number;
+}
+
 export interface LaunchedBrowser {
   name: BrowserName;
   /** "Chromium 156.0.8078.4", "WebKit 27.2", or "Firefox 157.0". */
@@ -80,6 +91,7 @@ export interface LaunchedBrowser {
 
 export async function launchBrowser(
   name: BrowserName = browserFromEnv(),
+  options: LaunchOptions = {},
 ): Promise<LaunchedBrowser> {
   const headless = !process.env.HEADED;
   let browser: Browser;
@@ -93,7 +105,14 @@ export async function launchBrowser(
     // Headless Firefox follows the display's refresh rate (120 Hz on ProMotion
     // Macs); pin it to the 60 Hz that headless Chromium and WebKit use so frame
     // intervals and "visible" times stay comparable.
-    const firefoxUserPrefs = { "layout.frame_rate": 60 };
+    const firefoxUserPrefs: Record<string, number | string> = { "layout.frame_rate": 60 };
+    if (options.deviceScaleFactor) {
+      // Firefox's own device pixels per CSS pixel, for every page and
+      // process. The viewport keeps its size in CSS pixels, and the
+      // deviceScaleFactor override reports the same ratio instead of
+      // multiplying it.
+      firefoxUserPrefs["layout.css.devPixelsPerPx"] = String(options.deviceScaleFactor);
+    }
     if (platform() === "darwin") {
       // Firefox reads its profile list from ~/Library/Application Support even
       // when Playwright passes a profile, and macOS may refuse that folder to

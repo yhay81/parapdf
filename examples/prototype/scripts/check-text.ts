@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Page } from "playwright";
 import { preview } from "vite";
-import { launchBrowser } from "../../../bench/scripts/browsers.ts";
+import { browserFromEnv, launchBrowser } from "../../../bench/scripts/browsers.ts";
 
 const exampleDir = fileURLToPath(new URL("..", import.meta.url));
 const engine = process.env.ENGINE ?? "pdfjs-next";
@@ -68,7 +68,7 @@ const server = await preview({
   preview: { port: 4185, strictPort: false, open: false },
 });
 const baseUrl = server.resolvedUrls?.local[0] ?? "http://localhost:4185/";
-const launched = await launchBrowser();
+const launched = await launchBrowser(browserFromEnv(), { deviceScaleFactor: 2 });
 console.log(`${launched.label}, engine ${engine}`);
 const errors: string[] = [];
 // Each document gets a fresh context, like a first visit. On a second visit
