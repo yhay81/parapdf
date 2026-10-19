@@ -1,8 +1,8 @@
 # ParaPDF runtime prototype: scripted scroll, Firefox 157.0
 
-- Run at: 2026-10-18T12:31:56.881Z
+- Run at: 2026-10-19T07:18:26.181Z
 - Machine: darwin 27.0.0 arm64, Apple M2 Pro (12 logical cores); Firefox 157.0 (Playwright build, headless); power: AC
-- Idle baseline (calibrate.html, median of jobs): 4 ms timer late by 2.0 ms (median) / 2.3 ms (p95); animation frames every 16.7 ms.
+- Idle baseline (calibrate.html, median of jobs): 4 ms timer late by 1.0 ms (median) / 1.1 ms (p95); animation frames every 16.7 ms.
 - Method: 1280×900 viewport at devicePixelRatio 2, fit-width zoom, 4000 ms of scrolling at a constant speed in CSS pixels per second after the first page is painted, median of 2 runs. PDF preload: on.
 - First paint: time from navigation start until page 1 shows pixels.
 - Blank: share of the viewport covered by pages without pixels, averaged over frames; blank frames: frames where more than 1% was blank.
@@ -14,51 +14,51 @@
 
 | Variant | First paint (ms) | Pages crossed | Blank (%) | Blank frames (%) | Main thread blocked (ms) | Lag p95 / max (ms) | Dropped frames | React commits | Renders base / detail / text / links / cancelled |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| pdfjs | 470 | 2 | 0.0 | 0.0 | 55 | 2.5 / 13 | 0 / 241 | 4 | 2 / 2 / 2 / 2 / 0 |
-| pdfjs, no text | 478 | 2 | 0.0 | 0.0 | 63 | 2.5 / 12 | 0 / 241 | 4 | 2 / 2 / 0 / 2 / 0 |
-| pdfjs-hwa | 479 | 2 | 0.0 | 0.0 | 56 | 2.6 / 13 | 0 / 241 | 4 | 2 / 2 / 2 / 2 / 0 |
-| pdfjs-hwa, no text | 487 | 2 | 0.0 | 0.0 | 34 | 2.3 / 9 | 0 / 242 | 4 | 2 / 2 / 0 / 2 / 0 |
-| pdfjs-next | 484 | 2 | 0.0 | 0.0 | 38 | 2.5 / 14 | 0 / 241 | 4 | 2 / 2 / 2 / 2 / 0 |
-| pdfjs-next, no text | 488 | 2 | 0.0 | 0.0 | 51 | 2.5 / 14 | 0 / 241 | 4 | 2 / 2 / 0 / 2 / 0 |
-| pdfjs-next-hwa | 475 | 2 | 0.0 | 0.0 | 47 | 2.4 / 9 | 0 / 241 | 4 | 2 / 2 / 2 / 2 / 0 |
-| pdfjs-next-hwa, no text | 485 | 2 | 0.0 | 0.0 | 34 | 2.4 / 11 | 0 / 241 | 4 | 2 / 2 / 0 / 2 / 0 |
+| pdfjs | 468 | 2 | 0.0 | 0.0 | 46 | 1.1 / 19 | 0 / 241 | 4 | 2 / 2 / 2 / 2 / 0 |
+| pdfjs, no text | 458 | 2 | 0.0 | 0.0 | 57 | 1.2 / 10 | 0 / 241 | 4 | 2 / 2 / 0 / 2 / 0 |
+| pdfjs-hwa | 485 | 2 | 0.0 | 0.0 | 89 | 1.8 / 16 | 0 / 241 | 4 | 2 / 2 / 2 / 2 / 0 |
+| pdfjs-hwa, no text | 464 | 2 | 0.0 | 0.0 | 34 | 1.1 / 14 | 0 / 241 | 4 | 2 / 2 / 0 / 2 / 0 |
+| pdfjs-next | 460 | 2 | 0.0 | 0.0 | 49 | 1.1 / 17 | 0 / 242 | 4 | 2 / 2 / 2 / 2 / 0 |
+| pdfjs-next, no text | 461 | 2 | 0.0 | 0.0 | 35 | 1.1 / 16 | 0 / 241 | 4 | 2 / 2 / 0 / 2 / 0 |
+| pdfjs-next-hwa | 461 | 2 | 0.0 | 0.0 | 41 | 1.1 / 15 | 0 / 241 | 4 | 2 / 2 / 2 / 2 / 0 |
+| pdfjs-next-hwa, no text | 459 | 2 | 0.0 | 0.0 | 37 | 1.2 / 13 | 0 / 241 | 4 | 2 / 2 / 0 / 2 / 0 |
 
 ## synthetic-text-1000.pdf, 3600 CSS px per second
 
 | Variant | First paint (ms) | Pages crossed | Blank (%) | Blank frames (%) | Main thread blocked (ms) | Lag p95 / max (ms) | Dropped frames | React commits | Renders base / detail / text / links / cancelled |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| pdfjs | 460 | 9 | 0.0 | 0.0 | 91 | 2.9 / 11 | 0 / 241 | 24 | 9 / 0 / 0 / 0 / 0 |
-| pdfjs, no text | 492 | 9 | 0.0 | 0.0 | 80 | 2.6 / 11 | 0 / 241 | 24 | 9 / 0 / 0 / 0 / 0 |
-| pdfjs-hwa | 471 | 9 | 0.0 | 0.0 | 96 | 3.0 / 10 | 0 / 241 | 24 | 9 / 0 / 0 / 0 / 0 |
-| pdfjs-hwa, no text | 487 | 9 | 0.0 | 0.0 | 96 | 2.7 / 11 | 0 / 241 | 24 | 9 / 0 / 0 / 0 / 0 |
-| pdfjs-next | 471 | 9 | 0.0 | 0.0 | 50 | 2.5 / 10 | 0 / 241 | 24 | 9 / 0 / 0 / 0 / 0 |
-| pdfjs-next, no text | 484 | 9 | 0.0 | 0.0 | 34 | 2.5 / 9 | 0 / 241 | 24 | 9 / 0 / 0 / 0 / 0 |
-| pdfjs-next-hwa | 491 | 9 | 0.0 | 0.0 | 40 | 2.6 / 8 | 0 / 241 | 24 | 9 / 0 / 0 / 0 / 0 |
-| pdfjs-next-hwa, no text | 472 | 9 | 0.0 | 0.0 | 41 | 2.2 / 9 | 0 / 241 | 24 | 9 / 0 / 0 / 0 / 0 |
+| pdfjs | 510 | 9 | 0.0 | 0.0 | 40 | 1.3 / 7 | 0 / 241 | 24 | 9 / 0 / 0 / 0 / 0 |
+| pdfjs, no text | 475 | 9 | 0.0 | 0.0 | 89 | 1.5 / 21 | 1 / 240 | 24 | 9 / 0 / 0 / 0 / 0 |
+| pdfjs-hwa | 466 | 9 | 0.0 | 0.0 | 29 | 1.1 / 8 | 0 / 241 | 24 | 9 / 0 / 0 / 0 / 0 |
+| pdfjs-hwa, no text | 463 | 9 | 0.0 | 0.0 | 31 | 1.1 / 9 | 0 / 241 | 24 | 9 / 0 / 0 / 0 / 0 |
+| pdfjs-next | 475 | 9 | 0.0 | 0.0 | 13 | 1.1 / 7 | 0 / 241 | 24 | 9 / 0 / 0 / 0 / 0 |
+| pdfjs-next, no text | 476 | 9 | 0.0 | 0.0 | 16 | 1.0 / 8 | 0 / 242 | 24 | 9 / 0 / 0 / 0 / 0 |
+| pdfjs-next-hwa | 474 | 9 | 0.0 | 0.0 | 24 | 1.1 / 10 | 0 / 242 | 24 | 9 / 0 / 0 / 0 / 0 |
+| pdfjs-next-hwa, no text | 529 | 9 | 0.0 | 0.0 | 51 | 1.7 / 8 | 1 / 240 | 24 | 9 / 0 / 0 / 0 / 0 |
 
 ## bill-hr815.pdf, 900 CSS px per second
 
 | Variant | First paint (ms) | Pages crossed | Blank (%) | Blank frames (%) | Main thread blocked (ms) | Lag p95 / max (ms) | Dropped frames | React commits | Renders base / detail / text / links / cancelled |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| pdfjs | 426 | 2 | 0.0 | 0.0 | 68 | 2.6 / 12 | 0 / 241 | 4 | 2 / 2 / 2 / 2 / 0 |
-| pdfjs, no text | 432 | 2 | 0.0 | 0.0 | 55 | 2.4 / 12 | 0 / 241 | 4 | 2 / 2 / 0 / 2 / 0 |
-| pdfjs-hwa | 449 | 2 | 0.0 | 0.0 | 50 | 2.3 / 11 | 0 / 242 | 4 | 2 / 2 / 2 / 2 / 0 |
-| pdfjs-hwa, no text | 424 | 2 | 0.0 | 0.0 | 69 | 2.6 / 11 | 0 / 241 | 4 | 2 / 2 / 0 / 2 / 0 |
-| pdfjs-next | 432 | 2 | 0.0 | 0.0 | 36 | 2.3 / 8 | 0 / 241 | 4 | 2 / 2 / 2 / 2 / 0 |
-| pdfjs-next, no text | 436 | 2 | 0.0 | 0.0 | 25 | 2.4 / 7 | 0 / 241 | 4 | 2 / 2 / 0 / 2 / 0 |
-| pdfjs-next-hwa | 425 | 2 | 0.0 | 0.0 | 51 | 2.6 / 11 | 0 / 241 | 4 | 2 / 2 / 2 / 2 / 0 |
-| pdfjs-next-hwa, no text | 430 | 2 | 0.0 | 0.0 | 31 | 2.3 / 8 | 0 / 242 | 4 | 2 / 2 / 0 / 2 / 0 |
+| pdfjs | 427 | 2 | 0.0 | 0.0 | 60 | 1.1 / 21 | 1 / 241 | 4 | 2 / 2 / 2 / 2 / 0 |
+| pdfjs, no text | 417 | 2 | 0.0 | 0.0 | 27 | 1.1 / 12 | 0 / 241 | 4 | 2 / 2 / 0 / 2 / 0 |
+| pdfjs-hwa | 425 | 2 | 0.0 | 0.0 | 113 | 1.3 / 37 | 1 / 241 | 4 | 2 / 2 / 2 / 2 / 0 |
+| pdfjs-hwa, no text | 409 | 2 | 0.0 | 0.0 | 41 | 1.1 / 12 | 0 / 241 | 4 | 2 / 2 / 0 / 2 / 0 |
+| pdfjs-next | 431 | 2 | 0.0 | 0.0 | 109 | 1.6 / 20 | 0 / 241 | 4 | 2 / 2 / 2 / 2 / 0 |
+| pdfjs-next, no text | 420 | 2 | 0.0 | 0.0 | 39 | 1.1 / 14 | 0 / 241 | 4 | 2 / 2 / 0 / 2 / 0 |
+| pdfjs-next-hwa | 414 | 2 | 0.0 | 0.0 | 49 | 1.1 / 16 | 0 / 242 | 4 | 2 / 2 / 2 / 2 / 0 |
+| pdfjs-next-hwa, no text | 413 | 2 | 0.0 | 0.0 | 43 | 1.1 / 13 | 0 / 241 | 4 | 2 / 2 / 0 / 2 / 0 |
 
 ## bill-hr815.pdf, 3600 CSS px per second
 
 | Variant | First paint (ms) | Pages crossed | Blank (%) | Blank frames (%) | Main thread blocked (ms) | Lag p95 / max (ms) | Dropped frames | React commits | Renders base / detail / text / links / cancelled |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| pdfjs | 431 | 7 | 0.0 | 0.0 | 77 | 2.6 / 9 | 0 / 241 | 20 | 8 / 0 / 0 / 0 / 0 |
-| pdfjs, no text | 432 | 7 | 0.0 | 0.0 | 77 | 2.3 / 11 | 0 / 241 | 20 | 8 / 0 / 0 / 0 / 0 |
-| pdfjs-hwa | 433 | 7 | 0.0 | 0.0 | 73 | 2.4 / 10 | 0 / 242 | 20 | 8 / 0 / 0 / 0 / 0 |
-| pdfjs-hwa, no text | 419 | 7 | 0.0 | 0.0 | 79 | 2.6 / 11 | 0 / 241 | 20 | 7 / 0 / 0 / 0 / 0 |
-| pdfjs-next | 431 | 7 | 0.0 | 0.0 | 61 | 2.6 / 8 | 0 / 242 | 20 | 8 / 0 / 0 / 0 / 0 |
-| pdfjs-next, no text | 423 | 7 | 0.0 | 0.0 | 46 | 2.5 / 7 | 0 / 242 | 20 | 8 / 0 / 0 / 0 / 0 |
-| pdfjs-next-hwa | 445 | 7 | 0.0 | 0.0 | 45 | 2.3 / 9 | 0 / 241 | 20 | 7 / 0 / 0 / 0 / 0 |
-| pdfjs-next-hwa, no text | 420 | 7 | 0.0 | 0.0 | 50 | 2.4 / 9 | 0 / 241 | 20 | 7 / 0 / 0 / 0 / 0 |
+| pdfjs | 409 | 7 | 0.0 | 0.0 | 44 | 1.1 / 19 | 0 / 241 | 20 | 7 / 0 / 0 / 0 / 0 |
+| pdfjs, no text | 448 | 7 | 0.0 | 0.0 | 19 | 1.1 / 11 | 0 / 241 | 20 | 7 / 0 / 0 / 0 / 0 |
+| pdfjs-hwa | 429 | 7 | 0.0 | 0.0 | 34 | 1.1 / 11 | 0 / 241 | 20 | 7 / 0 / 0 / 0 / 0 |
+| pdfjs-hwa, no text | 419 | 7 | 0.0 | 0.0 | 57 | 1.5 / 12 | 1 / 240 | 20 | 7 / 0 / 0 / 0 / 0 |
+| pdfjs-next | 426 | 7 | 0.0 | 0.0 | 151 | 1.2 / 84 | 1 / 236 | 20 | 8 / 0 / 0 / 0 / 0 |
+| pdfjs-next, no text | 411 | 7 | 0.0 | 0.0 | 48 | 1.2 / 12 | 1 / 241 | 20 | 8 / 0 / 0 / 0 / 0 |
+| pdfjs-next-hwa | 444 | 7 | 0.0 | 0.0 | 30 | 1.1 / 12 | 0 / 241 | 20 | 7 / 0 / 0 / 0 / 0 |
+| pdfjs-next-hwa, no text | 409 | 7 | 0.0 | 0.0 | 277 | 3.0 / 31 | 7 / 225 | 20 | 8 / 1 / 0 / 0 / 0 |
 

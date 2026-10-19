@@ -74,7 +74,9 @@ details per browser in [`chromium.md`](examples/prototype/results/chromium.md),
 [`firefox.md`](examples/prototype/results/firefox.md). Each cell is the median
 of two runs, and a virtual machine used 40–80% of a CPU core during these
 runs: compare blocked times within a browser, and treat differences under
-about 20 ms as noise.
+about 20 ms as noise. Firefox ran again on 2026-10-19 at devicePixelRatio 2
+(its first run had rendered at 1), while a virtual machine and other
+projects' processes kept the load average at 3.8–9.4.
 
 - **React stays out of the hot path.** In all three browsers, scrolling across
   7–9 pages over 241 frames caused 20–24 React commits, one batch per change
@@ -90,13 +92,15 @@ about 20 ms as noise.
   14 ms. CPU-backed canvases dropped 6–12 frames in 4 seconds of scrolling
   where GPU-backed canvases dropped none: one more reason to default to
   `enableHWA`.
-- **Firefox.** Every variant blocked for 25–96 ms, with stalls of 7–14 ms,
-  the renderer worker on a GPU-backed canvas included (31–51 ms). Scrolling
-  pages that are already rendered, with nothing new to render, blocks for
-  2–42 ms (median 5; see
-  [`control.md`](examples/prototype/results/control.md)), so rendering still
-  costs Firefox's main thread time with the renderer worker; why is not known
-  yet.
+- **Firefox.** Variants blocked for 13–113 ms, with stalls of 7–37 ms,
+  except two cells on bill-hr815 at 3,600 px/s where single runs of 283 and
+  527 ms lift the median to 151 and 277 ms; the renderer worker on a
+  GPU-backed canvas blocked for 24–49 ms, with stalls of 10–16 ms. Scrolling
+  pages that are already rendered, with nothing new to render, blocked for
+  4–112 ms (median 46) and leaving them still for 0–113 ms (median 6; see
+  [`control.md`](examples/prototype/results/control.md)), with the load
+  average at 4–9 during that run. At this noise level the control cannot
+  tell how much of Firefox's main-thread time comes from rendering.
 - **Startup.** Starting the PDF download with React's `preload()` moved first
   paint of bill-hr815 from 800 to 684 ms on released pdf.js and from 619 to
   503 ms with the renderer worker (Chromium, median of five runs; see
