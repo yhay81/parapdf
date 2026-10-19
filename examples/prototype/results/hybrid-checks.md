@@ -5,7 +5,9 @@ Run on 2026-10-19 between 00:56 and 01:10 JST on the build from commit
 27.2, and Firefox 157.0), with the hybrid engine (`ENGINE=hybrid` for the
 existing checks). Every check passed in every browser. The same checks had
 also passed on 2026-10-18 on the build before the cancellation fix, without
-the zoom case.
+the zoom case. Firefox ran them again on 2026-10-19 around 15:00 JST at
+devicePixelRatio 2 (see below), on a build identical to `26bbfab`'s, and
+passed every check; its column shows that run.
 
 | Check | What it covers | Chromium | WebKit | Firefox |
 |---|---|---:|---:|---:|
@@ -28,8 +30,8 @@ What `check-hybrid.ts` found, the same in all three browsers:
   text layer still comes from pdf.js: page 1 exposes "Electric-Lamp", a mouse
   drag selects it, and searching "Menlo Park" finds 2 matches. Zooming to
   150% re-renders page 1's detail layer with hayro at the new scale without a
-  fallback: from 2,512 to 3,379 device pixels wide (the 16 MP cap) in
-  Chromium and WebKit, from 1,256 to 1,884 in Firefox (see below).
+  fallback: from 2,512 to 3,379 device pixels wide (the 16 MP cap) in all
+  three browsers.
 
 The text and link checks open only documents with text (`bill-hr815.pdf`,
 `synthetic-cjk-nonembedded.pdf`, `synthetic-text-1000.pdf`, `usrguide.pdf`),
@@ -43,9 +45,9 @@ connected to the other server and timed out on its first navigation (with
 moved to port 4180 through a Node `--import` hook that rewrites the listen
 port, without changing the script.
 
-Firefox ran these checks at devicePixelRatio 1: Playwright's Firefox 157
-ignores `deviceScaleFactor: 2` on cross-origin-isolated pages (a minimal page
-reports 2 without COOP and COEP and 1 with them), and the demo is
-cross-origin isolated. Firefox's canvases therefore hold a quarter of the
-pixels that Chromium's and WebKit's hold. The checks do not depend on the
-resolution, but cross-browser timings from the demo do.
+Firefox first ran these checks at devicePixelRatio 1, with detail canvases
+of 1,256 and 1,884 device pixels in the zoom case: Playwright's Firefox 157
+drops `deviceScaleFactor: 2` on cross-origin-isolated pages such as the demo.
+The launcher now gives Firefox the contexts' ratio through its
+`layout.css.devPixelsPerPx` pref, and the rerun above used it. Port 4186 was
+free during the rerun, so `check-links.ts` ran unchanged.

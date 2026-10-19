@@ -191,9 +191,13 @@ until the benchmark results justify the architecture.
   cache when the response allows it), the classifier and hayro parse it again,
   and hayro decodes a page's images for every render (base and detail),
   where pdf.js keeps decoded images between renders of a page; on the
-  JBIG2 and JPEG manuscript this makes page 1 sharp 36–47 ms later in
-  Chromium and Firefox. hayro's wasm memory grows to 51–103 MiB per scanned
-  document at devicePixelRatio 2 and never shrinks. Results in
+  JBIG2 and JPEG manuscript this makes page 1 sharp 47 ms later in Chromium
+  and 17 ms later in Firefox. In Firefox, scrolling the scans with hayro
+  blocks the main thread several times longer than with pdf.js master (150
+  against 38 ms on the patent at 900 px/s); hayro's bitmaps come from CPU
+  pixels through `transferFromImageBitmap`, and why they cost Firefox's main
+  thread time is not known yet. hayro's wasm memory grows to 51–103 MiB per
+  scanned document at devicePixelRatio 2 and never shrinks. Results in
   `examples/prototype/results/hybrid.md`. The benchmark
   wrapper in `bench/hayro-wasm` leaks each parsed document (`Box::leak`),
   which is fine for one document per page but not for an application.
@@ -216,6 +220,17 @@ until the benchmark results justify the architecture.
     reused temporary home: macOS may refuse `~/Library/Application Support/Firefox`
     to processes another app started, and Firefox then exits with "Could not
     find profile folder".
+  - Firefox: Playwright's `deviceScaleFactor` only overrides the
+    `devicePixelRatio` that pages report (and `resolution` media queries and
+    the screenshot scale). Firefox 157 still lays pages out at one device
+    pixel per CSS pixel, and a navigation into a cross-origin-isolated page
+    replaces the browsing context and drops even the override, so the demo
+    reported 1. Scripts that create contexts with a `deviceScaleFactor` pass
+    it to `launchBrowser()`, which sets Firefox's `layout.css.devPixelsPerPx`
+    to it: pages then lay out at that ratio, isolated or not, and the override
+    reports the same value instead of multiplying it. Every context of such a
+    browser must use that ratio. The engine benchmark passes none and renders
+    at devicePixelRatio 1 in every browser.
   - WebKit refuses some ports outright (4190 among them); the runners use
     4179–4187.
 - Measure on AC power. Low Power Mode, which this Mac enables on battery,
@@ -255,13 +270,6 @@ until the benchmark results justify the architecture.
   to input or scrolling.
 - Payload is the brotli size of each engine's own assets in `bench/dist/`; the
   `pdfjs-next` workers are unminified.
-- Playwright's Firefox 157 ignores `deviceScaleFactor` on cross-origin-isolated
-  pages: with `deviceScaleFactor: 2`, a page reports `devicePixelRatio` 2
-  without COOP and COEP and 1 with them. The demo is isolated, so its Firefox
-  runs render detail canvases at a quarter of the pixels of the Chromium and
-  WebKit runs; compare Firefox's demo timings within Firefox only until the
-  launcher forces the ratio (for example with the `layout.css.devPixelsPerPx`
-  pref). The engine benchmark renders at a fixed scale and is not affected.
 - A runner that waits for other processes' Playwright browsers must tell its
   own apart by ancestry and skip WebKit's helpers (`com.apple.WebKit.*`),
   whose parent is launchd: counting them as foreign makes a runner wait for

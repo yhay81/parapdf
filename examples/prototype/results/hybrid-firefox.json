@@ -1,6 +1,6 @@
 {
   "environment": {
-    "runAt": "2026-10-19T05:39:39.346Z",
+    "runAt": "2026-10-19T06:45:26.327Z",
     "os": "darwin 27.0.0 arm64",
     "cpu": "Apple M2 Pro (12 logical cores)",
     "browserName": "firefox",
@@ -23,10 +23,10 @@
       "devicePixelRatio": 2,
       "maxLoad": 6
     },
-    "resumedJobs": 79,
+    "resumedJobs": 0,
     "load": {
-      "median": 5.4,
-      "max": 6.3
+      "median": 5,
+      "max": 11.8
     },
     "ignored": [],
     "errors": []
@@ -79,17 +79,17 @@
       "file": "bunka-kokugo-series-019-p4.pdf",
       "variant": "pdfjs-next-hwa",
       "jobs": 10,
-      "firstPaintMs": 485.7,
-      "page1DetailMs": 515.9,
-      "startupStallMs": 9.8,
-      "startupBlockedMs": 16.5,
+      "firstPaintMs": 475.4,
+      "page1DetailMs": 532.5,
+      "startupStallMs": 9.1,
+      "startupBlockedMs": 23.3,
       "renders": {
         "base pdfjs": {
-          "p50Ms": 138.9,
+          "p50Ms": 125.9,
           "count": 1
         },
         "detail pdfjs": {
-          "p50Ms": 27.2,
+          "p50Ms": 48.3,
           "count": 1
         },
         "base hayro": {
@@ -107,10 +107,10 @@
       "file": "bunka-kokugo-series-019-p4.pdf",
       "variant": "hybrid-hwa",
       "jobs": 10,
-      "firstPaintMs": 403.4,
-      "page1DetailMs": 433.9,
-      "startupStallMs": 6.5,
-      "startupBlockedMs": 8.3,
+      "firstPaintMs": 413.6,
+      "page1DetailMs": 494.4,
+      "startupStallMs": 12.8,
+      "startupBlockedMs": 23.4,
       "renders": {
         "base pdfjs": {
           "p50Ms": null,
@@ -121,30 +121,30 @@
           "count": null
         },
         "base hayro": {
-          "p50Ms": 56.7,
+          "p50Ms": 53.4,
           "count": 1
         },
         "detail hayro": {
-          "p50Ms": 29.9,
+          "p50Ms": 80.9,
           "count": 1
         }
       },
       "hybrid": {
-        "classifierReadyAt": 340.8,
-        "fetchMs": 2.3,
+        "classifierReadyAt": 350.3,
+        "fetchMs": 4.2,
         "classifierWaitMs": 0,
         "parseMs": 0.3,
-        "classifyWorkerP50Ms": 0.2,
-        "classifyWorkerMaxMs": 0.2,
-        "classifyRoundTripP50Ms": 4.3,
-        "firstClassifiedAt": 350.4,
+        "classifyWorkerP50Ms": 0.3,
+        "classifyWorkerMaxMs": 0.3,
+        "classifyRoundTripP50Ms": 3,
+        "firstClassifiedAt": 358.4,
         "pagesHayro": 1,
         "pagesBase": 0,
-        "hayroLoadedAt": 403.3,
+        "hayroLoadedAt": 413.5,
         "hayroLoadMs": 29.9,
         "hayroParseMs": 0.2,
         "classifierMiB": 1.3,
-        "hayroMiB": 34.8,
+        "hayroMiB": 102.9,
         "fallbacks": []
       }
     },
@@ -152,17 +152,17 @@
       "file": "patent-us223898.pdf",
       "variant": "pdfjs-next-hwa",
       "jobs": 10,
-      "firstPaintMs": 468.2,
-      "page1DetailMs": 486.8,
-      "startupStallMs": 10.3,
-      "startupBlockedMs": 33.3,
+      "firstPaintMs": 457.5,
+      "page1DetailMs": 518.5,
+      "startupStallMs": 12,
+      "startupBlockedMs": 49.6,
       "renders": {
         "base pdfjs": {
-          "p50Ms": 72.9,
+          "p50Ms": 76.8,
           "count": 4
         },
         "detail pdfjs": {
-          "p50Ms": 17.9,
+          "p50Ms": 62.7,
           "count": 3.5
         },
         "base hayro": {
@@ -180,10 +180,10 @@
       "file": "patent-us223898.pdf",
       "variant": "hybrid-hwa",
       "jobs": 10,
-      "firstPaintMs": 406.9,
-      "page1DetailMs": 449.2,
-      "startupStallMs": 8.2,
-      "startupBlockedMs": 19.5,
+      "firstPaintMs": 402.5,
+      "page1DetailMs": 460.3,
+      "startupStallMs": 9.4,
+      "startupBlockedMs": 43.1,
       "renders": {
         "base pdfjs": {
           "p50Ms": null,
@@ -194,30 +194,30 @@
           "count": null
         },
         "base hayro": {
-          "p50Ms": 53.9,
+          "p50Ms": 46.7,
           "count": 4
         },
         "detail hayro": {
-          "p50Ms": 31,
+          "p50Ms": 38.9,
           "count": 3.5
         }
       },
       "hybrid": {
-        "classifierReadyAt": 344.9,
-        "fetchMs": 2.9,
+        "classifierReadyAt": 342.5,
+        "fetchMs": 3.2,
         "classifierWaitMs": 0,
         "parseMs": 0.3,
-        "classifyWorkerP50Ms": 0.4,
+        "classifyWorkerP50Ms": 0.5,
         "classifyWorkerMaxMs": 0.8,
-        "classifyRoundTripP50Ms": 3.4,
-        "firstClassifiedAt": 354,
+        "classifyRoundTripP50Ms": 2.5,
+        "firstClassifiedAt": 353.3,
         "pagesHayro": 4,
         "pagesBase": 0,
-        "hayroLoadedAt": 406.8,
-        "hayroLoadMs": 33.2,
+        "hayroLoadedAt": 402.5,
+        "hayroLoadMs": 28.4,
         "hayroParseMs": 0.2,
         "classifierMiB": 1.6,
-        "hayroMiB": 27.2,
+        "hayroMiB": 83.9,
         "fallbacks": []
       }
     },
@@ -225,17 +225,17 @@
       "file": "wdl6812-manuscript.pdf",
       "variant": "pdfjs-next-hwa",
       "jobs": 10,
-      "firstPaintMs": 428.5,
-      "page1DetailMs": 452.3,
-      "startupStallMs": 7.9,
-      "startupBlockedMs": 9.4,
+      "firstPaintMs": 439.7,
+      "page1DetailMs": 514.4,
+      "startupStallMs": 9.1,
+      "startupBlockedMs": 22,
       "renders": {
         "base pdfjs": {
-          "p50Ms": 81.4,
+          "p50Ms": 82,
           "count": 2
         },
         "detail pdfjs": {
-          "p50Ms": 20.5,
+          "p50Ms": 72.7,
           "count": 2
         },
         "base hayro": {
@@ -253,10 +253,10 @@
       "file": "wdl6812-manuscript.pdf",
       "variant": "hybrid-hwa",
       "jobs": 10,
-      "firstPaintMs": 419,
-      "page1DetailMs": 488.1,
-      "startupStallMs": 6.7,
-      "startupBlockedMs": 9.9,
+      "firstPaintMs": 427.6,
+      "page1DetailMs": 530.8,
+      "startupStallMs": 9,
+      "startupBlockedMs": 31,
       "renders": {
         "base pdfjs": {
           "p50Ms": null,
@@ -267,30 +267,30 @@
           "count": null
         },
         "base hayro": {
-          "p50Ms": 66.2,
+          "p50Ms": 65.8,
           "count": 2
         },
         "detail hayro": {
-          "p50Ms": 69.3,
+          "p50Ms": 103.4,
           "count": 2
         }
       },
       "hybrid": {
-        "classifierReadyAt": 345.2,
-        "fetchMs": 4.3,
+        "classifierReadyAt": 352.5,
+        "fetchMs": 3.9,
         "classifierWaitMs": 0,
-        "parseMs": 0.3,
+        "parseMs": 0.4,
         "classifyWorkerP50Ms": 0.1,
         "classifyWorkerMaxMs": 0.3,
-        "classifyRoundTripP50Ms": 2.3,
-        "firstClassifiedAt": 356.8,
+        "classifyRoundTripP50Ms": 3.7,
+        "firstClassifiedAt": 362.2,
         "pagesHayro": 2,
         "pagesBase": 0,
-        "hayroLoadedAt": 418.9,
-        "hayroLoadMs": 31.4,
+        "hayroLoadedAt": 427.5,
+        "hayroLoadMs": 30,
         "hayroParseMs": 0.2,
         "classifierMiB": 1.4,
-        "hayroMiB": 28.5,
+        "hayroMiB": 51.3,
         "fallbacks": []
       }
     },
@@ -298,17 +298,17 @@
       "file": "bill-hr815.pdf",
       "variant": "pdfjs-next-hwa",
       "jobs": 10,
-      "firstPaintMs": 416.6,
-      "page1DetailMs": 456.2,
-      "startupStallMs": 6.6,
-      "startupBlockedMs": 11.5,
+      "firstPaintMs": 415.8,
+      "page1DetailMs": 495.2,
+      "startupStallMs": 15.2,
+      "startupBlockedMs": 37.9,
       "renders": {
         "base pdfjs": {
-          "p50Ms": 24.8,
+          "p50Ms": 25.7,
           "count": 7.5
         },
         "detail pdfjs": {
-          "p50Ms": 26.5,
+          "p50Ms": 56.4,
           "count": 4
         },
         "base hayro": {
@@ -326,17 +326,17 @@
       "file": "bill-hr815.pdf",
       "variant": "hybrid-hwa",
       "jobs": 10,
-      "firstPaintMs": 415.7,
-      "page1DetailMs": 458,
-      "startupStallMs": 7.4,
-      "startupBlockedMs": 12.9,
+      "firstPaintMs": 416.8,
+      "page1DetailMs": 509.7,
+      "startupStallMs": 14.1,
+      "startupBlockedMs": 42.5,
       "renders": {
         "base pdfjs": {
-          "p50Ms": 22.6,
-          "count": 8
+          "p50Ms": 22.8,
+          "count": 7.5
         },
         "detail pdfjs": {
-          "p50Ms": 25.7,
+          "p50Ms": 57.5,
           "count": 4
         },
         "base hayro": {
@@ -349,14 +349,14 @@
         }
       },
       "hybrid": {
-        "classifierReadyAt": 345.7,
-        "fetchMs": 3.2,
+        "classifierReadyAt": 347.5,
+        "fetchMs": 2.8,
         "classifierWaitMs": 0,
-        "parseMs": 1.2,
+        "parseMs": 1.1,
         "classifyWorkerP50Ms": 0.2,
-        "classifyWorkerMaxMs": 0.4,
-        "classifyRoundTripP50Ms": 1.4,
-        "firstClassifiedAt": 355.5,
+        "classifyWorkerMaxMs": 0.3,
+        "classifyRoundTripP50Ms": 1.5,
+        "firstClassifiedAt": 356.7,
         "pagesHayro": 0,
         "pagesBase": 8,
         "hayroLoadedAt": null,
@@ -376,8 +376,8 @@
       "jobs": 5,
       "pagesCrossed": 0,
       "blankMeanPct": 0,
-      "blockedMs": 0,
-      "stallMs": 1.4,
+      "blockedMs": 3.2,
+      "stallMs": 5,
       "droppedFrames": 0,
       "frames": 65
     },
@@ -388,8 +388,8 @@
       "jobs": 5,
       "pagesCrossed": 0,
       "blankMeanPct": 0,
-      "blockedMs": 0.2,
-      "stallMs": 2.2,
+      "blockedMs": 3.8,
+      "stallMs": 4.4,
       "droppedFrames": 0,
       "frames": 64
     },
@@ -400,8 +400,8 @@
       "jobs": 5,
       "pagesCrossed": 0,
       "blankMeanPct": 0,
-      "blockedMs": 0,
-      "stallMs": 1.3,
+      "blockedMs": 3.1,
+      "stallMs": 5.1,
       "droppedFrames": 0,
       "frames": 17
     },
@@ -412,8 +412,8 @@
       "jobs": 5,
       "pagesCrossed": 0,
       "blankMeanPct": 0,
-      "blockedMs": 0,
-      "stallMs": 1.1,
+      "blockedMs": 3.5,
+      "stallMs": 5.5,
       "droppedFrames": 0,
       "frames": 17
     },
@@ -424,8 +424,8 @@
       "jobs": 5,
       "pagesCrossed": 2,
       "blankMeanPct": 0,
-      "blockedMs": 27.3,
-      "stallMs": 11.4,
+      "blockedMs": 38.4,
+      "stallMs": 15.1,
       "droppedFrames": 0,
       "frames": 241
     },
@@ -436,10 +436,10 @@
       "jobs": 5,
       "pagesCrossed": 2,
       "blankMeanPct": 0,
-      "blockedMs": 18.9,
-      "stallMs": 6.8,
-      "droppedFrames": 0,
-      "frames": 240
+      "blockedMs": 150.4,
+      "stallMs": 36.1,
+      "droppedFrames": 4,
+      "frames": 237
     },
     {
       "file": "patent-us223898.pdf",
@@ -448,8 +448,8 @@
       "jobs": 5,
       "pagesCrossed": 3,
       "blankMeanPct": 0,
-      "blockedMs": 12.2,
-      "stallMs": 7.2,
+      "blockedMs": 22.2,
+      "stallMs": 10,
       "droppedFrames": 0,
       "frames": 111
     },
@@ -460,10 +460,10 @@
       "jobs": 5,
       "pagesCrossed": 3,
       "blankMeanPct": 0,
-      "blockedMs": 14.6,
-      "stallMs": 5.5,
-      "droppedFrames": 0,
-      "frames": 111
+      "blockedMs": 99.6,
+      "stallMs": 29.4,
+      "droppedFrames": 1,
+      "frames": 110
     },
     {
       "file": "wdl6812-manuscript.pdf",
@@ -472,8 +472,8 @@
       "jobs": 5,
       "pagesCrossed": 1,
       "blankMeanPct": 0,
-      "blockedMs": 5.4,
-      "stallMs": 6.9,
+      "blockedMs": 6,
+      "stallMs": 6.1,
       "droppedFrames": 0,
       "frames": 165
     },
@@ -484,8 +484,8 @@
       "jobs": 5,
       "pagesCrossed": 1,
       "blankMeanPct": 0,
-      "blockedMs": 2.7,
-      "stallMs": 3,
+      "blockedMs": 35.9,
+      "stallMs": 12.6,
       "droppedFrames": 0,
       "frames": 164
     },
@@ -496,8 +496,8 @@
       "jobs": 5,
       "pagesCrossed": 1,
       "blankMeanPct": 0,
-      "blockedMs": 2.4,
-      "stallMs": 4.4,
+      "blockedMs": 9.2,
+      "stallMs": 10.5,
       "droppedFrames": 0,
       "frames": 42
     },
@@ -508,10 +508,10 @@
       "jobs": 5,
       "pagesCrossed": 1,
       "blankMeanPct": 0,
-      "blockedMs": 6.4,
-      "stallMs": 4.7,
+      "blockedMs": 28.8,
+      "stallMs": 11.2,
       "droppedFrames": 0,
-      "frames": 42
+      "frames": 43
     },
     {
       "file": "bill-hr815.pdf",
@@ -520,8 +520,8 @@
       "jobs": 5,
       "pagesCrossed": 2,
       "blankMeanPct": 0,
-      "blockedMs": 33.4,
-      "stallMs": 8.1,
+      "blockedMs": 51.8,
+      "stallMs": 19.4,
       "droppedFrames": 0,
       "frames": 241
     },
@@ -532,8 +532,8 @@
       "jobs": 5,
       "pagesCrossed": 2,
       "blankMeanPct": 0,
-      "blockedMs": 25.6,
-      "stallMs": 8.7,
+      "blockedMs": 45.6,
+      "stallMs": 14.9,
       "droppedFrames": 0,
       "frames": 241
     },
@@ -544,8 +544,8 @@
       "jobs": 5,
       "pagesCrossed": 7,
       "blankMeanPct": 0,
-      "blockedMs": 19.7,
-      "stallMs": 8.1,
+      "blockedMs": 28.3,
+      "stallMs": 11.8,
       "droppedFrames": 0,
       "frames": 241
     },
@@ -556,8 +556,8 @@
       "jobs": 5,
       "pagesCrossed": 7,
       "blankMeanPct": 0,
-      "blockedMs": 10.4,
-      "stallMs": 8,
+      "blockedMs": 27,
+      "stallMs": 10.2,
       "droppedFrames": 0,
       "frames": 241
     }

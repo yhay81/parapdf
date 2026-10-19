@@ -149,47 +149,56 @@ this stays an experiment behind an option.
 [`hybrid-bench.ts`](examples/prototype/scripts/hybrid-bench.ts) compares it
 with pdf.js master's renderer worker on a GPU-backed canvas in the demo, ten
 cold page loads per document and browser (five at each of two scroll speeds),
-alternating which engine goes first; jobs started only on AC power, with no
-other Playwright browser open and a 1-minute load average of at most 6 on 12
-cores (medians 3.6–5.4). Summary in
+alternating which engine goes first; jobs started only on AC power, after
+waiting until no other Playwright browser was open and the 1-minute load
+average was at most 6 on 12 cores (medians at job start 3.6–5.0). Summary in
 [`hybrid.md`](examples/prototype/results/hybrid.md), details in
 [`hybrid-chromium.md`](examples/prototype/results/hybrid-chromium.md),
 [`hybrid-webkit.md`](examples/prototype/results/hybrid-webkit.md), and
 [`hybrid-firefox.md`](examples/prototype/results/hybrid-firefox.md). Firefox
-ran at devicePixelRatio 1 (Playwright's Firefox ignores `deviceScaleFactor`
-on cross-origin-isolated pages), so compare its two engines with each other
-only.
+was measured again once the launcher gave it devicePixelRatio 2 like the
+other two browsers; its first run, at 1, had hidden the scrolling loss below.
 
-- **First page.** On the three scans, page 1 shows pixels 9–124 ms sooner
-  (bunka 501 → 403 ms in Chromium, 535 → 411 in WebKit, 486 → 403 in
-  Firefox; patent 480 → 401, 498 → 408, 468 → 407). hayro draws the
+- **First page.** On the three scans, page 1 shows pixels 12–124 ms sooner
+  (bunka 501 → 403 ms in Chromium, 535 → 411 in WebKit, 475 → 414 in
+  Firefox; patent 480 → 401, 498 → 408, 458 → 403). hayro draws the
   low-resolution base layer in 46–70 ms where pdf.js needs 72–176 ms,
   because pdf.js decodes the image before its first render.
 - **Main thread.** The longest startup stall on bunka and the patent drops
   from 46–50 ms to 6.5–12 ms in Chromium and from 29–32 to 14–15 ms in WebKit
-  (whose idle timers already run about 6 ms late); Firefox goes from about
-  10 to 6.5–8 ms. Scrolling the patent at 900 px/s blocks the main thread for
-  5 instead of 26 ms in Chromium (longest stall 6 instead of 28 ms), and 19
-  instead of 27 ms in Firefox; WebKit stays at 27–28 ms.
+  (whose idle timers already run about 6 ms late). Firefox, which stalls for
+  only 9–12 ms with pdf.js, does not improve (bunka 9.1 → 12.8 ms, patent
+  12.0 → 9.4). Scrolling the patent at 900 px/s blocks the main thread for 5
+  instead of 26 ms in Chromium (longest stall 6 instead of 28 ms); WebKit
+  stays at 27–28 ms.
 - **Losses.** hayro decodes a page's images again for every render, while
-  pdf.js reuses them, so hayro's full-resolution renders take 30–92 ms against
-  10–49 ms. On the manuscript (JBIG2 and JPEG images), page 1 becomes sharp
-  47 ms later in Chromium and 36 ms later in Firefox, and about the same in
-  WebKit. hayro's WebAssembly memory grows to 51–103 MiB at devicePixelRatio 2
-  (27–35 MiB in Firefox at 1) and does not shrink; the classifier uses
-  1.3–1.7 MiB. The worker fetches the PDF again (from the HTTP cache when the
-  response allows), and the classifier and hayro parse it twice more.
+  pdf.js reuses them, so hayro's full-resolution renders take 34–103 ms against
+  10–73 ms. On the manuscript (JBIG2 and JPEG images), page 1 becomes sharp
+  47 ms later in Chromium and 17 ms later in Firefox, and about the same in
+  WebKit. In Firefox, scrolling the scans with hayro blocks the main thread
+  several times longer: on the patent at 900 px/s 150 instead of 38 ms (123–173
+  ms in each of the five runs), with stalls of 36 instead of 15 ms and 4
+  dropped frames in 4 seconds; 100 instead of 22 ms at 3,600 px/s, and 36
+  instead of 6 ms on the manuscript. hayro's bitmaps (9 MP for a patent page)
+  are made from CPU pixels (`createImageBitmap` of an `ImageData`) and reach
+  the canvas through `transferFromImageBitmap`, while pdf.js master's renderer
+  worker sends bitmaps of an OffscreenCanvas that the main thread draws with
+  `drawImage`; why Firefox spends main-thread time on hayro's is not known
+  yet. hayro's WebAssembly memory grows to 51–103 MiB at
+  devicePixelRatio 2 and does not shrink; the classifier uses 1.3–1.7 MiB. The
+  worker fetches the PDF again (from the HTTP cache when the response allows),
+  and the classifier and hayro parse it twice more.
 - **Text pages do not regress.** On bill-hr815, every page stays on pdf.js
   and the hayro module never loads. First paint (406 → 398 ms in Chromium,
-  439 → 448 in WebKit, 417 → 416 in Firefox), render times, and stalls stay
-  within run-to-run noise. The worker has fetched and parsed the PDF 341–351
+  439 → 448 in WebKit, 416 → 417 in Firefox), render times, and stalls stay
+  within run-to-run noise. The worker has fetched and parsed the PDF 343–352
   ms after navigation, 3–11 ms before pdf.js asks for page 1, so each page's
-  first render waits only for one round trip to the worker: 1.4–1.8 ms
+  first render waits only for one round trip to the worker: 1.5–1.8 ms
   (median) on bill-hr815, of which classifying the page takes 0.2 ms
   (0.0–0.9 ms on the other documents).
 - **Payload.** 95 KiB brotli with every document (the classifier and the
   worker), 1,363 KiB more only once a document has an image-only page; the
-  hayro module then loads and compiles in 13–33 ms from a local server.
+  hayro module then loads and compiles in 13–30 ms from a local server.
 - **Routing.** A classifier built from hayro's parser alone reads each page's
   content stream before its first render, without decoding images. Image-only
   pages render with hayro; everything else, and every page's text layer,
@@ -208,9 +217,10 @@ only.
   ([`hybrid-checks.md`](examples/prototype/results/hybrid-checks.md)).
 - **Next.** A decoded-image cache in hayro (or rendering the detail layer
   once and deriving the base from it) would remove the sharpening loss; a
-  measurement in Safari itself and on a real network, where the 1.36 MiB
-  hayro download counts, would decide whether the first-page win survives
-  outside this machine.
+  profile of Firefox's main thread while hayro's bitmaps arrive would explain
+  the scrolling loss there; a measurement in Safari itself and on a real
+  network, where the 1.36 MiB hayro download counts, would decide whether the
+  first-page win survives outside this machine.
 
 ## License
 
