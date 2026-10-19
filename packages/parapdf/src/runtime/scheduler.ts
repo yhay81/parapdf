@@ -241,7 +241,15 @@ export class RenderScheduler {
 
   #start(slot: Slot, layer: Layer, scale: number): void {
     const canvas = layer === "base" ? slot.base : slot.detail;
-    const task = this.#doc.render({ pageIndex: slot.index, scale, canvas });
+    // While scrolling is settled, this page's detail render follows its base
+    // render; saying so lets an engine draw both from one pass.
+    const input = this.#input;
+    let detailScale: number | undefined;
+    if (layer === "base" && input?.settled) {
+      detailScale = this.#detailScale(slot.index, input);
+      if (sameScale(slot.detailScale, detailScale)) detailScale = undefined;
+    }
+    const task = this.#doc.render({ pageIndex: slot.index, scale, canvas, detailScale });
     slot.job = { layer, scale, task };
     this.#running++;
     task.promise

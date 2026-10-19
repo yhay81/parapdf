@@ -16,6 +16,15 @@ export interface RenderRequest {
   /** Device pixels per PDF point. */
   scale: number;
   canvas: HTMLCanvasElement;
+  /**
+   * Set on a quick low-resolution render when the caller will request the
+   * same page at this scale next (the scheduler's detail layer, while
+   * scrolling is settled). An engine that pays for every render anew (hayro
+   * decodes a page's images each time) may draw both from one pass, put a
+   * reduced copy on `canvas`, and answer the next request from the kept
+   * pixels. Other engines ignore it.
+   */
+  detailScale?: number;
 }
 
 export interface RenderTask {
