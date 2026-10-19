@@ -169,6 +169,12 @@ interface ZoomGesture {
   /** How far a two-finger drag moved that point on screen. */
   panX: number;
   panY: number;
+  /**
+   * The translation the preview shows: the pan, less what the commit cannot
+   * keep because the new scroll range ends or a narrower page centers.
+   */
+  translateX: number;
+  translateY: number;
   /** Pending commit of a wheel or Safari gesture. */
   timer: number;
 }
@@ -366,7 +372,7 @@ export class PdfViewerRuntime {
         }
         this.#pendingPages.clear();
         const scale = this.#resolveInitialScale(firstSize);
-        this.#applyLayout(scale);
+        this.#applyLayout(this.#layoutAt(scale));
         this.store.set({ status: "ready", pageCount: doc.pageCount, scale, document: doc });
         this.#update();
         this.#background(this.#refineSizes(doc, generation), "measuring page sizes", generation);
@@ -634,7 +640,7 @@ export class PdfViewerRuntime {
     const docY = scroller.scrollTop + y;
     const page = pageAt(layout, docY);
     const withinPage = (docY - (layout.tops[page] ?? 0)) / (layout.heights[page] || 1);
-    const next = this.#applyLayout(layout.scale);
+    const next = this.#applyLayout(this.#layoutAt(layout.scale));
     scroller.scrollTop = (next.tops[page] ?? 0) + withinPage * (next.heights[page] ?? 0) - y;
     scroller.scrollLeft = (scroller.scrollWidth - scroller.clientWidth) / 2;
     this.#scheduler?.rotate(turned);
@@ -693,22 +699,52 @@ export class PdfViewerRuntime {
       return;
     }
     if (Math.abs(scale - state.scale) < 1e-4) return;
-    const x = anchor?.x ?? scroller.clientWidth / 2;
-    const y = anchor?.y ?? scroller.clientHeight / 2;
-    const docX = point?.x ?? scroller.scrollLeft + x;
-    const docY = point?.y ?? scroller.scrollTop + y;
-    const page = pageAt(layout, docY);
-    const viewportWidth = scroller.clientWidth;
-    const withinX = (docX - pageLeft(layout, page, viewportWidth)) / (layout.widths[page] || 1);
-    const withinY = (docY - (layout.tops[page] ?? 0)) / (layout.heights[page] || 1);
-    const next = this.#applyLayout(scale);
+    const at = {
+      x: anchor?.x ?? scroller.clientWidth / 2,
+      y: anchor?.y ?? scroller.clientHeight / 2,
+    };
+    const target = this.#placeZoom(
+      scroller,
+      layout,
+      scale,
+      at,
+      point ?? { x: scroller.scrollLeft + at.x, y: scroller.scrollTop + at.y },
+    );
+    this.#applyLayout(target.layout);
     // The content is resized imperatively, so the scroll position can be
     // restored before React re-renders the mounted pages.
-    scroller.scrollTop = (next.tops[page] ?? 0) + withinY * (next.heights[page] ?? 0) - y;
-    scroller.scrollLeft =
-      pageLeft(next, page, viewportWidth) + withinX * (next.widths[page] ?? 0) - x;
+    scroller.scrollTop = target.top;
+    scroller.scrollLeft = target.left;
     this.store.set({ scale });
     this.#update();
+  }
+
+  /**
+   * Where zooming `layout` to `scale` scrolls so that the content point
+   * `point` lands under the viewport point `anchor`, keeping its share of the
+   * same page. The browser clamps that position to the new scroll range;
+   * `maxLeft` and `maxTop` say where it ends.
+   */
+  #placeZoom(
+    scroller: HTMLElement,
+    layout: Layout,
+    scale: number,
+    anchor: { x: number; y: number },
+    point: { x: number; y: number },
+  ): { layout: Layout; left: number; top: number; maxLeft: number; maxTop: number } {
+    const page = pageAt(layout, point.y);
+    const viewportWidth = scroller.clientWidth;
+    const withinX = (point.x - pageLeft(layout, page, viewportWidth)) / (layout.widths[page] || 1);
+    const withinY = (point.y - (layout.tops[page] ?? 0)) / (layout.heights[page] || 1);
+    const next = Math.abs(scale - layout.scale) < 1e-4 ? layout : this.#layoutAt(scale);
+    return {
+      layout: next,
+      left: pageLeft(next, page, viewportWidth) + withinX * (next.widths[page] ?? 0) - anchor.x,
+      top: (next.tops[page] ?? 0) + withinY * (next.heights[page] ?? 0) - anchor.y,
+      // The content is at least as wide as the viewport (`max(100%, …)`).
+      maxLeft: Math.max(0, next.totalWidth - viewportWidth),
+      maxTop: Math.max(0, next.totalHeight - scroller.clientHeight),
+    };
   }
 
   /**
@@ -867,8 +903,11 @@ export class PdfViewerRuntime {
     return clamp((width - 2 * this.#gap) / firstPage.width, this.#minScale, this.#maxScale);
   }
 
-  #applyLayout(scale: number): Layout {
-    const layout = computeLayout(this.#sizes, scale, this.#gap, this.store.get().rotation);
+  #layoutAt(scale: number): Layout {
+    return computeLayout(this.#sizes, scale, this.#gap, this.store.get().rotation);
+  }
+
+  #applyLayout(layout: Layout): Layout {
     this.#sizeContent(layout);
     this.store.set({ layout });
     return layout;
@@ -916,7 +955,7 @@ export class PdfViewerRuntime {
     const anchorPage = layout && scroller ? pageAt(layout, scroller.scrollTop) : 0;
     const offset = layout && scroller ? scroller.scrollTop - (layout.tops[anchorPage] ?? 0) : 0;
     this.#sizes = sizes;
-    const next = this.#applyLayout(this.store.get().scale);
+    const next = this.#applyLayout(this.#layoutAt(this.store.get().scale));
     if (scroller) scroller.scrollTop = (next.tops[anchorPage] ?? 0) + offset;
     this.#update();
     // The page at the center may turn out wider or narrower than the first.
@@ -1107,6 +1146,8 @@ export class PdfViewerRuntime {
       originY: scroller.scrollTop + clientY - rect.top - scroller.clientTop,
       panX: 0,
       panY: 0,
+      translateX: 0,
+      translateY: 0,
       timer: 0,
     };
     return this.#zoom;
@@ -1118,12 +1159,31 @@ export class PdfViewerRuntime {
     return clamp(factor, this.#minScale / scale, this.#maxScale / scale);
   }
 
-  /** Preview a gesture on the compositor; layout and rendering wait for the commit. */
+  /**
+   * Preview a gesture on the compositor; layout and rendering wait for the
+   * commit. The preview shows the gesture's point where the commit will put
+   * it: where the new scroll range ends, or a page narrower than the viewport
+   * centers, the point cannot stay under the fingers, and showing it there
+   * anyway made it jump when they lifted.
+   */
   #previewZoom(zoom: ZoomGesture): void {
+    const scroller = this.#scroller;
     const content = this.#content;
-    if (!content) return;
+    const layout = this.store.get().layout;
+    if (!scroller || !content || !layout) return;
+    const left = scroller.scrollLeft;
+    const top = scroller.scrollTop;
+    const target = this.#placeZoom(
+      scroller,
+      layout,
+      clamp(layout.scale * zoom.factor, this.#minScale, this.#maxScale),
+      { x: zoom.originX + zoom.panX - left, y: zoom.originY + zoom.panY - top },
+      { x: zoom.originX, y: zoom.originY },
+    );
+    zoom.translateX = zoom.panX + target.left - clamp(target.left, 0, target.maxLeft);
+    zoom.translateY = zoom.panY + target.top - clamp(target.top, 0, target.maxTop);
     content.style.transformOrigin = `${zoom.originX}px ${zoom.originY}px`;
-    content.style.transform = `translate(${zoom.panX}px, ${zoom.panY}px) scale(${zoom.factor})`;
+    content.style.transform = `translate(${zoom.translateX}px, ${zoom.translateY}px) scale(${zoom.factor})`;
   }
 
   #commitZoom = (): void => {
