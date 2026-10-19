@@ -71,7 +71,12 @@ const LETTER = /^\p{L}$/u;
 /** A line end after these joins the lines: CJK has no spaces between words. */
 const JOINS_LINES = /^(?:\p{Ideographic}|[\u3040-\u30FF]|\u3099|\u309A)$/u;
 
-/** The searchable form of one character: possibly empty, possibly several. */
+/**
+ * The searchable form of one character: possibly empty, possibly several.
+ * It stays decomposed, as pdf.js's normalized text does: half-width katakana
+ * write a voiced sound mark as a character of its own (ﾃﾞ), which matches the
+ * composed letter (デ) only in decomposed form.
+ */
 function normalizeChar(char: string): string {
   const replacement = CHARACTERS_TO_NORMALIZE.get(char);
   if (replacement) return replacement;
@@ -80,7 +85,7 @@ function normalizeChar(char: string): string {
     if (MARK.test(unit) && !DIACRITICS_EXCEPTION.has(unit.codePointAt(0) ?? 0)) continue;
     out += unit;
   }
-  return out.normalize("NFC");
+  return out;
 }
 
 /** True when `char` decomposes into a letter followed by combining marks. */

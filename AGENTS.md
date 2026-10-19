@@ -312,7 +312,11 @@ until the benchmark results justify the architecture.
   voiced sound marks, viramas); a line end after a CJK character or inside a
   hyphenated word joins the lines, a dash before a line end stays, and any
   other line end reads as a space. Whitespace collapses, and every indexed
-  character maps back to UTF-16 offsets in text items.
+  character maps back to UTF-16 offsets in text items. The indexed text and
+  the query stay decomposed (NFD), as pdf.js's normalized text does:
+  recomposing each character on its own kept half-width katakana, which
+  write voiced sound marks as characters of their own (ﾃﾞｰﾀ), from matching
+  the composed letters (データ) either way.
   Results stream page by page; the first match at or after the current page is
   selected. Scrolling to a match uses text item boxes, so it works before the
   page's text layer exists. Highlights use the CSS Custom Highlight API
