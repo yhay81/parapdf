@@ -14,3 +14,8 @@ playwright-report/
 bench/public/
 examples/*/public/
 examples/*/results/raw/
+
+# Copied into the package while it is packed (packages/parapdf/scripts/legal-files.ts)
+packages/parapdf/LICENSE
+packages/parapdf/NOTICE.md
+packages/parapdf/LICENSES/

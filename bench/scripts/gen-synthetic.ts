@@ -5,7 +5,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { PDFDocument, PDFName, PDFString, StandardFonts } from "pdf-lib";
+import { degrees, PDFDocument, PDFName, PDFString, rgb, StandardFonts } from "pdf-lib";
 
 const outDir = fileURLToPath(new URL("../corpus/generated/", import.meta.url));
 
@@ -142,11 +142,47 @@ async function cjkNonEmbedded(): Promise<Uint8Array> {
   return doc.save();
 }
 
+/**
+ * Pages of different sizes and orientations, as office documents and drawing
+ * sets mix them: A4 and Letter portrait, an A3 landscape sheet, an A5 page,
+ * and an A4 page that /Rotate 90 shows landscape.
+ */
+async function mixedSizes(): Promise<Uint8Array> {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const pages: { size: [number, number]; rotate?: number; label: string }[] = [
+    { size: [595, 842], label: "A4 portrait" },
+    { size: [595, 842], label: "A4 portrait" },
+    { size: [1191, 842], label: "A3 landscape" },
+    { size: [595, 842], label: "A4 portrait" },
+    { size: [595, 842], rotate: 90, label: "A4 shown landscape by /Rotate 90" },
+    { size: [612, 792], label: "US Letter portrait" },
+    { size: [420, 595], label: "A5 portrait" },
+    { size: [595, 842], label: "A4 portrait" },
+  ];
+  pages.forEach(({ size: [width, height], rotate, label }, index) => {
+    const page = doc.addPage([width, height]);
+    if (rotate) page.setRotation(degrees(rotate));
+    page.drawRectangle({
+      x: 24,
+      y: 24,
+      width: width - 48,
+      height: height - 48,
+      borderWidth: 2,
+      borderColor: rgb(0.2, 0.2, 0.2),
+    });
+    page.drawText(`Page ${index + 1}: ${label}`, { x: 48, y: height - 72, size: 18, font });
+    page.drawText(`Mixed sizes marker ${index + 1}`, { x: 48, y: height - 104, size: 12, font });
+  });
+  return doc.save();
+}
+
 mkdirSync(outDir, { recursive: true });
 for (const [name, build] of [
   ["synthetic-text-1000.pdf", longText],
   ["synthetic-vector-200k.pdf", vectorHeavy],
   ["synthetic-cjk-nonembedded.pdf", cjkNonEmbedded],
+  ["synthetic-mixed-sizes.pdf", mixedSizes],
 ] as const) {
   const bytes = await build();
   writeFileSync(join(outDir, name), bytes);

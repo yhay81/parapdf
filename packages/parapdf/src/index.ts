@@ -1,4 +1,9 @@
-export { createPdfjsEngine, type PdfjsEngineOptions, pdfjsDocumentOf } from "./engine/pdfjs.ts";
+export {
+  createPdfjsEngine,
+  type PdfjsDocumentOptions,
+  type PdfjsEngineOptions,
+  pdfjsDocumentOf,
+} from "./engine/pdfjs.ts";
 export {
   type AnnotationLayerHandle,
   type AnnotationLayerRequest,
@@ -36,4 +41,5 @@ export {
   type SearchState,
   type ViewerOptions,
   type ViewerState,
+  type ZoomMode,
 } from "./runtime/viewer.ts";

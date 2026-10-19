@@ -1,6 +1,7 @@
 import {
   PdfDocument,
   type PdfEngine,
+  type PdfjsDocumentOptions,
   PdfPageRect,
   type PdfSource,
   PdfViewport,
@@ -26,6 +27,10 @@ const settings = {
   hwa: params.get("hwa") !== "0",
   text: params.get("text") !== "0",
   links: params.get("links") !== "0",
+  /** "disabled" leaves links to other documents inert. */
+  externalLinks: (params.get("externalLinks") === "disabled"
+    ? "disabled"
+    : "new-tab") as ViewerOptions["externalLinks"],
   /** Scripted scroll speed in CSS pixels per second; 0 disables the benchmark driver. */
   autoscroll: Number(params.get("autoscroll") ?? "0"),
   durationMs: Number(params.get("duration") ?? "4000"),
@@ -37,6 +42,16 @@ const settings = {
   preload: params.get("preload") !== "0",
   /** CSS pixels per PDF point the zoom may reach; the runtime's default when absent. */
   maxScale: params.has("maxScale") ? Number(params.get("maxScale")) : undefined,
+  /** More pdf.js getDocument parameters, as JSON. */
+  documentOptions: params.has("documentOptions")
+    ? (JSON.parse(params.get("documentOptions") ?? "{}") as PdfjsDocumentOptions)
+    : undefined,
+  /** Canvas pixel limits (ViewerOptions); the runtime's defaults when absent. */
+  canvasLimits: Object.fromEntries(
+    ["maxDetailPixels", "maxBasePixels", "maxCanvasPixels"].flatMap((name) =>
+      params.has(name) ? [[name, Number(params.get(name))]] : [],
+    ),
+  ) as Pick<ViewerOptions, "maxDetailPixels" | "maxBasePixels" | "maxCanvasPixels">,
 };
 
 // The page's language, which the text layers of PDFs that declare none
@@ -82,12 +97,16 @@ function countEngineWork(engine: PdfEngine): PdfEngine {
 }
 
 // Module-level values stay referentially stable across renders.
-const enginePromise = loadEngine(settings.engine, settings.hwa).then(countEngineWork);
+const enginePromise = loadEngine(settings.engine, settings.hwa, settings.documentOptions).then(
+  countEngineWork,
+);
 const source: PdfSource = { url: `/corpus/${settings.file}` };
 const viewerOptions: ViewerOptions = {
   textLayer: settings.text,
   annotationLayer: settings.links,
+  externalLinks: settings.externalLinks,
   ...(settings.maxScale ? { maxScale: settings.maxScale } : {}),
+  ...settings.canvasLimits,
 };
 const commits = { count: 0 };
 const countCommit: ProfilerOnRenderCallback = () => {
@@ -204,6 +223,7 @@ function Toolbar({
   const page = usePdfState((state) => state.currentPage);
   const pageCount = usePdfState((state) => state.pageCount);
   const scale = usePdfState((state) => state.scale);
+  const zoomMode = usePdfState((state) => state.zoomMode);
   return (
     <header className="toolbar">
       {hasOutline ? (
@@ -229,6 +249,13 @@ function Toolbar({
       <span>{Math.round((scale * 72 * 100) / 96)}%</span>
       <button type="button" onClick={() => viewer.zoomBy(1.25)} aria-label="Zoom in">
         +
+      </button>
+      <button
+        type="button"
+        aria-pressed={zoomMode === "fit-width"}
+        onClick={() => viewer.setScale("fit-width")}
+      >
+        Fit width
       </button>
       <button type="button" onClick={() => viewer.rotate(-90)} aria-label="Rotate counterclockwise">
         ↺

@@ -164,6 +164,38 @@ about 20 ms as noise.
   them in all three browsers. `usePdfDocument()` exposes the open document,
   and `pdfjsDocumentOf()` turns it into pdf.js's `PDFDocumentProxy` for the
   APIs ParaPDF does not wrap.
+- **Embedding options (2026-10-20).** Trying the runtime as the PDF preview
+  of a web app that shows uploaded drawings and documents showed what such an
+  app needs; [`check-options.ts`](examples/prototype/scripts/check-options.ts)
+  verifies all of it in Chromium, WebKit, and Firefox. "fit-width" now keeps
+  fitting as the viewport resizes or turns instead of applying once. Pages of
+  mixed sizes are centered in the viewport, not in the widest page, which had
+  pushed the A4 pages of a document with one A3 sheet 173 CSS pixels right
+  and cut 149 pixels off them. `maxDetailPixels`, `maxBasePixels`, and
+  `maxCanvasPixels` bound canvas memory, the last for all of a viewer's
+  canvases (a 24-page document held 93 MiB at 200%). Links to other
+  documents can stay inert, and `documentOptions` passes getDocument
+  parameters such as `canvasMaxAreaInBytes` through. A small visible page now
+  draws its first pixels in one render, before its text layer: on
+  synthetic-vector-200k in Chromium at devicePixelRatio 2 (released pdf.js,
+  median of nine runs), the first pixels came at 440 instead of 474 ms and
+  the sharp page at 456 instead of 515 ms. `pnpm --filter parapdf pack`
+  builds a package from `dist/` with the notices pdf.js's license requires.
+- **Pinch zoom (2026-10-20).** Only ctrl or meta with the wheel zoomed the
+  document, which covers trackpad pinches in Chromium and Firefox. A touch
+  pinch, or a trackpad pinch in Safari, zoomed the whole page instead and left
+  the PDF stretched at its old resolution: in Chromium emulating a tablet, a
+  pinch of 2 set the page's visual viewport to 2. Two touches now zoom the
+  document around the point between them and pan with it while the page stays
+  at 1, one finger still scrolls natively, and Safari's gesture events zoom
+  the document instead of the page.
+  [`check-pinch.ts`](examples/prototype/scripts/check-pinch.ts) verifies this
+  in Chromium with touches the DevTools protocol feeds through the browser's
+  own input handling, and with dispatched events in WebKit and Firefox;
+  Safari and iPadOS themselves are not verified yet. Zooming also keeps its
+  anchor on the same point of its page sideways now: one "Zoom in" on an A5
+  page beside a wider landscape sheet used to move the viewport's center from
+  half the page's width to 0.64 of it.
 - **Zoom cost.** Against a React wrapper of pdf.js's own viewer
   (`PDFViewer`), measured in another project's harness, the main thread was
   1.4–5.6 times busier while zooming.

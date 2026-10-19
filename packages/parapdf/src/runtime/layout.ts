@@ -96,14 +96,24 @@ export interface Viewport {
   height: number;
 }
 
+/**
+ * Where a page's left edge sits in the scrolled content, in CSS pixels: each
+ * page is centered in the viewport, as in pdf.js's viewer, and one wider
+ * than the viewport starts at the gap. Centering every page in the widest
+ * page's width instead pushed narrower pages off the viewport's right edge.
+ * `<PdfViewport>` places pages by the same rule in CSS.
+ */
+export function pageLeft(layout: Layout, index: number, viewportWidth: number): number {
+  return Math.max(layout.gap, (viewportWidth - (layout.widths[index] ?? 0)) / 2);
+}
+
 /** The part of a page inside the viewport, or null when none of it is. */
 export function visibleArea(layout: Layout, index: number, viewport: Viewport): PageArea | null {
   const width = layout.widths[index] ?? 0;
   const height = layout.heights[index] ?? 0;
   if (width === 0 || height === 0) return null;
   const top = layout.tops[index] ?? 0;
-  // Pages are centered in content at least as wide as the viewport.
-  const left = (Math.max(viewport.width, layout.totalWidth) - width) / 2;
+  const left = pageLeft(layout, index, viewport.width);
   const minX = Math.max(0, viewport.left - left) / width;
   const maxX = Math.min(width, viewport.left + viewport.width - left) / width;
   const minY = Math.max(0, viewport.top - top) / height;

@@ -47,6 +47,7 @@ export function PdfViewport({
           index={index}
           pageCount={pageCount}
           top={layout.tops[index] ?? 0}
+          gap={layout.gap}
           width={layout.widths[index] ?? 0}
           height={layout.heights[index] ?? 0}
           scale={layout.scale}
@@ -63,7 +64,19 @@ export function PdfViewport({
     <div
       ref={scrollerRef}
       className={className ? `parapdf-viewport ${className}` : "parapdf-viewport"}
-      style={{ overflow: "auto", contain: "strict", ...style }}
+      // The scroller is the query container whose width `cqw` measures for
+      // page placement. A stable gutter keeps that width from changing as the
+      // scrollbar comes and goes, which would refit "fit-width" back and forth.
+      // Touches pan it natively, but pinches zoom the document through the
+      // runtime instead of zooming the whole page.
+      style={{
+        overflow: "auto",
+        contain: "strict",
+        containerType: "inline-size",
+        scrollbarGutter: "stable",
+        touchAction: "pan-x pan-y",
+        ...style,
+      }}
       // biome-ignore lint/a11y/noNoninteractiveTabindex: a focusable scroll container is what lets keyboard users scroll it.
       tabIndex={0}
       role="document"
@@ -85,6 +98,8 @@ interface PdfPageProps {
   index: number;
   pageCount: number;
   top: number;
+  /** Space between pages and around the document, in CSS pixels. */
+  gap: number;
   width: number;
   height: number;
   /** CSS pixels per PDF point; pdf.js's text layer reads it as `--total-scale-factor`. */
@@ -106,6 +121,7 @@ const PdfPage = memo(function PdfPage({
   index,
   pageCount,
   top,
+  gap,
   width,
   height,
   scale,
@@ -136,9 +152,8 @@ const PdfPage = memo(function PdfPage({
         {
           position: "absolute",
           top,
-          left: 0,
-          right: 0,
-          margin: "0 auto",
+          // Centered in the viewport, at the gap when wider: pageLeft() in layout.ts.
+          left: `max(${gap}px, calc((100cqw - ${width}px) / 2))`,
           width,
           height,
           background: "#fff",
