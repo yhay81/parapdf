@@ -191,11 +191,18 @@ about 20 ms as noise.
   the document instead of the page.
   [`check-pinch.ts`](examples/prototype/scripts/check-pinch.ts) verifies this
   in Chromium with touches the DevTools protocol feeds through the browser's
-  own input handling, and with dispatched events in WebKit and Firefox;
-  Safari and iPadOS themselves are not verified yet. Zooming also keeps its
-  anchor on the same point of its page sideways now: one "Zoom in" on an A5
-  page beside a wider landscape sheet used to move the viewport's center from
-  half the page's width to 0.64 of it.
+  own input handling, and with dispatched events in WebKit and Firefox.
+  Safari in the iOS 27 Simulator (iPad Pro 11-inch) zoomed, scrolled, and
+  selected text by long press as expected too; physical devices are not
+  verified yet. That run found two faults, now fixed: a pinch in near the
+  document's top made the point between the fingers jump 334 CSS pixels when
+  they lifted, because the preview had shown it past the end of the scroll
+  range, and a long two-finger drag at a low zoom showed a blank band beyond
+  the mounted pages until the fingers lifted. A pinch that starts during a
+  fling still does nothing there: Safari gives the page no events for it.
+  Zooming also keeps its anchor on the same point of its page sideways now:
+  one "Zoom in" on an A5 page beside a wider landscape sheet used to move the
+  viewport's center from half the page's width to 0.64 of it.
 - **Zoom cost.** Against a React wrapper of pdf.js's own viewer
   (`PDFViewer`), measured in another project's harness, the main thread was
   1.4–5.6 times busier while zooming.

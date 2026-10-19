@@ -102,10 +102,13 @@ until the benchmark results justify the architecture.
   @parapdf/bench corpus` and `build`; `BROWSER` and `ENGINE` apply).
 - `pnpm --filter @parapdf/prototype check:pinch` — functional checks for zoom
   gestures: touch pinches zoom the document around the point between the
-  fingers and pan with it while the page itself stays unzoomed, two fingers
-  that keep their distance scroll, one finger still scrolls natively, Safari's
-  gesture events are prevented and zoom the document, and ctrl+wheel zooms
-  around the pointer (run after `build`; `BROWSER` and `ENGINE` apply).
+  fingers and pan with it while the page itself stays unzoomed, a pinch in
+  that the scroll range or a narrower page's centering stops commits where
+  its preview showed the point, two fingers that keep their distance scroll,
+  a long two-finger drag mounts and draws the pages it shows before the
+  fingers lift, one finger still scrolls natively, Safari's gesture events are
+  prevented and zoom the document, and ctrl+wheel zooms around the pointer
+  (run after `build`; `BROWSER` and `ENGINE` apply).
   Chromium gets real touches through the DevTools protocol; Playwright cannot
   put two fingers down in WebKit or Firefox, so there the check dispatches
   touch pointer events, and in WebKit gesture events.
@@ -141,7 +144,16 @@ until the benchmark results justify the architecture.
   page narrower than the content sideways.
 - Zoom gestures preview with a CSS transform of the content around the
   content point where they started, and then commit like `setScale`, that
-  point at the place the preview shows it:
+  point at the place the preview shows it. The preview works out the
+  commit's layout and scroll position (`#placeZoom`, which `#zoomTo` shares)
+  and shows the point there: where the new scroll range ends or a page
+  narrower than the viewport centers, the point leaves the fingers during the
+  gesture instead of jumping when they lift, as it did by 334 CSS pixels for
+  a pinch in near the document's top in iPadOS Safari. The mounted window and
+  the scheduler follow the band of content a preview shows, so the pages a
+  two-finger drag or a zoom out brings into view mount and draw before the
+  commit; full-resolution renders wait while the preview's zoom differs from
+  the committed one, which would draw them again.
   - Ctrl or meta with the wheel, which trackpad pinches produce in Chromium
     and Firefox, commits 150 ms after the last event.
   - Two touches commit when either lifts. `PdfViewport` sets `touch-action:
@@ -154,9 +166,15 @@ until the benchmark results justify the architecture.
     prevented, which keeps Safari from zooming the page. With no touches,
     as for macOS trackpad pinches, their `scale` zooms around their
     `clientX`/`clientY` and commits at `gestureend` or 150 ms after the last
-    event. iPadOS reports touch pinches with both kinds of events: pointer
-    events drive them, and if Safari cancels the pointers, the gesture events
-    carry the zoom on from where the touches left it.
+    event. iPadOS reports touch pinches with both kinds of events, the
+    gesture events at the touches' midpoint: pointer events drive them, and
+    if Safari cancels the pointers, the gesture events carry the zoom on from
+    where the touches left it. Safari in the iOS 27 Simulator never cancelled
+    the pointers of two fingers, so that hand-over did not run there.
+  - In iPadOS Safari, a pinch that starts while a fling still scrolls the
+    viewport reaches the page with neither pointer nor gesture events, and
+    `touch-action: pan-x pan-y` keeps Safari from zooming the page too: the
+    touch only stops the fling, and the next pinch zooms.
   - A relayout during a preview (a resize that refits, a turn, the page-size
     pass, a button) commits the gesture first; a pinch whose preview another
     gesture committed starts again from its fingers' current positions.
@@ -292,10 +310,12 @@ until the benchmark results justify the architecture.
   pdf.js engine opened, for APIs ParaPDF does not wrap.
 - Browsers: `check:text`, `check:links`, `check:lifecycle`,
   `check:rotation`, `check:options`, and `check:pinch` pass in Playwright's
-  Chromium, WebKit, and Firefox. Touch and Safari's gesture events are not
-  verified in Safari or on iPadOS devices: Playwright's WebKit cannot put two
-  fingers down, and its `GestureEvent` is a function whose objects are not
-  events. WebKit has neither
+  Chromium, WebKit, and Firefox. Playwright's WebKit cannot put two fingers
+  down, and its `GestureEvent` is a function whose objects are not events, so
+  touch pinches were also tried in Safari 27 in the iOS 27 Simulator (iPad
+  Pro 11-inch): pinches in and out, the point between the fingers, one-finger
+  scrolling with momentum, long-press selection, and two-finger drags worked.
+  Physical devices are not verified. WebKit has neither
   `requestIdleCallback` nor `scheduler.yield`, so idle text and annotation
   layers fall back to a 16 ms timer and search yields through `setTimeout(0)`.
 - Not yet implemented: form filling, structure tree (tagged PDF) semantics,

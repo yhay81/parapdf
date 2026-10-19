@@ -195,7 +195,7 @@ interface Pinch {
 interface SafariGestureEvent extends UIEvent {
   /** The distance between the touches, or the trackpad's magnification, relative to the start. */
   readonly scale: number;
-  /** The pointer's position on macOS. */
+  /** The pointer's position on macOS, the touches' midpoint on iPadOS. */
   readonly clientX?: number;
   readonly clientY?: number;
 }
