@@ -255,6 +255,19 @@ about 20 ms as noise.
   centered again; the preview now shows the content where the commit puts
   it. A pinch that starts while a fling still scrolls reaches the page
   through no event in iPadOS Safari, so it does nothing until the next one.
+- **Pages under a gesture preview (2026-10-20).** A gesture previews with a
+  CSS transform and leaves the scroll position in place, and the mounted
+  pages and the scheduler followed the scroll position alone. A long
+  two-finger drag at a low zoom therefore showed a blank band below the
+  mounted pages until the fingers lifted: 218 CSS pixels after a 900-point
+  drag at 23% in Safari in the iPadOS simulator, where the pages mounted
+  about 500 ms after the lift. They now follow the part of the content the
+  preview shows. [`check-pinch.ts`](examples/prototype/scripts/check-pinch.ts)
+  drags touch pointers over 96% of the viewport's height at the lowest zoom
+  and pinches in from 0.5 while dragging as far. In Chromium, WebKit, and
+  Firefox alike, the band reached 190 and 292 CSS pixels before the change
+  and stays at 0 now, with every page in view drawn by the last move. The
+  iPadOS simulator has not been tried again.
 - **Zoom cost.** Against a React wrapper of pdf.js's own viewer
   (`PDFViewer`), measured in another project's harness, the main thread was
   1.4–5.6 times busier while zooming.

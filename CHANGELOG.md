@@ -4,6 +4,13 @@ Changes to the `parapdf` package. It follows
 [Semantic Versioning](https://semver.org/); until 1.0, a minor release may
 change the API.
 
+## Unreleased
+
+- The pages a zoom gesture's preview brings into view, by a two-finger drag
+  or by zooming out, mount and draw before the gesture commits: a long
+  two-finger drag at a low zoom showed a blank band below the mounted pages
+  until the fingers lifted.
+
 ## 0.1.0 — 2026-10-20
 
 The first release, from Phase 0 of the project: the API is experimental.

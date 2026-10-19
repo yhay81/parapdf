@@ -145,7 +145,29 @@ const viewportOf = (scroller: HTMLElement): Viewport => ({
   top: scroller.scrollTop,
   width: scroller.clientWidth,
   height: scroller.clientHeight,
+  scrollerWidth: scroller.clientWidth,
 });
+
+/** How fast the shown content moves: full-resolution work waits while it moves fast. */
+interface Motion {
+  /** The shown content's top at its last move, in CSS pixels. */
+  top: number;
+  /** `performance.now()` at that move. */
+  at: number;
+  /** CSS pixels per millisecond, smoothed over moves that follow each other quickly. */
+  velocity: number;
+}
+
+/** The shown content's top moved to `top` at `now`. */
+function move(motion: Motion, top: number, now: number): void {
+  const elapsed = now - motion.at;
+  if (elapsed > 0) {
+    const instant = (top - motion.top) / elapsed;
+    motion.velocity = elapsed > SETTLE_DELAY ? instant : motion.velocity * 0.6 + instant * 0.4;
+  }
+  motion.top = top;
+  motion.at = now;
+}
 
 const yieldToMain = (): Promise<void> => {
   const scheduler = (globalThis as { scheduler?: { yield?: () => Promise<void> } }).scheduler;
@@ -192,6 +214,15 @@ interface ZoomGesture {
   /** How far a two-finger drag moved that point on screen. */
   panX: number;
   panY: number;
+  /** What the preview adds to the pan to show the content where the commit puts it. */
+  shiftX: number;
+  shiftY: number;
+  /**
+   * How the content the preview shows moves. It is kept apart from
+   * scrolling's: a zoom's commit jumps to another scroll position, which,
+   * measured against the preview's last move, would look like a fling.
+   */
+  motion: Motion;
   /** Pending commit of a wheel or Safari gesture. */
   timer: number;
 }
@@ -269,9 +300,8 @@ export class PdfViewerRuntime {
   #content: HTMLElement | null = null;
   #frame = 0;
   #settleTimer = 0;
-  #lastTop = 0;
-  #lastScrollAt = 0;
-  #velocity = 0;
+  /** How scrolling moves the content; a gesture's preview tracks its own motion. */
+  readonly #scrolling: Motion = { top: 0, at: 0, velocity: 0 };
   #zoom: ZoomGesture | null = null;
   /** Touch pointers down on the viewport, in client coordinates. */
   readonly #touches = new Map<number, { x: number; y: number }>();
@@ -959,14 +989,7 @@ export class PdfViewerRuntime {
   #onScroll = (): void => {
     const scroller = this.#scroller;
     if (!scroller) return;
-    const now = performance.now();
-    const elapsed = now - this.#lastScrollAt;
-    if (elapsed > 0) {
-      const instant = (scroller.scrollTop - this.#lastTop) / elapsed;
-      this.#velocity = elapsed > SETTLE_DELAY ? instant : this.#velocity * 0.6 + instant * 0.4;
-    }
-    this.#lastTop = scroller.scrollTop;
-    this.#lastScrollAt = now;
+    move(this.#scrolling, scroller.scrollTop, performance.now());
     this.#requestUpdate();
   };
 
@@ -1127,6 +1150,9 @@ export class PdfViewerRuntime {
       originY: scroller.scrollTop + clientY - rect.top - scroller.clientTop,
       panX: 0,
       panY: 0,
+      shiftX: 0,
+      shiftY: 0,
+      motion: { top: scroller.scrollTop, at: performance.now(), velocity: 0 },
       timer: 0,
     };
     return this.#zoom;
@@ -1139,13 +1165,14 @@ export class PdfViewerRuntime {
   }
 
   /**
-   * Preview a gesture on the compositor; layout and rendering wait for the
-   * commit. The preview shows the content where the commit will put it: the
-   * gesture's point stays under it unless that would scroll past the start
-   * or end of the document, or a page the zoom narrows below the viewport's
-   * width is centered again. Previewing the unconstrained place made the
-   * content jump when the gesture committed, by 334 CSS pixels on an iPad
-   * pinching in near the document's start.
+   * Preview a gesture on the compositor; layout waits for the commit, but the
+   * pages the preview brings into view mount and draw at the committed zoom
+   * before it (see #shownViewport). The preview shows the content where the
+   * commit will put it: the gesture's point stays under it unless that would
+   * scroll past the start or end of the document, or a page the zoom narrows
+   * below the viewport's width is centered again. Previewing the
+   * unconstrained place made the content jump when the gesture committed, by
+   * 334 CSS pixels on an iPad pinching in near the document's start.
    */
   #previewZoom(zoom: ZoomGesture): void {
     const content = this.#content;
@@ -1170,10 +1197,40 @@ export class PdfViewerRuntime {
     }
     const maxLeft = Math.max(0, next.totalWidth - scroller.clientWidth);
     const maxTop = Math.max(0, next.totalHeight - scroller.clientHeight);
-    const shiftX = target.left - clamp(target.left, 0, maxLeft);
-    const shiftY = target.top - clamp(target.top, 0, maxTop);
+    zoom.shiftX = target.left - clamp(target.left, 0, maxLeft);
+    zoom.shiftY = target.top - clamp(target.top, 0, maxTop);
     content.style.transformOrigin = `${zoom.originX}px ${zoom.originY}px`;
-    content.style.transform = `translate(${zoom.panX + shiftX}px, ${zoom.panY + shiftY}px) scale(${zoom.factor})`;
+    content.style.transform = `translate(${zoom.panX + zoom.shiftX}px, ${zoom.panY + zoom.shiftY}px) scale(${zoom.factor})`;
+    this.#requestUpdate();
+  }
+
+  /** Whether a gesture in progress previews another zoom, not just a pan. */
+  #zooming(): boolean {
+    const zoom = this.#zoom;
+    const scale = this.store.get().scale;
+    return zoom !== null && Math.abs(scale * zoom.factor - scale) >= 1e-4;
+  }
+
+  /**
+   * The part of the content the viewport shows, in the content's CSS pixels.
+   * A gesture's preview shows another part than the scroll position: its
+   * transform draws the content point p at origin + (p - origin) * factor +
+   * pan + shift, so the viewport maps back through the inverse. The mounted
+   * window and the scheduler follow it, so the pages a long two-finger drag
+   * or a zoom out brings into view mount and draw before the gesture commits.
+   */
+  #shownViewport(scroller: HTMLElement): Viewport {
+    const viewport = viewportOf(scroller);
+    const zoom = this.#zoom;
+    if (!zoom) return viewport;
+    const { originX, originY, factor } = zoom;
+    return {
+      left: originX + (viewport.left - zoom.panX - zoom.shiftX - originX) / factor,
+      top: originY + (viewport.top - zoom.panY - zoom.shiftY - originY) / factor,
+      width: viewport.width / factor,
+      height: viewport.height / factor,
+      scrollerWidth: viewport.scrollerWidth,
+    };
   }
 
   #commitZoom = (): void => {
@@ -1230,25 +1287,35 @@ export class PdfViewerRuntime {
     const layout = this.store.get().layout;
     const scroller = this.#scroller;
     if (!layout || !scroller) return;
-    const top = scroller.scrollTop;
-    const height = scroller.clientHeight;
-    const { first, last } = visibleRange(layout, top, height);
+    const viewport = this.#shownViewport(scroller);
+    const zoom = this.#zoom;
+    // A preview's drag moves the shown content without scrolling. It is
+    // measured once a frame, as scrolling is: the moves of a drag's two
+    // fingers come microseconds apart, and measuring each would make a slow
+    // drag look like a fling.
+    if (zoom && viewport.top !== zoom.motion.top) {
+      move(zoom.motion, viewport.top, performance.now());
+    }
+    const { first, last } = visibleRange(layout, viewport.top, viewport.height);
     const lastIndex = layout.tops.length - 1;
-    const focus = pageAt(layout, top + height / 2);
+    const focus = pageAt(layout, viewport.top + viewport.height / 2);
     // Publishing is cheap when nothing changed: the store ignores equal values.
     this.store.set({
       first: Math.max(0, first - this.#overscan),
       last: Math.min(lastIndex, last + this.#overscan),
       currentPage: focus,
     });
-    const quiet = performance.now() - this.#lastScrollAt > SETTLE_DELAY;
-    const settled = quiet || Math.abs(this.#velocity) < SETTLE_VELOCITY;
+    const motion = zoom?.motion ?? this.#scrolling;
+    const quiet = performance.now() - motion.at > SETTLE_DELAY;
+    // A zoom preview's commit draws the pages again at its zoom: until then
+    // the preview counts as fast scrolling.
+    const settled = (quiet || Math.abs(motion.velocity) < SETTLE_VELOCITY) && !this.#zooming();
     this.#scheduler?.update({
       layout,
       first,
       last,
       focus,
-      viewport: viewportOf(scroller),
+      viewport,
       devicePixelRatio: window.devicePixelRatio || 1,
       settled,
     });

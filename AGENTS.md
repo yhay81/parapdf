@@ -124,8 +124,10 @@ with the API.
   fingers and pan with it while the page itself stays unzoomed, two fingers
   that keep their distance scroll, one finger still scrolls natively, Safari's
   gesture events are prevented and zoom the document, ctrl+wheel zooms
-  around the pointer, and a pinch in at the document's start previews page 1
-  where its commit puts it (run after `build`; `BROWSER` and `ENGINE`
+  around the pointer, a pinch in at the document's start previews page 1
+  where its commit puts it, and a long two-finger drag at the lowest zoom, or
+  a pinch in that drags as far, mounts and draws the pages its preview shows
+  before the fingers lift (run after `build`; `BROWSER` and `ENGINE`
   apply).
   Chromium gets real touches through the DevTools protocol; Playwright cannot
   put two fingers down in WebKit or Firefox, so there the check dispatches
@@ -176,8 +178,8 @@ with the API.
 - `PdfViewerRuntime` owns scrolling, layout, zoom, and the render scheduler.
   It publishes only `status`, `layout`, the mounted window (`first`/`last`),
   `currentPage`, `scale`, and `zoomMode` through a small store read with
-  `useSyncExternalStore`; scrolling recomputes every frame but publishes only
-  changes.
+  `useSyncExternalStore`; scrolling and gesture previews recompute every
+  frame but publish only changes.
 - Layouts are immutable per zoom level. The runtime sizes the content element
   imperatively so zoom can restore the anchored scroll position before React
   re-renders the mounted pages. A zoom keeps its anchor as a share of the same
@@ -212,10 +214,24 @@ with the API.
     narrower than the viewport is centered. Previewing the unconstrained
     place made the content jump at the commit, 334 CSS pixels down and 96
     sideways in Safari in the iPadOS simulator.
+  - The mounted window, `currentPage`, and the scheduler follow the part of
+    the content the preview shows, the viewport mapped back through the
+    preview's transform (`#shownViewport()`), so the pages a two-finger drag
+    or a zoom out brings into view mount and draw before the commit. The
+    scheduler's `Viewport` keeps the scroller's width, which pages are
+    centered in, apart from the width the preview shows. A drag's speed defers
+    full-resolution work as scrolling's does. It is measured once a frame,
+    since the moves of the two fingers come microseconds apart, and on the
+    gesture: against scrolling's last move, a zoom's commit, which jumps to
+    another scroll position, would look like a fling. While a preview zooms,
+    it counts as fast scrolling, so only base renders start: the commit draws
+    the pages again at its zoom. Following the scroll position alone, which a
+    preview leaves in place, left a blank band below the mounted pages during
+    a long two-finger drag at a low zoom, 218 CSS pixels in the iPadOS
+    simulator.
   - In Safari on iPadOS, a pinch that starts while a fling still scrolls
     reaches the page through no event at all: the fling stops, the zoom does
-    not change, and a second pinch works. A long two-finger drag at a low
-    zoom pans only the preview, so pages it brings in mount at the commit.
+    not change, and a second pinch works.
 - `setScale("fit-width")`, which `initialScale` defaults to, sets `zoomMode`
   to "fit-width": the page at the viewport's center is fitted to the
   viewport's width again whenever that width changes, the view turns, or the
