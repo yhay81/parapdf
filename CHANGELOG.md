@@ -15,6 +15,9 @@ change the API.
   by visible area, losing its margin first and then resolution. Visible pages
   used to keep all the detail `maxDetailPixels` allowed, whatever the budget,
   and only pages outside the viewport gave pixels back.
+- `createPdfjsEngine` asks pdf.js for GPU-backed canvases unless
+  `enableHWA` is `false`. It used to leave pdf.js's default, CPU-backed
+  canvases.
 - A detail canvas without a margin around the visible area, which a
   `maxDetailPixels` below the viewport's device pixels leaves, is drawn once:
   it was drawn again about 60 times a second while the view stood still.

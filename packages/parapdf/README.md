@@ -225,7 +225,8 @@ of each page, `(pageNumber, pageCount) => string`, "Page 3 of 12" by
 default), and `renderOverlay`.
 
 `createPdfjsEngine` takes `pdfjs`, `workerSrc`, `assetBase`, `enableHWA`
-(ask pdf.js for GPU-backed canvases), `documentOptions` (more pdf.js
+(GPU-backed canvases, `true` by default; `false` asks pdf.js for CPU-backed
+ones), `documentOptions` (more pdf.js
 `getDocument` parameters for every document, such as `withCredentials` or
 `httpHeaders`), and `rendererSrc` (see [Limitations](#limitations)). For older
 browsers, pass pdf.js's legacy build, `pdfjs-dist/legacy/build/pdf.mjs`, and

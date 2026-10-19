@@ -151,6 +151,12 @@ with the API.
   the profile. `SCENARIOS`, `VARIANTS`, `TEXT`, `LINKS`, `FILE`, `DPR`,
   `START_SCALE`, `ZOOM` (zoom factors), `SPEED`, `DURATION`, `RUNS`, and
   `OUTPUT` apply.
+- `node examples/prototype/scripts/hwa-bench.ts` — GPU-backed against
+  CPU-backed canvases (`enableHWA`): blocked main thread, dropped frames, and
+  the physical footprint of every process of a browser launched for each job
+  (macOS `footprint`, which counts the IOSurfaces GPU canvases live in) while
+  a document opens, scrolls, zooms, and pans (run after `build`; `BROWSER`,
+  `VARIANTS`, `FILES`, `RUNS`, and `OUTPUT` apply).
 - `pnpm check` — Biome lint and format check. `pnpm format` applies fixes.
 - `pnpm typecheck` — TypeScript checks for every workspace package.
 - The functional checks default to `ENGINE=pdfjs-next`, which needs
@@ -277,10 +283,14 @@ with the API.
   full device resolution. The zoom goes up to 10 CSS pixels per point.
 - The pdf.js adapter starts its parsing worker when the engine is created, and
   the demo preloads the PDF with React's `preload()`, matching the CORS mode
-  pdf.js fetches with. `documentOptions` (typed `PdfjsDocumentOptions`) adds
-  getDocument parameters for every document, overriding `enableHWA` and the
-  asset URLs from `assetBase`; the source and the worker stay the adapter's.
-  The `pdfjs` option takes the legacy build as is.
+  pdf.js fetches with. The adapter asks for GPU-backed canvases unless
+  `enableHWA` is `false`: in an embedding app's preview they blocked the main
+  thread for 256 instead of 560 ms in Chromium, and 770 instead of 1,393 ms
+  in WebKit, while panning a zoomed drawing. `documentOptions` (typed
+  `PdfjsDocumentOptions`) adds getDocument parameters for every document,
+  overriding `enableHWA` and the asset URLs from `assetBase`; the source and
+  the worker stay the adapter's. The `pdfjs` option takes the legacy build as
+  is.
 - Text layers use pdf.js's core `TextLayer` inside `.parapdf-text-layer`, styled
   by rules derived from pdf.js's viewer CSS (attributed in `NOTICE.md`). Pages
   set `--total-scale-factor` and `--scale-round-x/y`, which `TextLayer` sizes

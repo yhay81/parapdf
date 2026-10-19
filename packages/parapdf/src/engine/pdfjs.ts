@@ -40,6 +40,11 @@ export interface PdfjsEngineOptions {
   rendererSrc?: string;
   /** Base URL of the pdf.js cmaps/, standard_fonts/, wasm/, and iccs/ directories. */
   assetBase?: string;
+  /**
+   * Draw on GPU-backed canvases, pdf.js's enableHWA (default true); false
+   * keeps pdf.js's own default of CPU-backed canvases. See README for what it
+   * costs and saves in each browser.
+   */
   enableHWA?: boolean;
   /**
    * More getDocument parameters for every document this engine opens. They
@@ -189,7 +194,7 @@ export function createPdfjsEngine(options: PdfjsEngineOptions): PdfEngine {
     name: options.rendererSrc ? "pdf.js (renderer worker)" : "pdf.js (main-thread drawing)",
     async open(source: PdfSource): Promise<PdfEngineDocument> {
       const loadingTask = pdfjs.getDocument({
-        enableHWA: options.enableHWA ?? false,
+        enableHWA: options.enableHWA ?? true,
         ...(assetBase
           ? {
               cMapUrl: `${assetBase}cmaps/`,
