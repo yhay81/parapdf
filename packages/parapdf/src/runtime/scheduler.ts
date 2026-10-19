@@ -100,6 +100,13 @@ export interface SchedulerOptions {
    * is larger gets detail only for its visible area plus a margin.
    */
   maxDetailPixels?: number;
+  /**
+   * The most pixels a detail canvas holds as a multiple of the viewport's
+   * device pixels, so the margin around the visible area follows the
+   * viewport's size; maxDetailPixels still caps it. Below 1 the visible area
+   * itself loses resolution.
+   */
+  maxDetailViewports?: number;
   /** The most pixels a base canvas holds; beyond it the base renders at lower resolution. */
   maxBasePixels?: number;
   /**
@@ -239,6 +246,7 @@ export class RenderScheduler {
   readonly #slots = new Map<number, Slot>();
   readonly #maxConcurrent: number;
   readonly #maxDetailPixels: number;
+  readonly #maxDetailViewports: number;
   readonly #maxBasePixels: number;
   readonly #maxCanvasPixels: number;
   readonly #options: SchedulerOptions;
@@ -253,6 +261,7 @@ export class RenderScheduler {
     this.#doc = doc;
     this.#maxConcurrent = options.maxConcurrent ?? 2;
     this.#maxDetailPixels = options.maxDetailPixels ?? 16_777_216;
+    this.#maxDetailViewports = options.maxDetailViewports ?? Number.POSITIVE_INFINITY;
     this.#maxBasePixels = options.maxBasePixels ?? 2_097_152;
     this.#maxCanvasPixels = options.maxCanvasPixels ?? Number.POSITIVE_INFINITY;
     this.#options = options;
@@ -403,10 +412,17 @@ export class RenderScheduler {
     );
   }
 
+  /** The most pixels a detail may hold: maxDetailPixels, at most maxDetailViewports viewports' worth. */
+  #detailBudget(input: ScheduleInput): number {
+    const { viewport, devicePixelRatio } = input;
+    const viewportPixels = viewport.width * viewport.height * devicePixelRatio ** 2;
+    return Math.min(this.#maxDetailPixels, this.#maxDetailViewports * viewportPixels);
+  }
+
   /**
-   * A page whose full-resolution render fits in maxDetailPixels gets detail
+   * A page whose full-resolution render fits its detail budget gets detail
    * for the whole page. A larger one gets detail only while visible, for the
-   * visible area grown by up to its own size on each side as far as the pixel
+   * visible area grown by up to its own size on each side as far as the
    * budget allows, as in pdf.js's PDFPageDetailView. Null: no detail layer.
    */
   #detailPlan(index: number, input: ScheduleInput): DetailPlan | null {
@@ -415,14 +431,12 @@ export class RenderScheduler {
     if (!size) return null;
     const scale = layout.scale * devicePixelRatio;
     const pagePixels = size.width * scale * (size.height * scale);
-    if (pagePixels <= this.#maxDetailPixels) return { scale, region: null };
+    const budget = this.#detailBudget(input);
+    if (pagePixels <= budget) return { scale, region: null };
     const visible = visibleArea(layout, index, input.viewport);
     if (!visible) return null;
     const visiblePixels = areaSize(visible) * pagePixels;
-    const overflow = Math.min(
-      1,
-      Math.max(0, (Math.sqrt(this.#maxDetailPixels / visiblePixels) - 1) / 2),
-    );
+    const overflow = Math.min(1, Math.max(0, (Math.sqrt(budget / visiblePixels) - 1) / 2));
     const growX = (visible.maxX - visible.minX) * overflow;
     const growY = (visible.maxY - visible.minY) * overflow;
     const region = {
@@ -431,13 +445,10 @@ export class RenderScheduler {
       maxX: Math.min(1, visible.maxX + growX),
       maxY: Math.min(1, visible.maxY + growY),
     };
-    // A viewport larger than the budget gets its detail at lower resolution.
+    // A visible area larger than the budget gets its detail at lower resolution.
     const regionPixels = areaSize(region) * pagePixels;
     return {
-      scale:
-        regionPixels > this.#maxDetailPixels
-          ? scale * Math.sqrt(this.#maxDetailPixels / regionPixels)
-          : scale,
+      scale: regionPixels > budget ? scale * Math.sqrt(budget / regionPixels) : scale,
       region,
     };
   }

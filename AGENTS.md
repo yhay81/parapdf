@@ -252,8 +252,10 @@ with the API.
   Once scrolling settles, a visible page without pixels also gets its
   whole-page detail without a base when that holds at most four times the
   base budget (`QUICK_DETAIL_BASES`): a base repeats the page's drawing work.
-  `ViewerOptions` sets the two budgets (`maxDetailPixels`, `maxBasePixels`)
-  and `maxCanvasPixels`, a budget for all of a viewer's canvases: pages
+  `ViewerOptions` sets the two budgets (`maxDetailPixels`, `maxBasePixels`),
+  `maxDetailViewports`, which caps the detail at a multiple of the viewport's
+  device pixels so that its margin follows the viewport's size, and
+  `maxCanvasPixels`, a budget for all of a viewer's canvases: pages
   outside the viewport render only within it and give their pixels back,
   farthest first and detail before base, when visible pages need more
   (`stats.trimmed`); visible pages always keep theirs.

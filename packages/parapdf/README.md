@@ -214,6 +214,7 @@ read when the component mounts; give it a new `key` to change them.
 | `annotationLayer` | `true` | Focusable links. |
 | `externalLinks` | `"new-tab"` | `"disabled"` leaves links to other documents inert. |
 | `maxDetailPixels` | 16,777,216 | Pixels of one page's full-resolution canvas; larger pages are drawn sharp only around the visible area. |
+| `maxDetailViewports` | unlimited | The same limit as a multiple of the viewport's device pixels, so the sharp margin around the visible area follows the viewport's size. |
 | `maxBasePixels` | 2,097,152 | Pixels of one page's low-resolution canvas. |
 | `maxCanvasPixels` | unlimited | Pixels of all of this viewer's canvases together; pages outside the viewport give theirs back first. |
 | `maxConcurrentRenders` | `2` | Pages drawn at once. |

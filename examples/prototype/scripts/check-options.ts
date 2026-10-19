@@ -116,6 +116,7 @@ const canvasPixels = (page: Page) =>
       largestBase,
       largestDetail,
       sharpness: viewer.sharpness(),
+      viewportPixels: scroller.clientWidth * scroller.clientHeight * window.devicePixelRatio ** 2,
       trimmed: viewer.stats?.trimmed ?? 0,
     };
   });
@@ -348,6 +349,29 @@ try {
     JSON.stringify(canvases),
   );
   await limited.context().close();
+
+  // maxDetailViewports sizes the detail by the viewport: smaller viewport, smaller detail.
+  const viewports = 1.5;
+  const relative = await newPage(`file=synthetic-vector-200k.pdf&maxDetailViewports=${viewports}`);
+  await relative.evaluate(() =>
+    (window as unknown as { __viewer: { setScale(scale: number): void } }).__viewer.setScale(2),
+  );
+  await settle(relative);
+  const wide = await canvasPixels(relative);
+  await relative.setViewportSize({ width: 640, height: 600 });
+  await relative.waitForTimeout(300);
+  await settle(relative);
+  const narrow = await canvasPixels(relative);
+  check(
+    "maxDetailViewports keeps the detail within its multiple of the viewport, at full resolution",
+    wide.largestDetail <= viewports * wide.viewportPixels * 1.02 &&
+      narrow.largestDetail <= viewports * narrow.viewportPixels * 1.02 &&
+      narrow.largestDetail < wide.largestDetail &&
+      wide.sharpness >= 0.99 &&
+      narrow.sharpness >= 0.99,
+    JSON.stringify({ wide, narrow }),
+  );
+  await relative.context().close();
 
   const detailLimit = 4_000_000;
   const capped = await newPage(`file=synthetic-vector-200k.pdf&maxDetailPixels=${detailLimit}`);

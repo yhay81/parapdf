@@ -6,6 +6,10 @@ change the API.
 
 ## Unreleased
 
+- `maxDetailViewports` caps one page's detail canvas at a multiple of the
+  viewport's device pixels: the margin drawn sharp around the visible area
+  then follows the viewport's size, small on a phone and large on a wide
+  panel. `maxDetailPixels` still caps it.
 - A detail canvas without a margin around the visible area, which a
   `maxDetailPixels` below the viewport's device pixels leaves, is drawn once:
   it was drawn again about 60 times a second while the view stood still.
