@@ -1,3 +1,5 @@
+"use client";
+
 import { useMemo } from "react";
 import type { SearchState } from "../runtime/viewer.ts";
 import { usePdfState, usePdfViewer } from "./context.ts";

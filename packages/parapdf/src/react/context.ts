@@ -1,3 +1,5 @@
+"use client";
+
 import { createContext, useContext, useSyncExternalStore } from "react";
 import type { PdfEngineDocument } from "../engine/types.ts";
 import type { PdfViewerRuntime, ViewerState } from "../runtime/viewer.ts";

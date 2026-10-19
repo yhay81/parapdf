@@ -1,3 +1,5 @@
+"use client";
+
 import { type CSSProperties, memo, type ReactNode, useLayoutEffect, useRef } from "react";
 import type { Rotation } from "../engine/types.ts";
 import { usePdfState, usePdfViewer } from "./context.ts";

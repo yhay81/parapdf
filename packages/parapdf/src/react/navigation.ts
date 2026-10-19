@@ -1,3 +1,5 @@
+"use client";
+
 import { useMemo } from "react";
 import type { DestinationRef, OutlineNode } from "../engine/types.ts";
 import { usePdfState, usePdfViewer } from "./context.ts";

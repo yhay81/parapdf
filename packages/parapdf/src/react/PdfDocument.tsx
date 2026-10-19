@@ -1,3 +1,5 @@
+"use client";
+
 import { type ReactNode, useEffect, useState } from "react";
 import type { PdfEngine, PdfSource } from "../engine/types.ts";
 import { PdfViewerRuntime, type ViewerOptions } from "../runtime/viewer.ts";
