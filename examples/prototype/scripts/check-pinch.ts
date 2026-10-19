@@ -1,8 +1,10 @@
 /**
  * Functional checks for pinch zoom: two touches zoom the document around the
- * point between them and pan with it instead of zooming the whole page, one
- * finger still scrolls natively, Safari's gesture events zoom the document
- * and are prevented, and ctrl+wheel still zooms around the pointer.
+ * point between them and pan with it instead of zooming the whole page, a
+ * pinch shows the point where its commit will put it, a long two-finger drag
+ * keeps the pages it shows mounted and drawn, one finger still scrolls
+ * natively, Safari's gesture events zoom the document and are prevented, and
+ * ctrl+wheel still zooms around the pointer.
  *
  * In Chromium the touches come from the DevTools protocol, which feeds them
  * through the browser's own input handling, touch-action and page zoom
@@ -89,7 +91,7 @@ const spotAt = (page: Page, point: Point): Promise<Spot | null> =>
     };
   }, point);
 
-/** Where a page point shows now, in client coordinates. */
+/** Where a page point shows now, in client coordinates, a preview's transform included. */
 const pointOf = (page: Page, spot: Spot): Promise<Point | null> =>
   page.evaluate(({ page, fx, fy }) => {
     const section = document.querySelector(`section[data-page="${page}"]`);
@@ -98,10 +100,10 @@ const pointOf = (page: Page, spot: Spot): Promise<Point | null> =>
     return { x: rect.left + fx * rect.width, y: rect.top + fy * rect.height };
   }, spot);
 
-/** How far a page point landed from where it should be, per axis. */
-async function drift(page: Page, spot: Spot | null, expected: Point): Promise<Point | null> {
+/** How far a page point shows from where it should be, per axis. */
+async function drift(page: Page, spot: Spot | null, expected: Point | null): Promise<Point | null> {
   const now = spot ? await pointOf(page, spot) : null;
-  return now ? { x: now.x - expected.x, y: now.y - expected.y } : null;
+  return now && expected ? { x: now.x - expected.x, y: now.y - expected.y } : null;
 }
 
 const within = (offset: number | undefined) =>
@@ -137,119 +139,154 @@ async function committed(page: Page): Promise<void> {
   await settle(page);
 }
 
-/** A point in the viewport: a third from its left and two fifths from its top. */
-const pinchPoint = (page: Page): Promise<Point> =>
-  page.evaluate(() => {
-    const scroller = document.querySelector(".parapdf-viewport") as HTMLElement;
-    const rect = scroller.getBoundingClientRect();
-    return {
-      x: Math.round(rect.left + scroller.clientWidth / 3),
-      y: Math.round(rect.top + (scroller.clientHeight * 2) / 5),
-    };
-  });
-
 /**
- * Two touches from `from` ± `half` to `to` ± `toHalf` horizontally, in
- * `steps` moves, through the DevTools protocol.
+ * Waits two animation frames: Chromium dispatches touch pointer moves once
+ * per frame, so the preview shows the last move only after the next one.
  */
-async function cdpTwoFingers(
-  cdp: CDPSession,
-  from: Point,
-  to: Point,
-  half: number,
-  toHalf: number,
-  steps: number,
-): Promise<void> {
-  const points = (center: Point, spread: number) => [
-    { x: center.x - spread, y: center.y, id: 0 },
-    { x: center.x + spread, y: center.y, id: 1 },
-  ];
-  await cdp.send("Input.dispatchTouchEvent", {
-    type: "touchStart",
-    touchPoints: points(from, half),
-  });
-  for (let step = 1; step <= steps; step++) {
-    const t = step / steps;
-    const center = { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t };
-    await cdp.send("Input.dispatchTouchEvent", {
-      type: "touchMove",
-      touchPoints: points(center, half + (toHalf - half) * t),
-    });
-  }
-  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+const nextFrames = (page: Page): Promise<void> =>
+  page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+
+/** A point in the viewport at shares of its width and height. */
+const viewportPoint = (page: Page, fx: number, fy: number): Promise<Point> =>
+  page.evaluate(
+    ({ fx, fy }) => {
+      const scroller = document.querySelector(".parapdf-viewport") as HTMLElement;
+      const rect = scroller.getBoundingClientRect();
+      return {
+        x: Math.round(rect.left + scroller.clientWidth * fx),
+        y: Math.round(rect.top + scroller.clientHeight * fy),
+      };
+    },
+    { fx, fy },
+  );
+
+/** Zoom with the runtime's own API, optionally scroll, and wait for sharp pages. */
+async function zoomTo(page: Page, scale: number | "fit-width", scrollTop?: number): Promise<void> {
+  await page.evaluate(
+    ({ scale, scrollTop }) => {
+      const viewer = (
+        window as unknown as { __viewer: { setScale(scale: number | "fit-width"): void } }
+      ).__viewer;
+      viewer.setScale(scale);
+      if (scrollTop !== undefined) {
+        (document.querySelector(".parapdf-viewport") as HTMLElement).scrollTop = scrollTop;
+      }
+    },
+    { scale, scrollTop },
+  );
+  await settle(page);
 }
 
 /**
- * The same two touches as touch pointer events dispatched in the page, with
- * Safari's gesture events beside them when `gestures` is set. `cancelAfter`
- * cancels the pointers after that many moves, as Safari does when it takes
- * the touches over, and lets the gesture events go on to a `scale` of 2.4.
+ * Two fingers side by side: put down at `from` ± `half` horizontally and
+ * moved, still down, to `to` ± `toHalf` in `steps` moves.
  */
-const dispatchTwoFingers = (
-  page: Page,
-  options: {
-    from: Point;
-    to: Point;
-    half: number;
-    toHalf: number;
-    steps: number;
-    gestures?: boolean;
-    cancelAfter?: number;
-  },
-): Promise<boolean[]> =>
-  page.evaluate(({ from, to, half, toHalf, steps, gestures, cancelAfter }) => {
-    const target = document.elementFromPoint(from.x, from.y) ?? document.body;
-    const prevented: boolean[] = [];
-    const pointer = (type: string, id: number, x: number, y: number) =>
-      target.dispatchEvent(
-        new PointerEvent(type, {
-          pointerId: id,
-          pointerType: "touch",
-          isPrimary: id === 11,
-          clientX: x,
-          clientY: y,
-          bubbles: true,
-          cancelable: true,
-          composed: true,
-        }),
-      );
-    const gesture = (type: string, scale: number) => {
-      if (!gestures) return;
-      const event = new UIEvent(type, { bubbles: true, cancelable: true });
-      Object.defineProperty(event, "scale", { value: scale });
-      target.dispatchEvent(event);
-      prevented.push(event.defaultPrevented);
-    };
-    const fingers = (t: number) => {
-      const x = from.x + (to.x - from.x) * t;
-      const y = from.y + (to.y - from.y) * t;
-      const spread = half + (toHalf - half) * t;
-      return { x, y, spread, scale: spread / half };
-    };
-    pointer("pointerdown", 11, from.x - half, from.y);
-    pointer("pointerdown", 12, from.x + half, from.y);
-    gesture("gesturestart", 1);
-    const moves = Math.min(steps, cancelAfter ?? steps);
-    for (let step = 1; step <= moves; step++) {
-      const { x, y, spread, scale } = fingers(step / steps);
-      pointer("pointermove", 11, x - spread, y);
-      pointer("pointermove", 12, x + spread, y);
-      gesture("gesturechange", scale);
-    }
-    if (cancelAfter !== undefined) {
-      const { x, y, spread } = fingers(moves / steps);
-      pointer("pointercancel", 11, x - spread, y);
-      pointer("pointercancel", 12, x + spread, y);
-      gesture("gesturechange", 2);
-      gesture("gesturechange", 2.4);
-      gesture("gestureend", 2.4);
-      return prevented;
-    }
-    pointer("pointerup", 11, to.x - toHalf, to.y);
-    pointer("pointerup", 12, to.x + toHalf, to.y);
-    gesture("gestureend", toHalf / half);
-    return prevented;
-  }, options);
+interface Fingers {
+  move(from: Point, to: Point, half: number, toHalf: number, steps: number): Promise<void>;
+  lift(): Promise<void>;
+}
+
+/** Chromium: touches through the DevTools protocol and the browser's input handling. */
+function protocolFingers(cdp: CDPSession): Fingers {
+  const touches = (center: Point, half: number) => [
+    { x: center.x - half, y: center.y, id: 0 },
+    { x: center.x + half, y: center.y, id: 1 },
+  ];
+  return {
+    async move(from, to, half, toHalf, steps) {
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchStart",
+        touchPoints: touches(from, half),
+      });
+      for (let step = 1; step <= steps; step++) {
+        const t = step / steps;
+        await cdp.send("Input.dispatchTouchEvent", {
+          type: "touchMove",
+          touchPoints: touches(
+            { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t },
+            half + (toHalf - half) * t,
+          ),
+        });
+      }
+    },
+    async lift() {
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    },
+  };
+}
+
+interface DispatchedFingers {
+  target: Element;
+  points: Point[];
+}
+
+/** WebKit and Firefox: touch pointer events dispatched where the fingers went down. */
+function dispatchedFingers(page: Page): Fingers {
+  return {
+    move: (from, to, half, toHalf, steps) =>
+      page.evaluate(
+        ({ from, to, half, toHalf, steps }) => {
+          const target = document.elementFromPoint(from.x, from.y) ?? document.body;
+          const fingers: DispatchedFingers = { target, points: [] };
+          (window as unknown as { __fingers: DispatchedFingers }).__fingers = fingers;
+          const place = (type: string, center: Point, spread: number) => {
+            fingers.points = [
+              { x: center.x - spread, y: center.y },
+              { x: center.x + spread, y: center.y },
+            ];
+            for (const [index, { x, y }] of fingers.points.entries()) {
+              target.dispatchEvent(
+                new PointerEvent(type, {
+                  pointerId: 11 + index,
+                  pointerType: "touch",
+                  isPrimary: index === 0,
+                  clientX: x,
+                  clientY: y,
+                  bubbles: true,
+                  cancelable: true,
+                  composed: true,
+                }),
+              );
+            }
+          };
+          place("pointerdown", from, half);
+          for (let step = 1; step <= steps; step++) {
+            const t = step / steps;
+            place(
+              "pointermove",
+              { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t },
+              half + (toHalf - half) * t,
+            );
+          }
+        },
+        { from, to, half, toHalf, steps },
+      ),
+    lift: () =>
+      page.evaluate(() => {
+        const { target, points } = (window as unknown as { __fingers: DispatchedFingers })
+          .__fingers;
+        for (const [index, { x, y }] of points.entries()) {
+          target.dispatchEvent(
+            new PointerEvent("pointerup", {
+              pointerId: 11 + index,
+              pointerType: "touch",
+              isPrimary: index === 0,
+              clientX: x,
+              clientY: y,
+              bubbles: true,
+              cancelable: true,
+              composed: true,
+            }),
+          );
+        }
+      }),
+  };
+}
 
 /** Safari's gesture events of a trackpad pinch at `point`, with no touches. */
 const dispatchTrackpadPinch = (page: Page, point: Point, scales: number[]): Promise<boolean[]> =>
@@ -272,6 +309,94 @@ const dispatchTrackpadPinch = (page: Page, point: Point, scales: number[]): Prom
     },
     { point, scales },
   );
+
+/**
+ * An iPadOS touch pinch whose pointers Safari cancels: touch pointer events
+ * and gesture events side by side, the touches spreading from 100 to 180
+ * pixels apart, then only gesture events, up to a scale of 2.4.
+ */
+const dispatchCancelledPinch = (page: Page, point: Point): Promise<boolean[]> =>
+  page.evaluate((point) => {
+    const target = document.elementFromPoint(point.x, point.y) ?? document.body;
+    const prevented: boolean[] = [];
+    const pointers = (type: string, spread: number) => {
+      for (const [index, x] of [point.x - spread, point.x + spread].entries()) {
+        target.dispatchEvent(
+          new PointerEvent(type, {
+            pointerId: 11 + index,
+            pointerType: "touch",
+            isPrimary: index === 0,
+            clientX: x,
+            clientY: point.y,
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+          }),
+        );
+      }
+    };
+    const gesture = (type: string, scale: number) => {
+      const event = new UIEvent(type, { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "scale", { value: scale });
+      target.dispatchEvent(event);
+      prevented.push(event.defaultPrevented);
+    };
+    pointers("pointerdown", 50);
+    gesture("gesturestart", 1);
+    for (let spread = 55; spread <= 90; spread += 5) {
+      pointers("pointermove", spread);
+      gesture("gesturechange", spread / 50);
+    }
+    pointers("pointercancel", 90);
+    gesture("gesturechange", 2);
+    gesture("gesturechange", 2.4);
+    gesture("gestureend", 2.4);
+    return prevented;
+  }, point);
+
+/**
+ * Whether the mounted pages cover the viewport as the preview shows them,
+ * and every page in view has pixels.
+ */
+const coveredWhileShown = (page: Page, timeout: number): Promise<boolean> =>
+  page
+    .waitForFunction(
+      () => {
+        const viewer = (
+          window as unknown as {
+            __viewer: {
+              hasPixels(index: number): boolean;
+              store: { get(): { pageCount: number } };
+            };
+          }
+        ).__viewer;
+        const scroller = document.querySelector(".parapdf-viewport") as HTMLElement;
+        const view = scroller.getBoundingClientRect();
+        const bottom = view.top + scroller.clientHeight;
+        const pages = [...scroller.querySelectorAll<HTMLElement>("section[data-page]")]
+          .map((section) => ({
+            index: Number(section.dataset.page) - 1,
+            rect: section.getBoundingClientRect(),
+          }))
+          .sort((a, b) => a.index - b.index);
+        const first = pages[0];
+        const last = pages.at(-1);
+        if (!first || !last) return false;
+        const reachesTop = first.index === 0 || first.rect.top <= view.top;
+        const reachesBottom =
+          last.index === viewer.store.get().pageCount - 1 || last.rect.bottom >= bottom;
+        const drawn = pages
+          .filter(({ rect }) => rect.bottom > view.top && rect.top < bottom)
+          .every(({ index }) => viewer.hasPixels(index));
+        return reachesTop && reachesBottom && drawn;
+      },
+      null,
+      { timeout, polling: 50 },
+    )
+    .then(
+      () => true,
+      () => false,
+    );
 
 const server = await preview({
   root: exampleDir,
@@ -313,7 +438,9 @@ const newPage = async (): Promise<Page> => {
 
 try {
   const page = await newPage();
-  const point = await pinchPoint(page);
+  const cdp = launched.name === "chromium" ? await page.context().newCDPSession(page) : null;
+  const fingers = cdp ? protocolFingers(cdp) : dispatchedFingers(page);
+  const point = await viewportPoint(page, 1 / 3, 2 / 5);
   let before = await viewState(page);
   check(
     "the viewport leaves pinches to the runtime",
@@ -335,16 +462,9 @@ try {
     after.scale > before.scale * 1.2 && within(offset?.x) && within(offset?.y),
     JSON.stringify({ ratio: after.scale / before.scale, offset }),
   );
-  await page.evaluate(() =>
-    (window as unknown as { __viewer: { setScale(scale: "fit-width"): void } }).__viewer.setScale(
-      "fit-width",
-    ),
-  );
-  await settle(page);
+  await zoomTo(page, "fit-width");
 
-  if (launched.name === "chromium") {
-    const cdp = await page.context().newCDPSession(page);
-
+  if (cdp) {
     // A pinch out zooms the document, not the page, around the point between the fingers.
     before = await viewState(page);
     spot = await spotAt(page, point);
@@ -385,39 +505,104 @@ try {
       after.pageZoom === 1 && after.scale < before.scale * 0.8 && within(offset?.y),
       JSON.stringify({ ratio: after.scale / before.scale, pageZoom: after.pageZoom, offset }),
     );
+  }
 
-    // Fingers that move apart and along at once zoom and pan: the point
-    // that was between them ends up between them again.
-    before = await viewState(page);
-    spot = await spotAt(page, point);
-    const moved = { x: point.x + 40, y: point.y + 60 };
-    await cdpTwoFingers(cdp, point, moved, 50, 100, 15);
-    await committed(page);
-    after = await viewState(page);
-    offset = await drift(page, spot, moved);
-    check(
-      "a pinch that also moves keeps the point between the fingers",
-      after.pageZoom === 1 &&
-        after.scale > before.scale * 1.4 &&
-        within(offset?.x) &&
-        within(offset?.y),
-      JSON.stringify({ ratio: after.scale / before.scale, offset }),
-    );
+  // Fingers that move apart and along at once zoom and pan: the point that
+  // was between them ends up between them again.
+  await zoomTo(page, "fit-width");
+  before = await viewState(page);
+  spot = await spotAt(page, point);
+  const moved = { x: point.x + 40, y: point.y + 60 };
+  await fingers.move(point, moved, 50, 100, 15);
+  await fingers.lift();
+  await committed(page);
+  after = await viewState(page);
+  offset = await drift(page, spot, moved);
+  check(
+    "a pinch that also moves keeps the point between the fingers",
+    after.pageZoom === 1 &&
+      after.scale > before.scale * 1.4 &&
+      after.zoomMode === "custom" &&
+      within(offset?.x) &&
+      within(offset?.y),
+    JSON.stringify({ ratio: after.scale / before.scale, offset }),
+  );
 
-    // Two fingers that keep their distance only scroll, at the same zoom.
-    before = after;
-    await cdpTwoFingers(cdp, point, { x: point.x, y: point.y - 150 }, 60, 60, 10);
-    await committed(page);
-    after = await viewState(page);
-    check(
-      "a two-finger drag scrolls without zooming",
-      after.scale === before.scale && Math.abs(after.scrollTop - before.scrollTop - 150) <= 2,
-      JSON.stringify({
-        scrolled: after.scrollTop - before.scrollTop,
-        ratio: after.scale / before.scale,
-      }),
-    );
+  // Two fingers that keep their distance only scroll, at the same zoom.
+  before = after;
+  await fingers.move(point, { x: point.x, y: point.y - 150 }, 60, 60, 10);
+  await fingers.lift();
+  await committed(page);
+  after = await viewState(page);
+  check(
+    "a two-finger drag scrolls without zooming",
+    after.scale === before.scale && Math.abs(after.scrollTop - before.scrollTop - 150) <= 2,
+    JSON.stringify({
+      scrolled: after.scrollTop - before.scrollTop,
+      ratio: after.scale / before.scale,
+    }),
+  );
 
+  // Zooming out near the document's top: the viewport cannot scroll above
+  // it, so the point between the fingers cannot stay there. The preview
+  // already shows it where the commit puts it.
+  await zoomTo(page, 2.6, 100);
+  const low = await viewportPoint(page, 1 / 2, 3 / 5);
+  before = await viewState(page);
+  spot = await spotAt(page, low);
+  await fingers.move(low, low, 200, 30, 20);
+  await nextFrames(page);
+  let shown = spot ? await pointOf(page, spot) : null;
+  await fingers.lift();
+  await committed(page);
+  after = await viewState(page);
+  offset = await drift(page, spot, shown);
+  check(
+    "a pinch in near the top commits where its preview showed the point",
+    after.scale < before.scale * 0.5 && within(offset?.x) && within(offset?.y),
+    JSON.stringify({ ratio: after.scale / before.scale, shown, offset }),
+  );
+
+  // Zooming out below the viewport's width off center: the page centers, so
+  // the point between the fingers cannot stay there either.
+  await zoomTo(page, "fit-width", 3000);
+  const side = await viewportPoint(page, 1 / 4, 9 / 20);
+  before = await viewState(page);
+  spot = await spotAt(page, side);
+  await fingers.move(side, side, 150, 60, 15);
+  await nextFrames(page);
+  shown = spot ? await pointOf(page, spot) : null;
+  await fingers.lift();
+  await committed(page);
+  after = await viewState(page);
+  offset = await drift(page, spot, shown);
+  check(
+    "a pinch in to a page narrower than the viewport commits where its preview showed the point",
+    after.scale < before.scale * 0.6 && within(offset?.x) && within(offset?.y),
+    JSON.stringify({ ratio: after.scale / before.scale, shown, offset }),
+  );
+
+  // A two-finger drag over almost the viewport's height at the lowest zoom
+  // shows pages beyond the mounted window: its two pages of overscan reach at
+  // most three page heights and two gaps (834 pixels here) past the
+  // viewport's bottom edge. They mount and draw before the fingers lift.
+  await zoomTo(page, 0.25);
+  const bottom = await viewportPoint(page, 1 / 2, 49 / 50);
+  const top = await viewportPoint(page, 1 / 2, 1 / 50);
+  before = await viewState(page);
+  await fingers.move(bottom, top, 75, 75, 30);
+  const covered = await coveredWhileShown(page, 5_000);
+  await fingers.lift();
+  await committed(page);
+  after = await viewState(page);
+  const dragged = bottom.y - top.y;
+  check(
+    "a long two-finger drag mounts and draws the pages it brings into view",
+    covered && Math.abs(after.scrollTop - before.scrollTop - dragged) <= 2,
+    JSON.stringify({ covered, dragged, scrolled: after.scrollTop - before.scrollTop }),
+  );
+
+  if (cdp) {
     // One finger still scrolls natively.
     before = after;
     await cdp.send("Input.synthesizeScrollGesture", {
@@ -437,33 +622,11 @@ try {
         after.transform === "",
       JSON.stringify({ scrolled: after.scrollTop - before.scrollTop }),
     );
-  } else {
-    // Touch pointer events that move apart and along at once zoom and pan.
-    before = await viewState(page);
-    spot = await spotAt(page, point);
-    const moved = { x: point.x + 40, y: point.y + 60 };
-    await dispatchTwoFingers(page, { from: point, to: moved, half: 50, toHalf: 100, steps: 15 });
-    await committed(page);
-    after = await viewState(page);
-    offset = await drift(page, spot, moved);
-    check(
-      "touch pointers that move apart and along zoom and keep the point between them",
-      after.scale > before.scale * 1.4 &&
-        after.zoomMode === "custom" &&
-        within(offset?.x) &&
-        within(offset?.y),
-      JSON.stringify({ ratio: after.scale / before.scale, offset }),
-    );
   }
 
   if (launched.name === "webkit") {
     // A trackpad pinch in Safari: gesture events alone, around the pointer.
-    await page.evaluate(() =>
-      (window as unknown as { __viewer: { setScale(scale: "fit-width"): void } }).__viewer.setScale(
-        "fit-width",
-      ),
-    );
-    await settle(page);
+    await zoomTo(page, "fit-width");
     before = await viewState(page);
     spot = await spotAt(page, point);
     const prevented = await dispatchTrackpadPinch(page, point, [1, 1.3, 1.7, 2, 2]);
@@ -484,22 +647,9 @@ try {
     // iPadOS reports a touch pinch through both kinds of events. If Safari
     // cancels the pointers, the gesture events carry the zoom on from where
     // the touches left it: 1.5 at a gesture scale of 1.8, so 2.4 makes 2.
-    await page.evaluate(() =>
-      (window as unknown as { __viewer: { setScale(scale: "fit-width"): void } }).__viewer.setScale(
-        "fit-width",
-      ),
-    );
-    await settle(page);
+    await zoomTo(page, "fit-width");
     before = await viewState(page);
-    const handedOver = await dispatchTwoFingers(page, {
-      from: point,
-      to: point,
-      half: 50,
-      toHalf: 100,
-      steps: 10,
-      gestures: true,
-      cancelAfter: 8,
-    });
+    const handedOver = await dispatchCancelledPinch(page, point);
     await committed(page);
     after = await viewState(page);
     check(
