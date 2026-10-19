@@ -87,6 +87,21 @@ export interface ViewerOptions {
   textLayer?: boolean;
   /** Build focusable link layers (default true). */
   annotationLayer?: boolean;
+  /**
+   * The most pixels one page's detail canvas holds (default 16 777 216, the
+   * canvas area limit of iOS). A page larger at full resolution gets detail
+   * only for its visible area plus a margin, still at full resolution.
+   */
+  maxDetailPixels?: number;
+  /** The most pixels one page's base canvas holds (default 2 097 152). */
+  maxBasePixels?: number;
+  /**
+   * The most pixels all of this viewer's canvases hold together (default
+   * unlimited), for memory-capped browsers such as iOS Safari. Pages outside
+   * the viewport render only within it and give their pixels back first,
+   * detail before base; visible pages always keep theirs.
+   */
+  maxCanvasPixels?: number;
 }
 
 /** Jumps kept for `back()`. */
@@ -156,6 +171,10 @@ export class PdfViewerRuntime {
   readonly #maxScale: number;
   readonly #textLayer: boolean;
   readonly #annotationLayer: boolean;
+  readonly #canvasLimits: Pick<
+    ViewerOptions,
+    "maxDetailPixels" | "maxBasePixels" | "maxCanvasPixels"
+  >;
   readonly #links: LinkHandlers = {
     navigate: (dest) => void this.goToDestination(dest),
     namedAction: (action) => this.#namedAction(action),
@@ -194,6 +213,11 @@ export class PdfViewerRuntime {
     this.#maxScale = options.maxScale ?? 10;
     this.#textLayer = options.textLayer ?? true;
     this.#annotationLayer = options.annotationLayer ?? true;
+    this.#canvasLimits = {
+      maxDetailPixels: options.maxDetailPixels,
+      maxBasePixels: options.maxBasePixels,
+      maxCanvasPixels: options.maxCanvasPixels,
+    };
     this.store.set({ zoomMode: this.#initialZoomMode() });
   }
 
@@ -255,6 +279,7 @@ export class PdfViewerRuntime {
         this.#sizes = Array.from({ length: doc.pageCount }, () => firstSize);
         this.#scheduler = new RenderScheduler(doc, {
           maxConcurrent: this.#maxConcurrentRenders,
+          ...this.#canvasLimits,
           links: this.#links,
           selection: this.#selection,
           onPainted: (pageIndex) => {

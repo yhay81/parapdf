@@ -89,6 +89,8 @@ export interface SchedulerStats {
   annotations: number;
   cancelled: number;
   failed: number;
+  /** Canvases of pages outside the viewport cleared to stay within maxCanvasPixels. */
+  trimmed: number;
 }
 
 export interface SchedulerOptions {
@@ -100,6 +102,13 @@ export interface SchedulerOptions {
   maxDetailPixels?: number;
   /** The most pixels a base canvas holds; beyond it the base renders at lower resolution. */
   maxBasePixels?: number;
+  /**
+   * The most pixels all canvases hold together. Pages outside the viewport
+   * render only within it and give their pixels back, farthest first and
+   * detail before base, when visible pages need more; visible pages always
+   * get theirs.
+   */
+  maxCanvasPixels?: number;
   /** Where activated links in annotation layers go. */
   links?: LinkHandlers;
   /** Keeps drag selections inside rendered text layers. */
@@ -204,12 +213,14 @@ export class RenderScheduler {
     annotations: 0,
     cancelled: 0,
     failed: 0,
+    trimmed: 0,
   };
   readonly #doc: PdfEngineDocument;
   readonly #slots = new Map<number, Slot>();
   readonly #maxConcurrent: number;
   readonly #maxDetailPixels: number;
   readonly #maxBasePixels: number;
+  readonly #maxCanvasPixels: number;
   readonly #options: SchedulerOptions;
   #input: ScheduleInput | undefined;
   #running = 0;
@@ -223,6 +234,7 @@ export class RenderScheduler {
     this.#maxConcurrent = options.maxConcurrent ?? 2;
     this.#maxDetailPixels = options.maxDetailPixels ?? 16_777_216;
     this.#maxBasePixels = options.maxBasePixels ?? 2_097_152;
+    this.#maxCanvasPixels = options.maxCanvasPixels ?? Number.POSITIVE_INFINITY;
     this.#options = options;
   }
 
@@ -418,6 +430,59 @@ export class RenderScheduler {
     return visible !== null && shouldRedrawRegion(slot.detailRegion, visible);
   }
 
+  /** Pixels of page `index` drawn at `scale` device pixels per point, over `region` or all of it. */
+  #pixels(index: number, scale: number, region: PageArea | null, input: ScheduleInput): number {
+    const size = input.layout.sizes[index];
+    if (!size) return 0;
+    return size.width * scale * size.height * scale * (region ? areaSize(region) : 1);
+  }
+
+  /** Pixels a layer holds, or will hold once its running render sizes the canvas. */
+  #layerPixels(slot: Slot, layer: Layer, input: ScheduleInput): number {
+    const job = slot.job;
+    if (job?.layer === layer) return this.#pixels(slot.index, job.scale, job.region, input);
+    const canvas = layer === "base" ? slot.base : slot.detail;
+    return canvas.width * canvas.height;
+  }
+
+  #canvasPixels(input: ScheduleInput): number {
+    let total = 0;
+    for (const slot of this.#slots.values()) {
+      total += this.#layerPixels(slot, "base", input) + this.#layerPixels(slot, "detail", input);
+    }
+    return total;
+  }
+
+  /**
+   * Over maxCanvasPixels, pages outside the viewport give their pixels back,
+   * farthest first and detail before base. Visible pages keep theirs.
+   */
+  #trim(input: ScheduleInput): void {
+    if (this.#maxCanvasPixels === Number.POSITIVE_INFINITY) return;
+    let total = this.#canvasPixels(input);
+    if (total <= this.#maxCanvasPixels) return;
+    const outside = [...this.#slots.values()]
+      .filter((slot) => slot.index < input.first || slot.index > input.last)
+      .sort((a, b) => Math.abs(b.index - input.focus) - Math.abs(a.index - input.focus));
+    for (const layer of ["detail", "base"] as const) {
+      for (const slot of outside) {
+        if (total <= this.#maxCanvasPixels) return;
+        const pixels = this.#layerPixels(slot, layer, input);
+        if (pixels === 0) continue;
+        // A running render ends through its own promise, which frees its slot.
+        if (slot.job?.layer === layer) slot.job.task.cancel();
+        if (layer === "detail") this.#clearDetail(slot);
+        else {
+          slot.baseScale = 0;
+          slot.base.width = 0;
+          slot.base.height = 0;
+        }
+        this.stats.trimmed++;
+        total -= pixels;
+      }
+    }
+  }
+
   #clearDetail(slot: Slot): void {
     slot.detailScale = 0;
     slot.detailRegion = null;
@@ -462,13 +527,31 @@ export class RenderScheduler {
       slot.baseScale === 0 &&
       !(slot.detailScale > 0 && slot.detailRegion === null && !needsDetail(slot));
     const detailFirst = (slot: Slot) => input.settled && planOf(slot)?.region === null;
+    // Pages outside the viewport render only within maxCanvasPixels.
+    const total = this.#canvasPixels(input);
+    const fits = (slot: Slot, layer: Layer) => {
+      const plan = layer === "detail" ? planOf(slot) : null;
+      const pixels =
+        layer === "base"
+          ? this.#pixels(slot.index, this.#baseScale(slot.index, input), null, input)
+          : plan
+            ? this.#pixels(slot.index, plan.scale, plan.region, input)
+            : 0;
+      return total - this.#layerPixels(slot, layer, input) + pixels <= this.#maxCanvasPixels;
+    };
 
     const phases: [(slot: Slot) => boolean, Layer][] = [
       [(slot) => visible(slot) && needsBase(slot), "base"],
       [(slot) => input.settled && visible(slot) && needsDetail(slot), "detail"],
-      [(slot) => !visible(slot) && needsBase(slot) && !detailFirst(slot), "base"],
-      [(slot) => input.settled && !visible(slot) && needsDetail(slot), "detail"],
-      [(slot) => input.settled && staleBase(slot), "base"],
+      [
+        (slot) => !visible(slot) && needsBase(slot) && !detailFirst(slot) && fits(slot, "base"),
+        "base",
+      ],
+      [
+        (slot) => input.settled && !visible(slot) && needsDetail(slot) && fits(slot, "detail"),
+        "detail",
+      ],
+      [(slot) => input.settled && staleBase(slot) && (visible(slot) || fits(slot, "base")), "base"],
     ];
     for (const [matches, layer] of phases) {
       const slot = idle.find(matches);
@@ -484,6 +567,7 @@ export class RenderScheduler {
   }
 
   #pump(): void {
+    if (this.#input) this.#trim(this.#input);
     while (this.#running < this.#maxConcurrent) {
       const next = this.#next();
       if (!next) break;

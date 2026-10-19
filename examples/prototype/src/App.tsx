@@ -37,6 +37,12 @@ const settings = {
   preload: params.get("preload") !== "0",
   /** CSS pixels per PDF point the zoom may reach; the runtime's default when absent. */
   maxScale: params.has("maxScale") ? Number(params.get("maxScale")) : undefined,
+  /** Canvas pixel limits (ViewerOptions); the runtime's defaults when absent. */
+  canvasLimits: Object.fromEntries(
+    ["maxDetailPixels", "maxBasePixels", "maxCanvasPixels"].flatMap((name) =>
+      params.has(name) ? [[name, Number(params.get(name))]] : [],
+    ),
+  ) as Pick<ViewerOptions, "maxDetailPixels" | "maxBasePixels" | "maxCanvasPixels">,
 };
 
 declare global {
@@ -83,6 +89,7 @@ const viewerOptions: ViewerOptions = {
   textLayer: settings.text,
   annotationLayer: settings.links,
   ...(settings.maxScale ? { maxScale: settings.maxScale } : {}),
+  ...settings.canvasLimits,
 };
 const commits = { count: 0 };
 const countCommit: ProfilerOnRenderCallback = () => {
