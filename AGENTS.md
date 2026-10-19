@@ -124,9 +124,10 @@ with the API.
   fingers and pan with it while the page itself stays unzoomed, two fingers
   that keep their distance scroll, one finger still scrolls natively, Safari's
   gesture events are prevented and zoom the document, ctrl+wheel zooms
-  around the pointer, and a pinch in at the document's start previews page 1
-  where its commit puts it (run after `build`; `BROWSER` and `ENGINE`
-  apply).
+  around the pointer, a pinch in at the document's start previews page 1
+  where its commit puts it, and a long two-finger drag at the lowest zoom
+  mounts and draws the pages it shows before the fingers lift (run after
+  `build`; `BROWSER` and `ENGINE` apply).
   Chromium gets real touches through the DevTools protocol; Playwright cannot
   put two fingers down in WebKit or Firefox, so there the check dispatches
   touch pointer events, and in WebKit gesture events.
@@ -212,10 +213,17 @@ with the API.
     narrower than the viewport is centered. Previewing the unconstrained
     place made the content jump at the commit, 334 CSS pixels down and 96
     sideways in Safari in the iPadOS simulator.
+  - The mounted window and the scheduler follow the band of content a
+    preview shows, the viewport mapped back through its transform, so the
+    pages a two-finger drag or a zoom out brings into view mount and draw
+    before the commit. Following only the scroll position, which a preview
+    does not move, left a blank band past the mounted pages during a long
+    two-finger drag at a low zoom, 218 CSS pixels in the iPadOS simulator.
+    Full-resolution renders wait while the preview's zoom differs from the
+    committed one, which would draw them again.
   - In Safari on iPadOS, a pinch that starts while a fling still scrolls
     reaches the page through no event at all: the fling stops, the zoom does
-    not change, and a second pinch works. A long two-finger drag at a low
-    zoom pans only the preview, so pages it brings in mount at the commit.
+    not change, and a second pinch works.
 - `setScale("fit-width")`, which `initialScale` defaults to, sets `zoomMode`
   to "fit-width": the page at the viewport's center is fitted to the
   viewport's width again whenever that width changes, the view turns, or the

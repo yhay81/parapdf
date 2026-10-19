@@ -192,6 +192,9 @@ interface ZoomGesture {
   /** How far a two-finger drag moved that point on screen. */
   panX: number;
   panY: number;
+  /** What the preview adds to the pan so that it shows the commit's scroll position. */
+  shiftX: number;
+  shiftY: number;
   /** Pending commit of a wheel or Safari gesture. */
   timer: number;
 }
@@ -1127,6 +1130,8 @@ export class PdfViewerRuntime {
       originY: scroller.scrollTop + clientY - rect.top - scroller.clientTop,
       panX: 0,
       panY: 0,
+      shiftX: 0,
+      shiftY: 0,
       timer: 0,
     };
     return this.#zoom;
@@ -1170,10 +1175,12 @@ export class PdfViewerRuntime {
     }
     const maxLeft = Math.max(0, next.totalWidth - scroller.clientWidth);
     const maxTop = Math.max(0, next.totalHeight - scroller.clientHeight);
-    const shiftX = target.left - clamp(target.left, 0, maxLeft);
-    const shiftY = target.top - clamp(target.top, 0, maxTop);
+    zoom.shiftX = target.left - clamp(target.left, 0, maxLeft);
+    zoom.shiftY = target.top - clamp(target.top, 0, maxTop);
     content.style.transformOrigin = `${zoom.originX}px ${zoom.originY}px`;
-    content.style.transform = `translate(${zoom.panX + shiftX}px, ${zoom.panY + shiftY}px) scale(${zoom.factor})`;
+    content.style.transform = `translate(${zoom.panX + zoom.shiftX}px, ${zoom.panY + zoom.shiftY}px) scale(${zoom.factor})`;
+    // Mount and draw the pages the preview brings into view.
+    this.#requestUpdate();
   }
 
   #commitZoom = (): void => {
@@ -1194,6 +1201,8 @@ export class PdfViewerRuntime {
       // A two-finger drag that never pinched only scrolls.
       scroller.scrollLeft = left - zoom.panX;
       scroller.scrollTop = top - zoom.panY;
+      // Settled again, also when the drag ends where it started.
+      this.#requestUpdate();
       return;
     }
     this.store.set({ zoomMode: "custom" });
@@ -1230,8 +1239,17 @@ export class PdfViewerRuntime {
     const layout = this.store.get().layout;
     const scroller = this.#scroller;
     if (!layout || !scroller) return;
-    const top = scroller.scrollTop;
-    const height = scroller.clientHeight;
+    let top = scroller.scrollTop;
+    let height = scroller.clientHeight;
+    const zoom = this.#zoom;
+    if (zoom) {
+      // A preview shows another band of the content: the viewport mapped back
+      // through its transform. The pages a two-finger drag or a zoom out
+      // brings into view mount and render before the commit, not after it.
+      const shownY = zoom.originY - top + zoom.panY + zoom.shiftY;
+      top = zoom.originY - shownY / zoom.factor;
+      height /= zoom.factor;
+    }
     const { first, last } = visibleRange(layout, top, height);
     const lastIndex = layout.tops.length - 1;
     const focus = pageAt(layout, top + height / 2);
@@ -1242,7 +1260,9 @@ export class PdfViewerRuntime {
       currentPage: focus,
     });
     const quiet = performance.now() - this.#lastScrollAt > SETTLE_DELAY;
-    const settled = quiet || Math.abs(this.#velocity) < SETTLE_VELOCITY;
+    // Full resolution for the scale a preview leaves would be drawn again at the commit.
+    const settled =
+      (quiet || Math.abs(this.#velocity) < SETTLE_VELOCITY) && (zoom?.factor ?? 1) === 1;
     this.#scheduler?.update({
       layout,
       first,

@@ -253,8 +253,11 @@ about 20 ms as noise.
   previewed page 1 where scrolling could not keep it, and the page jumped 334
   CSS pixels when the fingers lifted, 96 sideways where a narrower page was
   centered again; the preview now shows the content where the commit puts
-  it. A pinch that starts while a fling still scrolls reaches the page
-  through no event in iPadOS Safari, so it does nothing until the next one.
+  it. A long two-finger drag at a low zoom left a blank band, up to 218 CSS
+  pixels, past the pages mounted before the drag until the fingers lifted;
+  the pages a preview brings into view now mount and draw during it. A pinch
+  that starts while a fling still scrolls reaches the page through no event
+  in iPadOS Safari, so it does nothing until the next one.
 - **Zoom cost.** Against a React wrapper of pdf.js's own viewer
   (`PDFViewer`), measured in another project's harness, the main thread was
   1.4–5.6 times busier while zooming.
