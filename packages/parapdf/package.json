@@ -1,9 +1,27 @@
 {
   "name": "parapdf",
-  "version": "0.0.0",
-  "private": true,
-  "description": "The fastest PDF viewer for React (Phase 0 prototype)",
+  "version": "0.1.0",
+  "description": "A fast PDF viewer for React, built on pdf.js",
+  "keywords": [
+    "pdf",
+    "pdf.js",
+    "pdfjs",
+    "pdf-viewer",
+    "react",
+    "react-component",
+    "viewer"
+  ],
   "license": "MIT",
+  "author": "Yusuke Hayashi",
+  "homepage": "https://github.com/yhay81/parapdf/tree/main/packages/parapdf#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yhay81/parapdf.git",
+    "directory": "packages/parapdf"
+  },
+  "bugs": {
+    "url": "https://github.com/yhay81/parapdf/issues"
+  },
   "type": "module",
   "sideEffects": false,
   "exports": {
@@ -14,8 +32,11 @@
       ".": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
-      }
-    }
+      },
+      "./package.json": "./package.json"
+    },
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts"
   },
   "files": [
     "dist",
@@ -25,14 +46,15 @@
     "LICENSES"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node scripts/declaration-imports.ts",
+    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json && node scripts/declaration-imports.ts",
+    "check:package": "node scripts/check-package.ts",
     "prepack": "pnpm run build && node scripts/legal-files.ts copy",
     "postpack": "node scripts/legal-files.ts remove",
     "test": "node --test \"test/*.test.ts\"",
     "typecheck": "tsc -p . && tsc -p test"
   },
   "peerDependencies": {
-    "pdfjs-dist": ">=6.4.299",
+    "pdfjs-dist": "^6.4.299",
     "react": ">=19.2.0",
     "react-dom": ">=19.2.0"
   },

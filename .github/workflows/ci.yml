@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Lint, types, unit tests, and package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      # The benchmark's own typecheck needs its Rust build (pnpm bench:build).
+      - run: pnpm --filter parapdf --filter @parapdf/prototype typecheck
+      - run: pnpm test
+      - run: pnpm --filter parapdf check:package
+
+  browser:
+    name: Functional checks in Chromium
+    runs-on: ubuntu-latest
+    env:
+      BROWSER: chromium
+      # Released pdfjs-dist; the pdfjs-next engine needs a pdf.js master build.
+      ENGINE: pdfjs
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @parapdf/bench exec playwright install --with-deps chromium
+      - run: pnpm --filter @parapdf/bench corpus
+      - run: pnpm --filter @parapdf/prototype build
+      - run: pnpm --filter @parapdf/prototype check:text
+      - run: pnpm --filter @parapdf/prototype check:links
+      - run: pnpm --filter @parapdf/prototype check:lifecycle
+      - run: pnpm --filter @parapdf/prototype check:rotation
+      - run: pnpm --filter @parapdf/prototype check:options
+      - run: pnpm --filter @parapdf/prototype check:pinch

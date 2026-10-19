@@ -1,13 +1,47 @@
 # ParaPDF
 
-The fastest PDF viewer for React: rendering off the main thread, React out of
-the hot path.
+A PDF viewer for React built for speed: rendering off the main thread, React
+out of the hot path.
 
-> **Status: Phase 0.** Engine benchmark and runtime prototype. Nothing is
-> published and the API does not exist yet.
+> **Status: 0.1, experimental.** [`parapdf`](packages/parapdf) is on npm, and
+> its API may change in any minor release until 1.0. Phase 0, the engine
+> benchmark and the measurements behind the runtime, continues below.
 
 The name combines the Japanese "parapara", flipping quickly through pages, with
 parallel rendering on worker threads.
+
+## Use it
+
+```bash
+npm install parapdf pdfjs-dist
+```
+
+[`packages/parapdf/README.md`](packages/parapdf/README.md) shows how to set
+it up and what it does; [`CHANGELOG.md`](CHANGELOG.md) lists the releases.
+
+## Develop it
+
+The repository is a pnpm workspace for Node 24 or later: the package in
+[`packages/parapdf`](packages/parapdf), a demo with benchmarks and functional
+checks in [`examples/prototype`](examples/prototype), and the engine
+benchmark in [`bench`](bench). [`AGENTS.md`](AGENTS.md) describes them and
+every command.
+
+```bash
+pnpm install
+pnpm check
+pnpm --filter parapdf --filter @parapdf/prototype typecheck
+pnpm test
+pnpm --filter @parapdf/bench exec playwright install chromium webkit firefox
+pnpm --filter @parapdf/bench corpus
+pnpm --filter @parapdf/prototype build
+ENGINE=pdfjs pnpm --filter @parapdf/prototype check:text
+```
+
+`pnpm typecheck` covers the benchmark too, which needs its Rust build
+(`pnpm bench:build`) first. The functional checks run on pdf.js master's
+renderer worker by default, which `bench/scripts/build-pdfjs-next.sh` builds;
+`ENGINE=pdfjs` runs them on released pdfjs-dist.
 
 ## Phase 0
 

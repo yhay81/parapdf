@@ -9,9 +9,12 @@ off-main-thread rendering.
 
 ## Status
 
-Phase 0: engine comparison benchmark and runtime prototype. Nothing is
-published and there is no public API yet. The repository stays local-only
-until the benchmark results justify the architecture.
+Phase 0: engine comparison benchmark and runtime prototype. The runtime is
+published on npm as `parapdf` 0.x, first as 0.1.0 on 2026-10-20, for early
+use: its API is experimental, and any minor release may change it. Record
+every change to the package in `CHANGELOG.md`, and keep
+`packages/parapdf/README.md`, the package's documentation on npm, in step
+with the API.
 
 ## Product principles
 
@@ -55,12 +58,15 @@ until the benchmark results justify the architecture.
   - `results/` — committed result summaries per browser (`chromium`,
     `webkit`, `firefox` as `.md` and `.json`) and the cross-browser summary
     `browsers.md`.
-- `packages/parapdf/` — the runtime prototype: engine boundary (`engine/`),
-  layout, scheduler, and viewer runtime (`runtime/`), and React bindings
-  (`react/`). The workspace consumes its TypeScript source. `build` emits
-  JavaScript and declarations to `dist/`, and packing ships `dist/` (through
-  `publishConfig`), `src/` for the source maps, and the license and notices
-  the pdf.js code it derives from requires. The package stays private.
+- `packages/parapdf/` — the runtime, published as `parapdf`: engine
+  boundary (`engine/`), layout, scheduler, and viewer runtime (`runtime/`),
+  and React bindings (`react/`), whose modules declare `"use client"`; unit
+  tests of the modules that need no DOM (`test/`, Node's test runner); and
+  `README.md`, the user documentation npm shows. The workspace consumes its
+  TypeScript source. `build` emits JavaScript and declarations to `dist/`,
+  and packing ships `dist/` (through `publishConfig`, so pack and publish
+  with pnpm), `src/` for the source maps, the README, and the license and
+  notices the pdf.js code it derives from requires.
 - `examples/prototype/` — Vite + React 19 demo, the scripted scroll
   benchmark (`scripts/scroll-bench.ts`, results per browser in `results/`,
   summarized by `scripts/compare.ts` in `results/browsers.md`), and
@@ -125,6 +131,12 @@ until the benchmark results justify the architecture.
 - `pnpm --filter parapdf build` — JavaScript and declarations in
   `packages/parapdf/dist/`; `pnpm --filter parapdf pack` builds and packs the
   tarball.
+- `pnpm test` — unit tests of the package's layout, search normalization,
+  store, and document sharing.
+- `pnpm --filter parapdf check:package` — packs the package and checks the
+  tarball as an application would install it: its files and manifest, the
+  `"use client"` directives, TypeScript against its declarations with
+  bundler and nodenext resolution, and rendering on the server.
 - `node examples/prototype/scripts/zoom-bench.ts` — zoom benchmark: sharpness,
   time to sharp, and canvas memory after zooming to `SCALES` (4,8) and
   panning, on desktop and phone-sized viewports (run after `build`; `BROWSER`,
@@ -139,6 +151,23 @@ until the benchmark results justify the architecture.
   `OUTPUT` apply.
 - `pnpm check` — Biome lint and format check. `pnpm format` applies fixes.
 - `pnpm typecheck` — TypeScript checks for every workspace package.
+- The functional checks default to `ENGINE=pdfjs-next`, which needs
+  `bench/scripts/build-pdfjs-next.sh`; `ENGINE=pdfjs` runs them on released
+  pdfjs-dist, as CI does (`.github/workflows/ci.yml`, Chromium only).
+
+## Releasing
+
+1. Update `version` in `packages/parapdf/package.json` and add the release
+   to `CHANGELOG.md`.
+2. Run `pnpm check`, `pnpm typecheck`, `pnpm test`, `pnpm --filter parapdf
+   check:package`, and every functional check in Chromium, WebKit, and
+   Firefox.
+3. Commit, tag `vX.Y.Z`, and push the branch and the tag.
+4. `pnpm --filter parapdf publish` from `main` in a checkout without
+   uncommitted or untracked files, which pnpm's git checks refuse: pnpm
+   applies `publishConfig` and runs `prepack`, which builds and copies the
+   license and notices in. npm asks the maintainer to authenticate.
+5. Create the GitHub release for the tag from its `CHANGELOG.md` entry.
 
 ## Runtime prototype
 
