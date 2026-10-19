@@ -252,13 +252,55 @@ until the benchmark results justify the architecture.
   not reported upstream yet.
 - `TextSelectionTracker` (`runtime/selection.ts`, ported from pdf.js's
   `TextLayerBuilder` and attributed in `NOTICE.md`) gives every text layer a
-  selection touches the `selecting` class, which stretches its
-  `.endOfContent` over the page. In WebKit and Chromium before 148 it also
-  moves `.endOfContent` next to the changing end of the selection, so a drag
-  past a line's end does not select the rest of the page. Each viewer owns
-  its listeners, so closing one viewer leaves the others working (pdf.js
-  issue 22129). In WebKit a drag across the gap between two pages still jumps
-  to the end of the next page.
+  selection touches the `selecting` class, which stretches its unselectable
+  `.endOfContent` over the page, so a drag past a line's end does not select
+  the rest of the page. In browsers other than Firefox and Chromium 148 or
+  later it also moves `.endOfContent` next to the changing end of the
+  selection, as pdf.js does. Unlike pdf.js, it leaves `.endOfContent` alone
+  when it already is the layer's last child: re-inserting it at every
+  `selectionchange` left it without a box until the next style flush, and
+  Firefox hit-tested a quick move from page 2's text into page 1's margin
+  against the bare text layer, selecting all of page 1. Each viewer owns its
+  listeners, so closing one viewer leaves the others working (pdf.js issue
+  22129).
+- The viewer CSS declares `-webkit-user-select` next to every `user-select`,
+  as pdf.js's does: Playwright's WebKit 27.2 parses `user-select` but its
+  mouse selection follows only the prefixed property. Without it,
+  `.endOfContent` was selectable in WebKit, and a drag into the next page
+  selected to that page's end.
+- Over space without text, browsers end a drag selection at the start of an
+  element rather than at the nearest text. The space between and beside the
+  pages belongs to the pages element (`.parapdf-pages`): WebKit and Firefox
+  send it to the start of the first mounted page, and Chromium the space
+  beside a page to that page's start. So during a primary-button drag, until
+  release, the pages element has `selecting`, which leaves only the text
+  layers in it selectable: a drag holds over a gap, beside a page, and over
+  the last pixel column and row of a page whose box, rounded to whole pixels,
+  is larger than its text layer, which pdf.js rounds down (796 by 1,030 px
+  around 795 by 1,029 at scale 1.3 on a US Letter page). Chromium and WebKit
+  sent that column and row to the page's start, and a drag in 1 px steps
+  reaches them: dragging up selected all of the page above. In WebKit and
+  Firefox, text layers above the selection also have `selecting` and
+  `before-selection`, whose selectable `.endOfContent` sends their blank space
+  to the page's end, so a drag entering a page from either side selects up to
+  the page boundary; Chromium picks the nearest text there by itself. pdf.js's
+  own viewer selects all of the page above in WebKit and Firefox when a drag
+  enters it from below; not yet reported upstream.
+- A press on the pages element itself started the selection at that same
+  place: from beside page 1 to the end of one of its lines, all three
+  browsers selected 3,357 characters where the line holds 49. The tracker
+  starts such a drag at the nearest text instead: beside a page, the start or
+  end of the nearest run, on the side of the press; in a gap, the boundary
+  between the pages. The browser still handles the press, so a click there
+  clears the selection. The tracker marks the layers for that position at the
+  press, because Chromium and Firefox hit-test a pointer move before its
+  listeners run; selects it at the first move as a range between two
+  equivalent DOM positions, because Chromium extends a drag only from a range
+  and otherwise restarts it from the pressed point; and puts the anchor back
+  until release, because WebKit restarts the drag at the first text the
+  pointer reaches. A drag that selects nothing leaves no selection. Shift,
+  Ctrl, Alt, and Meta presses and double and triple clicks there keep the
+  browser's behaviour.
 - Search indexes each page with the normalization of pdf.js's
   `PDFFindController` (ported in `runtime/text-search.ts`, attributed in
   `NOTICE.md`) at its default options: compatibility forms, case, and

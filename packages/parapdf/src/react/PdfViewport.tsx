@@ -87,7 +87,7 @@ export function PdfViewport({
         {VIEWER_CSS}
       </style>
       {/* The runtime sizes this element imperatively so zoom can restore the scroll position first. */}
-      <div ref={contentRef} style={{ position: "relative" }}>
+      <div ref={contentRef} className="parapdf-pages" style={{ position: "relative" }}>
         {pages}
       </div>
     </div>

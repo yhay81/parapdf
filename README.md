@@ -111,9 +111,11 @@ about 20 ms as noise.
   CSS Custom Highlight API without touching the text layer DOM. Pages are
   labelled regions and the viewport is a focusable document.
   [`check-text.ts`](examples/prototype/scripts/check-text.ts) verifies
-  selection, including a drag past a line's end, search, Japanese,
-  full-width, diacritic, and line-break matching, and these semantics in all
-  three browsers.
+  selection, including drags past a line's end, across the gap between two
+  pages in both directions, quickly and in 1 px steps, and from beside or
+  between pages, search,
+  Japanese, full-width, diacritic, and line-break matching, and these
+  semantics in all three browsers.
 - **Text layer cost.** Text layers are built only after scrolling settles, one
   page per idle period. With the renderer worker on a GPU-backed canvas in
   Chromium, slow scrolling blocked the main thread for 3–18 ms with text
@@ -143,8 +145,24 @@ about 20 ms as noise.
   the cross-origin-isolated demo, apparently when taken from its cache, and
   pdf.js silently parsed on the main thread; the same happens to the renderer
   worker of a document reopened in the same page. The demo isolates itself
-  only for precise timers. In WebKit, a drag selection across the gap between two
-  pages still jumps to the end of the next page.
+  only for precise timers. Mouse selection in WebKit 27.2 ignores unprefixed
+  `user-select`, so the viewer CSS also declares `-webkit-user-select`, as
+  pdf.js's does. Over space without text, WebKit and Firefox put the end of a
+  drag selection at the start of the page or gap under the pointer, so
+  during a drag ParaPDF holds the selection over gaps and sends a page's
+  blank space to the page boundary: drags between pages no longer jump to the
+  start or end of a page. pdf.js's own viewer still selects the whole page
+  above when a drag enters it from below in WebKit and Firefox. Chromium sent
+  a drag over the space beside a page to that page's start, and all three
+  browsers started a drag pressed beside or between pages at the start of the
+  first mounted page: 3,357 characters where the dragged line holds 49. Drags
+  now hold beside a page too, and a drag pressed there starts at the nearest
+  text. A page's box, rounded to whole pixels, can be a pixel wider and taller
+  than its text layer, which pdf.js rounds down, and Chromium and WebKit sent
+  a slow drag over that pixel to the page's start; during a drag only text
+  layers are selectable now. In Firefox, re-inserting a text layer's
+  `.endOfContent` at every selection change, as pdf.js does, made a quick drag
+  into the page above select all of it; ParaPDF leaves the element in place.
 - **High zoom.** Pages whose full-resolution render exceeds 16 MP now get
   detail only for the visible area plus a margin, as pdf.js's viewer does,
   and base canvases stop at 2 MP. At 4 and 8 CSS pixels per point on

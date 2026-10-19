@@ -430,6 +430,7 @@ export class PdfViewerRuntime {
     }
     const resize = new ResizeObserver(this.#onResize);
     resize.observe(scroller);
+    const detachSelection = this.#selection.attachPages(content);
     this.#requestUpdate();
     return () => {
       scroller.removeEventListener("scroll", this.#onScroll);
@@ -437,6 +438,7 @@ export class PdfViewerRuntime {
       scroller.removeEventListener("pointerdown", this.#onPointerDown);
       for (const type of GESTURE_EVENTS) scroller.removeEventListener(type, this.#onGesture);
       resize.disconnect();
+      detachSelection();
       if (this.#frame) cancelAnimationFrame(this.#frame);
       this.#frame = 0;
       if (this.#scroller === scroller) {
