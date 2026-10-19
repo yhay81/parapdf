@@ -115,7 +115,59 @@ export async function summarizeRecords(layoutScale: number) {
     const classified = events.filter((event) => event.type === "classified");
     const loaded = events.find((event) => event.type === "renderer-loaded");
     const memory = await benchRecords.memory().catch(() => null);
+    // Time inside the worker per hayro pass: a base or a detail layer on its
+    // own, or one pass at the detail scale for both layers (`once`), whose
+    // full-resolution bitmap the worker creates after sending the base layer.
+    const passes = new Map<
+      string,
+      { raster: number[]; reduce: number[]; bitmap: number[]; fullBitmap: number[] }
+    >();
+    const passList = (pass: string) => {
+      const lists = passes.get(pass) ?? { raster: [], reduce: [], bitmap: [], fullBitmap: [] };
+      passes.set(pass, lists);
+      return lists;
+    };
+    for (const event of events) {
+      if (event.type !== "rendered" || event.renderer !== "hayro") continue;
+      if (event.kept && !event.rasterMs) {
+        if (event.bitmapMs !== undefined) passList("once").fullBitmap.push(event.bitmapMs);
+        continue;
+      }
+      const once = event.rasterScale !== undefined && event.rasterScale > event.scale * 1.5;
+      const lists = passList(once ? "once" : layerOf(event.scale));
+      lists.raster.push(event.rasterMs ?? Number.NaN);
+      if (event.reduceMs !== undefined) lists.reduce.push(event.reduceMs);
+      if (event.bitmapMs !== undefined) lists.bitmap.push(event.bitmapMs);
+    }
+    // Full-resolution bitmaps kept from base renders: how many the detail
+    // render used, why the others were dropped, and the most held at once.
+    let keptBytes = 0;
+    let keptPeakBytes = 0;
+    let keptUsed = 0;
+    const keptDropped: Record<string, number> = {};
+    for (const event of events) {
+      if (event.type === "kept") {
+        keptBytes += event.bytes;
+        keptPeakBytes = Math.max(keptPeakBytes, keptBytes);
+      } else if (event.type === "kept-released") {
+        keptBytes -= event.bytes;
+        if (event.used) keptUsed++;
+        else keptDropped[event.reason] = (keptDropped[event.reason] ?? 0) + 1;
+      }
+    }
     hybrid = {
+      hayroPasses: Object.fromEntries(
+        [...passes].map(([pass, lists]) => [
+          pass,
+          {
+            raster: summarize(lists.raster),
+            reduce: summarize(lists.reduce),
+            bitmap: summarize(lists.bitmap),
+            fullBitmap: summarize(lists.fullBitmap),
+          },
+        ]),
+      ),
+      kept: { used: keptUsed, dropped: keptDropped, peakMiB: keptPeakBytes / MiB },
       opened: opened
         ? {
             at: opened.at,

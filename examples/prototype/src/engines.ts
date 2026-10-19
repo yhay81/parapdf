@@ -1,15 +1,21 @@
-import { createHybridEngine, createPdfjsEngine, type HybridEvent, type PdfEngine } from "parapdf";
+import {
+  createHybridEngine,
+  createPdfjsEngine,
+  type HybridEngineOptions,
+  type PdfEngine,
+} from "parapdf";
 
 /**
  * `pdfjs` is released pdfjs-dist (main-thread drawing); `pdfjs-next` is pdf.js
  * master with its renderer worker; `hybrid` is `pdfjs-next` with image-only
  * pages rendered by hayro. All load lazily so none inflates the others'
- * startup.
+ * startup. `hybrid.detailRender` picks how hayro draws a page's detail
+ * layer (see `HybridEngineOptions`), for comparison.
  */
 export async function loadEngine(
   kind: string,
   enableHWA: boolean,
-  onHybridEvent?: (event: HybridEvent) => void,
+  hybrid: Pick<HybridEngineOptions, "onEvent" | "detailRender"> = {},
 ): Promise<PdfEngine> {
   if (kind === "hybrid") {
     // Start the hybrid worker before pdf.js loads, so the classifier module
@@ -18,7 +24,8 @@ export async function loadEngine(
     return createHybridEngine({
       base: await loadEngine("pdfjs-next", enableHWA),
       createWorker: () => worker,
-      onEvent: onHybridEvent,
+      detailRender: hybrid.detailRender,
+      onEvent: hybrid.onEvent,
     });
   }
   if (kind === "pdfjs-next") {

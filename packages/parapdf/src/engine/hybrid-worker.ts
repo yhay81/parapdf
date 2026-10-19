@@ -22,11 +22,19 @@ export interface ClassifierModule {
   open(data: Uint8Array): ClassifierDocument;
 }
 
-/** One rasterized page; `takePixels` moves out tightly packed RGBA8 rows. */
+/** One rasterized page, as tightly packed RGBA8 rows in the module's memory. */
 export interface RenderedPixels {
   readonly width: number;
   readonly height: number;
-  takePixels(): Uint8Array;
+  /** The pixels in place; valid until `free` or the next call into the module. */
+  view(): Uint8ClampedArray<ArrayBuffer>;
+  /**
+   * A copy at `1 / factor` of the size, `floor(width / factor)` ×
+   * `floor(height / factor)` pixels, each the mean of a `factor` × `factor`
+   * block.
+   */
+  reduce(factor: number): Uint8Array;
+  free(): void;
 }
 
 export interface RendererDocument {
@@ -55,7 +63,22 @@ export type HybridRequest =
       maxPathSegments: number;
       maxContentBytes: number;
     }
-  | { id: number; type: "render"; doc: number; index: number; scale: number }
+  | {
+      id: number;
+      type: "render";
+      doc: number;
+      index: number;
+      scale: number;
+      /**
+       * The caller renders this page at `detail.scale` next: the worker
+       * sends that bitmap too, unasked, to `detail.id`, before any other
+       * queued render. With `once`, one pass at `detail.scale` serves both
+       * and the reply to `id` gets a reduced copy; otherwise the pass at
+       * `scale` comes first, and the detail pass is queued ahead of every
+       * other render (a cancel of `detail.id` drops it).
+       */
+      detail?: { id: number; scale: number; once: boolean };
+    }
   | { id: number; type: "close"; doc: number }
   | { id: number; type: "memory" }
   /** Drops a queued request; one already running finishes and is ignored. */
@@ -80,7 +103,14 @@ export interface RenderResult {
   bitmap: ImageBitmap;
   width: number;
   height: number;
+  /** The scale hayro rendered at: the request's, or its detail scale when rendering once. */
+  rasterScale: number;
+  /** hayro's rasterization; 0 on the detail reply of a render done once, counted on its base. */
   rasterMs: number;
+  /** Averaging the full-resolution pixels down to the request's scale. */
+  reduceMs?: number;
+  /** Creating the ImageBitmap from the pixels. */
+  bitmapMs: number;
   /** Set on the render that loaded the rasterizer: module load and document parse. */
   rendererLoad?: { loadMs: number; parseMs: number };
 }
@@ -133,10 +163,35 @@ export function serveHybridWorker(modules: HybridWorkerModules): void {
     return open;
   };
 
+  /** A handler's reply, or null when it replied itself; `id` defaults to the request's own. */
+  type Outcome = { result: unknown; transfer?: Transferable[]; id?: number } | null;
+
+  /** Copies pixels into an ImageBitmap; the browser reads the view once. */
+  const bitmapOf = (pixels: Uint8ClampedArray<ArrayBuffer>, width: number, height: number) =>
+    createImageBitmap(new ImageData(pixels, width, height));
+
+  /** One hayro pass at `scale`, as a bitmap. */
+  const pass = async (
+    renderer: RendererDocument,
+    index: number,
+    scale: number,
+  ): Promise<RenderResult> => {
+    let start = performance.now();
+    const page = renderer.render(index, scale);
+    const rasterMs = performance.now() - start;
+    try {
+      start = performance.now();
+      const bitmap = await bitmapOf(page.view(), page.width, page.height);
+      const bitmapMs = performance.now() - start;
+      const { width, height } = page;
+      return { bitmap, width, height, rasterScale: scale, rasterMs, bitmapMs };
+    } finally {
+      page.free();
+    }
+  };
+
   const handlers: {
-    [K in Queued["type"]]: (
-      request: Extract<Queued, { type: K }>,
-    ) => Promise<{ result: unknown; transfer?: Transferable[] }>;
+    [K in Queued["type"]]: (request: Extract<Queued, { type: K }>) => Promise<Outcome>;
   } = {
     async open({ doc, url, data }) {
       let start = performance.now();
@@ -172,7 +227,7 @@ export function serveHybridWorker(modules: HybridWorkerModules): void {
       return { result };
     },
 
-    async render({ doc, index, scale }) {
+    async render({ id, doc, index, scale, detail }) {
       const open = ready(doc);
       let rendererLoad: RenderResult["rendererLoad"];
       if (!open.renderer) {
@@ -184,25 +239,70 @@ export function serveHybridWorker(modules: HybridWorkerModules): void {
         open.renderer = module.open(open.bytes);
         rendererLoad = { loadMs, parseMs: performance.now() - start };
       }
-      const start = performance.now();
-      const page = open.renderer.render(index, scale);
+      const pages = open.renderer;
+      // The reduced copy averages blocks of whole pixels, so rendering once
+      // needs a detail scale at least twice this one.
+      const factor = detail?.once ? Math.round(detail.scale / scale) : 0;
+      if (detail?.once && factor < 2) {
+        reply({ id: detail.id, ok: false, error: "not rendered once", cancelled: true });
+      }
+      if (!detail?.once || factor < 2) {
+        const base = await pass(pages, index, scale);
+        if (!detail || detail.once) {
+          return { result: { ...base, rendererLoad }, transfer: [base.bitmap] };
+        }
+        // The detail pass goes ahead of every queued render, behind
+        // classifications, which decide where pages go.
+        renders.unshift({ id: detail.id, type: "render", doc, index, scale: detail.scale });
+        reply({ id, ok: true, result: { ...base, rendererLoad } }, [base.bitmap]);
+        return null;
+      }
+      // hayro decodes the page's images on every render, so one pass at the
+      // detail scale serves both layers.
+      let start = performance.now();
+      const page = pages.render(index, detail.scale);
+      const rasterMs = performance.now() - start;
       const { width, height } = page;
-      const bytes = page.takePixels();
-      // wasm-bindgen copies the pixels into a fresh, non-shared ArrayBuffer.
-      const pixels = new Uint8ClampedArray(
-        bytes.buffer as ArrayBuffer,
-        bytes.byteOffset,
-        bytes.byteLength,
-      );
-      const bitmap = await createImageBitmap(new ImageData(pixels, width, height));
-      const result: RenderResult = {
-        bitmap,
-        width,
-        height,
-        rasterMs: performance.now() - start,
-        rendererLoad,
-      };
-      return { result, transfer: [bitmap] };
+      try {
+        start = performance.now();
+        const reduced = page.reduce(factor);
+        const reduceMs = performance.now() - start;
+        start = performance.now();
+        const base = await bitmapOf(
+          new Uint8ClampedArray(
+            reduced.buffer as ArrayBuffer,
+            reduced.byteOffset,
+            reduced.byteLength,
+          ),
+          Math.floor(width / factor),
+          Math.floor(height / factor),
+        );
+        const baseResult: RenderResult = {
+          bitmap: base,
+          width: base.width,
+          height: base.height,
+          rasterScale: detail.scale,
+          rasterMs,
+          reduceMs,
+          bitmapMs: performance.now() - start,
+          rendererLoad,
+        };
+        // The low-resolution layer goes out first; the full pixels follow.
+        reply({ id, ok: true, result: baseResult }, [base]);
+        start = performance.now();
+        const bitmap = await bitmapOf(page.view(), width, height);
+        const result: RenderResult = {
+          bitmap,
+          width,
+          height,
+          rasterScale: detail.scale,
+          rasterMs: 0,
+          bitmapMs: performance.now() - start,
+        };
+        return { id: detail.id, result, transfer: [bitmap] };
+      } finally {
+        page.free();
+      }
     },
 
     async close({ doc }) {
@@ -227,14 +327,19 @@ export function serveHybridWorker(modules: HybridWorkerModules): void {
     running = true;
     for (let request = urgent.shift() ?? renders.shift(); request; ) {
       try {
-        const handler = handlers[request.type] as (
-          request: Queued,
-        ) => Promise<{ result: unknown; transfer?: Transferable[] }>;
-        const { result, transfer } = await handler(request);
-        reply({ id: request.id, ok: true, result }, transfer);
+        const handler = handlers[request.type] as (request: Queued) => Promise<Outcome>;
+        const outcome = await handler(request);
+        if (outcome) {
+          const { result, transfer, id = request.id } = outcome;
+          reply({ id, ok: true, result }, transfer);
+        }
       } catch (error) {
         const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
+        // The main thread ignores replies to requests that already settled.
         reply({ id: request.id, ok: false, error: message });
+        if (request.type === "render" && request.detail) {
+          reply({ id: request.detail.id, ok: false, error: message });
+        }
       }
       request = urgent.shift() ?? renders.shift();
     }
@@ -246,9 +351,11 @@ export function serveHybridWorker(modules: HybridWorkerModules): void {
     if (request.type === "cancel") {
       for (const list of [urgent, renders]) {
         const at = list.findIndex((queued) => queued.id === request.target);
-        if (at >= 0) {
-          list.splice(at, 1);
-          reply({ id: request.target, ok: false, error: "cancelled", cancelled: true });
+        if (at < 0) continue;
+        const [dropped] = list.splice(at, 1);
+        reply({ id: request.target, ok: false, error: "cancelled", cancelled: true });
+        if (dropped?.type === "render" && dropped.detail) {
+          reply({ id: dropped.detail.id, ok: false, error: "cancelled", cancelled: true });
         }
       }
       return;

@@ -26,14 +26,15 @@ serveHybridWorker({
         return {
           render(index, scale) {
             const page = doc.render(index, scale);
+            const { width, height } = page;
             return {
-              width: page.width,
-              height: page.height,
-              takePixels() {
-                const pixels = page.take_pixels();
-                page.free();
-                return pixels;
-              },
+              width,
+              height,
+              // Read memory.buffer each time: it is replaced when the module's memory grows.
+              view: () =>
+                new Uint8ClampedArray(memory.buffer, page.pixelsPtr(), width * height * 4),
+              reduce: (factor) => page.reduce(factor),
+              free: () => page.free(),
             };
           },
           free: () => doc.free(),

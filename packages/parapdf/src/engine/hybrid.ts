@@ -61,8 +61,32 @@ export type HybridEvent =
       renderer: PageRenderer;
       /** From the render request until the pixels were on the canvas. */
       ms: number;
-      /** hayro's raster and bitmap time inside the worker. */
+      /** The scale hayro rasterized at: `scale`, or the detail scale when it rendered once. */
+      rasterScale?: number;
+      /** hayro's rasterization inside the worker; 0 when the base render's pass drew the pixels. */
       rasterMs?: number;
+      /** Averaging the full-resolution pixels down for the base layer. */
+      reduceMs?: number;
+      /** Creating the ImageBitmap inside the worker. */
+      bitmapMs?: number;
+      /** The worker sent the pixels with the page's base render, before this request. */
+      kept?: boolean;
+    }
+  /** A base render's full-resolution bitmap arrived and waits for the page's detail render. */
+  | { type: "kept"; at: number; pageIndex: number; scale: number; bytes: number }
+  /**
+   * A kept render left the cache: `used` by the detail render, or dropped
+   * because the page was released, a newer render replaced it, the cache was
+   * full, the request had another scale, or its base render was cancelled or
+   * failed. `bytes` is 0 when its bitmap had not arrived yet.
+   */
+  | {
+      type: "kept-released";
+      at: number;
+      pageIndex: number;
+      used: boolean;
+      reason: string;
+      bytes: number;
     }
   | { type: "fallback"; at: number; pageIndex: number | null; reason: string };
 
@@ -82,6 +106,26 @@ export interface HybridEngineOptions {
   maxContentBytes?: number;
   /** How long a render waits for its page's classification before using the base engine. */
   classifyTimeoutMs?: number;
+  /**
+   * How hayro draws a page's detail layer when the page's base render
+   * carries `detailScale`. hayro decodes a page's images on every render.
+   * - `"once"` (default): one pass at the detail scale; the base layer gets a
+   *   reduced copy, and the detail render shows the kept full-resolution
+   *   bitmap.
+   * - `"base-first"`: the base pass, then the detail pass right away, ahead
+   *   of other queued renders, kept for the detail render.
+   * - `"separate"`: each layer when it is requested, as two independent
+   *   renders.
+   */
+  detailRender?: "once" | "base-first" | "separate";
+  /**
+   * Detail-layer bitmaps a document keeps until their pages' detail renders
+   * ask for them; the oldest is dropped first (default 3: a visible page and
+   * the two overscan pages below it, which the scheduler renders before any
+   * overscan detail). Each becomes a detail canvas the scheduler would fill
+   * anyway, so they add memory only for pages released before that.
+   */
+  maxKeptRenders?: number;
   onEvent?: (event: HybridEvent) => void;
 }
 
@@ -130,6 +174,18 @@ class WorkerChannel {
       this.#pending.set(id, { resolve: resolve as (value: unknown) => void, reject });
       this.#worker.postMessage({ ...request, id }, transfer);
     });
+    return { id, promise };
+  }
+
+  /** A reply the worker sends without a request of its own, such as a render's `detail`. */
+  expect<T>() {
+    const id = this.#nextId++;
+    const promise = new Promise<T>((resolve, reject) => {
+      if (this.#failure) return reject(this.#failure);
+      this.#pending.set(id, { resolve: resolve as (value: unknown) => void, reject });
+    });
+    // Callers that drop the reply must not see an unhandled rejection.
+    promise.catch(() => {});
     return { id, promise };
   }
 
@@ -198,8 +254,30 @@ interface Settings {
   maxPathSegments: number;
   maxContentBytes: number;
   classifyTimeoutMs: number;
+  detailRender: NonNullable<HybridEngineOptions["detailRender"]>;
+  maxKeptRenders: number;
   emit: (event: HybridEvent) => void;
 }
+
+/** A base render's full-resolution bitmap, kept for the page's detail render. */
+interface Kept {
+  /** The worker's id for the delivery, which cancelling drops when still queued. */
+  id: number;
+  scale: number;
+  /** Rejects when the worker did not deliver it (cancelled or failed). */
+  delivery: Promise<RenderResult>;
+  /** Width × height × 4 once the bitmap arrived, 0 before. */
+  bytes: number;
+}
+
+const sameScale = (a: number, b: number): boolean => Math.abs(a - b) <= b * 0.01;
+
+/** Closes a kept bitmap whenever it arrives. */
+const discard = (kept: Kept) =>
+  kept.delivery.then(
+    (result) => result.bitmap.close(),
+    () => {},
+  );
 
 class HybridDocument implements PdfEngineDocument {
   readonly #base: PdfEngineDocument;
@@ -209,6 +287,8 @@ class HybridDocument implements PdfEngineDocument {
   readonly #decisions = new Map<number, Promise<PageRenderer>>();
   /** Canvases holding a `bitmaprenderer` context, which pdf.js cannot draw into. */
   readonly #bitmapCanvases = new WeakSet<object>();
+  /** Full-resolution renders kept for the next detail render, by page, oldest first. */
+  readonly #kept = new Map<number, Kept>();
   #hayroFailures = 0;
 
   constructor(
@@ -252,16 +332,82 @@ class HybridDocument implements PdfEngineDocument {
   }
 
   releasePage(pageIndex: number): void {
+    this.#dropKept(pageIndex, "released");
     this.#base.releasePage(pageIndex);
   }
 
   async destroy(): Promise<void> {
+    for (const pageIndex of [...this.#kept.keys()]) this.#dropKept(pageIndex, "closed");
     void this.#channel?.call({ type: "close", doc: this.#doc }).promise.catch(() => {});
     await this.#base.destroy();
   }
 
+  /** Keeps the full-resolution bitmap that a base render of `pageIndex` delivers later. */
+  #keep(pageIndex: number, id: number, scale: number, delivery: Promise<RenderResult>): Kept {
+    this.#dropKept(pageIndex, "replaced");
+    for (const oldest of this.#kept.keys()) {
+      if (this.#kept.size < this.#settings.maxKeptRenders) break;
+      this.#dropKept(oldest, "cache full");
+    }
+    const kept: Kept = { id, scale, delivery, bytes: 0 };
+    this.#kept.set(pageIndex, kept);
+    delivery.then(
+      (result) => {
+        if (this.#kept.get(pageIndex) !== kept) return;
+        kept.bytes = result.width * result.height * 4;
+        this.#settings.emit({
+          type: "kept",
+          at: performance.now(),
+          pageIndex,
+          scale,
+          bytes: kept.bytes,
+        });
+      },
+      () => this.#dropKept(pageIndex, "not delivered", kept),
+    );
+    return kept;
+  }
+
+  /** Removes the kept render of `pageIndex` (only `which`, when given) and closes its bitmap. */
+  #dropKept(pageIndex: number, reason: string, which?: Kept): void {
+    const kept = this.#kept.get(pageIndex);
+    if (!kept || (which && kept !== which)) return;
+    this.#kept.delete(pageIndex);
+    // A detail pass still queued in the worker is not worth running.
+    this.#channel?.cancel(kept.id);
+    void discard(kept);
+    this.#settings.emit({
+      type: "kept-released",
+      at: performance.now(),
+      pageIndex,
+      used: false,
+      reason,
+      bytes: kept.bytes,
+    });
+  }
+
+  /** The kept render of `pageIndex` if it has `scale`; one with another scale is dropped. */
+  #takeKept(pageIndex: number, scale: number): Kept | undefined {
+    const kept = this.#kept.get(pageIndex);
+    if (!kept) return undefined;
+    if (!sameScale(kept.scale, scale)) {
+      this.#dropKept(pageIndex, "other scale");
+      return undefined;
+    }
+    this.#kept.delete(pageIndex);
+    this.#settings.emit({
+      type: "kept-released",
+      at: performance.now(),
+      pageIndex,
+      used: true,
+      reason: "used",
+      bytes: kept.bytes,
+    });
+    return kept;
+  }
+
   render(request: RenderRequest): RenderTask {
-    const { pageIndex } = request;
+    const { pageIndex, scale, detailScale } = request;
     const cancelled = cancellation();
     let isCancelled = false;
     let inner: RenderTask | undefined;
@@ -275,18 +421,64 @@ class HybridDocument implements PdfEngineDocument {
 
     const promise = (async () => {
       const start = performance.now();
+      // The worker may have sent this layer along with the page's base layer.
+      const kept = this.#takeKept(pageIndex, scale);
+      if (kept) {
+        try {
+          const result = await Promise.race([kept.delivery, cancelled.promise]);
+          if (isCancelled) result.bitmap.close();
+          stopIfCancelled();
+          show(request.canvas, result.bitmap, this.#bitmapCanvases);
+          this.#settings.emit({
+            type: "rendered",
+            at: performance.now(),
+            pageIndex,
+            scale,
+            renderer: "hayro",
+            ms: performance.now() - start,
+            rasterScale: result.rasterScale,
+            rasterMs: result.rasterMs,
+            bitmapMs: result.bitmapMs,
+            kept: true,
+          });
+          return;
+        } catch (error) {
+          if (isCancelled) {
+            this.#channel?.cancel(kept.id);
+            void discard(kept);
+            throw error;
+          }
+          // The worker did not deliver the kept pixels; render them now.
+        }
+      }
       const renderer = await Promise.race([this.#decide(pageIndex), cancelled.promise]);
       stopIfCancelled();
       const channel = this.#channel;
       if (renderer === "hayro" && channel) {
+        // The worker sends the detail layer unasked: from the same pass when
+        // rendering once (the detail scale must be at least twice this
+        // one), or from a second pass right after this one.
+        const mode = this.#settings.detailRender;
+        const detail =
+          detailScale !== undefined &&
+          (mode === "once"
+            ? Math.round(detailScale / scale) >= 2
+            : mode === "base-first" && detailScale > scale * 1.01)
+            ? { scale: detailScale, once: mode === "once", ...channel.expect<RenderResult>() }
+            : undefined;
+        let keptRender: Kept | undefined;
         try {
           const { id, promise: rendering } = channel.call<RenderResult>({
             type: "render",
             doc: this.#doc,
             index: pageIndex,
-            scale: request.scale,
+            scale,
+            detail: detail && { id: detail.id, scale: detail.scale, once: detail.once },
           });
           workerRequest = id;
+          if (detail) {
+            keptRender = this.#keep(pageIndex, detail.id, detail.scale, detail.promise);
+          }
           // A bitmap that arrives after cancellation still has to be released.
           rendering.then(
             (result) => isCancelled && result.bitmap.close(),
@@ -307,13 +499,19 @@ class HybridDocument implements PdfEngineDocument {
             type: "rendered",
             at: performance.now(),
             pageIndex,
-            scale: request.scale,
+            scale,
             renderer: "hayro",
             ms: performance.now() - start,
+            rasterScale: result.rasterScale,
             rasterMs: result.rasterMs,
+            reduceMs: result.reduceMs,
+            bitmapMs: result.bitmapMs,
           });
           return;
         } catch (error) {
+          if (keptRender) {
+            this.#dropKept(pageIndex, isCancelled ? "base cancelled" : "base failed", keptRender);
+          }
           if (isCancelled || isRenderCancelled(error)) throw error;
           this.#hayroFailed(pageIndex, error);
         }
@@ -324,7 +522,7 @@ class HybridDocument implements PdfEngineDocument {
         type: "rendered",
         at: performance.now(),
         pageIndex,
-        scale: request.scale,
+        scale,
         renderer: "base",
         ms: performance.now() - start,
       });
@@ -457,6 +655,8 @@ export function createHybridEngine(options: HybridEngineOptions): HybridEngine {
     maxPathSegments: options.maxPathSegments ?? 64,
     maxContentBytes: options.maxContentBytes ?? 256 * 1024,
     classifyTimeoutMs: options.classifyTimeoutMs ?? 250,
+    detailRender: options.detailRender ?? "once",
+    maxKeptRenders: Math.max(1, options.maxKeptRenders ?? 3),
     emit,
   };
   // Like pdf.js's parsing worker, start now so the classifier module loads

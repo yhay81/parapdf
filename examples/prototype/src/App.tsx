@@ -1,4 +1,5 @@
 import {
+  type HybridEngineOptions,
   PdfDocument,
   PdfPageRect,
   type PdfSource,
@@ -34,6 +35,8 @@ const settings = {
     frameIntervalMs: Number(params.get("idleFrame") ?? "16.7"),
   },
   preload: params.get("preload") !== "0",
+  /** How the hybrid engine draws hayro pages' detail layers: `once`, `base-first`, or `separate`. */
+  detailRender: (params.get("detail") ?? undefined) as HybridEngineOptions["detailRender"],
 };
 
 const benchmarking = settings.autoscroll > 0;
@@ -41,9 +44,10 @@ const benchmarking = settings.autoscroll > 0;
 // covers loading the engines and painting the first pages.
 const stopStartupLag = benchmarking ? startLagMonitor(blockedThreshold(settings.idle)) : null;
 // Module-level values stay referentially stable across renders.
-const enginePromise = loadEngine(settings.engine, settings.hwa, recordHybridEvent).then((engine) =>
-  benchmarking ? instrumentEngine(engine) : engine,
-);
+const enginePromise = loadEngine(settings.engine, settings.hwa, {
+  onEvent: recordHybridEvent,
+  detailRender: settings.detailRender,
+}).then((engine) => (benchmarking ? instrumentEngine(engine) : engine));
 // Exposed for the Playwright probes; not part of the library surface.
 (window as { __benchRecords?: unknown }).__benchRecords = benchRecords;
 const source: PdfSource = { url: `/corpus/${settings.file}` };
@@ -63,6 +67,7 @@ const benchLabel = {
   links: settings.links,
   speed: settings.autoscroll,
   preload: settings.preload,
+  detailRender: settings.detailRender,
 };
 
 /** One highlight in PDF points, to show overlays follow zoom without re-rendering. */
