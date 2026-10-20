@@ -1,9 +1,12 @@
-# Draft pdf.js issue: knockout groups composite every element over the whole group canvas
+# pdf.js issue 22256: knockout groups composite every element over the whole group canvas
 
-Status: draft only. Not filed and not posted anywhere; the user decides
-whether to file it. Written on 2026-10-19 by a side session of the ParaPDF
-work, from the zoom measurement whose JavaScript profile put 85 ms of
-`drawImage` in `CanvasGraphics#compositeKnockoutSurface`.
+Status: filed on 2026-10-20 as
+https://github.com/mozilla/pdf.js/issues/22256, with the text under "Issue
+text" below; the reproduction page is linked from this repository instead of
+attached. Drafted on 2026-10-19 by a side session of the ParaPDF work, from
+the zoom measurement whose JavaScript profile put 85 ms of `drawImage` in
+`CanvasGraphics#compositeKnockoutSurface`. Not done before filing: checking
+release Chrome, Firefox, and Safari by hand, and other govinfo.gov PDFs.
 
 Reproduction: `bench/scripts/knockout-repro.html` (the page: pdf.js's display
 API only, with timing wrappers) and `bench/scripts/knockout-repro.ts` (the
