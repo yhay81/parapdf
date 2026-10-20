@@ -281,21 +281,49 @@ export class TextSelectionTracker {
    * Where a press at (x, y) on the pages element starts a selection: beside a
    * page, the start or end of the nearest run of its text layer, on the side
    * the press is on; elsewhere, the boundary between the pages around it.
+   * The nearest page is the nearest above or below first, then sideways.
    */
   #nearestPoint(pages: HTMLElement, x: number, y: number): Point {
     const children = pages.childNodes;
+    const boxes: (DOMRect | null)[] = [];
+    let nearest = -1;
+    let nearestDy = Number.POSITIVE_INFINITY;
+    let nearestDx = Number.POSITIVE_INFINITY;
     for (let index = 0; index < children.length; index++) {
       const page = children[index];
-      if (!(page instanceof HTMLElement)) continue;
+      // "page" mode hides the pages beside the ones it shows.
+      if (!(page instanceof HTMLElement) || page.style.visibility === "hidden") {
+        boxes.push(null);
+        continue;
+      }
       const box = page.getBoundingClientRect();
-      if (y < box.top) return { node: pages, offset: index };
-      if (y > box.bottom) continue;
-      const layer = page.querySelector(".parapdf-text-layer");
-      const run =
-        layer instanceof HTMLElement && this.#layers.has(layer) ? nearestRun(layer, x, y) : null;
-      return run ?? { node: pages, offset: index };
+      boxes.push(box);
+      const dy = Math.max(box.top - y, y - box.bottom, 0);
+      const dx = Math.max(box.left - x, x - box.right, 0);
+      if (dy < nearestDy || (dy === nearestDy && dx < nearestDx)) {
+        nearest = index;
+        nearestDy = dy;
+        nearestDx = dx;
+      }
     }
-    return { node: pages, offset: children.length };
+    const box = boxes[nearest];
+    if (!box) return { node: pages, offset: children.length };
+    if (y < box.top) return { node: pages, offset: nearest };
+    if (y > box.bottom) return { node: pages, offset: nearest + 1 };
+    // Between that page and another beside it, the boundary between them.
+    const other = boxes.findIndex(
+      (beside, index) =>
+        beside !== null &&
+        index !== nearest &&
+        y >= beside.top &&
+        y <= beside.bottom &&
+        (x < box.left ? beside.right <= x : beside.left >= x),
+    );
+    if (other !== -1) return { node: pages, offset: Math.max(nearest, other) };
+    const layer = (children[nearest] as HTMLElement).querySelector(".parapdf-text-layer");
+    const run =
+      layer instanceof HTMLElement && this.#layers.has(layer) ? nearestRun(layer, x, y) : null;
+    return run ?? { node: pages, offset: nearest };
   }
 
   #onSelectionChange(): void {

@@ -51,6 +51,8 @@ export function PdfViewport({
 
   const pages: ReactNode[] = [];
   if (layout) {
+    const { shown } = layout;
+    const centered = layout.scrollMode === "horizontal" || shown !== null;
     for (let index = first; index <= last; index++) {
       pages.push(
         <PdfPage
@@ -60,6 +62,8 @@ export function PdfViewport({
           top={layout.tops[index] ?? 0}
           gap={layout.gap}
           rowWidth={layout.rowWidths[index] ?? 0}
+          rowHeight={centered ? (layout.rowHeights[index] ?? 0) : null}
+          hidden={shown !== null && (index < shown.first || index > shown.last)}
           offset={layout.offsets[index] ?? 0}
           width={layout.widths[index] ?? 0}
           height={layout.heights[index] ?? 0}
@@ -77,15 +81,16 @@ export function PdfViewport({
     <div
       ref={scrollerRef}
       className={className ? `parapdf-viewport ${className}` : "parapdf-viewport"}
-      // The scroller is the query container whose width `cqw` measures for
-      // page placement. A stable gutter keeps that width from changing as the
-      // scrollbar comes and goes, which would refit "fit-width" back and forth.
+      // The scroller is the query container whose size `cqw` and `cqh`
+      // measure for page placement. A stable gutter keeps its width from
+      // changing as the scrollbar comes and goes, which would refit
+      // "fit-width" back and forth.
       // Touches pan it natively, but pinches zoom the document through the
       // runtime instead of zooming the whole page.
       style={{
         overflow: "auto",
         contain: "strict",
-        containerType: "inline-size",
+        containerType: "size",
         scrollbarGutter: "stable",
         touchAction: "pan-x pan-y",
         ...style,
@@ -116,6 +121,10 @@ interface PdfPageProps {
   gap: number;
   /** The width of the page's row, and the page's distance from the row's left edge. */
   rowWidth: number;
+  /** The height of the page's row where rows are centered in the viewport's height, else null. */
+  rowHeight: number | null;
+  /** In "page" mode, a page beside the row shown: mounted, and drawn, before a flip shows it. */
+  hidden: boolean;
   offset: number;
   width: number;
   height: number;
@@ -140,6 +149,8 @@ const PdfPage = memo(function PdfPage({
   top,
   gap,
   rowWidth,
+  rowHeight,
+  hidden,
   offset,
   width,
   height,
@@ -178,9 +189,14 @@ const PdfPage = memo(function PdfPage({
       style={
         {
           position: "absolute",
-          top,
-          // Its row centered in the viewport, at the gap when wider: pageLeft() in layout.ts.
+          // Its row centered in the viewport, at the gap when larger:
+          // pageLeft() and pageTop() in layout.ts.
+          top:
+            rowHeight === null
+              ? top
+              : `calc(${top}px + max(0px, (100cqh - ${rowHeight}px) / 2 - ${gap}px))`,
           left: `calc(max(${gap}px, (100cqw - ${rowWidth}px) / 2) + ${offset}px)`,
+          visibility: hidden ? "hidden" : undefined,
           width,
           height,
           background: "#fff",

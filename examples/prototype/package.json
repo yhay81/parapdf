@@ -13,6 +13,7 @@
     "check:rotation": "node scripts/check-rotation.ts",
     "check:options": "node scripts/check-options.ts",
     "check:pinch": "node scripts/check-pinch.ts",
+    "check:scroll": "node scripts/check-scroll.ts",
     "typecheck": "tsc -p ."
   },
   "dependencies": {

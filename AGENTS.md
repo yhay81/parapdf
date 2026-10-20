@@ -90,9 +90,10 @@ with the API.
   select `engine` (`pdfjs` or `pdfjs-next`), `hwa`, `text`, `file`,
   `preload`, `lang` (the page's language, `en` by default), `source`
   (`data` opens the PDF from bytes the demo fetched instead of its URL),
-  `forms` (`1` for fillable fields), `spread` (`odd` or `even`), `page` (the
-  one-based page shown first), `scale` (a number, `fit-width`, or
-  `fit-page`), and `password` (the source's password).
+  `forms` (`1` for fillable fields), `spread` (`odd` or `even`), `scroll`
+  (`horizontal`, `wrapped`, or `page`), `page` (the one-based page shown
+  first), `scale` (a number, `fit-width`, or `fit-page`), and `password`
+  (the source's password).
 - `pnpm --filter @parapdf/prototype build && pnpm --filter @parapdf/prototype bench`
   — scripted scroll benchmark; `BROWSER` picks the browser, and `VARIANTS`,
   `TEXT`, `LINKS`, `FILES`, `SPEEDS` (CSS px per second), `RUNS`, `DURATION`,
@@ -122,6 +123,15 @@ with the API.
   `build`; `BROWSER` and `ENGINE` apply). It reads colors on pages from
   screenshots, because pdf.js's renderer worker draws into canvases the main
   thread cannot read.
+- `pnpm --filter @parapdf/prototype check:scroll` — functional checks for
+  scroll modes on the document of mixed page sizes: where pages sit in
+  "vertical", "horizontal", "wrapped", and "page" mode, alone and in odd
+  spreads; the current page; zooming around a point; "fit-width" and
+  "fit-page"; scrolling to a search match; switching modes on the current
+  page; filling rows again after a resize; and flipping pages in "page" mode
+  with keys, the demo's buttons, and `goToPage()`, while a zoomed page
+  scrolls within itself (run after `pnpm --filter @parapdf/bench corpus` and
+  `build`; `BROWSER` and `ENGINE` apply).
 - `pnpm --filter @parapdf/prototype check:rotation` — functional checks for
   view rotation (page boxes, canvases, text, overlays, search, link jumps)
   and the `usePdfDocument()` escape hatch (run after `build`; `BROWSER`
@@ -253,19 +263,48 @@ with the API.
     reaches the page through no event at all: the fling stops, the zoom does
     not change, and a second pinch works.
 - `setScale("fit-width")`, which `initialScale` defaults to, sets `zoomMode`
-  to "fit-width": the page at the viewport's center is fitted to the
-  viewport's width again whenever that width changes, the view turns, or the
-  background pass learns that page's real size, like pdf.js's "page-width".
+  to "fit-width": the current page is fitted to the viewport's width again
+  whenever that width changes, the view turns, or the background pass learns
+  that page's real size, like pdf.js's "page-width".
   A numeric `setScale`, `zoomBy`, and wheel zoom set it to "custom". The
   scroller keeps a stable scrollbar gutter, so a scrollbar that comes and
   goes cannot refit back and forth.
 - Each page is centered in the viewport, and a page wider than the viewport
   starts at the gap: `pageLeft()` in `layout.ts`, used for visible areas,
   destinations, and search scrolling. `PdfViewport` places pages by the same
-  rule in CSS against the scroller's width (`100cqw`; the scroller is an
-  inline-size query container), so a resize moves pages without a React
-  render. Centering pages in the widest page's width pushed narrower pages
-  past the viewport's right edge.
+  rule in CSS against the scroller's width (`100cqw`; the scroller is a size
+  query container), so a resize moves pages without a React render.
+  Centering pages in the widest page's width pushed narrower pages past the
+  viewport's right edge. In "horizontal" and "page" mode, rows are centered
+  in the viewport's height the same way: `pageTop()` and `100cqh`.
+- Scroll modes (`scrollMode`, `setScrollMode()`) follow pdf.js's viewer.
+  `computeLayout()` breaks the pages into rows of whole spreads: one per row
+  in "vertical" and "page" mode, all of them in "horizontal", and as many as
+  fit the scroller's width with the gaps in "wrapped". A resize fills wrapped
+  rows again only once a page moves to another row (`sameRows()`); rows are
+  centered in CSS, so other resizes need no layout. "page" mode puts every
+  row in the same place and shows one (`shown`, which `showPage()` switches
+  without new arrays): the content is sized to that row and clips the others
+  (`overflow: clip`), which stay mounted within the overscan, hidden, so the
+  next row has pixels before a flip shows it. Without the clip, hidden rows
+  widened the scroll range: to 1,507 px for a 1,024 px wide spread at
+  "fit-page".
+  `goToPage()`, `nextPage()`, `previousPage()`, links, search, and `back()`
+  show the row they need, and keys that would scroll past an edge of the row
+  shown flip it (Page Down, space, and ↓ at its bottom, → at its right edge,
+  and back the other way), showing the next row from the edge they crossed
+  at the same place along the other axis; the wheel and touches only scroll
+  within a zoomed row. "fit-width" and "fit-page" fit one page, not a
+  spread, in "horizontal" mode, as pdf.js does. The mounted window is
+  rounded out to whole rows except in "horizontal" mode, and scrolling's
+  speed is measured along the axis pages follow each other on.
+- `currentPage` is the page nearest the viewport's center, but the current
+  page stays current while all of it is in view, as in pdf.js's viewer, and
+  navigation (`goToPage()`, links, `back()`, search) makes the page it shows
+  current. At the start of a horizontal row of portrait pages fitted to the
+  viewport's height, or of wrapped rows, the page at the center was the
+  second or third. A page taller than the viewport is never all in view, so
+  at "fit-width" the current page is still the one at the center.
 - Each mounted page stacks a base canvas (half a device pixel per CSS pixel,
   at most 2 MP) under a detail canvas at full device resolution. A page whose
   full-resolution render fits in 16 MP gets detail for the whole page. Beyond
@@ -398,7 +437,8 @@ with the API.
   browsers selected 3,357 characters where the line holds 49. The tracker
   starts such a drag at the nearest text instead: beside a page, the start or
   end of the nearest run, on the side of the press; in a gap, the boundary
-  between the pages. The browser still handles the press, so a click there
+  between the pages, whether they are above and below each other or side by
+  side. The nearest page is the nearest above or below first, then sideways. The browser still handles the press, so a click there
   clears the selection. The tracker marks the layers for that position at the
   press, because Chromium and Firefox hit-test a pointer move before its
   listeners run; selects it at the first move as a range between two
@@ -518,8 +558,8 @@ with the API.
     drawn one at a time with the print intent into PNG images in a
     print-only container, `@page` sized by the first page.
   - Spreads: the layout has rows (`rowTops`, `rowWidths`, `rowHeights`,
-    `offsets`); each row is centered like a page used to be, and pages are
-    centered vertically in their row. `pageAt()` returns a row's first page;
+    `rowFirst`, `rowLast`, `offsets`); each row is centered like a page used
+    to be, and pages are centered vertically in their row.
     `pageAtPoint()` picks the page under a point, which zoom anchors and the
     current page use. Fitting in a spread mode counts two pages, as pdf.js
     does, so the zoom stays the same from row to row.
@@ -538,8 +578,8 @@ with the API.
     `entireWord`, `matchDiacritics`), `getSelection()` in unturned PDF
     points, and `pageColors`.
 - Browsers: `check:text`, `check:links`, `check:lifecycle`,
-  `check:rotation`, `check:options`, `check:pinch`, and `check:features`
-  pass in Playwright's Chromium, WebKit, and Firefox. Playwright's WebKit cannot put two fingers
+  `check:rotation`, `check:options`, `check:pinch`, `check:features`, and
+  `check:scroll` pass in Playwright's Chromium, WebKit, and Firefox. Playwright's WebKit cannot put two fingers
   down, and its `GestureEvent` is a function whose objects are not events, so
   touch and Safari's gesture events were checked by hand in Safari 27 in the
   iPadOS 27 simulator (iPad Pro 11-inch): pinches, the point between the
@@ -550,8 +590,7 @@ with the API.
   devices are not verified yet. WebKit has neither
   `requestIdleCallback` nor `scheduler.yield`, so idle text and annotation
   layers fall back to a 16 ms timer and search yields through `setTimeout(0)`.
-- Not yet implemented: horizontal, wrapped, and page-at-a-time scrolling
-  (pdf.js's scroll modes), annotation editing, form scripts (pdf.js's
+- Not yet implemented: annotation editing, form scripts (pdf.js's
   sandbox), XFA forms, text for pages outside the mounted window, and a
   highlight fallback for browsers without the CSS Custom Highlight API.
 

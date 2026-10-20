@@ -22,8 +22,9 @@ A fast PDF viewer for React, built on [pdf.js](https://github.com/mozilla/pdf.js
   document.
 - **What a document viewer does.** Fillable forms that save into the PDF,
   comments, layers, attachments, page labels, thumbnails, printing,
-  two-page spreads, encrypted documents, and selections in PDF coordinates
-  for your own highlights.
+  two-page spreads, scrolling sideways, in rows, or a page at a time,
+  encrypted documents, and selections in PDF coordinates for your own
+  highlights.
 - **Gestures.** Ctrl or ⌘ with the wheel, trackpad pinches, touch pinches,
   and Safari's gesture events zoom the document instead of the page; Ctrl or
   ⌘ with +, -, and 0 too, and a hand tool drags it.
@@ -89,9 +90,9 @@ function Toolbar() {
   const scale = usePdfState((state) => state.scale);
   return (
     <div role="toolbar" aria-label="PDF controls">
-      <button type="button" onClick={() => viewer.goToPage(page - 1)}>Previous</button>
+      <button type="button" onClick={() => viewer.previousPage()}>Previous</button>
       <span>{page + 1} / {pageCount}</span>
-      <button type="button" onClick={() => viewer.goToPage(page + 1)}>Next</button>
+      <button type="button" onClick={() => viewer.nextPage()}>Next</button>
       <button type="button" onClick={() => viewer.zoomBy(1 / 1.25)}>Zoom out</button>
       <span>{Math.round((scale * 72 * 100) / 96)}%</span>
       <button type="button" onClick={() => viewer.zoomBy(1.25)}>Zoom in</button>
@@ -110,10 +111,10 @@ state (`ViewerState`) has:
 |---|---|
 | `status`, `error` | `"idle"`, `"loading"`, `"password"` (see [Encrypted documents](#encrypted-documents)), `"ready"`, or `"error"`, and the error's message. |
 | `progress` | `{ loaded, total }` bytes of the document received, `total` null when the server did not say; null before any arrive. |
-| `pageCount`, `currentPage` | Pages in the document, and the zero-based page nearest the viewport's center. |
+| `pageCount`, `currentPage` | Pages in the document, and the zero-based page being read: the one nearest the viewport's center, except that the current page stays current while all of it is in view, and that navigation makes the page it shows current. |
 | `pageLabels` | Each page's label, such as `"iv"` or `"A-3"`, when the PDF defines them; otherwise null. |
 | `scale`, `zoomMode` | CSS pixels per PDF point; `"fit-width"` or `"fit-page"` while the page is fitted as the viewport resizes, otherwise `"custom"`. |
-| `rotation`, `spread` | The view's clockwise rotation (0, 90, 180, or 270), and `"none"`, `"odd"`, or `"even"` (see [Spreads](#spreads-and-fitting)). |
+| `rotation`, `spread`, `scrollMode` | The view's clockwise rotation (0, 90, 180, or 270); `"none"`, `"odd"`, or `"even"`; and `"vertical"`, `"horizontal"`, `"wrapped"`, or `"page"` (see [Scroll modes](#scroll-modes-spreads-and-fitting)). |
 | `tool` | What a mouse drag does: `"select"` text, or scroll the document with the `"hand"`. |
 | `search` | The search in progress or done (see below). |
 | `outline`, `canGoBack` | The document outline (`null` while it loads), and whether `back()` has a position to return to. |
@@ -122,12 +123,14 @@ state (`ViewerState`) has:
 | `document` | The open document (see [pdf.js's own API](#pdfjss-own-api)). |
 
 `usePdfViewer()` returns the viewer runtime, whose methods change the view:
-`goToPage(index)`, `zoomBy(factor)`, `setScale(scale | "fit-width" |
-"fit-page")`, `resetScale()`, `rotate(degrees)`, `setRotation(rotation)`,
-`setSpread(spread)`, `setTool("select" | "hand")`, `goToDestination(dest)`,
-`back()`, and the methods of the sections below. The viewport is focusable:
-the arrow, Page Up, Page Down, Home, End, and space keys scroll it, and Ctrl
-or ⌘ with +, -, and 0 zoom in, out, and back to `initialScale`.
+`goToPage(index)`, `nextPage()` and `previousPage()` (by a whole spread or
+row), `zoomBy(factor)`, `setScale(scale | "fit-width" | "fit-page")`,
+`resetScale()`, `rotate(degrees)`, `setRotation(rotation)`,
+`setSpread(spread)`, `setScrollMode(mode)`, `setTool("select" | "hand")`,
+`goToDestination(dest)`, `back()`, and the methods of the sections below.
+The viewport is focusable: the arrow, Page Up, Page Down, Home, End, and
+space keys scroll it, or flip pages in `"page"` mode, and Ctrl or ⌘ with +,
+-, and 0 zoom in, out, and back to `initialScale`.
 
 ## Search
 
@@ -283,14 +286,29 @@ layers work too.
 annotation does: by default, the browser downloads the file. The
 `openAttachment` option replaces that, for both.
 
-## Spreads and fitting
+## Scroll modes, spreads, and fitting
+
+`setScrollMode()` arranges pages as pdf.js's viewer does: `"vertical"`, the
+default, stacks them top to bottom; `"horizontal"` puts them in one row that
+scrolls sideways, centered in the viewport's height; `"wrapped"` fills each
+row with as many pages as fit the viewport's width, again when it resizes;
+`"page"` shows one page, or one spread, at a time. In `"page"` mode,
+`goToPage()`, `nextPage()`, `previousPage()`, links, and search flip pages,
+and so do the keys that would scroll past the edge of the page shown: Page
+Down, space, and ↓ at its bottom and → at its right edge go forward, and
+Page Up, Shift+space, ↑, and ← go back; Home and End go to the first and
+last page. A zoomed page scrolls within itself, and the pages beside it are
+drawn before they show. The current page stays in view when the mode
+changes.
 
 `setSpread("odd")` shows pages side by side in pairs, 1–2, 3–4; `"even"`
 shows page 1 alone and pairs 2–3, 4–5, like a book with its cover; `"none"`
-goes back to one page per row. `setScale("fit-page")` fits all of the page at
-the viewport's center, or of its spread, and keeps fitting it as the
-viewport resizes; in a spread mode, fitting counts two pages, so the zoom
-stays the same from row to row, as in pdf.js.
+goes back to one page per row. Pairs stay together in every scroll mode: in
+a wrapped row and when `"page"` mode flips. `setScale("fit-page")` fits all
+of the current page, or of its spread, and keeps fitting it as the viewport
+resizes; in a spread mode, fitting counts two pages, so the zoom stays the
+same from row to row, as in pdf.js. In `"horizontal"` mode, where all pages
+share one row, fitting counts one.
 
 ## Selections and highlights
 
@@ -331,7 +349,8 @@ read when the component mounts; give it a new `key` to change them.
 |---|---|---|
 | `initialScale` | `"fit-width"` | A scale in CSS pixels per point, `"fit-width"`, which keeps fitting the page width as the viewport resizes, or `"fit-page"`, which keeps fitting all of it. |
 | `initialPage` | `0` | The zero-based page shown first. |
-| `spread` | `"none"` | `"odd"` or `"even"` shows pages in pairs (see [Spreads](#spreads-and-fitting)). |
+| `spread` | `"none"` | `"odd"` or `"even"` shows pages in pairs (see [Spreads](#scroll-modes-spreads-and-fitting)). |
+| `scrollMode` | `"vertical"` | `"horizontal"`, `"wrapped"`, or `"page"` arranges pages otherwise (see [Scroll modes](#scroll-modes-spreads-and-fitting)). |
 | `initialTool` | `"select"` | `"hand"` makes a mouse drag scroll the document from the start. |
 | `minScale`, `maxScale` | `0.25`, `10` | Zoom limits in CSS pixels per point. |
 | `gap` | `12` | CSS pixels between pages and around them. |
@@ -420,9 +439,7 @@ application's language with `label` and `pageLabel`.
 - Released pdfjs-dist draws pages on the main thread. Drawing in a worker
   needs pdf.js's renderer worker (`rendererSrc`), which is only in unreleased
   pdf.js builds so far.
-- Not yet supported: scrolling sideways or a page at a time (pages scroll
-  vertically, one or two per row), editing annotations, form scripts, and
-  XFA forms.
+- Not yet supported: editing annotations, form scripts, and XFA forms.
 - Text exists only for mounted pages, so the browser's own find sees only
   those; use `usePdfSearch`.
 - Search highlights need the CSS Custom Highlight API; browsers without it

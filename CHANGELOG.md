@@ -36,6 +36,20 @@ the last items).
 - Two-page spreads (`spread`, `setSpread()`), "fit-page" zoom, `resetScale()`,
   Ctrl or ⌘ with +, -, and 0 in the viewport, `initialPage`, and a hand tool
   (`tool`, `setTool()`, `initialTool`).
+- Scroll modes, as in pdf.js (`scrollMode`, `setScrollMode()`): pages in a
+  column (`"vertical"`, as before), in one row scrolled sideways
+  (`"horizontal"`), in rows filling the viewport's width (`"wrapped"`), or
+  one page or spread at a time (`"page"`). In `"page"` mode, `goToPage()`,
+  links, search, and the keys that would scroll past the page's edge flip
+  pages, and a zoomed page scrolls within itself. Spreads work in every mode.
+- `nextPage()` and `previousPage()` go to the next or previous spread or
+  row; links with the NextPage and PrevPage actions do the same.
+- The current page stays current while all of it is in view, as in pdf.js,
+  and `goToPage()`, links, `back()`, and search make the page they show
+  current: at the start of a row of pages narrower than half the viewport,
+  or of pages shorter than half of it, the page at the viewport's center was
+  the second or third. Pages taller than the viewport, as at "fit-width",
+  change pages at the center as before.
 - Search options: `caseSensitive`, `entireWord`, and `matchDiacritics`.
 - `getSelection()` and `usePdfSelection()`: the selected text and the
   rectangles it covers in PDF points, for highlights of your own.
@@ -48,7 +62,9 @@ the last items).
   first frame arrived, over the low-resolution page or in its place.
 - `ViewerState.status` has the new value `"password"`, and `ZoomMode`
   `"fit-page"`. `Layout` describes rows: `rowTops`, `rowWidths`,
-  `rowHeights`, `offsets`, and `spread`.
+  `rowHeights`, `rowFirst`, `rowLast`, `offsets`, `spread`, `scrollMode`,
+  and, in `"page"` mode, the row `shown`. In `"horizontal"` and `"page"`
+  mode, `tops` are before a row is centered in the viewport's height.
 - The engine boundary grew: `PdfEngine.open()` takes `OpenOptions`
   (progress, passwords, and an abort signal), and `PdfEngineDocument` has
   `getPageLabels()`, `getMetadata()`, `getAttachments()`,

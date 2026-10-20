@@ -42,7 +42,7 @@ export { PdfThumbnail, type PdfThumbnailProps } from "./react/PdfThumbnail.tsx";
 export { PdfViewport, type PdfViewportProps } from "./react/PdfViewport.tsx";
 export { type PdfSearch, usePdfSearch } from "./react/search.ts";
 export { usePdfSelection } from "./react/selection.ts";
-export type { Layout, SpreadMode } from "./runtime/layout.ts";
+export type { Layout, ScrollMode, SpreadMode } from "./runtime/layout.ts";
 export type { PrintOptions } from "./runtime/print.ts";
 export type { SchedulerStats } from "./runtime/scheduler.ts";
 export type { SearchMatch, SearchOptions, TextPosition } from "./runtime/text-search.ts";

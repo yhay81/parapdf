@@ -21,11 +21,18 @@ import { SearchHighlights } from "./highlights.ts";
 import {
   computeLayout,
   type Layout,
-  pageAt,
+  type LayoutOptions,
+  type PageArea,
   pageAtPoint,
   pageLeft,
+  pageTop,
   rowBounds,
+  rowEnd,
+  rowStart,
+  type ScrollMode,
   type SpreadMode,
+  sameRows,
+  showPage,
   turnBox,
   turnedSize,
   type Viewport,
@@ -77,14 +84,20 @@ export interface ViewerState {
   /** Mounted page window: visible pages plus overscan. */
   first: number;
   last: number;
-  /** Page nearest the viewport center. */
+  /**
+   * The page being read: the page nearest the viewport's center, except that
+   * the current page stays current while all of it is in view, as in pdf.js.
+   * `goToPage()`, links, `back()`, and search make the page they show
+   * current, which then stays so even when it is too small to reach the
+   * center, as the first page at the start of a row of pages is.
+   */
   currentPage: number;
   /** CSS pixels per PDF point. */
   scale: number;
   /**
-   * "fit-width" keeps fitting the width of the page at the viewport's center
-   * as the viewport resizes or the view turns, "fit-page" all of that page;
-   * "custom" keeps `scale`.
+   * "fit-width" keeps fitting the width of the current page as the viewport
+   * resizes or the view turns, "fit-page" all of that page; "custom" keeps
+   * `scale`.
    */
   zoomMode: ZoomMode;
   /**
@@ -96,6 +109,11 @@ export interface ViewerState {
   rotation: Rotation;
   /** Whether pages show one per row or side by side in pairs. */
   spread: SpreadMode;
+  /**
+   * How pages are arranged and scrolled: in a column, in a row, in rows
+   * filling the viewport's width, or one page or spread at a time.
+   */
+  scrollMode: ScrollMode;
   /** The open document, for engine features ParaPDF does not wrap; null until it loads. */
   document: PdfEngineDocument | null;
   search: SearchState;
@@ -146,6 +164,8 @@ export interface ViewerOptions {
   gap?: number;
   /** One page per row (the default), or pairs side by side; see `setSpread()`. */
   spread?: SpreadMode;
+  /** How pages are arranged and scrolled (default "vertical"); see `setScrollMode()`. */
+  scrollMode?: ScrollMode;
   /** Pages mounted beyond each edge of the viewport. */
   overscan?: number;
   maxConcurrentRenders?: number;
@@ -252,12 +272,17 @@ const IDLE_SEARCH: SearchState = {
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
+/** Whether a visible area is all of its page. */
+const whole = (area: PageArea | null): boolean =>
+  area !== null && area.minX === 0 && area.minY === 0 && area.maxX === 1 && area.maxY === 1;
+
 const viewportOf = (scroller: HTMLElement): Viewport => ({
   left: scroller.scrollLeft,
   top: scroller.scrollTop,
   width: scroller.clientWidth,
   height: scroller.clientHeight,
   scrollerWidth: scroller.clientWidth,
+  scrollerHeight: scroller.clientHeight,
 });
 
 /**
@@ -304,26 +329,33 @@ function selectedRects(
   }
 }
 
-/** How fast the shown content moves: full-resolution work waits while it moves fast. */
+/**
+ * How fast the shown content moves along the direction pages follow each
+ * other: full-resolution work waits while it moves fast.
+ */
 interface Motion {
-  /** The shown content's top at its last move, in CSS pixels. */
-  top: number;
+  /** The shown content's top, or left in "horizontal" mode, at its last move, in CSS pixels. */
+  position: number;
   /** `performance.now()` at that move. */
   at: number;
   /** CSS pixels per millisecond, smoothed over moves that follow each other quickly. */
   velocity: number;
 }
 
-/** The shown content's top moved to `top` at `now`. */
-function move(motion: Motion, top: number, now: number): void {
+/** The shown content moved to `position` at `now`. */
+function move(motion: Motion, position: number, now: number): void {
   const elapsed = now - motion.at;
   if (elapsed > 0) {
-    const instant = (top - motion.top) / elapsed;
+    const instant = (position - motion.position) / elapsed;
     motion.velocity = elapsed > SETTLE_DELAY ? instant : motion.velocity * 0.6 + instant * 0.4;
   }
-  motion.top = top;
+  motion.position = position;
   motion.at = now;
 }
+
+/** Where `viewport` is along the direction pages follow each other in `scrollMode`. */
+const positionOf = (scrollMode: ScrollMode, viewport: { left: number; top: number }): number =>
+  scrollMode === "horizontal" ? viewport.left : viewport.top;
 
 const yieldToMain = (): Promise<void> => {
   const scheduler = (globalThis as { scheduler?: { yield?: () => Promise<void> } }).scheduler;
@@ -338,28 +370,40 @@ type PageElements = [
   HTMLElement | null,
 ];
 
+/** The scroller's size, which rows are centered in. */
+interface ScrollerSize {
+  width: number;
+  height: number;
+}
+
 /**
  * The scroll position at which the content point `point` of `layout` shows
  * at `anchor` (viewport coordinates) in `next`, as a share of the same page
- * along both axes: pages are centered in the viewport, so a share of the
- * content's width moved points on narrower pages sideways. The browser
- * clamps it to the scrollable range.
+ * along both axes: rows are centered in the viewport and may wrap
+ * differently, so a share of the content's size moved points sideways. The
+ * browser clamps it to the scrollable range.
  */
 function zoomTarget(
   layout: Layout,
   next: Layout,
-  viewportWidth: number,
+  scroller: ScrollerSize,
   anchor: { x: number; y: number },
   point: { x: number; y: number },
 ): { left: number; top: number } {
-  const page = pageAtPoint(layout, point.x, point.y, viewportWidth);
-  const withinX = (point.x - pageLeft(layout, page, viewportWidth)) / (layout.widths[page] || 1);
-  const withinY = (point.y - (layout.tops[page] ?? 0)) / (layout.heights[page] || 1);
+  const { width, height } = scroller;
+  const page = pageAtPoint(layout, point.x, point.y, width);
+  const withinX = (point.x - pageLeft(layout, page, width)) / (layout.widths[page] || 1);
+  const withinY = (point.y - pageTop(layout, page, height)) / (layout.heights[page] || 1);
   return {
-    left: pageLeft(next, page, viewportWidth) + withinX * (next.widths[page] ?? 0) - anchor.x,
-    top: (next.tops[page] ?? 0) + withinY * (next.heights[page] ?? 0) - anchor.y,
+    left: pageLeft(next, page, width) + withinX * (next.widths[page] ?? 0) - anchor.x,
+    top: pageTop(next, page, height) + withinY * (next.heights[page] ?? 0) - anchor.y,
   };
 }
+
+const sizeOf = (scroller: HTMLElement): ScrollerSize => ({
+  width: scroller.clientWidth,
+  height: scroller.clientHeight,
+});
 
 /**
  * A zoom gesture in progress: the wheel with ctrl or meta (also trackpad
@@ -434,6 +478,7 @@ export class PdfViewerRuntime {
     canGoBack: false,
     rotation: 0,
     spread: "none",
+    scrollMode: "vertical",
     document: null,
     pageLabels: null,
     metadata: null,
@@ -457,8 +502,11 @@ export class PdfViewerRuntime {
     "maxDetailPixels" | "maxDetailViewports" | "maxBasePixels" | "maxCanvasPixels"
   >;
   readonly #links: LinkHandlers;
-  /** Positions before link and outline jumps, as a page plus a fraction of it. */
-  #history: { pageIndex: number; offset: number }[] = [];
+  /**
+   * Positions before link and outline jumps: the page at the viewport's
+   * top-left corner and where that corner is, as a share of the page.
+   */
+  #history: { pageIndex: number; x: number; y: number; current: number }[] = [];
   readonly #highlights = new SearchHighlights();
   readonly #selection = new TextSelectionTracker();
   readonly #thumbnails = new ThumbnailRenderer({
@@ -490,7 +538,7 @@ export class PdfViewerRuntime {
   #frame = 0;
   #settleTimer = 0;
   /** How scrolling moves the content; a gesture's preview tracks its own motion. */
-  readonly #scrolling: Motion = { top: 0, at: 0, velocity: 0 };
+  readonly #scrolling: Motion = { position: 0, at: 0, velocity: 0 };
   #zoom: ZoomGesture | null = null;
   /** Touch pointers down on the viewport, in client coordinates. */
   readonly #touches = new Map<number, { x: number; y: number }>();
@@ -539,6 +587,7 @@ export class PdfViewerRuntime {
       zoomMode: this.#initialZoomMode(),
       tool: options.initialTool ?? "select",
       spread: options.spread ?? "none",
+      scrollMode: options.scrollMode ?? "vertical",
     });
   }
 
@@ -601,6 +650,7 @@ export class PdfViewerRuntime {
       search: IDLE_SEARCH,
       outline: null,
       canGoBack: false,
+      currentPage: 0,
       rotation: 0,
       zoomMode: this.#initialZoomMode(),
       document: null,
@@ -943,17 +993,17 @@ export class PdfViewerRuntime {
     const layout = this.store.get().layout;
     const scroller = this.#scroller;
     if (!layout || !scroller || scroller.clientHeight === 0) return 0;
-    const top = scroller.scrollTop;
-    const bottom = top + scroller.clientHeight;
-    const { first, last } = visibleRange(layout, top, scroller.clientHeight);
+    const viewport = viewportOf(scroller);
+    const { first, last } = visibleRange(layout, viewport);
     let blank = 0;
     for (let index = first; index <= last; index++) {
-      if (this.hasPixels(index)) continue;
-      const pageTop = layout.tops[index] ?? 0;
-      const pageBottom = pageTop + (layout.heights[index] ?? 0);
-      const visibleHeight = Math.max(0, Math.min(bottom, pageBottom) - Math.max(top, pageTop));
-      const visibleWidth = Math.min(layout.widths[index] ?? 0, scroller.clientWidth);
-      blank += visibleHeight * visibleWidth;
+      const area = visibleArea(layout, index, viewport);
+      if (!area || this.hasPixels(index)) continue;
+      blank +=
+        (area.maxX - area.minX) *
+        (layout.widths[index] ?? 0) *
+        (area.maxY - area.minY) *
+        (layout.heights[index] ?? 0);
     }
     return blank / (scroller.clientHeight * scroller.clientWidth);
   }
@@ -970,7 +1020,7 @@ export class PdfViewerRuntime {
     if (!layout || !scroller || !scheduler || scroller.clientHeight === 0) return 0;
     const viewport = viewportOf(scroller);
     const needed = layout.scale * (window.devicePixelRatio || 1);
-    const { first, last } = visibleRange(layout, viewport.top, viewport.height);
+    const { first, last } = visibleRange(layout, viewport);
     let weighted = 0;
     let total = 0;
     for (let index = first; index <= last; index++) {
@@ -987,18 +1037,89 @@ export class PdfViewerRuntime {
     return total > 0 ? weighted / total : 0;
   }
 
+  /**
+   * Show page `index` from its top: its row at the viewport's top, or, in
+   * "horizontal" mode, the page at the viewport's left. "page" mode shows its
+   * row instead of the one it showed.
+   */
   goToPage(index: number): void {
-    const layout = this.store.get().layout;
+    const current = this.store.get().layout;
     const scroller = this.#scroller;
-    if (!layout || !scroller) return;
-    const target = clamp(index, 0, layout.tops.length - 1);
-    scroller.scrollTop = (layout.rowTops[target] ?? 0) - layout.gap;
-    // A page of a spread wider than the viewport may lie beside it.
+    if (!current || !scroller || current.tops.length === 0) return;
+    const target = clamp(index, 0, current.tops.length - 1);
+    const layout = this.#show(current, target);
+    const { gap } = layout;
     const left = pageLeft(layout, target, scroller.clientWidth);
-    const right = left + (layout.widths[target] ?? 0);
-    if (left < scroller.scrollLeft || right > scroller.scrollLeft + scroller.clientWidth) {
-      scroller.scrollLeft = left - layout.gap;
+    const top = pageTop(layout, target, scroller.clientHeight);
+    if (layout.scrollMode === "horizontal") {
+      scroller.scrollLeft = left - gap;
+      scroller.scrollTop = top - gap;
+    } else {
+      // The row's top: a page shorter than its row is centered in it.
+      scroller.scrollTop = top - ((layout.tops[target] ?? 0) - (layout.rowTops[target] ?? 0)) - gap;
+      // A page of a spread wider than the viewport may lie beside it.
+      const right = left + (layout.widths[target] ?? 0);
+      if (left < scroller.scrollLeft || right > scroller.scrollLeft + scroller.clientWidth) {
+        scroller.scrollLeft = left - gap;
+      }
     }
+    // At once, not at the scroll event: a flip may not scroll at all, and a
+    // second flip in the same frame starts from the page this one shows.
+    this.store.set({ currentPage: target });
+    this.#update();
+  }
+
+  /** Go to the next page, or the next spread or row of pages; "page" mode flips to it. */
+  nextPage(): void {
+    this.#flip(1);
+  }
+
+  /** Go to the previous page, or the previous spread or row of pages. */
+  previousPage(): void {
+    this.#flip(-1);
+  }
+
+  /**
+   * Go to the first page after the current page's row, or the last before
+   * it: in "horizontal" mode, where all pages share one row, its spread.
+   * Keys that flip pages pass the `axis` they scroll along: the page then
+   * shows from the edge they crossed, at the same place along the other axis.
+   */
+  #flip(direction: 1 | -1, axis: "x" | "y" | null = null): boolean {
+    const { layout, currentPage, spread } = this.store.get();
+    const scroller = this.#scroller;
+    if (!layout || !scroller) return false;
+    const count = layout.tops.length;
+    const row =
+      layout.scrollMode === "horizontal"
+        ? rowBounds(spread, currentPage, count)
+        : { first: rowStart(layout, currentPage), last: rowEnd(layout, currentPage) };
+    const target = direction > 0 ? row.last + 1 : row.first - 1;
+    if (target < 0 || target >= count) return false;
+    const { scrollLeft, scrollTop } = scroller;
+    this.goToPage(target);
+    // The browser clamps the far edge to the scrollable range.
+    if (axis === "y") {
+      scroller.scrollLeft = scrollLeft;
+      scroller.scrollTop = direction > 0 ? 0 : scroller.scrollHeight;
+    } else if (axis === "x") {
+      scroller.scrollTop = scrollTop;
+      scroller.scrollLeft = direction > 0 ? 0 : scroller.scrollWidth;
+    }
+    return true;
+  }
+
+  /**
+   * In "page" mode, show the row of page `index`, resizing the content for
+   * it; returns the layout that shows it, `layout` itself in the other modes.
+   */
+  #show(layout: Layout, index: number): Layout {
+    const next = showPage(layout, index);
+    if (next !== layout) {
+      this.#sizeContent(next);
+      this.store.set({ layout: next });
+    }
+    return next;
   }
 
   /**
@@ -1009,15 +1130,16 @@ export class PdfViewerRuntime {
     const doc = this.#doc;
     if (!doc) return false;
     const target = await doc.resolveDestination(dest).catch(() => null);
-    const layout = this.store.get().layout;
+    const current = this.store.get().layout;
     const scroller = this.#scroller;
-    if (!target || !layout || !scroller || this.#doc !== doc) return false;
-    if (target.pageIndex < 0 || target.pageIndex >= layout.tops.length) return false;
+    if (!target || !current || !scroller || this.#doc !== doc) return false;
+    const { pageIndex } = target;
+    if (pageIndex < 0 || pageIndex >= current.tops.length) return false;
     this.#remember();
-    const pageTop = layout.tops[target.pageIndex] ?? 0;
+    const layout = this.#show(current, pageIndex);
     // The engine reports the point on the unturned page; a quarter turn makes
     // its left coordinate the vertical one.
-    const size = layout.sizes[target.pageIndex] ?? { width: 0, height: 0 };
+    const size = layout.sizes[pageIndex] ?? { width: 0, height: 0 };
     const point = turnBox(
       { x: target.x ?? 0, y: target.y ?? 0, width: 0, height: 0 },
       size,
@@ -1026,15 +1148,21 @@ export class PdfViewerRuntime {
     const quarter = layout.rotation % 180 !== 0;
     const hasTop = (quarter ? target.x : target.y) !== null;
     const hasLeft = (quarter ? target.y : target.x) !== null;
-    // An explicit top lands at the top edge of the viewport, as in other PDF readers.
-    scroller.scrollTop = hasTop ? pageTop + point.y * layout.scale : pageTop - layout.gap;
-    if (hasLeft) {
-      const left =
-        pageLeft(layout, target.pageIndex, scroller.clientWidth) + point.x * layout.scale;
-      if (left < scroller.scrollLeft || left > scroller.scrollLeft + scroller.clientWidth) {
-        scroller.scrollLeft = left;
-      }
+    const pageX = pageLeft(layout, pageIndex, scroller.clientWidth);
+    const pageY = pageTop(layout, pageIndex, scroller.clientHeight);
+    // An explicit top lands at the top edge of the viewport, as in other PDF
+    // readers, and an explicit left, in "horizontal" mode, at its left edge.
+    const top = hasTop ? pageY + point.y * layout.scale : pageY - layout.gap;
+    const left = hasLeft ? pageX + point.x * layout.scale : pageX - layout.gap;
+    scroller.scrollTop = top;
+    if (
+      layout.scrollMode === "horizontal" ||
+      (hasLeft && (left < scroller.scrollLeft || left > scroller.scrollLeft + scroller.clientWidth))
+    ) {
+      scroller.scrollLeft = left;
     }
+    this.store.set({ currentPage: pageIndex });
+    this.#update();
     return true;
   }
 
@@ -1042,33 +1170,48 @@ export class PdfViewerRuntime {
   back(): void {
     const entry = this.#history.pop();
     this.store.set({ canGoBack: this.#history.length > 0 });
-    const layout = this.store.get().layout;
-    if (!entry || !layout || !this.#scroller) return;
-    const top = layout.tops[entry.pageIndex] ?? 0;
-    this.#scroller.scrollTop = top + entry.offset * (layout.heights[entry.pageIndex] ?? 0);
+    const current = this.store.get().layout;
+    const scroller = this.#scroller;
+    if (!entry || !current || !scroller) return;
+    const { pageIndex } = entry;
+    const layout = this.#show(current, pageIndex);
+    scroller.scrollTop =
+      pageTop(layout, pageIndex, scroller.clientHeight) +
+      entry.y * (layout.heights[pageIndex] ?? 0);
+    scroller.scrollLeft =
+      pageLeft(layout, pageIndex, scroller.clientWidth) + entry.x * (layout.widths[pageIndex] ?? 0);
+    this.store.set({ currentPage: entry.current });
+    this.#update();
   }
 
-  /** Save the viewport's top as a page and fraction, which survive zoom changes. */
+  /**
+   * Save the viewport's top-left corner as a page and a share of it, which
+   * survive zoom changes, and the current page.
+   */
   #remember(): void {
     const layout = this.store.get().layout;
     const scroller = this.#scroller;
     if (!layout || !scroller) return;
-    const pageIndex = pageAt(layout, scroller.scrollTop);
-    const offset =
-      (scroller.scrollTop - (layout.tops[pageIndex] ?? 0)) / (layout.heights[pageIndex] || 1);
-    this.#history.push({ pageIndex, offset });
+    const { scrollLeft: x, scrollTop: y, clientWidth, clientHeight } = scroller;
+    const pageIndex = pageAtPoint(layout, x, y, clientWidth);
+    this.#history.push({
+      pageIndex,
+      x: (x - pageLeft(layout, pageIndex, clientWidth)) / (layout.widths[pageIndex] || 1),
+      y: (y - pageTop(layout, pageIndex, clientHeight)) / (layout.heights[pageIndex] || 1),
+      current: this.store.get().currentPage,
+    });
     if (this.#history.length > HISTORY_LIMIT) this.#history.shift();
     this.store.set({ canGoBack: true });
   }
 
   #namedAction(action: string): void {
-    const { currentPage, pageCount } = this.store.get();
+    const { pageCount } = this.store.get();
     switch (action) {
       case "NextPage":
-        this.goToPage(currentPage + 1);
+        this.nextPage();
         break;
       case "PrevPage":
-        this.goToPage(currentPage - 1);
+        this.previousPage();
         break;
       case "FirstPage":
         this.#remember();
@@ -1104,14 +1247,13 @@ export class PdfViewerRuntime {
     const scroller = this.#scroller;
     this.store.set({ rotation: turned });
     if (!layout || !scroller) return;
-    // Keep the page at the viewport's center at the same share of its height.
-    const y = scroller.clientHeight / 2;
-    const docY = scroller.scrollTop + y;
-    const page = pageAt(layout, docY);
-    const withinPage = (docY - (layout.tops[page] ?? 0)) / (layout.heights[page] || 1);
+    // Keep the point at the viewport's center at the same share of its page.
+    const anchor = { x: scroller.clientWidth / 2, y: scroller.clientHeight / 2 };
+    const point = { x: scroller.scrollLeft + anchor.x, y: scroller.scrollTop + anchor.y };
     const next = this.#applyLayout(layout.scale);
-    scroller.scrollTop = (next.tops[page] ?? 0) + withinPage * (next.heights[page] ?? 0) - y;
-    scroller.scrollLeft = (scroller.scrollWidth - scroller.clientWidth) / 2;
+    const target = zoomTarget(layout, next, sizeOf(scroller), anchor, point);
+    scroller.scrollTop = target.top;
+    scroller.scrollLeft = target.left;
     this.#scheduler?.rotate(turned);
     this.#update();
     // A turned page has another width to fit.
@@ -1121,30 +1263,60 @@ export class PdfViewerRuntime {
   /**
    * Show pages one per row ("none"), or side by side in pairs: "odd" pairs
    * pages 1–2, 3–4, and "even" shows page 1 alone and pairs 2–3, 4–5, like a
-   * book. The page at the viewport's center stays in view.
+   * book. The current page stays in view, from its top.
    */
   setSpread(spread: SpreadMode): void {
     if (spread === this.store.get().spread) return;
     this.#finishZoom();
-    const layout = this.store.get().layout;
-    const scroller = this.#scroller;
-    this.store.set({ spread });
-    if (!layout || !scroller) return;
     const page = this.store.get().currentPage;
-    this.#applyLayout(layout.scale);
-    this.goToPage(page);
-    this.#update();
+    this.store.set({ spread });
     // A pair is wider than a page, a page alone narrower than a pair.
-    this.#fit();
+    this.#arrange(page);
+  }
+
+  /**
+   * Arrange pages in a column ("vertical"), in one row scrolled sideways
+   * ("horizontal"), in rows filling the viewport's width ("wrapped"), or one
+   * page or spread at a time ("page"), whose keys and `goToPage()` flip
+   * pages, as in pdf.js. The current page stays in view, from its top.
+   */
+  setScrollMode(scrollMode: ScrollMode): void {
+    if (scrollMode === this.store.get().scrollMode) return;
+    this.#finishZoom();
+    const page = this.store.get().currentPage;
+    this.store.set({ scrollMode });
+    this.#arrange(page);
+  }
+
+  /**
+   * Lay the pages out again after their arrangement changed, fitted again in
+   * "fit-width" and "fit-page" mode, and go to page `page`.
+   */
+  #arrange(page: number): void {
+    const state = this.store.get();
+    const layout = state.layout;
+    const scroller = this.#scroller;
+    if (!layout || !scroller) return;
+    let scale = layout.scale;
+    if (state.zoomMode !== "custom" && scroller.clientWidth > 0) {
+      const fitted = this.#fitScale(page, state.zoomMode);
+      if (fitted !== null) {
+        scale = fitted;
+        this.#fittedWidth = scroller.clientWidth;
+        this.#fittedHeight = scroller.clientHeight;
+      }
+    }
+    this.#applyLayout(scale, page);
+    this.store.set({ scale });
+    this.goToPage(page);
   }
 
   /**
    * Change the zoom level, keeping the point under `anchor` (viewport
    * coordinates, default center) in place. "fit-width" fits the width of the
-   * page at the viewport's center and keeps fitting it as the viewport
-   * resizes or the view turns, like pdf.js's "page-width"; "fit-page" fits
-   * all of that page and shows it from its top, like "page-fit"; a number
-   * stops that.
+   * current page and keeps fitting it as the viewport resizes or the view
+   * turns, like pdf.js's "page-width"; "fit-page" fits all of that page and
+   * shows it from its top, like "page-fit"; a number stops that.
    */
   setScale(requested: number | "fit-width" | "fit-page", anchor?: { x: number; y: number }): void {
     this.#finishZoom();
@@ -1173,9 +1345,9 @@ export class PdfViewerRuntime {
   }
 
   /**
-   * Fit the page at the viewport's center to the viewport: its width in
-   * "fit-width" mode, all of it in "fit-page" mode, which also scrolls it to
-   * the viewport's top. Nothing in "custom" mode.
+   * Fit the current page to the viewport: its width in "fit-width" mode, all
+   * of it in "fit-page" mode, which also scrolls it to the viewport's top.
+   * Nothing in "custom" mode.
    */
   #fit(): void {
     const scroller = this.#scroller;
@@ -1195,10 +1367,13 @@ export class PdfViewerRuntime {
    * The scale that fits the row of page `index`, the page or its spread, to
    * the viewport in `mode`; null while the pages' sizes are unknown. In a
    * spread mode, a page alone in its row, such as a cover, counts twice, as
-   * in pdf.js: the zoom then stays the same from row to row.
+   * in pdf.js: the zoom then stays the same from row to row. In "horizontal"
+   * mode, where all pages share one row, the page alone fits.
    */
   #fitScale(index: number, mode: "fit-width" | "fit-page"): number | null {
-    const { rotation, spread } = this.store.get();
+    const { rotation, scrollMode } = this.store.get();
+    // Pages that share one row side by side fit one by one, as in pdf.js.
+    const spread = scrollMode === "horizontal" ? "none" : this.store.get().spread;
     const { first, last } = rowBounds(spread, index, this.#sizes.length);
     let width = 0;
     let height = 0;
@@ -1248,7 +1423,7 @@ export class PdfViewerRuntime {
     const y = anchor?.y ?? scroller.clientHeight / 2;
     const docPoint = point ?? { x: scroller.scrollLeft + x, y: scroller.scrollTop + y };
     const next = this.#applyLayout(scale);
-    const target = zoomTarget(layout, next, scroller.clientWidth, { x, y }, docPoint);
+    const target = zoomTarget(layout, next, sizeOf(scroller), { x, y }, docPoint);
     // The content is resized imperatively, so the scroll position can be
     // restored before React re-renders the mounted pages.
     scroller.scrollTop = target.top;
@@ -1369,14 +1544,18 @@ export class PdfViewerRuntime {
     this.#background(this.#scrollToMatch(match), "scrolling to a match");
   }
 
-  /** Scroll so a match sits in the upper third of the viewport. */
+  /**
+   * Scroll so a match sits in the upper third of the viewport, and, in
+   * "horizontal" mode, in its left third. "page" mode shows its page.
+   */
   async #scrollToMatch(match: SearchMatch): Promise<void> {
     const doc = this.#doc;
     if (!doc) return;
     const text = await doc.getText(match.pageIndex);
-    const layout = this.store.get().layout;
+    const current = this.store.get().layout;
     const scroller = this.#scroller;
-    if (!layout || !scroller || this.#doc !== doc) return;
+    if (!current || !scroller || this.#doc !== doc) return;
+    const layout = this.#show(current, match.pageIndex);
     const at = match.start.item * 4;
     const size = layout.sizes[match.pageIndex] ?? { width: 0, height: 0 };
     const box = turnBox(
@@ -1389,13 +1568,18 @@ export class PdfViewerRuntime {
       size,
       layout.rotation,
     );
-    const x = box.x * layout.scale;
-    const y = box.y * layout.scale;
-    scroller.scrollTop = (layout.tops[match.pageIndex] ?? 0) + y - scroller.clientHeight / 3;
-    const left = pageLeft(layout, match.pageIndex, scroller.clientWidth) + x;
-    if (left < scroller.scrollLeft || left > scroller.scrollLeft + scroller.clientWidth) {
+    const top = pageTop(layout, match.pageIndex, scroller.clientHeight) + box.y * layout.scale;
+    const left = pageLeft(layout, match.pageIndex, scroller.clientWidth) + box.x * layout.scale;
+    scroller.scrollTop = top - scroller.clientHeight / 3;
+    if (
+      layout.scrollMode === "horizontal" ||
+      left < scroller.scrollLeft ||
+      left > scroller.scrollLeft + scroller.clientWidth
+    ) {
       scroller.scrollLeft = left - scroller.clientWidth / 3;
     }
+    this.store.set({ currentPage: match.pageIndex });
+    this.#update();
   }
 
   #refreshHighlights(): void {
@@ -1431,18 +1615,41 @@ export class PdfViewerRuntime {
     return scale;
   }
 
-  #applyLayout(scale: number): Layout {
-    const { rotation, spread } = this.store.get();
-    const layout = computeLayout(this.#sizes, scale, this.#gap, rotation, spread);
+  /** Lay the pages out at `scale`; in "page" mode, showing the row of page `page`. */
+  #applyLayout(scale: number, page?: number): Layout {
+    const layout = computeLayout(this.#sizes, scale, this.#layoutOptions(page));
     this.#sizeContent(layout);
     this.store.set({ layout });
     return layout;
   }
 
+  /**
+   * How pages are laid out now: "wrapped" rows fill the scroller's width, and
+   * "page" mode shows the row of page `page`, by default the row it shows.
+   */
+  #layoutOptions(page?: number): LayoutOptions {
+    const { rotation, spread, scrollMode, layout, currentPage } = this.store.get();
+    return {
+      gap: this.#gap,
+      rotation,
+      spread,
+      scrollMode,
+      viewportWidth: this.#scroller?.clientWidth ?? 0,
+      page: page ?? layout?.shown?.first ?? currentPage,
+    };
+  }
+
   #sizeContent(layout: Layout): void {
     if (!this.#content) return;
-    this.#content.style.height = `${layout.totalHeight}px`;
+    // A row centered in the viewport's height needs content at least as tall.
+    const centered = layout.scrollMode === "horizontal" || layout.scrollMode === "page";
+    this.#content.style.height = centered
+      ? `max(100cqh, ${layout.totalHeight}px)`
+      : `${layout.totalHeight}px`;
     this.#content.style.width = `max(100%, ${layout.totalWidth}px)`;
+    // The hidden rows of "page" mode, wider or taller than the row shown,
+    // would otherwise widen the scrollable range.
+    this.#content.style.overflow = layout.shown ? "clip" : "";
   }
 
   /**
@@ -1478,11 +1685,15 @@ export class PdfViewerRuntime {
     this.#finishZoom();
     const scroller = this.#scroller;
     const layout = this.store.get().layout;
-    const anchorPage = layout && scroller ? pageAt(layout, scroller.scrollTop) : 0;
-    const offset = layout && scroller ? scroller.scrollTop - (layout.tops[anchorPage] ?? 0) : 0;
     this.#sizes = sizes;
     const next = this.#applyLayout(this.store.get().scale);
-    if (scroller) scroller.scrollTop = (next.tops[anchorPage] ?? 0) + offset;
+    if (scroller && layout) {
+      // Keep the point at the viewport's top-left corner where it is.
+      const point = { x: scroller.scrollLeft, y: scroller.scrollTop };
+      const target = zoomTarget(layout, next, sizeOf(scroller), { x: 0, y: 0 }, point);
+      scroller.scrollTop = target.top;
+      scroller.scrollLeft = target.left;
+    }
     this.#update();
     // The page at the center may turn out wider or narrower than the first.
     this.#fit();
@@ -1501,15 +1712,90 @@ export class PdfViewerRuntime {
       this.#finishZoom();
       this.#fit();
     }
+    this.#rewrap();
     this.#requestUpdate();
   };
+
+  /**
+   * In "wrapped" mode, fill the rows again to the viewport's new width once
+   * that moves a page to another row, keeping the point at the viewport's
+   * center at the same share of its page. Rows are centered in CSS, so a
+   * resize that keeps them needs no new layout.
+   */
+  #rewrap(): void {
+    const layout = this.store.get().layout;
+    const scroller = this.#scroller;
+    if (!layout || !scroller || layout.scrollMode !== "wrapped") return;
+    if (sameRows(layout, computeLayout(this.#sizes, layout.scale, this.#layoutOptions()))) return;
+    this.#finishZoom();
+    const current = this.store.get().layout ?? layout;
+    const anchor = { x: scroller.clientWidth / 2, y: scroller.clientHeight / 2 };
+    const point = { x: scroller.scrollLeft + anchor.x, y: scroller.scrollTop + anchor.y };
+    const next = this.#applyLayout(current.scale);
+    const target = zoomTarget(current, next, sizeOf(scroller), anchor, point);
+    scroller.scrollTop = target.top;
+    scroller.scrollLeft = target.left;
+    this.#update();
+  }
+
+  #onKeyDown = (event: KeyboardEvent): void => {
+    if (event.altKey) return;
+    if (event.ctrlKey || event.metaKey) this.#zoomKey(event);
+    else if (this.store.get().scrollMode === "page") this.#pageKey(event);
+  };
+
+  /**
+   * In "page" mode, keys that would scroll past an edge of the page shown
+   * flip to the next or previous one and show it from the edge they crossed:
+   * PageDown, Space, and ↓ at its bottom, → at its right edge, and PageUp,
+   * Shift+Space, ↑, and ← back the other way. Home and End go to the first
+   * and last page. Keys meant for a form field or a button stay theirs.
+   */
+  #pageKey(event: KeyboardEvent): void {
+    const scroller = this.#scroller;
+    const target = event.target instanceof Element ? event.target : null;
+    if (!scroller || target?.closest("input, select, textarea, button, [contenteditable]")) return;
+    // Within a pixel: zooming leaves fractional scroll positions.
+    const atTop = scroller.scrollTop <= 1;
+    const atBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1;
+    const atLeft = scroller.scrollLeft <= 1;
+    const atRight = scroller.scrollLeft + scroller.clientWidth >= scroller.scrollWidth - 1;
+    let flipped = false;
+    switch (event.key) {
+      case "PageDown":
+      case "ArrowDown":
+        flipped = atBottom && this.#flip(1, "y");
+        break;
+      case "PageUp":
+      case "ArrowUp":
+        flipped = atTop && this.#flip(-1, "y");
+        break;
+      case " ":
+        flipped = event.shiftKey ? atTop && this.#flip(-1, "y") : atBottom && this.#flip(1, "y");
+        break;
+      case "ArrowRight":
+        flipped = atRight && this.#flip(1, "x");
+        break;
+      case "ArrowLeft":
+        flipped = atLeft && this.#flip(-1, "x");
+        break;
+      case "Home":
+        this.goToPage(0);
+        flipped = true;
+        break;
+      case "End":
+        this.goToPage(this.store.get().pageCount - 1);
+        flipped = true;
+        break;
+    }
+    if (flipped) event.preventDefault();
+  }
 
   /**
    * Ctrl or ⌘ with +, -, or 0 zooms the document instead of the page while
    * focus is in the viewport, as in pdf.js's viewer.
    */
-  #onKeyDown = (event: KeyboardEvent): void => {
-    if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+  #zoomKey(event: KeyboardEvent): void {
     switch (event.key) {
       case "+":
       case "=":
@@ -1526,7 +1812,7 @@ export class PdfViewerRuntime {
         return;
     }
     event.preventDefault();
-  };
+  }
 
   /**
    * The hand tool scrolls with a mouse or pen drag. Links, form fields, and
@@ -1568,7 +1854,11 @@ export class PdfViewerRuntime {
   #onScroll = (): void => {
     const scroller = this.#scroller;
     if (!scroller) return;
-    move(this.#scrolling, scroller.scrollTop, performance.now());
+    move(
+      this.#scrolling,
+      positionOf(this.store.get().scrollMode, viewportOf(scroller)),
+      performance.now(),
+    );
     this.#requestUpdate();
   };
 
@@ -1731,7 +2021,11 @@ export class PdfViewerRuntime {
       panY: 0,
       shiftX: 0,
       shiftY: 0,
-      motion: { top: scroller.scrollTop, at: performance.now(), velocity: 0 },
+      motion: {
+        position: positionOf(this.store.get().scrollMode, viewportOf(scroller)),
+        at: performance.now(),
+        velocity: 0,
+      },
       timer: 0,
     };
     return this.#zoom;
@@ -1765,11 +2059,11 @@ export class PdfViewerRuntime {
     let target = { left: left - zoom.panX, top: top - zoom.panY };
     const scale = layout.scale * zoom.factor;
     if (Math.abs(scale - layout.scale) >= 1e-4) {
-      next = computeLayout(this.#sizes, scale, this.#gap, layout.rotation, layout.spread);
+      next = computeLayout(this.#sizes, scale, this.#layoutOptions());
       target = zoomTarget(
         layout,
         next,
-        scroller.clientWidth,
+        sizeOf(scroller),
         { x: zoom.originX + zoom.panX - left, y: zoom.originY + zoom.panY - top },
         { x: zoom.originX, y: zoom.originY },
       );
@@ -1809,6 +2103,7 @@ export class PdfViewerRuntime {
       width: viewport.width / factor,
       height: viewport.height / factor,
       scrollerWidth: viewport.scrollerWidth,
+      scrollerHeight: viewport.scrollerHeight,
     };
   }
 
@@ -1872,22 +2167,40 @@ export class PdfViewerRuntime {
     // measured once a frame, as scrolling is: the moves of a drag's two
     // fingers come microseconds apart, and measuring each would make a slow
     // drag look like a fling.
-    if (zoom && viewport.top !== zoom.motion.top) {
-      move(zoom.motion, viewport.top, performance.now());
+    const position = positionOf(layout.scrollMode, viewport);
+    if (zoom && position !== zoom.motion.position) {
+      move(zoom.motion, position, performance.now());
     }
-    const { first, last } = visibleRange(layout, viewport.top, viewport.height);
+    const { first, last } = visibleRange(layout, viewport);
     const lastIndex = layout.tops.length - 1;
+    // Overscan pages beyond each edge, rounded out to whole rows where rows
+    // stack or flip: "page" mode mounts the rows beside the one it shows,
+    // hidden, so that they draw before a flip shows them.
+    let mountedFirst = Math.max(0, first - this.#overscan);
+    let mountedLast = Math.min(lastIndex, last + this.#overscan);
+    if (layout.scrollMode !== "horizontal" && mountedLast >= mountedFirst) {
+      mountedFirst = rowStart(layout, mountedFirst);
+      mountedLast = rowEnd(layout, mountedLast);
+    }
     const focus = pageAtPoint(
       layout,
       viewport.left + viewport.width / 2,
       viewport.top + viewport.height / 2,
       viewport.scrollerWidth,
     );
+    // The current page stays current while all of it is in view: at the start
+    // of a row of pages narrower than half the viewport, the page at the
+    // center is the second or third.
+    const { currentPage } = this.store.get();
+    const kept =
+      currentPage >= first &&
+      currentPage <= last &&
+      whole(visibleArea(layout, currentPage, viewport));
     // Publishing is cheap when nothing changed: the store ignores equal values.
     this.store.set({
-      first: Math.max(0, first - this.#overscan),
-      last: Math.min(lastIndex, last + this.#overscan),
-      currentPage: focus,
+      first: mountedFirst,
+      last: mountedLast,
+      currentPage: kept ? currentPage : focus,
     });
     const motion = zoom?.motion ?? this.#scrolling;
     const quiet = performance.now() - motion.at > SETTLE_DELAY;

@@ -6,6 +6,7 @@ import {
   type PdfSource,
   PdfViewport,
   pdfjsDocumentOf,
+  type ScrollMode,
   type SpreadMode,
   usePdfDocument,
   usePdfNavigation,
@@ -52,6 +53,10 @@ const settings = {
   spread: (["odd", "even"].includes(params.get("spread") ?? "")
     ? params.get("spread")
     : "none") as SpreadMode,
+  /** "horizontal", "wrapped", or "page" arranges pages other than in a column. */
+  scrollMode: (["horizontal", "wrapped", "page"].includes(params.get("scroll") ?? "")
+    ? params.get("scroll")
+    : "vertical") as ScrollMode,
   /** The one-based page shown first. */
   initialPage: Number(params.get("page") ?? "1") - 1,
   /** A scale in CSS pixels per point, "fit-width", or "fit-page". */
@@ -145,6 +150,7 @@ const viewerOptions: ViewerOptions = {
   externalLinks: settings.externalLinks,
   forms: settings.forms,
   spread: settings.spread,
+  scrollMode: settings.scrollMode,
   ...(settings.initialPage > 0 ? { initialPage: settings.initialPage } : {}),
   ...(settings.initialScale !== undefined ? { initialScale: settings.initialScale } : {}),
   ...(settings.maxScale ? { maxScale: settings.maxScale } : {}),
@@ -283,6 +289,7 @@ function Toolbar({
   const scale = usePdfState((state) => state.scale);
   const zoomMode = usePdfState((state) => state.zoomMode);
   const spread = usePdfState((state) => state.spread);
+  const scrollMode = usePdfState((state) => state.scrollMode);
   const tool = usePdfState((state) => state.tool);
   const sidebarButton = (view: SidebarView, text: string) => (
     <button
@@ -311,7 +318,13 @@ function Toolbar({
       </button>
       <strong title={title ?? undefined}>ParaPDF prototype</strong>
       <span className="engine">{viewer.engineName}</span>
+      <button type="button" onClick={() => viewer.previousPage()} aria-label="Previous page">
+        ‹
+      </button>
       <span>{pageText}</span>
+      <button type="button" onClick={() => viewer.nextPage()} aria-label="Next page">
+        ›
+      </button>
       <button type="button" onClick={() => viewer.zoomBy(1 / 1.25)} aria-label="Zoom out">
         −
       </button>
@@ -342,6 +355,16 @@ function Toolbar({
         <option value="none">Single pages</option>
         <option value="odd">Odd spreads</option>
         <option value="even">Even spreads</option>
+      </select>
+      <select
+        aria-label="Scrolling"
+        value={scrollMode}
+        onChange={(event) => viewer.setScrollMode(event.target.value as ScrollMode)}
+      >
+        <option value="vertical">Vertical</option>
+        <option value="horizontal">Horizontal</option>
+        <option value="wrapped">Wrapped</option>
+        <option value="page">Page by page</option>
       </select>
       <button
         type="button"
