@@ -1,6 +1,6 @@
 import type * as Pdfjs from "pdfjs-dist";
 import { createPdfjsEngine, type PdfjsDocumentOptions } from "./pdfjs.ts";
-import { fileUrls, pdfjsWorkerUrl } from "./pdfjs-files.ts";
+import { fileUrls, iconUrls, pdfjsWorkerUrl } from "./pdfjs-files.ts";
 import type { PdfEngine } from "./types.ts";
 
 /**
@@ -10,7 +10,20 @@ import type { PdfEngine } from "./types.ts";
  * the copies in the package, which bundlers emit with the application's
  * assets.
  */
+/** A build of the pdf.js version the package ships, with its worker from the package. */
+export interface PdfjsBuild {
+  readonly name: string;
+  readonly pdfjs: () => Promise<typeof Pdfjs>;
+  readonly workerUrl: () => URL;
+}
+
 export interface PdfjsConfig {
+  /**
+   * The pdf.js build to load: `legacyBuild` from `parapdf/legacy` for older
+   * browsers. Its worker and files come from the package like the modern
+   * build's, so it needs nothing else.
+   */
+  build?: PdfjsBuild;
   /**
    * Base URL of a copy of the package's `pdfjs/` directory, ending with a
    * slash, for bundlers that do not emit files referenced with
@@ -20,9 +33,8 @@ export interface PdfjsConfig {
   assetBase?: string;
   /**
    * Base URL of pdf.js's annotation icons, ending with a slash; by default
-   * `${assetBase}web/images/`. Without either, comments that have no
-   * appearance of their own get a transparent icon that still opens their
-   * popup.
+   * the icons the package ships, or `${assetBase}web/images/` with
+   * `assetBase`.
    */
   imageResourcesPath?: string;
   /** URL of pdf.js's worker script, when it is not `${assetBase}pdf.worker.js`. */
@@ -55,8 +67,8 @@ let workerLocation = "";
 
 /** Whether two configurations load pdf.js alike; loaders compare by presence. */
 const sameConfig = (a: PdfjsConfig, b: PdfjsConfig): boolean =>
-  JSON.stringify({ ...a, pdfjs: Boolean(a.pdfjs) }) ===
-  JSON.stringify({ ...b, pdfjs: Boolean(b.pdfjs) });
+  JSON.stringify({ ...a, pdfjs: Boolean(a.pdfjs), build: a.build?.name }) ===
+  JSON.stringify({ ...b, pdfjs: Boolean(b.pdfjs), build: b.build?.name });
 
 /**
  * Sets how ParaPDF loads pdf.js. Call it before the first document opens;
@@ -161,7 +173,7 @@ function startWorker(url: string): Promise<Worker | null> {
 async function createEngine(options: PdfjsConfig): Promise<PdfEngine> {
   const { assetBase } = options;
   const shipped = assetBase === undefined && options.workerSrc === undefined;
-  const pdfjsLoading = options.pdfjs?.() ?? import("pdfjs-dist");
+  const pdfjsLoading = options.pdfjs?.() ?? options.build?.pdfjs() ?? import("pdfjs-dist");
   // The shipped worker's prelude routes its requests for the shipped files
   // to the URLs in its own URL's fragment (see scripts/worker-prelude.js).
   // The list is in this bundle, 3 KB compressed, so the worker starts at
@@ -169,7 +181,7 @@ async function createEngine(options: PdfjsConfig): Promise<PdfEngine> {
   let workerSrc: string;
   let started: Promise<Worker | null> = Promise.resolve(null);
   if (shipped) {
-    workerLocation = absolute(pdfjsWorkerUrl());
+    workerLocation = absolute((options.build?.workerUrl ?? pdfjsWorkerUrl)());
     const urls = Object.entries(fileUrls()).map(([name, url]) => [name, absolute(url)]);
     workerSrc = `${workerLocation}#${encodeURIComponent(JSON.stringify(Object.fromEntries(urls)))}`;
     started = startWorker(workerSrc);
@@ -187,6 +199,13 @@ async function createEngine(options: PdfjsConfig): Promise<PdfEngine> {
     rendererSrc: options.rendererSrc,
     assetBase,
     imageResourcesPath: options.imageResourcesPath,
+    ...(shipped
+      ? {
+          iconUrls: Object.fromEntries(
+            Object.entries(iconUrls()).map(([name, url]) => [name, absolute(url)]),
+          ),
+        }
+      : {}),
     enableHWA: options.enableHWA,
     documentOptions: {
       ...(shipped ? SHIPPED_FILE_OPTIONS : {}),

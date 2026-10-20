@@ -72,11 +72,13 @@ try {
   check("the tarball holds no tests, scripts, or tarballs", stray.length === 0, stray.join(", "));
 
   // Every file the code references with new URL(…, import.meta.url) ships.
-  const references = [
-    ...readFileSync(join(installed, "dist/engine/pdfjs-files.js"), "utf8").matchAll(
-      /new URL\(\s*"\.\.\/\.\.\/(pdfjs\/[^"]+)"/g,
-    ),
-  ].map((match) => match[1] ?? "");
+  const references = ["pdfjs-files.js", "pdfjs-legacy-files.js"].flatMap((module) =>
+    [
+      ...readFileSync(join(installed, "dist/engine", module), "utf8").matchAll(
+        /new URL\(\s*"\.\.\/\.\.\/(pdfjs\/[^"]+)"/g,
+      ),
+    ].map((match) => match[1] ?? ""),
+  );
   const unshipped = references.filter((name) => !files.includes(name));
   check(
     "the tarball holds every pdf.js file the code references",

@@ -59,6 +59,11 @@ export interface PdfjsEngineOptions {
    */
   imageResourcesPath?: string;
   /**
+   * The annotation icons' own URLs, by file name, as bundlers emit them;
+   * used without `imageResourcesPath` and `assetBase`.
+   */
+  iconUrls?: Record<string, string>;
+  /**
    * Draw on GPU-backed canvases, pdf.js's enableHWA (default true); false
    * keeps pdf.js's own default of CPU-backed canvases. See README for what it
    * costs and saves in each browser.
@@ -291,11 +296,27 @@ const viewportOf = (page: Pdfjs.PDFPageProxy, scale: number, rotation: Rotation 
  */
 const TRANSPARENT_ICONS = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E#";
 
+/**
+ * Points the icons pdf.js named after the transparent image's fragment mark
+ * at their own URLs. pdf.js builds an icon's URL from one base, which files
+ * a bundler emits under names of their own do not share; an icon without a
+ * file keeps the transparent image.
+ */
+function placeIcons(container: HTMLElement, icons: Record<string, string>): void {
+  for (const image of container.querySelectorAll("img")) {
+    const src = image.getAttribute("src");
+    if (!src?.startsWith(TRANSPARENT_ICONS)) continue;
+    const url = icons[src.slice(TRANSPARENT_ICONS.length)];
+    if (url) image.src = url;
+  }
+}
+
 /** pdf.js through its core display API only. */
 export function createPdfjsEngine(options: PdfjsEngineOptions): PdfEngine {
   const { pdfjs, assetBase } = options;
   const imageResourcesPath =
     options.imageResourcesPath ?? (assetBase ? `${assetBase}web/images/` : TRANSPARENT_ICONS);
+  const iconUrls = imageResourcesPath === TRANSPARENT_ICONS ? options.iconUrls : undefined;
   pdfjs.GlobalWorkerOptions.workerSrc = options.workerSrc;
   if (options.rendererSrc) {
     (pdfjs.GlobalWorkerOptions as { rendererSrc?: string }).rendererSrc = options.rendererSrc;
@@ -585,6 +606,7 @@ export function createPdfjsEngine(options: PdfjsEngineOptions): PdfEngine {
                 ? { optionalContentConfig: layerConfigs.get(layers)?.display }
                 : {}),
             });
+            if (iconUrls) placeIcons(container, iconUrls);
             if (form) form.layer = layer;
             return {
               update(nextScale, nextRotation) {

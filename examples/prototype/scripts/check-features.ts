@@ -37,6 +37,7 @@ interface Viewer {
   store: {
     get(): {
       status: string;
+      error: string | null;
       passwordReason: string | null;
       progress: { loaded: number; total: number | null } | null;
       pageCount: number;
@@ -259,6 +260,26 @@ try {
       (await state(given.page))?.status === "ready",
     );
     await given.page.context().close();
+
+    // Without a prompt, an encrypted document fails as it did before
+    // passwords were supported, with or without a wrong password.
+    for (const query of ["", "&password=wrong"]) {
+      const failed = await open(
+        launched.browser,
+        demo(`file=synthetic-encrypted.pdf&passwordPrompt=0${query}`),
+        { ready: false },
+      );
+      await failed.page.waitForFunction(() =>
+        ["error", "ready"].includes(window.__viewer?.store.get().status ?? ""),
+      );
+      const result = await state(failed.page);
+      check(
+        `passwordPrompt: false fails the document${query ? " with a wrong password" : ""}`,
+        result?.status === "error" && /PasswordException/.test(result.error ?? ""),
+        `${result?.status}: ${result?.error}`,
+      );
+      await failed.page.context().close();
+    }
   }
 
   // --- The feature sampler, with forms ---
@@ -348,6 +369,22 @@ try {
       "the state follows the layers",
       JSON.stringify((await state(page))?.layers?.map((layer) => layer.visible)) ===
         JSON.stringify([false, true]),
+    );
+
+    // A comment without an appearance of its own shows pdf.js's icon, from
+    // the files the package ships (or pdf.js master's, with ENGINE=pdfjs-next).
+    const icon = await page
+      .locator('section[data-page="1"] .parapdf-annotation-layer img')
+      .first()
+      .evaluate(async (image: HTMLImageElement) => {
+        await image.decode().catch(() => {});
+        return { src: image.src, width: image.naturalWidth };
+      })
+      .catch(() => null);
+    check(
+      "a comment shows pdf.js's icon",
+      icon !== null && !icon.src.startsWith("data:") && icon.width > 0,
+      JSON.stringify(icon),
     );
 
     // A comment's popup: hidden until its icon is hovered, then styled like pdf.js's.

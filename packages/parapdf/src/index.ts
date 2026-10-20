@@ -1,5 +1,11 @@
-export { configurePdfjs, type PdfjsConfig, preloadPdfjs } from "./engine/bundled.ts";
+export {
+  configurePdfjs,
+  type PdfjsBuild,
+  type PdfjsConfig,
+  preloadPdfjs,
+} from "./engine/bundled.ts";
 export type { PdfjsDocumentOptions } from "./engine/pdfjs.ts";
+export { pdfjsVersion } from "./engine/pdfjs-files.ts";
 export type {
   DestinationRef,
   OutlineNode,

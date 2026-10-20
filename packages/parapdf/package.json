@@ -25,13 +25,18 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./legacy": "./src/legacy.ts"
   },
   "publishConfig": {
     "exports": {
       ".": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
+      },
+      "./legacy": {
+        "types": "./dist/legacy.d.ts",
+        "default": "./dist/legacy.js"
       },
       "./package.json": "./package.json"
     },
