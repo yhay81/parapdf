@@ -6,6 +6,13 @@ change the API.
 
 ## Unreleased
 
+## 0.2.0 — 2026-10-20
+
+Canvas budgets that an embedding app can hold to: the sharp margin follows
+the viewport, and the budget counts visible pages. Two behaviors change:
+`maxCanvasPixels` now limits visible pages too, and pdf.js draws on
+GPU-backed canvases unless `enableHWA` is `false`.
+
 - The pages a zoom gesture's preview brings into view, by a two-finger drag
   or by zooming out, mount and draw before the gesture commits: a long
   two-finger drag at a low zoom showed a blank band below the mounted pages
