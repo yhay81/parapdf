@@ -1,11 +1,15 @@
-# pdf.js issue draft: an upward drag into the page above selects all of that page
+# pdf.js issue 22259: an upward drag into the page above selects all of that page
 
-Status: draft only, not filed. Drafted on 2026-10-20 by a side session of the
+Status: filed on 2026-10-20 as
+https://github.com/mozilla/pdf.js/issues/22259, with a shortened version of
+the text under "Issue text" below: the template fields, the result table,
+the cause, and the possible fix in one paragraph, without the diff, the
+snippet, or the history. Not done before filing: reproducing by hand in
+release browsers and attaching screenshots. Drafted on 2026-10-20 by a side session of the
 ParaPDF work, from the finding recorded in `AGENTS.md` (Runtime prototype,
 the item on drag selections over space without text) and in commit a0ef709,
 which fixed the same behaviour in ParaPDF (`TextSelectionTracker`,
-`packages/parapdf/src/runtime/selection.ts`). The user decides whether to
-file it after reading this draft.
+`packages/parapdf/src/runtime/selection.ts`).
 
 Reproduction: `bench/scripts/selection-drag-repro.html` (the page: pdf.js's
 viewer components, `pdf_viewer.mjs`, or with `mode=layers` the display API's

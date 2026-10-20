@@ -1,10 +1,14 @@
-# pdf.js issue draft: TextLayer measures text without /Lang in an unknown language
+# pdf.js issue 22258: TextLayer measures text without /Lang in an unknown language
 
-Status: draft only, not filed. Drafted on 2026-10-20 by a side session of the
+Status: filed on 2026-10-20 as
+https://github.com/mozilla/pdf.js/issues/22258, with a shortened version of
+the text under "Issue text" below: the template fields, the result table,
+the cause, and the possible fix in one paragraph, without the diff, the
+snippet, or the history. Not done before filing: reproducing by hand in
+release browsers and attaching screenshots. Drafted on 2026-10-20 by a side session of the
 ParaPDF work, from the finding recorded in `AGENTS.md` (Runtime prototype,
 the `TextLayer` and `lang` item) and worked around in ParaPDF by
-`inLayerLanguage()` in `packages/parapdf/src/engine/pdfjs.ts`. The user
-decides whether to file it after reading this draft.
+`inLayerLanguage()` in `packages/parapdf/src/engine/pdfjs.ts`.
 
 Reproduction: `bench/scripts/textlayer-lang-repro.html` (the page: pdf.js's
 display API only, `getDocument`, `PDFPageProxy.render`, and `TextLayer`,
