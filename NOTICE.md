@@ -22,4 +22,10 @@ The full license text is in
 | `packages/parapdf/src/runtime/viewer.ts` | `web/pdf_viewer.js` (pdfjs-dist 6.4.299), `PDFViewer` | Two rules of its scroll modes: horizontal scrolling fits one page, not a spread, to the viewport, and the current page stays current while all of it is in view. The layout of the scroll modes, flipping pages, and the keys that flip them are ParaPDF's own. |
 | `packages/parapdf/src/runtime/selection.ts` | `web/text_layer_builder.js` (pdfjs-dist 6.4.299), `TextLayerBuilder` | The selection handling: the `selecting` class on text layers a selection touches, its reset on pointer release, blur, and key release, and moving `endOfContent` next to the changing end of the selection in browsers other than Firefox and Chromium 148 or later. Each viewer owns its listeners instead of sharing static ones, and a reset leaves `endOfContent` in place when it already is the layer's last child; the drag handling for the space around the pages, including drags that start there, and for text layers above the selection is ParaPDF's own. |
 
-pdf.js itself is a peer dependency and is not redistributed by ParaPDF.
+The `parapdf` package depends on pdfjs-dist 6.4.299 and redistributes parts
+of it in `pdfjs/`: pdf.js's worker and legacy worker, each behind ParaPDF's
+prelude, and the CMaps, standard fonts, image decoders, ICC profile, and
+annotation icons it loads on demand. They stay under the Apache License 2.0
+and the licenses that pdfjs-dist ships with them, copied alongside
+(`pdfjs/LICENSE` and the license files in its directories); the
+toolbar icons of the annotation editor are inlined, as noted above.
