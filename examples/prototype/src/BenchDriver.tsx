@@ -29,8 +29,10 @@ export interface BenchDriverProps {
 
 /**
  * Scripted scroll benchmark: waits for the first page, scrolls at a constant
- * speed, and publishes main-thread, frame, blank-area, React-commit, and
- * render counts on `window.__result` for the Playwright runner.
+ * speed along the direction pages follow each other (sideways in
+ * "horizontal" mode), and publishes main-thread, frame, blank-area,
+ * React-commit, store, and render counts on `window.__result` for the
+ * Playwright runner.
  */
 export function BenchDriver({ speed, durationMs, idle, commits, label }: BenchDriverProps) {
   const viewer = usePdfViewer();
@@ -63,14 +65,28 @@ export function BenchDriver({ speed, durationMs, idle, commits, label }: BenchDr
         }),
       };
       const commitsBefore = commits.count;
-      const startPage = viewer.store.get().currentPage;
+      const { scrollMode, scale, currentPage: startPage } = viewer.store.get();
+      // What the store publishes while scrolling: React commits should follow
+      // changes of the mounted window and the current page, not frames.
+      const published = { updates: 0, windows: 0, currentPages: 0 };
+      let previous = viewer.store.get();
+      const unsubscribe = viewer.store.subscribe(() => {
+        const state = viewer.store.get();
+        published.updates++;
+        if (state.first !== previous.first || state.last !== previous.last) published.windows++;
+        if (state.currentPage !== previous.currentPage) published.currentPages++;
+        previous = state;
+      });
       const stopLag = startLagMonitor(blockedThreshold(idle));
       const stopFrames = startFrameMonitor(idle.frameIntervalMs);
       let sampledFrames = 0;
       let blankSum = 0;
       let blankFrames = 0;
       const start = performance.now();
-      const startTop = scroller.scrollTop;
+      // Pages follow each other sideways in "horizontal" mode and downward in
+      // the others.
+      const sideways = scrollMode === "horizontal";
+      const startPosition = sideways ? scroller.scrollLeft : scroller.scrollTop;
 
       await new Promise<void>((resolve) => {
         const tick = () => {
@@ -80,11 +96,15 @@ export function BenchDriver({ speed, durationMs, idle, commits, label }: BenchDr
           if (blank > 0.01) blankFrames++;
           sampledFrames++;
           const elapsed = performance.now() - start;
-          const atEnd = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1;
+          const atEnd = sideways
+            ? scroller.scrollLeft + scroller.clientWidth >= scroller.scrollWidth - 1
+            : scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1;
           if (elapsed >= durationMs || atEnd) return resolve();
           // Position follows elapsed time, so a slow or dropped frame jumps
           // further instead of slowing the scroll down.
-          scroller.scrollTop = startTop + (speed * elapsed) / 1000;
+          const position = startPosition + (speed * elapsed) / 1000;
+          if (sideways) scroller.scrollLeft = position;
+          else scroller.scrollTop = position;
           requestAnimationFrame(tick);
         };
         requestAnimationFrame(tick);
@@ -92,6 +112,7 @@ export function BenchDriver({ speed, durationMs, idle, commits, label }: BenchDr
 
       const scrollMs = performance.now() - start;
       const commitsDuringScroll = commits.count - commitsBefore;
+      unsubscribe();
       const lag = stopLag();
       const frames = stopFrames();
       const pagesCrossed = viewer.store.get().currentPage - startPage;
@@ -103,10 +124,13 @@ export function BenchDriver({ speed, durationMs, idle, commits, label }: BenchDr
       publish({
         ...label,
         engine: viewer.engineName,
+        scrollMode,
+        scale,
         firstPaintMs,
         scrollMs,
         pagesCrossed,
         commitsDuringScroll,
+        published,
         blankMeanPct: (blankSum / Math.max(1, sampledFrames)) * 100,
         blankFramesPct: (blankFrames / Math.max(1, sampledFrames)) * 100,
         settleMs,

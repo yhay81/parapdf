@@ -1,6 +1,8 @@
 /**
  * Writes results/browsers.md, a side-by-side summary of the scroll benchmark
  * in every browser that has a results/<browser>.json from scroll-bench.ts.
+ * PREFIX reads results/<PREFIX><browser>.json, which scroll-bench.ts writes
+ * with OUTPUT=<PREFIX><browser>, and writes results/<PREFIX>browsers.md.
  *
  * Usage: node examples/prototype/scripts/compare.ts
  */
@@ -16,6 +18,9 @@ interface Summary {
   runs: number;
   firstPaintMs: number;
   commitsDuringScroll: number;
+  /** Absent from results measured before the store's changes were counted. */
+  windowChanges?: number;
+  currentPageChanges?: number;
   blankMeanPct: number;
   blockedMs: number;
   lagMaxMs: number;
@@ -36,13 +41,15 @@ interface ScrollResults {
 }
 
 const resultsDir = fileURLToPath(new URL("../results/", import.meta.url));
-const all = browserNames.flatMap((name) => {
+const prefix = process.env.PREFIX ?? "";
+const all = browserNames.flatMap((browser) => {
+  const name = `${prefix}${browser}`;
   const path = join(resultsDir, `${name}.json`);
   return existsSync(path)
     ? [{ name, ...(JSON.parse(readFileSync(path, "utf8")) as ScrollResults) }]
     : [];
 });
-if (all.length === 0) throw new Error("no results/<browser>.json files to compare");
+if (all.length === 0) throw new Error(`no results/${prefix}<browser>.json files to compare`);
 
 const fmt = (value: number | undefined, digits = 0) =>
   value === undefined || !Number.isFinite(value) ? "—" : value.toFixed(digits);
@@ -117,21 +124,25 @@ const markdown = [
   "",
   "## React commits while scrolling",
   "",
-  "Commits depend on the pages crossed, not on the browser; a browser that commits more is rendering React in the hot path.",
+  "Commits depend on the pages crossed, not on the browser; a browser that commits more is rendering React in the hot path. Where the run counted them, the store's changes of the mounted window and of the current page follow in parentheses: commits should not outnumber the two together, and stay far below the frames drawn.",
   "",
-  `| File · speed | ${all.map((results) => results.environment.browser).join(" | ")} |`,
+  `| File · speed · variant | ${all.map((results) => results.environment.browser).join(" | ")} |`,
   rule,
-  ...groups.map((group) => {
+  ...groups.flatMap((group) => {
     const [file = "", speedText = "0"] = group.split("\t");
     const speed = Number(speedText);
-    const variant = variants[0] ?? "";
-    const cells = all.map((results) =>
-      fmt(find(results, file, speed, variant)?.commitsDuringScroll),
-    );
-    return `| ${file} · ${speed} px/s (${variant}) | ${cells.join(" | ")} |`;
+    return variants.map((variant) => {
+      const cells = all.map((results) => {
+        const summary = find(results, file, speed, variant);
+        return summary?.windowChanges === undefined
+          ? fmt(summary?.commitsDuringScroll)
+          : `${fmt(summary.commitsDuringScroll)} (${fmt(summary.windowChanges)} / ${fmt(summary.currentPageChanges)})`;
+      });
+      return `| ${file} · ${speed} px/s · ${variant} | ${cells.join(" | ")} |`;
+    });
   }),
   "",
 ];
-const target = join(resultsDir, "browsers.md");
+const target = join(resultsDir, `${prefix}browsers.md`);
 writeFileSync(target, `${markdown.join("\n")}\n`);
 console.log(`Wrote ${target}`);
