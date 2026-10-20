@@ -128,12 +128,65 @@ export function normalizeQuery(query: string, options: SearchOptions = {}): stri
   return out.trimEnd();
 }
 
-interface SourceChar {
+export interface SourceChar {
   /** One code point, or "\n" for the end of a line. */
   char: string;
   item: number;
   start: number;
   end: number;
+}
+
+/**
+ * The page as pdf.js's find controller sees it: the code points of its items
+ * in order, and "\n" after each item that ends a line, at the item's end.
+ */
+export function sourceChars(page: PageText): SourceChar[] {
+  const chars: SourceChar[] = [];
+  page.items.forEach((str, item) => {
+    let offset = 0;
+    for (const char of str) {
+      chars.push({ char, item, start: offset, end: offset + char.length });
+      offset += char.length;
+    }
+    if (page.endsLine[item]) chars.push({ char: "\n", item, start: offset, end: offset });
+  });
+  return chars;
+}
+
+/**
+ * `chars` with their line ends joined as search joins them: a line end
+ * inside a CJK run or a word hyphenated across lines disappears, with the
+ * hyphen; a dash before a line end stays and joins the lines; any other line
+ * end becomes a space.
+ */
+export function* joinLines(chars: readonly SourceChar[]): Generator<SourceChar> {
+  for (let i = 0; i < chars.length; i++) {
+    const source = chars[i] as SourceChar;
+    const before = chars[i - 1]?.char ?? "";
+    if (source.char === "\n") {
+      if (!JOINS_LINES.test(before)) yield { ...source, char: " " };
+      continue;
+    }
+    if (source.char === "-" && chars[i + 1]?.char === "\n") {
+      const after = chars[i + 2]?.char ?? "";
+      if (
+        endsWithMark(before) ||
+        (LOWERCASE.test(before) && LOWERCASE.test(after)) ||
+        (UPPERCASE.test(before) && LETTER.test(after))
+      ) {
+        // A word hyphenated across lines: drop the hyphen and the line end.
+        i++;
+        continue;
+      }
+      if (before && !SPACE.test(before)) {
+        // Any other dash right before a line end stays and joins the lines.
+        yield source;
+        i++;
+        continue;
+      }
+    }
+    yield source;
+  }
 }
 
 /** The page's searchable text; only `caseSensitive` and `matchDiacritics` change it. */
@@ -159,43 +212,7 @@ export function buildPageIndex(page: PageText, options: SearchOptions = {}): Pag
     }
   };
 
-  // The page as pdf.js's find controller sees it: items in order, "\n" after
-  // each item that ends a line.
-  const chars: SourceChar[] = [];
-  page.items.forEach((str, item) => {
-    let offset = 0;
-    for (const char of str) {
-      chars.push({ char, item, start: offset, end: offset + char.length });
-      offset += char.length;
-    }
-    if (page.endsLine[item]) chars.push({ char: "\n", item, start: offset, end: offset });
-  });
-
-  for (let i = 0; i < chars.length; i++) {
-    const source = chars[i] as SourceChar;
-    const before = chars[i - 1]?.char ?? "";
-    if (source.char === "\n") {
-      if (!JOINS_LINES.test(before)) append(" ", source);
-      continue;
-    }
-    if (source.char === "-" && chars[i + 1]?.char === "\n") {
-      const after = chars[i + 2]?.char ?? "";
-      if (
-        endsWithMark(before) ||
-        (LOWERCASE.test(before) && LOWERCASE.test(after)) ||
-        (UPPERCASE.test(before) && LETTER.test(after))
-      ) {
-        // A word hyphenated across lines: drop the hyphen and the line end.
-        i++;
-        continue;
-      }
-      if (before && !SPACE.test(before)) {
-        // Any other dash right before a line end stays and joins the lines.
-        append("-", source);
-        i++;
-        continue;
-      }
-    }
+  for (const source of joinLines(sourceChars(page))) {
     append(normalizeChar(source.char, options), source);
   }
   return {

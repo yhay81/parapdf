@@ -46,6 +46,10 @@
       }
       .password label { display: flex; gap: 8px; align-items: center; }
       .toolbar { overflow-x: auto; white-space: nowrap; }
+      .annotation-toolbar { top: 40px; background: #303236; }
+      .annotation-toolbar [aria-pressed="true"] { outline: 2px solid #8ab4f8; }
+      .viewport.with-annotations { top: 80px; }
+      .with-annotations ~ .sidebar, .sidebar:has(~ .with-annotations) { top: 80px; }
     </style>
   </head>
   <body>

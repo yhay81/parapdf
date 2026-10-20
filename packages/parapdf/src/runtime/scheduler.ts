@@ -1,4 +1,7 @@
 import {
+  type AnnotationEditor,
+  type AnnotationEditorLayerTask,
+  type AnnotationLayerEditor,
   type AnnotationLayerHandle,
   type AnnotationLayerTask,
   isRenderCancelled,
@@ -46,9 +49,10 @@ type Layer = "base" | "detail";
  * maxCanvasPixels, a detail that does not fit beside the old one is still
  * drawn in place, over the base.
  *
- * The text and annotation layers are DOM built on the main thread, so they
- * are the last things a page gets: one layer at a time, only after scrolling
- * settles, during idle periods, text before links.
+ * The text, annotation, and annotation editor layers are DOM built on the
+ * main thread, so they are the last things a page gets: one layer at a time,
+ * only after scrolling settles, during idle periods: text, then the
+ * annotations the viewer edits, then links.
  *
  * A text layer keeps the zoom it was laid out for: it carries its own
  * `--total-scale-factor`, and later zooms scale the laid-out layer with CSS.
@@ -68,6 +72,8 @@ interface Slot {
   readonly annotations: HTMLElement | null;
   /** Receives a tagged page's structure with its text layer. */
   readonly structure: HTMLElement | null;
+  /** Receives the annotations the viewer edits on the page. */
+  readonly editor: HTMLElement | null;
   /** Device pixels per point of the last completed render, 0 when empty. */
   baseScale: number;
   detailScale: number;
@@ -86,6 +92,8 @@ interface Slot {
   annotationHandle: AnnotationLayerHandle | undefined;
   annotationScale: number;
   annotationRotation: Rotation;
+  editorTask: AnnotationEditorLayerTask | undefined;
+  editorHandle: AnnotationLayerEditor | undefined;
 }
 
 /** A render of one of a page's layers. */
@@ -118,6 +126,8 @@ export interface SchedulerStats {
   /** Text layers laid out again for a new zoom. */
   textUpdates: number;
   annotations: number;
+  /** Layers of annotations the viewer edits, built for mounted pages. */
+  editors: number;
   cancelled: number;
   failed: number;
   /** Canvases of pages outside the viewport cleared to stay within maxCanvasPixels. */
@@ -160,10 +170,15 @@ export interface SchedulerOptions {
   layers?: LayerState;
   /** Keeps drag selections inside rendered text layers. */
   selection?: TextSelectionTracker;
+  /** Edits annotations on the pages; see `setAnnotationEditor`. */
+  annotationEditor?: AnnotationEditor;
   onPainted?: (pageIndex: number, layer: Layer) => void;
   onTextReady?: (pageIndex: number, handle: TextLayerHandle) => void;
   onTextRemoved?: (pageIndex: number) => void;
 }
+
+/** How long `whenEditable` waits for a page's annotation editor layer. */
+const EDITOR_WAIT_MS = 10_000;
 
 /** Base renders use half a device pixel per CSS pixel at most: fast, and fine as a placeholder. */
 const BASE_FACTOR = 0.5;
@@ -313,6 +328,7 @@ export class RenderScheduler {
     text: 0,
     textUpdates: 0,
     annotations: 0,
+    editors: 0,
     cancelled: 0,
     failed: 0,
     trimmed: 0,
@@ -328,6 +344,8 @@ export class RenderScheduler {
   #input: ScheduleInput | undefined;
   #running = 0;
   #textRunning = false;
+  /** Callers waiting for a page's annotation editor layer: true once built, false if never. */
+  readonly #editorWaiters = new Map<number, Set<(built: boolean) => void>>();
   /** Bumped when every canvas becomes stale, so renders started before are dropped. */
   #epoch = 0;
   #textScheduled = false;
@@ -358,6 +376,7 @@ export class RenderScheduler {
     annotations: HTMLElement | null,
     structure: HTMLElement | null = null,
     spare: HTMLCanvasElement | null = null,
+    editor: HTMLElement | null = null,
   ): void {
     this.detach(index);
     // Canvas pixels are counted by size, and a new canvas is 300 by 150.
@@ -370,6 +389,7 @@ export class RenderScheduler {
       text,
       annotations,
       structure,
+      editor,
       baseScale: 0,
       detailScale: 0,
       baseVersion: 0,
@@ -384,6 +404,8 @@ export class RenderScheduler {
       annotationHandle: undefined,
       annotationScale: 0,
       annotationRotation: 0,
+      editorTask: undefined,
+      editorHandle: undefined,
     });
     this.#pump();
   }
@@ -395,6 +417,9 @@ export class RenderScheduler {
     slot.job?.task.cancel();
     slot.textTask?.cancel();
     slot.annotationTask?.cancel();
+    slot.editorTask?.cancel();
+    slot.editorHandle?.destroy();
+    this.#editorBuilt(index, false);
     if (slot.textHandle) this.#options.onTextRemoved?.(index);
     if (slot.text) {
       this.#options.selection?.remove(slot.text);
@@ -431,8 +456,27 @@ export class RenderScheduler {
         slot.annotationHandle.update(slot.annotationScale, rotation);
         slot.annotationRotation = rotation;
       }
+      // Edited annotations turn with the page at once: they are what the reader works on.
+      slot.editorHandle?.update(this.#input?.layout.scale ?? 1, rotation);
     }
     // The next update() brings the turned layout and starts the new renders.
+  }
+
+  /**
+   * Build the layers of the annotations `editor` edits on the mounted pages
+   * from now on, or, with null, take them down.
+   */
+  setAnnotationEditor(editor: AnnotationEditor | null): void {
+    if (this.#options.annotationEditor === editor) return;
+    for (const index of [...this.#editorWaiters.keys()]) this.#editorBuilt(index, false);
+    for (const slot of this.#slots.values()) {
+      slot.editorTask?.cancel();
+      slot.editorTask = undefined;
+      slot.editorHandle?.destroy();
+      slot.editorHandle = undefined;
+    }
+    this.#options.annotationEditor = editor ?? undefined;
+    this.#scheduleText();
   }
 
   /**
@@ -1037,10 +1081,20 @@ export class RenderScheduler {
     const needsText = (slot: Slot) => slot.text !== null && !slot.textHandle && !slot.textTask;
     const needsLinks = (slot: Slot) =>
       slot.annotations !== null && !slot.annotationHandle && !slot.annotationTask;
+    const needsEditor = (slot: Slot) =>
+      slot.editor !== null &&
+      this.#options.annotationEditor !== undefined &&
+      !slot.editorHandle &&
+      !slot.editorTask;
     for (const inWindow of [visible, (slot: Slot) => !visible(slot)]) {
       const text = slots.find((slot) => inWindow(slot) && needsText(slot));
       if (text) {
         this.#startText(text, scale, rotation);
+        return;
+      }
+      const editor = slots.find((slot) => inWindow(slot) && needsEditor(slot));
+      if (editor) {
+        this.#startEditor(editor, scale, rotation);
         return;
       }
       const links = slots.find((slot) => inWindow(slot) && needsLinks(slot));
@@ -1075,6 +1129,77 @@ export class RenderScheduler {
       }
       this.#scheduleText();
     }
+  }
+
+  /**
+   * Whether page `index` gets its annotation editor layer: true once it is
+   * built, at once if it is; false when the page unmounts first, editing
+   * stops, or within EDITOR_WAIT_MS. The page need not be mounted yet.
+   */
+  whenEditable(index: number): Promise<boolean> {
+    if (this.#slots.get(index)?.editorHandle) return Promise.resolve(true);
+    if (!this.#options.annotationEditor) return Promise.resolve(false);
+    return new Promise((resolve) => {
+      const waiters = this.#editorWaiters.get(index) ?? new Set();
+      this.#editorWaiters.set(index, waiters);
+      const timer = setTimeout(() => done(false), EDITOR_WAIT_MS);
+      const done = (built: boolean) => {
+        clearTimeout(timer);
+        waiters.delete(done);
+        resolve(built);
+      };
+      waiters.add(done);
+    });
+  }
+
+  #editorBuilt(index: number, built: boolean): void {
+    const waiters = this.#editorWaiters.get(index);
+    if (!waiters) return;
+    this.#editorWaiters.delete(index);
+    for (const done of [...waiters]) done(built);
+  }
+
+  #startEditor(slot: Slot, cssScale: number, rotation: Rotation): void {
+    const container = slot.editor;
+    const editor = this.#options.annotationEditor;
+    const drawings = slot.base.parentElement;
+    if (!container || !editor || !drawings) return;
+    const task = editor.renderLayer({
+      pageIndex: slot.index,
+      container,
+      drawings,
+      textLayer: slot.text,
+      cssScale,
+      rotation,
+    });
+    slot.editorTask = task;
+    this.#textRunning = true;
+    task.promise
+      .then(
+        (handle) => {
+          if (this.#slots.get(slot.index) !== slot || slot.editorTask !== task) {
+            handle.destroy();
+            return;
+          }
+          slot.editorHandle = handle;
+          // A turn while it was built, which rotate() could not tell it of.
+          handle.update(cssScale, this.#input?.layout.rotation ?? rotation);
+          this.stats.editors++;
+          this.#editorBuilt(slot.index, true);
+        },
+        (error: unknown) => {
+          if (isRenderCancelled(error)) this.stats.cancelled++;
+          else {
+            this.stats.failed++;
+            console.error(`page ${slot.index + 1}: annotation editor layer failed`, error);
+          }
+        },
+      )
+      .finally(() => {
+        if (slot.editorTask === task) slot.editorTask = undefined;
+        this.#textRunning = false;
+        this.#scheduleText();
+      });
   }
 
   #startAnnotations(slot: Slot, cssScale: number, rotation: Rotation): void {

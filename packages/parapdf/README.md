@@ -113,6 +113,7 @@ state (`ViewerState`) has:
 | `outline`, `canGoBack` | The document outline (`null` while it loads), and whether `back()` has a position to return to. |
 | `metadata` | Title, author, subject, keywords, creator, producer, creation and modification dates, PDF version, and language; null while it loads. |
 | `attachments`, `layers` | The document's embedded files and its layers (see [Layers and attachments](#layers-and-attachments)); null while they load. |
+| `annotationTool`, `annotationState`, `annotationStyles` | The annotation tool, undo, redo, and selection, and each tool's style, with `annotationEditing` on (see [Annotations](#annotations)); the last two null while it is off. |
 
 `usePdfViewer()` returns the viewer runtime, whose methods change the view:
 `goToPage(index)`, `nextPage()` and `previousPage()` (by a whole spread or
@@ -161,6 +162,32 @@ Debounce `search()` while the user types.
 `search(query, options)` takes the options of pdf.js's find bar, all off by
 default: `caseSensitive`, `entireWord` (a match must not be part of a longer
 word), and `matchDiacritics` (é no longer matches e).
+
+## Document text
+
+`viewer.getText(options)` reads the document's text from every page,
+mounted or not, as search reads it: the text runs in content order, "\n"
+where a line ends, and an empty line between pages.
+
+```ts
+const { text, pages } = await viewer.getText();
+// pages: [{ pageIndex: 0, text: "…", offset: 0 }, …], where offset is the page's start in text
+```
+
+- `from` and `to` narrow it to pages (`{ from: 2, to: 4 }` reads pages 3
+  to 5) or to points in the text: a search match's ends,
+  `{ pageIndex: match.pageIndex, ...match.start }` and `...match.end`, or a
+  selection's, `getSelection().start` and `.end`. A point is included as a
+  start and excluded as an end.
+- `lineBreaks: "join"` joins lines as search does: without a space inside a
+  word hyphenated across lines and in Japanese and Chinese text, with one
+  elsewhere.
+- `signal` stops a read, which then rejects with the signal's reason.
+
+Pages are parsed in pdf.js's worker a few at a time, and the text is kept:
+a second read, or a search, parses nothing again. The browser's selection
+covers only mounted pages; to copy a range longer than those, read it with
+`getText()` between the points where it starts and ends.
 
 ## Links, outline, and navigation
 
@@ -234,6 +261,99 @@ the PDF draws them. What the reader types belongs to the document:
   browser's print dialog with only those pages.
 
 Form scripts (JavaScript actions) do not run.
+
+## Annotations
+
+With `options={{ annotationEditing: true }}`, the reader can create
+highlights, text, drawings, images, and signatures, with pdf.js's editors.
+`viewer.setAnnotationTool(tool)` chooses what a pointer does on the pages:
+
+| Tool | |
+|---|---|
+| `"highlight"` | Selecting text highlights it; a drag outside text highlights freehand. |
+| `"freetext"` | A click adds text where the reader types. |
+| `"ink"` | A drag draws. |
+| `"stamp"`, `"signature"` | Select and move images and signatures, which `addImage()` and `addSignature()` add. |
+| `"none"` | The default: annotations show, but cannot be selected. |
+
+With any tool, the reader selects, moves, resizes, and deletes the
+annotations created, and a selected one shows pdf.js's small toolbar with
+its color and a delete button. Ctrl or ⌘ with Z undoes, and the arrow keys
+move what is selected.
+
+```tsx
+function AnnotationTools() {
+  const viewer = usePdfViewer();
+  const tool = usePdfState((state) => state.annotationTool);
+  const canUndo = usePdfState((state) => state.annotationState?.canUndo ?? false);
+  const ink = usePdfState((state) => state.annotationStyles?.ink);
+  return (
+    <div role="toolbar" aria-label="Annotations">
+      <button type="button" aria-pressed={tool === "ink"} onClick={() => viewer.setAnnotationTool("ink")}>
+        Draw
+      </button>
+      <input
+        type="color"
+        aria-label="Line color"
+        value={ink?.color.toLowerCase() ?? "#000000"}
+        onChange={(event) => viewer.setAnnotationStyle("ink", { color: event.target.value })}
+      />
+      <button type="button" disabled={!canUndo} onClick={() => viewer.undoAnnotation()}>
+        Undo
+      </button>
+    </div>
+  );
+}
+```
+
+- `setAnnotationStyle(tool, style)` restyles the selected annotations, or,
+  with none selected, the next ones `tool` creates: `color` for each tool,
+  `thickness` for `"ink"` and freehand highlights, `opacity` for `"ink"`,
+  and `fontSize` for `"freetext"`, in PDF points. `annotationStyles` shows
+  each tool's style, or the selected annotation's.
+- `undoAnnotation()`, `redoAnnotation()`, `deleteSelectedAnnotations()`,
+  and `selectAllAnnotations()`; `annotationState` says whether there is
+  something to undo or redo (`canUndo`, `canRedo`), whether annotations are
+  selected (`hasSelection`), and whether there are any (`isEmpty`).
+- `addImage(image, { pageIndex, altText })` adds an image, a `Blob` or a
+  URL, to the current page or `pageIndex`, in the middle of its visible
+  part, and selects it. `altText` describes it to assistive technology, in
+  the saved PDF too.
+- `addSignature(signature, { pageIndex, description })` adds a signature
+  the same way, from typed text (`{ text, fontFamily }`, italic serif by
+  default), an image (`{ image }`, whose outline is traced), or strokes the
+  application drew (`{ strokes, width, height, thickness }`, each stroke a
+  list of x and y coordinates in a box of `width` by `height`). ParaPDF
+  shows no signature pad or dialog of its own.
+
+Annotations go into the document's bytes that `save()`, `download()`, and
+`print()` use. To keep them apart from the PDF, say on a server,
+`exportAnnotations()` returns them as JSON-compatible data, and
+`importAnnotations(annotations)` adds them again where they were, after the
+same document opens again, without an undo step:
+
+```ts
+localStorage.setItem("annotations", JSON.stringify(viewer.exportAnnotations()));
+// Later, once the document is open (status "ready"):
+await viewer.importAnnotations(JSON.parse(localStorage.getItem("annotations") ?? "[]"));
+```
+
+Each exported annotation has `pageIndex`, `type` (the tool that made it),
+and `data`, pdf.js's own description of it: keep `data` as it is. It is the
+form pdf.js pastes copies in, which may change when ParaPDF moves to
+another pdf.js; the changelog says when. Text being
+typed counts once it is committed, when the reader clicks elsewhere or
+another tool is chosen. Annotations belong to the open document: they are
+gone once the viewer closes it, so export or save them before.
+
+The editor's code and styles load when a viewer with `annotationEditing`
+opens a document, so applications that do not edit annotations do not
+download them; `annotationState` is null until then. A viewer that edits
+annotations opens its own copy of the document instead of sharing one with
+other viewers of the same source. Thumbnails show pages without the
+annotations created, as pdf.js's do. Label the editor's
+controls in the application's language with `annotationLabels`; the
+defaults are pdf.js's English names.
 
 ## Encrypted documents
 
@@ -315,8 +435,12 @@ so you can keep a selection as a highlight. `usePdfSelection()` follows it:
 
 ```tsx
 const selection = usePdfSelection();
-// { text: "…", pages: [{ pageIndex: 0, rects: [{ x, y, width, height }] }] } or null
+// { text: "…", pages: [{ pageIndex: 0, rects: [{ x, y, width, height }] }], start, end } or null
 ```
+
+`start` and `end` are where the selection begins and ends in the document's
+text, for [`getText()`](#document-text); null for an end outside the pages'
+text.
 
 ## Overlays
 
@@ -355,6 +479,8 @@ component mounts; give it a new `key` to change them.
 | `textLayer` | `true` | Selectable, screen-reader-visible text. Search works without it but paints matches only on text layers. |
 | `annotationLayer` | `true` | Focusable links, comment popups, and, with `forms`, form fields. |
 | `forms` | `false` | Form fields the reader can fill in (see [Forms](#forms-printing-and-saving)). |
+| `annotationEditing` | `false` | Highlights, text, drawings, images, and signatures the reader creates (see [Annotations](#annotations)). |
+| `annotationLabels` | English | The accessible names of the annotation editor's controls, such as `{ removeInk: "線を削除" }`. |
 | `externalLinks` | `"new-tab"` | `"disabled"` leaves links to other documents inert. |
 | `openAttachment` | download | What opening an embedded file does: `({ filename, content }) => void`. |
 | `pageColors` | none | `{ background, foreground }` to draw pages in two colors, for example `Canvas` and `CanvasText` in forced-colors mode. |
@@ -494,12 +620,16 @@ application's language with `label` and `pageLabel`.
 - Released pdfjs-dist draws pages on the main thread. Drawing in a worker
   needs pdf.js's renderer worker (`configurePdfjs({ rendererSrc })`), which
   is only in unreleased pdf.js builds so far.
-- Not yet supported: editing annotations, form scripts, and XFA forms.
+- Not yet supported: editing annotations the PDF already holds, form
+  scripts, and XFA forms. Annotations the reader creates can be moved,
+  restyled, and deleted; those in the file stay as they are drawn.
+- Comments on created annotations and pdf.js's alt text dialog are not
+  shown; images take their alternative text from `addImage()`.
 - Chromium and Firefox give pdf.js the PDF's preloaded download. Whether
   Safari does is not verified yet; where a browser does not, the PDF
   downloads twice.
-- Text exists only for mounted pages, so the browser's own find sees only
-  those; use `usePdfSearch`.
+- Text layers exist only for mounted pages, so the browser's own find and
+  selection see only those; use `usePdfSearch` and `getText()`.
 - Search highlights need the CSS Custom Highlight API; browsers without it
   find and scroll to matches without painting them.
 - One `PdfViewport` per `PdfDocument`.

@@ -1,6 +1,14 @@
 "use client";
 
-import { type CSSProperties, memo, type ReactNode, useLayoutEffect, useRef } from "react";
+import {
+  type CSSProperties,
+  lazy,
+  memo,
+  type ReactNode,
+  Suspense,
+  useLayoutEffect,
+  useRef,
+} from "react";
 import type { Rotation } from "../engine/types.ts";
 import { usePdfState, usePdfViewer } from "./context.ts";
 import { VIEWER_CSS } from "./styles.ts";
@@ -18,6 +26,18 @@ export interface PdfViewportProps {
   /** Content drawn over a page, positioned with `<PdfPageRect>`. */
   renderOverlay?: (pageIndex: number) => ReactNode;
 }
+
+/** The annotation editor's styles, loaded only by viewers that edit annotations. */
+const EditorStyles = lazy(async () => {
+  const { EDITOR_CSS } = await import("./editor-styles.ts");
+  return {
+    default: () => (
+      <style href="parapdf-editor" precedence="parapdf">
+        {EDITOR_CSS}
+      </style>
+    ),
+  };
+});
 
 const defaultPageLabel = (pageNumber: number, pageCount: number) =>
   `Page ${pageNumber} of ${pageCount}`;
@@ -71,6 +91,7 @@ export function PdfViewport({
           rotation={layout.rotation}
           textLayer={runtime.textLayer}
           annotationLayer={runtime.annotationLayer}
+          annotationEditing={runtime.annotationEditing}
           overlay={renderOverlay?.(index)}
         />,
       );
@@ -104,6 +125,11 @@ export function PdfViewport({
       <style href="parapdf-viewer" precedence="parapdf">
         {VIEWER_CSS}
       </style>
+      {runtime.annotationEditing ? (
+        <Suspense fallback={null}>
+          <EditorStyles />
+        </Suspense>
+      ) : null}
       {/* The runtime sizes this element imperatively so zoom can restore the scroll position first. */}
       <div ref={contentRef} className="parapdf-pages" style={{ position: "relative" }}>
         {pages}
@@ -133,6 +159,8 @@ interface PdfPageProps {
   rotation: Rotation;
   textLayer: boolean;
   annotationLayer: boolean;
+  /** Whether the page gets a layer for the annotations the reader creates. */
+  annotationEditing: boolean;
   overlay: ReactNode;
 }
 
@@ -158,6 +186,7 @@ const PdfPage = memo(function PdfPage({
   rotation,
   textLayer,
   annotationLayer,
+  annotationEditing,
   overlay,
 }: PdfPageProps) {
   const runtime = usePdfViewer();
@@ -167,6 +196,7 @@ const PdfPage = memo(function PdfPage({
   const textRef = useRef<HTMLDivElement>(null);
   const annotationRef = useRef<HTMLDivElement>(null);
   const structureRef = useRef<HTMLCanvasElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
     const base = baseRef.current;
@@ -180,6 +210,7 @@ const PdfPage = memo(function PdfPage({
       annotationRef.current,
       structureRef.current,
       spareRef.current,
+      editorRef.current,
     );
   }, [runtime, index]);
 
@@ -210,8 +241,12 @@ const PdfPage = memo(function PdfPage({
         } as CSSProperties
       }
     >
-      {/* Pixels only; the text layer carries the content for assistive technology. */}
-      <div aria-hidden="true" style={layerStyle}>
+      {/*
+        Pixels only; the text layer carries the content for assistive
+        technology. Highlights and drawn lines are drawn here too, over the
+        page's own drawing.
+      */}
+      <div aria-hidden="true" className="parapdf-canvas-wrapper" style={layerStyle}>
         <canvas ref={baseRef} style={layerStyle} />
         {/* Two detail canvases: a new detail is drawn into one while the other shows the old. */}
         <canvas ref={detailRef} style={layerStyle} />
@@ -224,6 +259,7 @@ const PdfPage = memo(function PdfPage({
       ) : null}
       {textLayer ? <div ref={textRef} className="parapdf-text-layer" /> : null}
       {annotationLayer ? <div ref={annotationRef} className="parapdf-annotation-layer" /> : null}
+      {annotationEditing ? <div ref={editorRef} className="parapdf-editor-layer" /> : null}
       {overlay ? (
         // Overlays are placed on the unturned page, like the text layer, and
         // turn with it through the viewer CSS.

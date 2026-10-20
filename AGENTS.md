@@ -103,7 +103,9 @@ with the API.
   `check:lifecycle`), `forms` (`1` for fillable fields), `spread` (`odd` or
   `even`), `scroll` (`horizontal`, `wrapped`, or `page`), `page` (the
   one-based page shown first), `scale` (a number, `fit-width`, or
-  `fit-page`), and `password` (the source's password).
+  `fit-page`), `password` (the source's password), and `annotations` (`1`
+  for annotation editing, with a second toolbar that keeps exported
+  annotations in localStorage and copies the document's text).
 - `pnpm --filter @parapdf/prototype build && pnpm --filter @parapdf/prototype bench`
   — scripted scroll benchmark; `BROWSER` picks the browser, and `VARIANTS`,
   `TEXT`, `LINKS`, `SCROLL` (scroll modes: `vertical`, `horizontal`,
@@ -118,8 +120,18 @@ with the API.
 - `pnpm --filter @parapdf/prototype check:text` — functional checks for text
   selection, search highlights, normalization, accessibility semantics
   including the text's language, and text runs ending on their glyphs on
-  English and Japanese pages and after zooming (run after `build`; `BROWSER`
-  applies here too).
+  English and Japanese pages and after zooming, and for `getText()`: every
+  page's text, unmounted pages included, the text between a search match's
+  and a selection's ends, joined lines, and aborting (run after `build`;
+  `BROWSER` applies here too).
+- `pnpm --filter @parapdf/prototype check:annotations` — functional checks
+  for annotation editing on `usrguide.pdf`: drawing, text, highlights of
+  selected text, images, and typed signatures; styles, undo, redo, and
+  deleting; switching tools while typing; annotations staying in place,
+  without taking focus or adding undo steps, as their page mounts again,
+  zooms, and turns; `save()` writing them into the PDF, read back by
+  pdf.js; and exporting and importing them, on an unmounted page too (run
+  after `build`; `BROWSER` and `ENGINE` apply).
 - `pnpm --filter @parapdf/prototype check:links` — functional checks for
   internal and external links, keyboard activation, the back stack, and the
   outline on `usrguide.pdf` (run after `build`; `BROWSER` applies here too).
@@ -692,6 +704,97 @@ with the API.
   A turn drops the old canvases at once and re-renders them, while layers
   only change their attribute. Search scrolling and destinations map unturned
   points with `turnBox()`.
+- `getText()` reads the document's text from the engine's `getText()`, the
+  page text the search index is built from and the text layer lays out,
+  for every page between `from` and `to`, four pages requested ahead of the
+  one read. `pageText()` (`runtime/document-text.ts`) joins a page's items
+  with "\n" where lines end, or, with `lineBreaks: "join"`, through
+  `joinLines()`, the search index's rules for line ends (`text-search.ts`),
+  without its normalization; points (`TextPoint`: a page, an item, and a
+  UTF-16 offset) cut it as search matches and selections do. A match may
+  span a hyphenated line end, which "keep" reads as "Appro-\npriations".
+  `getSelection()` maps the selection's ends to points through the text
+  layer's runs, one per item. Extending the DOM selection over every page
+  would need every page's text layer mounted.
+- Annotation editing (`annotationEditing`, `engine/pdfjs-editor.ts`, and
+  its styles, `react/editor-styles.ts`) loads as chunks of their own, when
+  a viewer that edits opens a document (`createAnnotationEditor()` imports
+  it) and through `React.lazy` for the styles, so applications that do not
+  edit annotations carry neither: 4.4 and 4.3 KB with gzip in the demo's
+  Vite build, which took 7.6 KB off its main chunk.
+  It runs on pdf.js's display API: one `AnnotationEditorUIManager` per viewer, an
+  `AnnotationEditorLayer` per mounted page (`.parapdf-editor-layer`, over
+  the annotation layer), and a `DrawLayer` per page whose highlight and
+  ink SVGs go into the canvases' parent (`.parapdf-canvas-wrapper`), as in
+  pdf.js's viewer. The manager hears of zoom commits, turns, and the
+  current page through a small event bus of ParaPDF's (`scalechanging`,
+  `rotationchanging`, `pagechanging`) and reports undo, selection, and
+  styles back (`editingstateschanged`, `annotationeditorparamschanged`),
+  published as `annotationState` and `annotationStyles`. The scheduler
+  builds editor layers in the idle DOM pipeline, after a page's text layer
+  and before its links; the editors themselves live in the manager and in
+  the document's `annotationStorage`, so pages that unmount take only
+  their layer down, and `saveDocument()` and printing (`ENABLE_STORAGE`)
+  include them.
+  - Drawings, highlights, and images record an undo step that removes
+    them whenever a layer adds them, which a page's new layer does for the
+    annotations it shows again: undo then removed an annotation created
+    long before instead of the reader's last step. pdf.js's viewer does the
+    same once a page leaves its page buffer (mozilla/pdf.js#22270); in
+    ParaPDF, whose pages unmount two pages out of view, it happened all the
+    time. Highlights and images also focus themselves as a layer adds them,
+    which took focus from the application's controls when the page mounted
+    again with a tool chosen (`check:annotations` failed without the fix);
+    with no tool, the new layer is hidden while it adds them, and pdf.js's
+    viewer builds every layer hidden. `quietly()` hides the layer and makes
+    the manager's `addCommands` run commands without recording them, for
+    the synchronous part of `render()` and of imports.
+  - Annotations the PDF holds stay drawn on the canvas and in the annotation
+    layer: the editor layers get no `annotationLayer`, so pdf.js does not
+    turn them into editors, and no page has to be drawn again without them
+    when a tool is chosen. The annotation layer's sections take no pointer
+    while a tool is chosen (`parapdf-annotating`), as pdf.js disables its
+    annotation layer.
+  - Exports are pdf.js's copies (`serialize(true)`, what it pastes), plain
+    arrays for typed arrays, and for highlights, which have no copy, what
+    the PDF saves; imports deserialize them with `isClone`, which pdf.js
+    places where the copy was instead of beside it. A text annotation still
+    moves up by its font size, which pdf.js applies to every new one where
+    it was clicked, and is moved back; pdf.js's own clones, of pasted
+    pages, move too (mozilla/pdf.js#22271). Images are decoded before their
+    editor is created, so it draws them at once: on a page that is not
+    mounted, the editors are created on a layer outside the document and
+    left with the manager, as those of an unmounted page are.
+  - Selecting an annotation of another kind asks for its tool
+    (`switchannotationeditormode`), which ParaPDF follows, except while the
+    application switches tools: finishing the text being typed selected it
+    and switched back to the text tool. pdf.js's viewer ends in the tool
+    chosen, as its toolbar button takes focus from the text first.
+  - In Playwright's WebKit 27.2, a signal from `AbortSignal.any()` that
+    nothing references is collected, and aborting its sources then no
+    longer removes listeners added with it: the window listener of a
+    finished drawing stayed, and every later press threw a TypeError in it
+    (3 errors without the fix, 0 with every such signal kept referenced).
+    The manager's `combinedSignal` keeps each signal until it aborts. The
+    same steps in pdf.js's viewer (6.5.262) threw nothing, and a standalone
+    page did not reproduce it; reducing it for WebKit is yhay81/parapdf#1.
+  - pdf.js initializes its editor classes once, with the first manager, and
+    keeps that manager's view parameters in the defaults of new drawings;
+    in pdf.js's viewer, a line drawn at 200% after opening another document
+    was stroked 1.33 px wide instead of 2.67 (mozilla/pdf.js#22272). A new
+    manager resets `AnnotationEditorLayer._initialized`, so the newest
+    viewer that edits sets them.
+  - pdf.js marks the elements its editors create with Fluent ids, which only
+    its viewer translates; a `MutationObserver` per editor layer gives them
+    `annotationLabels` as accessible names and titles. The alt text and
+    comment buttons are hidden: ParaPDF shows no dialogs.
+  - A viewer that edits annotations holds its own document
+    (`acquireDocument(…, owner)`): annotations live in the document's
+    storage, which another viewer of it would save too, and the editor ids
+    of two managers would collide. StrictMode's second mount, by the same
+    runtime, still reuses it. A viewport that detaches exports the
+    annotations and the next one imports them; closing the document
+    removes them from its storage.
 - `usePdfDocument()` returns pdf.js's `PDFDocumentProxy` of the open
   document, for APIs ParaPDF does not wrap; the runtime publishes the
   engine's document as `document`, whose `native` it is.
@@ -760,7 +863,7 @@ with the API.
     points, and `pageColors`.
 - Browsers: `check:text`, `check:links`, `check:lifecycle`,
   `check:rotation`, `check:options`, `check:pinch`, `check:bundle`,
-  `check:features`, and `check:scroll` pass in Playwright's Chromium,
+  `check:features`, `check:scroll`, and `check:annotations` pass in Playwright's Chromium,
   WebKit, and Firefox. Playwright's WebKit keeps no
   HTTP cache, so it downloads a preloaded PDF again (it fetched a response
   with `max-age=3600` twice as well); `check:bundle` reports that as a note.
@@ -777,9 +880,11 @@ with the API.
   are not verified yet. WebKit has neither
   `requestIdleCallback` nor `scheduler.yield`, so idle text and annotation
   layers fall back to a 16 ms timer and search yields through `setTimeout(0)`.
-- Not yet implemented: annotation editing, form scripts (pdf.js's
-  sandbox), XFA forms, text for pages outside the mounted window, and a
-  highlight fallback for browsers without the CSS Custom Highlight API.
+- Not yet implemented: editing the annotations a PDF already holds, comments
+  on created annotations, form scripts (pdf.js's sandbox), XFA forms, text
+  layers for pages outside the mounted window (`getText()` reads their
+  text), and a highlight fallback for browsers without the CSS Custom
+  Highlight API.
 
 ## Benchmark methodology
 
