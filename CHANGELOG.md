@@ -4,7 +4,7 @@ Changes to the `parapdf` package. It follows
 [Semantic Versioning](https://semver.org/); until 1.0, a minor release may
 change the API.
 
-## Unreleased
+## 0.4.0 — 2026-10-20
 
 - Annotation editing, with `annotationEditing: true`, through pdf.js's
   editors: highlights of selected text and freehand, text, drawings, images
