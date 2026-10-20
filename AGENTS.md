@@ -436,9 +436,17 @@ with the API.
   560 ms in Chromium, and 770 instead of 1,393 ms in WebKit, while panning a
   zoomed drawing); `documentOptions` (typed `PdfjsDocumentOptions`) adds
   getDocument parameters for every document, overriding `enableHWA` and the
-  file options; `pdfjs` with `workerSrc` and `assetBase` loads another build,
-  such as the legacy build, or the demo's pdf.js master; and `rendererSrc`
-  starts master's renderer worker.
+  file options; `build: legacyBuild` (`parapdf/legacy`, `src/legacy.ts`)
+  loads pdf.js's legacy build with the package's `pdf.worker.legacy.js`,
+  the legacy worker behind the same prelude, whose URL lives in a module of
+  its own (`pdfjs-legacy-files.ts`) so that only applications importing
+  `parapdf/legacy` emit it; `pdfjs` with `workerSrc` and `assetBase` loads
+  any other build, such as the demo's pdf.js master; and `rendererSrc`
+  starts master's renderer worker. An embedding app found that with the
+  legacy build set up through `workerSrc`, the shipped worker's early start
+  and prelude did not apply and it still served its own 6.4 MB copy of the
+  files. `passwordPrompt: false` (a viewer option) fails an encrypted
+  document for that viewer instead of waiting, as before 0.3.0.
 - Text layers use pdf.js's core `TextLayer` inside `.parapdf-text-layer`, styled
   by rules derived from pdf.js's viewer CSS (attributed in `NOTICE.md`). Pages
   set `--total-scale-factor` and `--scale-round-x/y`, which `TextLayer` sizes
@@ -612,7 +620,11 @@ with the API.
     `save()` is `saveDocument()` once anything was typed. A page drawn with
     forms is not copied into thumbnails, as in pdf.js. The viewer CSS keeps
     pdf.js's widget and popup rules: without the popup rules, comment
-    popups used to open as unstyled transparent text.
+    popups used to open as unstyled transparent text. pdf.js builds a
+    comment icon's URL from one base (`imageResourcesPath`), which the files
+    a bundler emits do not share, so with the shipped files the engine
+    gives the layer a transparent data URL as the base and then points each
+    icon, named in the URL's fragment, at its emitted file (`placeIcons()`).
   - Layers: each viewer gets a `LayerState` from the engine (pdf.js's
     display `OptionalContentConfig`) that renders, annotation layers,
     thumbnails, and printouts take. It loads beside the first paint, not
@@ -691,9 +703,9 @@ with the API.
     devicePixelRatio 1. `restoreScaleFactor()` visits `calibrate.html` and
     applies the viewport again before the real navigation, and the scroll and
     zoom benchmarks reject jobs whose devicePixelRatio is wrong. The Firefox
-    scroll and control results measured before this fix (`firefox.md`,
-    `browsers.md`, and `control.md` in `examples/prototype/results/`) ran at
-    devicePixelRatio 1 and need a rerun.
+    scroll and control results measured before this fix ran at
+    devicePixelRatio 1; `firefox.md`, `browsers.md`, and `control.md` in
+    `examples/prototype/results/` were measured again on 2026-10-20 at 2.
   - WebKit refuses some ports outright (4190 among them); the runners use
     4179–4189. Their servers bind 127.0.0.1: with `localhost` they could listen
     on `::1` beside another session's server on 127.0.0.1, and the browser

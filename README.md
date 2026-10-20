@@ -105,10 +105,11 @@ and Firefox; summary in
 [`examples/prototype/results/browsers.md`](examples/prototype/results/browsers.md),
 details per browser in [`chromium.md`](examples/prototype/results/chromium.md),
 [`webkit.md`](examples/prototype/results/webkit.md), and
-[`firefox.md`](examples/prototype/results/firefox.md). Each cell is the median
-of two runs, and a virtual machine used 40–80% of a CPU core during these
-runs: compare blocked times within a browser, and treat differences under
-about 20 ms as noise.
+[`firefox.md`](examples/prototype/results/firefox.md), which now hold the
+rerun of 2026-10-20 ("Scroll rerun" below); the other items describe the
+first runs. Each cell is the median of two runs, and a virtual machine
+used 40–80% of a CPU core during these runs: compare blocked times within a
+browser, and treat differences under about 20 ms as noise.
 
 - **React stays out of the hot path.** In all three browsers, scrolling across
   7–9 pages over 241 frames caused 20–24 React commits, one batch per change
@@ -127,7 +128,7 @@ about 20 ms as noise.
 - **Firefox.** These Firefox runs rendered at devicePixelRatio 1, not 2:
   Playwright's Firefox drops the scale factor in cross-origin-isolated pages,
   which the scripts now work around, so they are not comparable with the other
-  browsers until rerun. In them, every variant blocked for 25–96 ms, with
+  browsers; the rerun below replaces them. In them, every variant blocked for 25–96 ms, with
   stalls of 7–14 ms, the renderer worker on a GPU-backed canvas included
   (31–51 ms), while scrolling already rendered pages with nothing new to
   render blocked for 2–42 ms (median 5; see
@@ -137,6 +138,21 @@ about 20 ms as noise.
   503 ms with the renderer worker (Chromium, median of five runs; see
   [`startup-preload.md`](examples/prototype/results/startup-preload.md) and
   [`startup-no-preload.md`](examples/prototype/results/startup-no-preload.md)).
+- **Scroll rerun (2026-10-20).** The same benchmark on the code of main at
+  c26717b (pdf.js in the package, the document viewer features, scroll
+  modes), on AC power with a one-minute load average of 3.5–8.8, now with
+  Firefox at devicePixelRatio 2. No variant left the viewport blank in any
+  browser, and React committed 4–24 times per run as before. Chromium's
+  main thread was blocked for 0–7 ms with pdf.js master's renderer worker on
+  a GPU-backed canvas and 10–28 ms with released pdf.js on a CPU-backed one.
+  In WebKit every variant blocked for 1–16 ms, and CPU-backed canvases again
+  dropped 7–12 frames where GPU-backed ones dropped none. Firefox, now
+  comparable, blocked for 15–84 ms with stalls of 7–20 ms in every variant,
+  the renderer worker included, and its scroll control, which scrolls pages
+  that need no rendering, blocked for 7 ms (1–10) with stalls of 8 ms: in
+  Firefox the scrolling itself costs main-thread time that ParaPDF does not
+  cause. Page 1 showed after 142–257 ms in Chromium, 171–315 ms in WebKit,
+  and 217–367 ms in Firefox.
 - **Text, search, and accessibility.** pdf.js text layers make pages
   selectable and readable by screen readers. Whole-document search normalizes
   text the way pdf.js's find controller does: it ignores full-width forms,
