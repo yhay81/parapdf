@@ -162,9 +162,11 @@ with the API.
   frame, one finger still scrolls natively, Safari's gesture events are
   prevented and zoom the document, ctrl+wheel zooms around the pointer, a
   pinch in at the document's start previews page 1 where its commit puts
-  it, and a long two-finger drag at the lowest zoom, or a pinch in that
-  drags as far, mounts and draws the pages its preview shows before the
-  fingers lift (run after `build`; `BROWSER` and `ENGINE` apply).
+  it, a long two-finger drag at the lowest zoom, or a pinch in that drags as
+  far, mounts and draws the pages its preview shows before the fingers lift,
+  and in every frame after a pinch out or in commits, each page in view shows
+  its drawing, neither blank nor only its base, as its canvases composite
+  (run after `build`; `BROWSER` and `ENGINE` apply).
   Chromium gets real touches through the DevTools protocol; Playwright cannot
   put two fingers down in WebKit or Firefox, so there the check dispatches
   touch pointer events, and in WebKit gesture events. Dispatched pointers,
@@ -191,6 +193,16 @@ with the API.
   time to sharp, and canvas memory after zooming to `SCALES` (4,8) and
   panning, on desktop and phone-sized viewports (run after `build`; `BROWSER`,
   `VARIANTS`, `FILE`, `RUNS`, and `OUTPUT` apply).
+- `node examples/prototype/scripts/commit-bench.ts` — zoom commit benchmark:
+  in every frame after ten kinds of zoom commit (touch pinches, `setScale`,
+  `zoomBy`, ctrl+wheel), whether a page in view shows blank or only its base,
+  read from its canvases as it shows them, then, in a second pass without
+  that probe, which reads canvases back from the GPU, the time until the
+  pages in view are sharp, the renders, and canvas memory (run after
+  `build`; `BROWSER`, `ENGINE` (`pdfjs`), `SCENARIOS`, `RUNS`, `THROTTLE`
+  (Chromium's CPU slowdown), `DIST` and `LABEL` (another build of the demo,
+  such as an older commit's built in a directory of its own), and `OUTPUT`
+  apply).
 - `node examples/prototype/scripts/main-thread-bench.ts` — main-thread cost of
   zooming and slow scrolling in Chromium: task, script, layout, and style time
   from the DevTools protocol, a JavaScript CPU profile, and the renders the
@@ -343,7 +355,8 @@ with the API.
   second or third. A page taller than the viewport is never all in view, so
   at "fit-width" the current page is still the one at the center.
 - Each mounted page stacks a base canvas (half a device pixel per CSS pixel,
-  at most 2 MP) under a detail canvas at full device resolution. A page whose
+  at most 2 MP) under a detail canvas at full device resolution, which has a
+  spare beside it (see below). A page whose
   full-resolution render fits in 16 MP gets detail for the whole page. Beyond
   that, as in pdf.js's `PDFPageDetailView` (attributed in `NOTICE.md`), only
   visible pages get detail, drawn through the engine's `region` request for
@@ -382,12 +395,43 @@ with the API.
   budget exists for browsers that cap all canvases together, as iOS Safari
   does, where going past the cap leaves canvases blank. Visible pages used to
   keep all the detail `maxDetailPixels` allowed, whatever the budget.
-  A render clears its canvas, so the page counts that layer as empty until
-  the render completes, and the canvas stays hidden until then: a resized
-  canvas with pdf.js's opaque context is black, and pdf.js's renderer worker
-  sends its first frame a round trip later, so with it a detail render
-  covered its base with black and a base render showed a black page, which
-  `check:features` caught after a refit.
+  A render clears its canvas, and the canvas stays hidden until the render
+  completes: a resized canvas with pdf.js's opaque context is black, pdf.js's
+  renderer worker sends its first frame a round trip later, and pdf.js
+  drawing on the main thread fills the canvas white before it draws over it
+  in chunks, one per animation frame. A page that shows a detail draws the
+  next one into the spare detail canvas, and the two change places when it
+  completes, as pdf.js's viewer replaces a page's canvas only once the new
+  one is drawn: after a zoom, the page shows its old detail, scaled by CSS,
+  meanwhile. `commit-bench.ts` reads what the pages in view show in every
+  frame after ten kinds of zoom commit, three runs each
+  (`results/commit-*.md`). Drawn in place, as in 258f693, a page showed white
+  in 39, 39, and 49 frames over nine of them in Chromium, WebKit, and
+  Firefox, for up to 48, 100, and 154 ms; hidden while drawn, from 99b435b
+  to 8e33a94, it showed only its base, at a quarter of the device's
+  resolution, in 36, 36, and 38 frames, for up to 46, 111, and 64 ms; now in
+  none, nor at Chromium's CPU slowed down four times, where the white lasted
+  up to 119 ms and the base 106. In Safari in the iPadOS simulator the white
+  lasted 80–175 ms and the base 100–130 ms, and neither showed after a pinch
+  out, a pinch in at the document's start, or a pinch in while dragging. A
+  stale whole-page detail that stays until its replacement needs no base
+  under it, so the ten commits draw half as many bases (16, 15, and 16
+  against 32, 34, and 34, the sum of the medians) and about as many details,
+  and the pages in view are sharp after 3–36, 4–36, and 4–90 ms against 11–173,
+  12–150, and 29–102, except after zooming to 5 and back, which draw the
+  same as before and took up to 12 ms more or less. The cost: a commit holds
+  the old and the new details while the new ones are drawn, up to 25–28 MiB
+  more canvas memory at its peak, 115–118 against 89 MiB after a 10% zoom
+  step. Within `maxCanvasPixels`, a detail that does not fit beside the old
+  one is drawn in place, over the base. `check:pinch` reads the canvases in
+  every frame after a pinch out and a pinch in commit, and fails on 258f693
+  and 8e33a94: `hasPixels()` held while pages showed white, so checks of it
+  had seen nothing.
+  A canvas a page gives back is zeroed and hidden: Chromium paints a canvas
+  with pdf.js's opaque context black over its whole box once its size is
+  zero, so pages showed black after a turn until they were drawn again, and
+  a zeroed detail canvas stacked over the shown one turned the page black,
+  which `check:features` caught.
   Unmounted pages zero their canvases and release pdf.js page data.
   `sharpness()` reports the resolution of the visible pixels as a share of
   full device resolution. The zoom goes up to 10 CSS pixels per point.
@@ -664,8 +708,10 @@ with the API.
   fingers, one-finger scrolling, long-press text selection, and two-finger
   drags behave as described here, pointer events drive pinches there, Safari
   never cancelled their pointers, and its gesture events carry `clientX` and
-  `clientY` at the fingers' midpoint. Safari on macOS and real iOS and iPadOS
-  devices are not verified yet. WebKit has neither
+  `clientY` at the fingers' midpoint. After their commits, no page in view
+  showed blank or only its base there, read from the canvases as
+  `check:pinch` reads them. Safari on macOS and real iOS and iPadOS devices
+  are not verified yet. WebKit has neither
   `requestIdleCallback` nor `scheduler.yield`, so idle text and annotation
   layers fall back to a 16 ms timer and search yields through `setTimeout(0)`.
 - Not yet implemented: annotation editing, form scripts (pdf.js's

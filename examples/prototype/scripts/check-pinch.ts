@@ -3,8 +3,10 @@
  * point between them and pan with it instead of zooming the whole page, two
  * touches that keep their distance only scroll however fast they move, the
  * pages their preview brings into view mount and draw before the fingers
- * lift, one finger still scrolls natively, Safari's gesture events zoom the
- * document and are prevented, and ctrl+wheel still zooms around the pointer.
+ * lift, the visible pages show their drawing in every frame after a pinch
+ * commits, one finger still scrolls natively, Safari's gesture events zoom
+ * the document and are prevented, and ctrl+wheel still zooms around the
+ * pointer.
  *
  * In Chromium the touches come from the DevTools protocol, which feeds them
  * through the browser's own input handling, touch-action and page zoom
@@ -155,6 +157,208 @@ async function committed(page: Page): Promise<void> {
     { timeout: 5_000 },
   );
   await settle(page);
+}
+
+interface CommitFrames {
+  /** Frames from the commit until the pages settled. */
+  frames: number;
+  /** Frames in which a visible page showed one color where its settled drawing shows more. */
+  blank: number;
+  /** Frames in which a visible page that showed a detail canvas before the commit showed none. */
+  base: number;
+}
+
+/**
+ * Starts recording, in every frame after its animation frame callbacks, what
+ * each visible page shows: its canvases composited as the page shows them,
+ * hidden ones left out, at a quarter of the page's CSS size. `stop()`
+ * returns what the frames from the zoom's commit on showed. The canvases are
+ * read because the scheduler's own account of a page's pixels said nothing
+ * of what they showed: while a detail canvas was drawn in place, pdf.js
+ * filled it white, and the page showed white for 80 to 175 ms after each
+ * zoom in Safari in the iPadOS simulator while `hasPixels()` held.
+ */
+function startCommitProbe(): void {
+  const viewer = (
+    window as unknown as {
+      __viewer: {
+        store: { get(): { scale: number }; subscribe(listener: () => void): () => void };
+      };
+    }
+  ).__viewer;
+  const scroller = document.querySelector(".parapdf-viewport") as HTMLElement;
+  const probe = document.createElement("canvas");
+  const ctx = probe.getContext("2d") as CanvasRenderingContext2D;
+  const S = 0.25;
+  const frames: {
+    t: number;
+    pages: { page: number; region: number[]; flat: boolean; detail: boolean }[];
+  }[] = [];
+  let commitAt = Number.POSITIVE_INFINITY;
+  const scale = viewer.store.get().scale;
+  const unsubscribe = viewer.store.subscribe(() => {
+    if (viewer.store.get().scale !== scale) commitAt = Math.min(commitAt, performance.now());
+  });
+  /** Draws what `section` shows into the probe; returns which of its canvases show. */
+  const composite = (section: HTMLElement): boolean[] => {
+    const rect = section.getBoundingClientRect();
+    probe.width = Math.max(1, Math.round(rect.width * S));
+    probe.height = Math.max(1, Math.round(rect.height * S));
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, probe.width, probe.height);
+    return [
+      ...section.querySelectorAll<HTMLCanvasElement>(":scope > div[aria-hidden] > canvas"),
+    ].map((canvas) => {
+      // A canvas never drawn keeps the default size, 300 by 150, and shows nothing.
+      const shown =
+        canvas.width * canvas.height > 0 &&
+        !(canvas.width === 300 && canvas.height === 150) &&
+        getComputedStyle(canvas).visibility !== "hidden";
+      if (shown) {
+        const box = canvas.getBoundingClientRect();
+        ctx.drawImage(
+          canvas,
+          (box.left - rect.left) * S,
+          (box.top - rect.top) * S,
+          box.width * S,
+          box.height * S,
+        );
+      }
+      return shown;
+    });
+  };
+  /**
+   * Whether `region`, shares of the page, shows one color in the probe: white
+   * while pdf.js fills a canvas before drawing on it, or black where a resized
+   * canvas with its opaque context shows before its first frame.
+   */
+  const flatIn = ([x0 = 0, y0 = 0, x1 = 1, y1 = 1]: number[]): boolean => {
+    const x = Math.floor(x0 * probe.width);
+    const y = Math.floor(y0 * probe.height);
+    const { data } = ctx.getImageData(
+      x,
+      y,
+      Math.max(1, Math.floor(x1 * probe.width) - x),
+      Math.max(1, Math.floor(y1 * probe.height) - y),
+    );
+    for (let i = 4; i < data.length; i += 4) {
+      for (let channel = 0; channel < 3; channel++) {
+        if (Math.abs((data[i + channel] ?? 0) - (data[channel] ?? 0)) > 4) return false;
+      }
+    }
+    return true;
+  };
+  let running = true;
+  const record = () => {
+    const box = scroller.getBoundingClientRect();
+    const left = box.left + scroller.clientLeft;
+    const top = box.top + scroller.clientTop;
+    const pages = [];
+    for (const section of scroller.querySelectorAll<HTMLElement>("section[data-page]")) {
+      const rect = section.getBoundingClientRect();
+      const [vl, vt, vr, vb] = [
+        Math.max(left, rect.left),
+        Math.max(top, rect.top),
+        Math.min(left + scroller.clientWidth, rect.right),
+        Math.min(top + scroller.clientHeight, rect.bottom),
+      ] as [number, number, number, number];
+      // Pages that show at least 16 CSS pixels each way, four probe pixels.
+      if (vr - vl < 16 || vb - vt < 16 || getComputedStyle(section).visibility === "hidden") {
+        continue;
+      }
+      const shown = composite(section);
+      const region = [
+        (vl - rect.left) / rect.width,
+        (vt - rect.top) / rect.height,
+        (vr - rect.left) / rect.width,
+        (vb - rect.top) / rect.height,
+      ];
+      pages.push({
+        page: Number(section.dataset.page),
+        region,
+        flat: flatIn(region),
+        detail: shown.slice(1).some(Boolean),
+      });
+    }
+    frames.push({ t: performance.now(), pages });
+  };
+  // ResizeObserver callbacks run after a frame's animation frame callbacks
+  // and layout, before paint: the canvases then hold what the frame shows.
+  const sentinel = document.createElement("div");
+  sentinel.style.cssText = "position:fixed;width:1px;height:1px;visibility:hidden";
+  document.body.append(sentinel);
+  const observer = new ResizeObserver(() => {
+    if (running) record();
+  });
+  observer.observe(sentinel);
+  const tick = () => {
+    if (!running) return;
+    sentinel.style.width = sentinel.style.width === "2px" ? "1px" : "2px";
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+  (window as unknown as { __commitProbe: { stop(): CommitFrames } }).__commitProbe = {
+    stop() {
+      running = false;
+      observer.disconnect();
+      sentinel.remove();
+      unsubscribe();
+      const after = frames.filter((frame) => frame.t >= commitAt);
+      const before = frames.filter((frame) => frame.t < commitAt).at(-1);
+      const detailed = new Set(
+        before?.pages.filter((shot) => shot.detail).map((shot) => shot.page) ?? [],
+      );
+      // Where the page shows one color, its settled drawing of the same part
+      // must too, as a margin does.
+      const settledFlat = new Map<string, boolean>();
+      const blank = (shot: { page: number; region: number[]; flat: boolean }) => {
+        if (!shot.flat) return false;
+        const key = `${shot.page} ${shot.region.join()}`;
+        if (!settledFlat.has(key)) {
+          const section = scroller.querySelector<HTMLElement>(`section[data-page="${shot.page}"]`);
+          if (section) composite(section);
+          settledFlat.set(key, section ? flatIn(shot.region) : false);
+        }
+        return !settledFlat.get(key);
+      };
+      return {
+        frames: after.length,
+        blank: after.filter((frame) => frame.pages.some(blank)).length,
+        base: after.filter((frame) =>
+          frame.pages.some((shot) => detailed.has(shot.page) && !shot.detail),
+        ).length,
+      };
+    },
+  };
+}
+
+/**
+ * Runs `gesture` under the commit probe until its commit settled and no
+ * render completed for 400 ms: zoomed out, the pages count as sharp at once,
+ * while their new details are still to be drawn and to take the old ones'
+ * place.
+ */
+async function commitFrames(page: Page, gesture: () => Promise<unknown>): Promise<CommitFrames> {
+  await page.evaluate(startCommitProbe);
+  await gesture();
+  await committed(page);
+  await page.waitForFunction(
+    () => {
+      const stats = (window as unknown as { __viewer: { stats: object | null } }).__viewer.stats;
+      const holder = window as unknown as { __rendered?: { key: string; since: number } };
+      const key = JSON.stringify(stats);
+      if (holder.__rendered?.key !== key) {
+        holder.__rendered = { key, since: performance.now() };
+        return false;
+      }
+      return performance.now() - holder.__rendered.since > 400;
+    },
+    null,
+    { timeout: 10_000, polling: 50 },
+  );
+  return page.evaluate(() =>
+    (window as unknown as { __commitProbe: { stop(): CommitFrames } }).__commitProbe.stop(),
+  );
 }
 
 /**
@@ -911,6 +1115,31 @@ try {
       band: pinched.band,
       drawnAfter: pinched.drawnAfter,
     }),
+  );
+
+  // In every frame after a pinch commits, the visible pages show their
+  // drawing: each its old detail, scaled, until the new one, drawn into the
+  // other detail canvas, takes its place. Drawn in place, the detail showed
+  // white while pdf.js drew it, for 80 to 175 ms in Safari in the iPadOS
+  // simulator; hidden until complete, it left the page to its base, at a
+  // quarter of the device's resolution, for as long.
+  await fitPage(page, 2);
+  const zoomedIn = await commitFrames(page, () =>
+    dispatchTwoFingers(page, { from: point, to: point, half: 50, toHalf: 100, steps: 10 }),
+  );
+  check(
+    "after a pinch out commits, no visible page shows blank or only its base in any frame",
+    zoomedIn.frames > 0 && zoomedIn.blank === 0 && zoomedIn.base === 0,
+    JSON.stringify(zoomedIn),
+  );
+  await fitPage(page, 0);
+  const zoomedOut = await commitFrames(page, () =>
+    dispatchTwoFingers(page, { from: point, to: point, half: 150, toHalf: 40, steps: 10 }),
+  );
+  check(
+    "after a pinch in commits, no visible page shows blank or only its base in any frame",
+    zoomedOut.frames > 0 && zoomedOut.blank === 0 && zoomedOut.base === 0,
+    JSON.stringify(zoomedOut),
   );
 
   await page.context().close();
