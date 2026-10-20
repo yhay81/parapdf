@@ -258,6 +258,29 @@ about 20 ms as noise.
   pages fill leaves nothing for the next page: scrolling a 24-page document
   at 900 CSS pixels per second showed 8 blank frames in 4 seconds at 6 MP,
   as before, and none at 16 MP, in Chromium and WebKit.
+- **GPU-backed canvases (2026-10-20).** `createPdfjsEngine` now asks pdf.js
+  for GPU-backed canvases unless `enableHWA` is `false`.
+  [`hwa-bench.ts`](examples/prototype/scripts/hwa-bench.ts) opens a document
+  at 1280 by 900 CSS pixels and devicePixelRatio 2, scrolls for 3 seconds,
+  zooms to 3, and pans four times, each job in a browser of its own, and
+  sums the physical footprint of that browser's processes, IOSurfaces
+  included (median of three runs on AC power;
+  [`hwa-chromium.md`](examples/prototype/results/hwa-chromium.md),
+  [`hwa-webkit.md`](examples/prototype/results/hwa-webkit.md),
+  [`hwa-firefox.md`](examples/prototype/results/hwa-firefox.md)). In
+  Chromium, GPU-backed canvases blocked the main thread for 33 instead of
+  209 ms on bill-hr815 and 6 instead of 1,207 ms on synthetic-vector-200k
+  with released pdf.js (7 and 1 instead of 93 and 64 ms with the renderer
+  worker), and the pages were sharp 32–41 ms sooner. Their footprint was
+  28–42 MiB smaller on bill-hr815 but 10–22 MiB larger on
+  synthetic-vector-200k, whose summed peaks grew by up to 78 MiB. In WebKit
+  they dropped 1–2 frames where CPU-backed canvases dropped 8–20, and
+  released pdf.js was sharp 108–152 ms sooner, but they blocked the main
+  thread for longer in three of four cases (92 against 50 ms on bill-hr815
+  with released pdf.js; 21 against 80 ms on synthetic-vector-200k was the
+  exception) and held 20–109 MiB more at the end. In Firefox the two made no
+  difference beyond noise: blocked times within 40 ms of each other and
+  footprints within 5 MiB.
 - **Pinch zoom (2026-10-20).** Only ctrl or meta with the wheel zoomed the
   document, which covers trackpad pinches in Chromium and Firefox. A touch
   pinch, or a trackpad pinch in Safari, zoomed the whole page instead and left

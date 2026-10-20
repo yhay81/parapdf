@@ -226,11 +226,12 @@ default), and `renderOverlay`.
 
 `createPdfjsEngine` takes `pdfjs`, `workerSrc`, `assetBase`, `enableHWA`
 (GPU-backed canvases, `true` by default; `false` asks pdf.js for CPU-backed
-ones), `documentOptions` (more pdf.js
-`getDocument` parameters for every document, such as `withCredentials` or
-`httpHeaders`), and `rendererSrc` (see [Limitations](#limitations)). For older
-browsers, pass pdf.js's legacy build, `pdfjs-dist/legacy/build/pdf.mjs`, and
-its worker.
+ones, which block the main thread for longer in Chromium and drop more frames
+in WebKit, though WebKit holds less memory with them), `documentOptions` (more
+pdf.js `getDocument` parameters for every document, such as `withCredentials`
+or `httpHeaders`), and `rendererSrc` (see [Limitations](#limitations)). For
+older browsers, pass pdf.js's legacy build, `pdfjs-dist/legacy/build/pdf.mjs`,
+and its worker.
 
 ## Sources
 
