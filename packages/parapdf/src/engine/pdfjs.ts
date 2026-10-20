@@ -470,8 +470,10 @@ export function createPdfjsEngine(options: PdfjsEngineOptions): PdfEngine {
               canvas.height = region.height;
               task = page.render({ ...parameters, transform: [1, 0, 0, 1, -region.x, -region.y] });
             } else {
-              canvas.width = Math.floor(viewport.width);
-              canvas.height = Math.floor(viewport.height);
+              // Whole pixels, as pdf.js's viewer sizes them, past a scale's
+              // rounding error: a thumbnail 240 px wide came out at 239.99….
+              canvas.width = Math.floor(viewport.width + 1e-6);
+              canvas.height = Math.floor(viewport.height + 1e-6);
               task = page.render(parameters);
             }
             await task.promise;

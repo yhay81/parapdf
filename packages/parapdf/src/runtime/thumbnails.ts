@@ -113,7 +113,10 @@ export class ThumbnailRenderer {
     if (thumbnail.drawn === key || thumbnail.cancel) return;
     const { canvas } = thumbnail;
     canvas.width = width;
-    canvas.height = Math.max(1, Math.round((width * turned.height) / turned.width));
+    // Rounded down as the engine sizes a render, so a thumbnail keeps its
+    // size whether it is copied from the page or drawn: in CI's Chromium a
+    // drawn one came out 1 px shorter than a copied one.
+    canvas.height = Math.max(1, Math.floor((width * turned.height) / turned.width + 1e-6));
     if (scheduler.copyPage(thumbnail.pageIndex, canvas, rotation)) {
       thumbnail.drawn = key;
       return;

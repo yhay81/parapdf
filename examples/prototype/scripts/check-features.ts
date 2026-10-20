@@ -552,7 +552,7 @@ try {
     });
     check(
       "thumbnails are drawn at the device's resolution",
-      thumbnailSize?.[0] === 240 && thumbnailSize[1] === Math.round((240 * 792) / 612),
+      thumbnailSize?.[0] === 240 && thumbnailSize[1] === Math.floor((240 * 792) / 612),
       JSON.stringify(thumbnailSize),
     );
     await settle(page);
