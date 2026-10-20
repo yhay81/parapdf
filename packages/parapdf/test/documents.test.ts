@@ -39,6 +39,19 @@ describe("acquireDocument", () => {
     assert.equal(counts.opens, 2);
   });
 
+  it("gives an owner a document of its own, which it shares with no other viewer", async () => {
+    const { engine, counts } = countingEngine();
+    const editor = {};
+    const shared = acquireDocument(engine, { url: "/a.pdf" });
+    const own = acquireDocument(engine, { url: "/a.pdf" }, {}, editor);
+    // The owner's second mount, as StrictMode makes, reuses its own.
+    own.release();
+    const again = acquireDocument(engine, { url: "/a.pdf" }, {}, editor);
+    assert.notEqual(await shared.document, await own.document);
+    assert.equal(await own.document, await again.document);
+    assert.equal(counts.opens, 2);
+  });
+
   it("destroys a document a second after its last viewer releases it", async () => {
     const { engine, counts } = countingEngine();
     const a = acquireDocument(engine, { url: "/a.pdf" });

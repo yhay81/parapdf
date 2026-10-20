@@ -1,0 +1,798 @@
+import type * as Pdfjs from "pdfjs-dist";
+import {
+  type AnnotationEditingState,
+  type AnnotationEditor,
+  type AnnotationEditorLayerTask,
+  type AnnotationEditorOptions,
+  type AnnotationLabels,
+  type AnnotationLayerEditor,
+  type AnnotationStyles,
+  type AnnotationTool,
+  type AnnotationType,
+  RenderCancelledError,
+  type Rotation,
+  type SavedAnnotation,
+  type SignatureInput,
+} from "./types.ts";
+
+/*
+ * Annotation editing through pdf.js's display API: its
+ * AnnotationEditorUIManager owns the editors of one viewer, an
+ * AnnotationEditorLayer per mounted page shows them, and a DrawLayer per page
+ * draws highlights and freehand lines as SVG under the text layer. pdf.js's
+ * viewer components, which build these for its own viewer, are not used: the
+ * manager hears of scrolling, zooming, and turning through a small event bus
+ * of ParaPDF's, the shape pdf.js's editors expect of one.
+ */
+
+/** The parts of pdf.js's editors this module calls, which pdf.js types loosely. */
+interface PdfjsEditor {
+  readonly id: string;
+  /** pdf.js's name of the kind, the same as ParaPDF's. */
+  readonly editorType: AnnotationType;
+  pageIndex: number;
+  /** Moves it by CSS pixels on the screen. */
+  translate(x: number, y: number): void;
+  isClone?: boolean;
+  serialize(isForCopying?: boolean): Record<string, unknown> | null;
+  isEmpty(): boolean;
+  altTextData: unknown;
+  createAltText(): unknown;
+  addSignature(data: unknown, heightInPage: number, description: string, uuid: string | null): void;
+  getFromText(text: string, font: object): unknown;
+  getFromImage(bitmap: ImageBitmap): unknown;
+  getDrawnSignature(curves: object): unknown;
+  remove(): void;
+}
+
+interface PdfjsEditorLayer {
+  readonly pageIndex: number;
+  readonly div: HTMLDivElement | null;
+  render(parameters: { viewport: Pdfjs.PageViewport }): Promise<void>;
+  update(parameters: { viewport: Pdfjs.PageViewport }): void;
+  deserialize(data: object): Promise<PdfjsEditor | null>;
+  addOrRebuild(editor: PdfjsEditor): void;
+  addNewEditor(data?: object): void;
+  destroy(): void;
+}
+
+interface PdfjsUIManager {
+  readonly imageManager: {
+    getFromUrl(url: string): Promise<{ bitmap: unknown; id: string; isSvg: boolean } | null>;
+  };
+  viewParameters: { realScale: number; rotation: number };
+  updateMode(
+    mode: number,
+    editId?: string | null,
+    isFromUser?: boolean,
+    isFromKeyboard?: boolean,
+    mustEnterInEditMode?: boolean,
+    editComment?: boolean,
+  ): Promise<void>;
+  updateParams(type: number, value: unknown): void;
+  getMode(): number;
+  getLayer(pageIndex: number): PdfjsEditorLayer | undefined;
+  getEditors(pageIndex: number): Iterable<PdfjsEditor>;
+  undo(): void;
+  redo(): void;
+  delete(): void;
+  selectAll(): void;
+  commitOrRemove(): void;
+  endCurrentEditing(): void;
+  addCommands(command: { cmd(): void; undo(): void; mustExec?: boolean }): void;
+  readonly _signal: AbortSignal | null;
+  combinedSignal(controller: AbortController): AbortSignal;
+  destroy(): void;
+}
+
+type Listener = (event: Record<string, unknown>) => void;
+
+/**
+ * What pdf.js's editors expect of the viewer's event bus: listeners by
+ * event name, removed by their abort signal or `off`, and `dispatch`.
+ */
+class EditorEventBus {
+  readonly #listeners = new Map<string, Set<Listener>>();
+
+  on(name: string, listener: Listener, options?: { once?: boolean; signal?: AbortSignal }): void {
+    if (options?.signal?.aborted) return;
+    const listeners = this.#listeners.get(name) ?? new Set();
+    this.#listeners.set(name, listeners);
+    const wrapped: Listener = options?.once
+      ? (event) => {
+          listeners.delete(wrapped);
+          listener(event);
+        }
+      : listener;
+    // `off` removes a listener by itself; `once` listeners are wrapped.
+    if (options?.once) this.#wrapped.set(listener, wrapped);
+    listeners.add(wrapped);
+    options?.signal?.addEventListener("abort", () => listeners.delete(wrapped), { once: true });
+  }
+
+  readonly #wrapped = new WeakMap<Listener, Listener>();
+
+  off(name: string, listener: Listener): void {
+    const listeners = this.#listeners.get(name);
+    listeners?.delete(listener);
+    const wrapped = this.#wrapped.get(listener);
+    if (wrapped) listeners?.delete(wrapped);
+  }
+
+  dispatch(name: string, event: Record<string, unknown>): void {
+    for (const listener of [...(this.#listeners.get(name) ?? [])]) listener(event);
+  }
+
+  clear(): void {
+    this.#listeners.clear();
+  }
+}
+
+/** pdf.js's own highlight colors, which its color picker offers, by name; the first is the default. */
+const HIGHLIGHT_COLORS =
+  "yellow=#FFFF98,green=#53FFBC,blue=#80EBFF,pink=#FFCBE6,red=#FF4F5F," +
+  "yellow_HCM=#FFFFCC,green_HCM=#53FFBC,blue_HCM=#80EBFF,pink_HCM=#F6B8FF,red_HCM=#C50043";
+
+/** How tall a signature is when placed, in PDF points, as in pdf.js's viewer. */
+const SIGNATURE_HEIGHT = 40;
+
+/**
+ * pdf.js's localization ids of the elements its editors create, and the
+ * label each gets: buttons and color options a title and an accessible
+ * name, everything else an accessible name.
+ */
+const LABELS: Record<string, keyof AnnotationLabels> = {
+  "pdfjs-editor-highlight-editor": "highlight",
+  "pdfjs-free-text2": "freeText",
+  "pdfjs-editor-ink-editor": "ink",
+  "pdfjs-editor-stamp-editor": "stamp",
+  "pdfjs-editor-signature-editor1": "signature",
+  "pdfjs-editor-remove-highlight-button": "removeHighlight",
+  "pdfjs-editor-remove-freetext-button": "removeFreeText",
+  "pdfjs-editor-remove-ink-button": "removeInk",
+  "pdfjs-editor-remove-stamp-button": "removeStamp",
+  "pdfjs-editor-remove-signature-button": "removeSignature",
+  "pdfjs-editor-colorpicker-button": "color",
+  "pdfjs-editor-colorpicker-dropdown": "colors",
+  "pdfjs-editor-color-picker-free-text-input": "textColor",
+  "pdfjs-editor-color-picker-ink-input": "inkColor",
+  "pdfjs-editor-colorpicker-yellow": "yellow",
+  "pdfjs-editor-colorpicker-green": "green",
+  "pdfjs-editor-colorpicker-blue": "blue",
+  "pdfjs-editor-colorpicker-pink": "pink",
+  "pdfjs-editor-colorpicker-red": "red",
+  "pdfjs-editor-resizer-top-left": "resizeTopLeft",
+  "pdfjs-editor-resizer-top-middle": "resizeTopMiddle",
+  "pdfjs-editor-resizer-top-right": "resizeTopRight",
+  "pdfjs-editor-resizer-middle-right": "resizeMiddleRight",
+  "pdfjs-editor-resizer-bottom-right": "resizeBottomRight",
+  "pdfjs-editor-resizer-bottom-middle": "resizeBottomMiddle",
+  "pdfjs-editor-resizer-bottom-left": "resizeBottomLeft",
+  "pdfjs-editor-resizer-middle-left": "resizeMiddleLeft",
+};
+
+/** Gives `element` the label of its localization id, if ParaPDF has one. */
+function label(element: Element, labels: AnnotationLabels): void {
+  const id = element.getAttribute("data-l10n-id");
+  const key = id ? LABELS[id] : undefined;
+  if (!key) return;
+  let text = labels[key];
+  if (key === "signature") {
+    // pdf.js passes the signature's description as the message's argument.
+    const args = element.getAttribute("data-l10n-args");
+    const description = args ? (JSON.parse(args) as { description?: string }).description : "";
+    if (description) text = `${text}: ${description}`;
+  }
+  if (key === "freeText") element.setAttribute("default-content", labels.freeTextPlaceholder);
+  if (element.getAttribute("aria-label") !== text) element.setAttribute("aria-label", text);
+  const titled =
+    element instanceof HTMLButtonElement ||
+    element instanceof HTMLInputElement ||
+    element.getAttribute("role") === "option";
+  if (titled && element.getAttribute("title") !== text) element.setAttribute("title", text);
+}
+
+/**
+ * Labels what pdf.js's editors add to `container` from now on, and what is
+ * there already. pdf.js marks its text with Fluent ids, which only its own
+ * viewer translates.
+ */
+function labelElements(container: HTMLElement, labels: AnnotationLabels): MutationObserver {
+  const labelTree = (node: Node) => {
+    if (!(node instanceof Element)) return;
+    label(node, labels);
+    for (const element of node.querySelectorAll("[data-l10n-id]")) label(element, labels);
+  };
+  const observer = new MutationObserver((records) => {
+    for (const record of records) {
+      if (record.type === "attributes") label(record.target as Element, labels);
+      else for (const node of record.addedNodes) labelTree(node);
+    }
+  });
+  observer.observe(container, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ["data-l10n-id", "data-l10n-args"],
+  });
+  labelTree(container);
+  return observer;
+}
+
+/**
+ * What pdf.js's editors ask of a localization: messages for the alt text
+ * of images, which ParaPDF does not show, and nothing else; they mark
+ * elements with ids instead, which `labelElements` labels.
+ */
+const l10n = {
+  getLanguage: () => document.documentElement.lang || "en",
+  getDirection: () => "ltr",
+  get: async (_id: string, _args?: unknown, fallback?: string) => fallback ?? "",
+  translate: async () => {},
+  translateOnce: async () => {},
+  pause() {},
+  resume() {},
+  destroy() {},
+};
+
+const isAnnotationType = (value: unknown): value is AnnotationType =>
+  value === "highlight" ||
+  value === "freetext" ||
+  value === "ink" ||
+  value === "stamp" ||
+  value === "signature";
+
+/**
+ * Plain arrays for the typed arrays pdf.js serializes outlines in, so that
+ * the data survives JSON; pdf.js reads both back alike.
+ */
+function plain(value: unknown): unknown {
+  if (ArrayBuffer.isView(value) && !(value instanceof DataView)) {
+    return Array.from(value as unknown as ArrayLike<number>);
+  }
+  if (Array.isArray(value)) return value.map(plain);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, plain(entry)]));
+  }
+  return value;
+}
+
+/** A Blob as the File pdf.js's image cache takes, under a name no other image has. */
+let imageCount = 0;
+const asFile = (image: Blob): File =>
+  image instanceof File
+    ? image
+    : new File([image], `image-${++imageCount}`, { type: image.type, lastModified: Date.now() });
+
+/**
+ * Runs `run`, in which a layer adds editors that exist already, as they
+ * would be after the reader's own steps: hidden, so that the editors that
+ * focus themselves as a layer adds them, highlights and images, do not
+ * (pdf.js's own viewer builds its layers hidden too), and recording no undo
+ * step. Drawings and images record a step that removes them whenever a
+ * layer adds them, which a page's new layer does for the annotations it
+ * shows again: undo then removed an annotation drawn long before instead
+ * of the reader's last step, in pdf.js's viewer too once a page left its
+ * page buffer (mozilla/pdf.js#22270). `run` must not await: pdf.js shows the layer again where it
+ * should be shown when its render ends.
+ */
+function quietly<T>(manager: PdfjsUIManager, container: HTMLElement, run: () => T): T {
+  const hidden = container.hidden;
+  container.hidden = true;
+  // An own property over the prototype's method, for the length of `run`.
+  manager.addCommands = ({ cmd, mustExec }) => {
+    if (mustExec) cmd();
+  };
+  try {
+    return run();
+  } finally {
+    delete (manager as Partial<PdfjsUIManager>).addCommands;
+    container.hidden = hidden;
+  }
+}
+
+/** Builds annotation editing on pdf.js's display API for one viewer of `doc`. */
+export function createPdfjsAnnotationEditor(
+  pdfjs: typeof Pdfjs,
+  doc: Pdfjs.PDFDocumentProxy,
+  getPage: (pageIndex: number) => Promise<Pdfjs.PDFPageProxy>,
+  options: AnnotationEditorOptions,
+): AnnotationEditor {
+  const { AnnotationEditorType: Mode, AnnotationEditorParamsType: Param } = pdfjs;
+  const modes: Record<AnnotationTool, number> = {
+    none: Mode.NONE,
+    highlight: Mode.HIGHLIGHT,
+    freetext: Mode.FREETEXT,
+    ink: Mode.INK,
+    stamp: Mode.STAMP,
+    signature: Mode.SIGNATURE,
+  };
+  /** Which style of which tool each of pdf.js's parameters is. */
+  const params: Record<number, [keyof AnnotationStyles, string]> = {
+    [Param.HIGHLIGHT_COLOR]: ["highlight", "color"],
+    [Param.HIGHLIGHT_THICKNESS]: ["highlight", "thickness"],
+    [Param.FREETEXT_COLOR]: ["freetext", "color"],
+    [Param.FREETEXT_SIZE]: ["freetext", "fontSize"],
+    [Param.INK_COLOR]: ["ink", "color"],
+    [Param.INK_THICKNESS]: ["ink", "thickness"],
+    [Param.INK_OPACITY]: ["ink", "opacity"],
+  };
+  // pdf.js's own defaults, until its editors report theirs.
+  let styles: AnnotationStyles = {
+    highlight: { color: "#FFFF98", thickness: 12 },
+    freetext: { color: "#000000", fontSize: 10 },
+    ink: { color: "#000000", thickness: 1, opacity: 1 },
+  };
+  let state: AnnotationEditingState = {
+    canUndo: false,
+    canRedo: false,
+    hasSelection: false,
+    isEmpty: true,
+  };
+  const eventBus = new EditorEventBus();
+  eventBus.on("editingstateschanged", ({ details }) => {
+    const changed = details as Record<string, boolean>;
+    state = {
+      canUndo: changed.hasSomethingToUndo ?? state.canUndo,
+      canRedo: changed.hasSomethingToRedo ?? state.canRedo,
+      hasSelection: changed.hasSelectedEditor ?? state.hasSelection,
+      isEmpty: changed.isEmpty ?? state.isEmpty,
+    };
+    options.onStateChange(state);
+  });
+  eventBus.on("annotationeditorparamschanged", ({ details }) => {
+    let next = styles;
+    for (const [type, value] of details as [number, unknown][]) {
+      const param = params[type];
+      if (!param) continue;
+      const [tool, key] = param;
+      if ((next[tool] as Record<string, unknown>)[key] === value) continue;
+      next = { ...next, [tool]: { ...next[tool], [key]: value } };
+    }
+    if (next === styles) return;
+    styles = next;
+    options.onStylesChange(styles);
+  });
+
+  const toolOf = (mode: unknown): AnnotationTool =>
+    (Object.entries(modes) as [AnnotationTool, number][]).find(
+      ([, value]) => value === mode,
+    )?.[0] ?? "none";
+  /** Switches the application asked for, which the editors' own requests do not undo. */
+  let switching = 0;
+  // Selecting an annotation of another kind switches to its tool, which
+  // pdf.js asks its viewer's toolbar to do.
+  eventBus.on("switchannotationeditormode", (event) => {
+    // Finishing the text being typed selects it, and pdf.js then asks for
+    // the text tool again.
+    if (switching > 0) return;
+    const { mode, editId, isFromKeyboard, mustEnterInEditMode, editComment } = event as {
+      mode: number;
+      editId?: string;
+      isFromKeyboard?: boolean;
+      mustEnterInEditMode?: boolean;
+      editComment?: boolean;
+    };
+    options.onToolChange(toolOf(mode));
+    void manager.updateMode(
+      mode,
+      editId ?? null,
+      true,
+      isFromKeyboard ?? false,
+      mustEnterInEditMode ?? false,
+      editComment ?? false,
+    );
+  });
+  eventBus.on("showannotationeditorui", ({ mode }) => {
+    options.onToolChange(toolOf(mode));
+    void manager.updateMode(mode as number).then(() => {
+      eventBus.dispatch("annotationeditormodechanged", { source: null, mode });
+    });
+  });
+
+  /** A signature waiting for the editor that `addSignature` asked pdf.js to create. */
+  let pendingSignature: { input: SignatureInput; description: string } | null = null;
+  /**
+   * What pdf.js's signature editor asks for when it is created without a
+   * signature: ParaPDF hands it the one `addSignature` was given. pdf.js's
+   * viewer opens a dialog instead.
+   */
+  const signatureManager = {
+    async loadSignatures() {},
+    async renderEditButton() {
+      return null;
+    },
+    getSignature({ editor }: { editor: PdfjsEditor }) {
+      const pending = pendingSignature;
+      pendingSignature = null;
+      if (!pending) {
+        editor.remove();
+        return;
+      }
+      const { input, description } = pending;
+      void (async () => {
+        let outline: unknown;
+        if ("text" in input) {
+          outline = editor.getFromText(input.text, {
+            fontFamily: input.fontFamily ?? "serif",
+            fontStyle: input.fontStyle ?? "italic",
+            fontWeight: input.fontWeight ?? "normal",
+          });
+        } else if ("image" in input) {
+          const bitmap =
+            input.image instanceof Blob ? await createImageBitmap(input.image) : input.image;
+          outline = editor.getFromImage(bitmap);
+        } else {
+          outline = editor.getDrawnSignature({
+            curves: input.strokes.map((points) => ({ points: [...points] })),
+            width: input.width,
+            height: input.height,
+            thickness: input.thickness ?? 1,
+          });
+        }
+        editor.addSignature(outline, SIGNATURE_HEIGHT, description, null);
+      })().catch((error: unknown) => {
+        console.error("adding a signature failed", error);
+        editor.remove();
+      });
+    },
+    destroy() {},
+  };
+
+  // pdf.js initializes its editor classes once, with the first manager,
+  // and keeps that manager's view parameters in the defaults of new
+  // drawings (mozilla/pdf.js#22272): the newest editor takes them over.
+  (pdfjs.AnnotationEditorLayer as unknown as { _initialized: boolean })._initialized = false;
+  const manager = new pdfjs.AnnotationEditorUIManager(
+    options.container,
+    options.pages,
+    null, // viewerAlert
+    null, // altTextManager: images get the alt text addImage() is given
+    null, // commentManager
+    signatureManager,
+    eventBus,
+    doc,
+    options.pageColors ?? null,
+    HIGHLIGHT_COLORS,
+    false, // enableHighlightFloatingButton
+    false, // enableUpdatedAddImage
+    false, // enableNewAltTextWhenAddingImage
+    null, // mlManager
+    null, // editorUndoBar
+    // ParaPDF zooms the document with two fingers, also over an annotation.
+    false,
+  ) as unknown as PdfjsUIManager;
+
+  // WebKit collects a signal from AbortSignal.any() that nothing references,
+  // and aborting its sources then no longer removes the listeners added with
+  // it: in Playwright's WebKit 27.2, the window listener of a finished
+  // drawing stayed, and every later press threw in it (yhay81/parapdf#1).
+  // pdf.js combines its signals here; each is kept until it aborts.
+  const combined = new Set<AbortSignal>();
+  manager.combinedSignal = (controller) => {
+    const signal = AbortSignal.any([manager._signal ?? controller.signal, controller.signal]);
+    combined.add(signal);
+    signal.addEventListener("abort", () => combined.delete(signal), { once: true });
+    return signal;
+  };
+
+  let scale = options.scale;
+  let rotation = options.rotation;
+  const viewportOf = (page: Pdfjs.PDFPageProxy, cssScale = scale, turn = rotation) =>
+    page.getViewport({ scale: cssScale, rotation: (page.rotate + turn) % 360 }).clone({
+      dontFlip: true,
+    });
+  const setView = (cssScale: number, nextRotation: Rotation) => {
+    if (cssScale !== scale) {
+      scale = cssScale;
+      eventBus.dispatch("scalechanging", {
+        source: null,
+        scale: cssScale / pdfjs.PixelsPerInch.PDF_TO_CSS_UNITS,
+      });
+    }
+    if (nextRotation !== rotation) {
+      rotation = nextRotation;
+      eventBus.dispatch("rotationchanging", { source: null, pagesRotation: nextRotation });
+    }
+  };
+  manager.viewParameters.realScale = scale;
+  manager.viewParameters.rotation = rotation;
+
+  let destroyed = false;
+  /** The layers of the mounted pages, by page, and what takes each down. */
+  const layers = new Map<number, { layer: PdfjsEditorLayer; destroy(): void }>();
+
+  /** Run `use` on page `pageIndex`'s layer, or on a layer outside the document for an unmounted page. */
+  async function withLayer<T>(
+    pageIndex: number,
+    use: (layer: PdfjsEditorLayer) => Promise<T>,
+  ): Promise<T> {
+    const live = layers.get(pageIndex)?.layer;
+    if (live) return use(live);
+    const page = await getPage(pageIndex);
+    const mounted = layers.get(pageIndex)?.layer;
+    if (mounted) return use(mounted);
+    // Built, filled, and destroyed within microtasks, before the page can
+    // mount: its editors stay with the manager, as those of a page that
+    // unmounts do, and appear when its layer is built.
+    const container = document.createElement("div");
+    const drawLayer = new pdfjs.DrawLayer({ pageIndex });
+    drawLayer.setParent(document.createElement("div"));
+    const layer = new pdfjs.AnnotationEditorLayer({
+      uiManager: manager as never,
+      pageIndex,
+      div: container,
+      structTreeLayer: null as never,
+      accessibilityManager: undefined,
+      annotationLayer: undefined,
+      drawLayer,
+      textLayer: undefined,
+      viewport: viewportOf(page),
+      l10n: l10n as never,
+      mode: {},
+      enabled: false,
+    }) as unknown as PdfjsEditorLayer;
+    try {
+      return await use(layer);
+    } finally {
+      layer.destroy();
+      drawLayer.destroy();
+    }
+  }
+
+  /** Data pdf.js can create an editor from again where it was: images decoded, copies not moved. */
+  async function restorable(annotation: SavedAnnotation): Promise<object | null> {
+    const data = { ...(annotation.data as Record<string, unknown>) };
+    if (annotation.type === "stamp" && typeof data.bitmapUrl === "string") {
+      // Decoded before the editor is created, which then draws it at once:
+      // a layer outside the document is gone by the time a download would end.
+      const image = await manager.imageManager.getFromUrl(data.bitmapUrl);
+      if (!image) return null;
+      Object.assign(data, { bitmapId: image.id, bitmap: image.bitmap, isSvg: image.isSvg });
+    }
+    return data;
+  }
+
+  /** The editor `layer` created last for `create`, null when it created none. */
+  function created(layer: PdfjsEditorLayer, create: () => void): PdfjsEditor | null {
+    const before = new Set(manager.getEditors(layer.pageIndex));
+    create();
+    for (const editor of manager.getEditors(layer.pageIndex)) {
+      if (!before.has(editor)) return editor;
+    }
+    return null;
+  }
+
+  /** Switch to `mode` for the application: the annotation being typed or drawn is finished first. */
+  async function switchTo(mode: number): Promise<void> {
+    switching++;
+    try {
+      manager.endCurrentEditing();
+      await manager.updateMode(mode);
+    } finally {
+      switching--;
+    }
+  }
+
+  const live = (pageIndex: number): PdfjsEditorLayer => {
+    const layer = layers.get(pageIndex)?.layer;
+    if (!layer) throw new Error(`Page ${pageIndex + 1} has no annotation layer yet`);
+    return layer;
+  };
+
+  return {
+    get state() {
+      return state;
+    },
+    get styles() {
+      return styles;
+    },
+    async setTool(tool) {
+      if (destroyed) return;
+      await switchTo(modes[tool]);
+    },
+    setStyle(tool, style) {
+      for (const [type, [paramTool, key]] of Object.entries(params)) {
+        const value = (style as Record<string, unknown>)[key];
+        if (paramTool === tool && value !== undefined) manager.updateParams(Number(type), value);
+      }
+      // pdf.js reports the style of selected annotations it changes; the
+      // defaults, its toolbars keep themselves.
+      if (!state.hasSelection) {
+        styles = { ...styles, [tool]: { ...styles[tool], ...style } };
+        options.onStylesChange(styles);
+      }
+    },
+    undo: () => manager.undo(),
+    redo: () => manager.redo(),
+    deleteSelected: () => manager.delete(),
+    selectAll: () => manager.selectAll(),
+    commit: () => manager.endCurrentEditing(),
+    async addImage(pageIndex, image, altText) {
+      await switchTo(Mode.STAMP);
+      const layer = live(pageIndex);
+      const editor = created(layer, () =>
+        layer.addNewEditor(
+          typeof image === "string" ? { bitmapUrl: image } : { bitmapFile: asFile(image) },
+        ),
+      );
+      if (!editor) return false;
+      if (altText) {
+        editor.createAltText();
+        editor.altTextData = { altText, decorative: false };
+      }
+      return true;
+    },
+    async addSignature(pageIndex, signature, description = "") {
+      await switchTo(Mode.SIGNATURE);
+      const layer = live(pageIndex);
+      pendingSignature = { input: signature, description };
+      const editor = created(layer, () => layer.addNewEditor());
+      pendingSignature = null;
+      return editor !== null;
+    },
+    export() {
+      const annotations: SavedAnnotation[] = [];
+      for (let pageIndex = 0; pageIndex < doc.numPages; pageIndex++) {
+        for (const editor of manager.getEditors(pageIndex)) {
+          const type = editor.editorType;
+          if (!isAnnotationType(type) || editor.isEmpty()) continue;
+          // Copies, which pdf.js pastes, carry everything, images included;
+          // highlights have none and are kept as the PDF saves them.
+          const data = editor.serialize(type !== "highlight");
+          if (data) annotations.push({ pageIndex, type, data: plain(data) });
+        }
+      }
+      return annotations;
+    },
+    async import(annotations) {
+      const byPage = new Map<number, SavedAnnotation[]>();
+      for (const annotation of annotations) {
+        const { pageIndex } = annotation;
+        if (!isAnnotationType(annotation.type) || !annotation.data) continue;
+        if (!Number.isInteger(pageIndex) || pageIndex < 0 || pageIndex >= doc.numPages) continue;
+        byPage.set(pageIndex, [...(byPage.get(pageIndex) ?? []), annotation]);
+      }
+      let count = 0;
+      const imported = () => {
+        // The manager hears of no step, so it reports no change.
+        if (count > 0 && state.isEmpty) {
+          state = { ...state, isEmpty: false };
+          options.onStateChange(state);
+        }
+        return count;
+      };
+      for (const [pageIndex, saved] of byPage) {
+        // Images are decoded first, so that the layer is filled in one go.
+        const data = await Promise.all(saved.map(restorable));
+        if (destroyed) return imported();
+        count += await withLayer(pageIndex, async (layer) => {
+          const editors: PdfjsEditor[] = [];
+          for (const item of data) {
+            const editor = item ? await layer.deserialize({ ...item, pageIndex }) : null;
+            // In place: pdf.js moves a pasted copy beside its original,
+            // except a clone.
+            if (editor) editor.isClone = true;
+            if (editor) editors.push(editor);
+          }
+          if (layer.div) {
+            const { div } = layer;
+            quietly(manager, div, () => {
+              for (const editor of editors) layer.addOrRebuild(editor);
+            });
+            for (const editor of editors) {
+              // pdf.js moves a new text annotation up by its font size from
+              // where the reader clicked, and a clone too (mozilla/pdf.js#22271).
+              const { fontSize } = editor.serialize(true) ?? {};
+              if (editor.editorType === "freetext" && typeof fontSize === "number") {
+                editor.translate(0, fontSize * manager.viewParameters.realScale);
+              }
+            }
+          }
+          return editors.length;
+        });
+      }
+      return imported();
+    },
+    setView,
+    setCurrentPage(pageIndex) {
+      eventBus.dispatch("pagechanging", { source: null, pageNumber: pageIndex + 1 });
+    },
+    renderLayer({ pageIndex, container, drawings, textLayer, cssScale, rotation: turn }) {
+      let cancelled = false;
+      let handle: AnnotationLayerEditor | null = null;
+      const promise = getPage(pageIndex).then(async (page): Promise<AnnotationLayerEditor> => {
+        if (cancelled || destroyed) throw new RenderCancelledError("annotation editor cancelled");
+        // The layer of an earlier mount of the page, should it still be up.
+        layers.get(pageIndex)?.destroy();
+        // pdf.js finds the text a selection highlights through its class.
+        textLayer?.classList.add("textLayer");
+        container.dir = getComputedStyle(options.container).direction;
+        const drawLayer = new pdfjs.DrawLayer({ pageIndex });
+        drawLayer.setParent(drawings);
+        const observer = labelElements(container, options.labels);
+        let layerRotation = turn;
+        const layer = new pdfjs.AnnotationEditorLayer({
+          uiManager: manager as never,
+          pageIndex,
+          div: container as HTMLDivElement,
+          structTreeLayer: null as never,
+          accessibilityManager: undefined,
+          annotationLayer: undefined,
+          drawLayer,
+          textLayer: (textLayer ? { div: textLayer } : undefined) as never,
+          viewport: viewportOf(page, cssScale, turn),
+          l10n: l10n as never,
+          mode: {},
+          enabled: false,
+        }) as unknown as PdfjsEditorLayer;
+        let removed = false;
+        const destroy = () => {
+          if (removed) return;
+          removed = true;
+          observer.disconnect();
+          if (layers.get(pageIndex)?.layer === layer) layers.delete(pageIndex);
+          // The layer first, whose editors take their drawings off the draw layer.
+          layer.destroy();
+          drawLayer.destroy();
+          textLayer?.classList.remove("textLayer", "highlighting");
+          container.replaceChildren();
+          for (const name of ["style", "dir", "hidden", "tabindex", "data-main-rotation"]) {
+            container.removeAttribute(name);
+          }
+          container.className = container.className
+            .split(" ")
+            .filter((name) => name.startsWith("parapdf-"))
+            .join(" ");
+        };
+        layers.set(pageIndex, { layer, destroy });
+        handle = {
+          update(nextScale, nextRotation) {
+            if (removed || nextRotation === layerRotation) return;
+            layerRotation = nextRotation;
+            layer.update({ viewport: viewportOf(page, nextScale, nextRotation) });
+          },
+          destroy,
+        };
+        try {
+          // The annotations of the page go back on it in the part of
+          // render() that runs before it returns; render() then shows the
+          // layer, unless it has nothing to show and no tool is chosen.
+          container.hidden = true;
+          const rendered = quietly(manager, container, () =>
+            layer.render({ viewport: viewportOf(page, cssScale, turn) }),
+          );
+          await rendered;
+        } catch (error) {
+          destroy();
+          throw error;
+        }
+        if (cancelled || destroyed) {
+          destroy();
+          throw new RenderCancelledError("annotation editor cancelled");
+        }
+        return handle;
+      });
+      return {
+        promise,
+        cancel() {
+          cancelled = true;
+          handle?.destroy();
+        },
+      } satisfies AnnotationEditorLayerTask;
+    },
+    destroy() {
+      if (destroyed) return;
+      destroyed = true;
+      for (const { destroy } of [...layers.values()]) destroy();
+      layers.clear();
+      manager.destroy();
+      eventBus.clear();
+      // The document forgets the editors' annotations, which it would save otherwise.
+      const storage = doc.annotationStorage;
+      for (const [key] of [...storage]) {
+        if (key.startsWith("pdfjs_internal_editor_")) storage.remove(key);
+      }
+    },
+  };
+}

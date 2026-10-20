@@ -7,6 +7,11 @@ export {
 export type { PdfjsDocumentOptions } from "./engine/pdfjs.ts";
 export { pdfjsVersion } from "./engine/pdfjs-files.ts";
 export type {
+  AnnotationEditingState,
+  AnnotationLabels,
+  AnnotationStyles,
+  AnnotationTool,
+  AnnotationType,
   DestinationRef,
   OutlineNode,
   PageColors,
@@ -16,6 +21,8 @@ export type {
   PdfMetadata,
   PdfSource,
   Rotation,
+  SavedAnnotation,
+  SignatureInput,
 } from "./engine/types.ts";
 export { usePdfDocument, usePdfState, usePdfViewer } from "./react/context.ts";
 export { type PdfNavigation, usePdfNavigation, usePdfOutline } from "./react/navigation.ts";
@@ -25,6 +32,13 @@ export { PdfThumbnail, type PdfThumbnailProps } from "./react/PdfThumbnail.tsx";
 export { PdfViewport, type PdfViewportProps } from "./react/PdfViewport.tsx";
 export { type PdfSearch, usePdfSearch } from "./react/search.ts";
 export { usePdfSelection } from "./react/selection.ts";
+export type {
+  DocumentText,
+  LineBreaks,
+  PageTextContent,
+  TextOptions,
+  TextPoint,
+} from "./runtime/document-text.ts";
 export type { Layout, ScrollMode, SpreadMode } from "./runtime/layout.ts";
 export type { PrintOptions } from "./runtime/print.ts";
 export type { SchedulerStats } from "./runtime/scheduler.ts";

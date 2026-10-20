@@ -666,8 +666,14 @@ export function createPdfjsEngine(options: PdfjsEngineOptions): PdfEngine {
         createLayerState() {
           return createLayerState(doc);
         },
+        async createAnnotationEditor(editorOptions) {
+          // Loaded only by applications that edit annotations.
+          const { createPdfjsAnnotationEditor } = await import("./pdfjs-editor.ts");
+          return createPdfjsAnnotationEditor(pdfjs, doc, getPage, editorOptions);
+        },
         save() {
-          // Without edits, the original bytes; saveDocument() writes the form values in.
+          // Without edits, the original bytes; saveDocument() writes form
+          // values and the editor's annotations in.
           return doc.annotationStorage.size > 0 ? doc.saveDocument() : doc.getData();
         },
         async resolveDestination(dest): Promise<ResolvedDestination | null> {

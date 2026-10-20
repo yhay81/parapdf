@@ -42,7 +42,8 @@ export interface DocumentLease {
   submitPassword(password: string | null): void;
 }
 
-const registries = new WeakMap<PdfEngine, Map<unknown, Entry>>();
+/** Documents by source, for each engine, and for each viewer that holds its own. */
+const registries = new WeakMap<object, Map<unknown, Entry>>();
 
 /**
  * What identifies a source: its URL with the request's headers and
@@ -57,11 +58,11 @@ export const sourceKey = (source: PdfSource): unknown => {
   return `url:${url} ${JSON.stringify([headers, withCredentials ?? false])}`;
 };
 
-function registryOf(engine: PdfEngine): Map<unknown, Entry> {
-  let registry = registries.get(engine);
+function registryOf(owner: object): Map<unknown, Entry> {
+  let registry = registries.get(owner);
   if (!registry) {
     registry = new Map();
-    registries.set(engine, registry);
+    registries.set(owner, registry);
   }
   return registry;
 }
@@ -104,12 +105,19 @@ function openEntry(engine: PdfEngine, source: PdfSource): Entry {
   return entry;
 }
 
+/**
+ * The document `source` names, loaded once for every viewer of it, or, with
+ * `owner`, for that owner alone: a viewer that edits annotations keeps
+ * them in its document, which StrictMode's second mount of the same viewer
+ * still reuses.
+ */
 export function acquireDocument(
   engine: PdfEngine,
   source: PdfSource,
   listener: DocumentListener = {},
+  owner?: object,
 ): DocumentLease {
-  const registry = registryOf(engine);
+  const registry = registryOf(owner ?? engine);
   const key = sourceKey(source);
   let entry = registry.get(key);
   if (entry) {

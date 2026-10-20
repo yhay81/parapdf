@@ -1,10 +1,16 @@
 import type {
+  AnnotationEditingState,
+  AnnotationEditor,
+  AnnotationLabels,
+  AnnotationStyles,
+  AnnotationTool,
   DestinationRef,
   LayerState,
   LinkHandlers,
   OutlineNode,
   PageColors,
   PageSize,
+  PageText,
   PasswordReason,
   PdfAttachment,
   PdfEngine,
@@ -13,8 +19,18 @@ import type {
   PdfMetadata,
   PdfSource,
   Rotation,
+  SavedAnnotation,
+  SignatureInput,
   TextLayerHandle,
 } from "../engine/types.ts";
+import {
+  type DocumentText,
+  PAGE_SEPARATOR,
+  type PageTextContent,
+  pageText,
+  type TextOptions,
+  type TextPoint,
+} from "./document-text.ts";
 import { acquireDocument, type DocumentLease } from "./documents.ts";
 import { downloadBytes, filenameFromUrl } from "./files.ts";
 import { SearchHighlights } from "./highlights.ts";
@@ -132,6 +148,12 @@ export interface ViewerState {
    * show; null until loaded, empty when it has none.
    */
   layers: readonly PdfLayer[] | null;
+  /** What a pointer does on the pages when `annotationEditing` is on; see `setAnnotationTool()`. */
+  annotationTool: AnnotationTool;
+  /** Undo, redo, and the selection of the annotations edited; null while editing is off. */
+  annotationState: AnnotationEditingState | null;
+  /** The style of each tool; null while editing is off. */
+  annotationStyles: AnnotationStyles | null;
 }
 
 export type ZoomMode = "fit-width" | "fit-page" | "custom";
@@ -150,6 +172,12 @@ export interface PdfSelection {
   text: string;
   /** The rectangles the selected text covers, page by page, in page order. */
   pages: readonly { pageIndex: number; rects: readonly PdfRect[] }[];
+  /**
+   * Where the selection starts and ends in the document's text, for
+   * `getText()`: null for an end outside the pages' text layers.
+   */
+  start: TextPoint | null;
+  end: TextPoint | null;
 }
 
 export type PointerTool = "select" | "hand";
@@ -244,7 +272,49 @@ export interface ViewerOptions {
    * exceeded by them.
    */
   maxCanvasPixels?: number;
+  /**
+   * Let the reader create highlights, text, drawings, images, and
+   * signatures on the pages (default false); see `setAnnotationTool()`.
+   * `save()` writes them into the document, and `exportAnnotations()`
+   * gives them to the application to keep. The viewer then opens its own
+   * copy of the document instead of sharing one.
+   */
+  annotationEditing?: boolean;
+  /** The accessible names of the editor's controls, by default in English. */
+  annotationLabels?: Partial<AnnotationLabels>;
 }
+
+/** The editor's controls and annotations as pdf.js's English strings name them. */
+const ANNOTATION_LABELS: AnnotationLabels = {
+  highlight: "Highlight editor",
+  freeText: "Text Editor",
+  freeTextPlaceholder: "Start typing…",
+  ink: "Drawing editor",
+  stamp: "Image editor",
+  signature: "Signature editor",
+  removeHighlight: "Remove highlight",
+  removeFreeText: "Remove text",
+  removeInk: "Remove drawing",
+  removeStamp: "Remove image",
+  removeSignature: "Remove signature",
+  color: "Change color",
+  colors: "Color choices",
+  textColor: "Change text color",
+  inkColor: "Change drawing color",
+  yellow: "Yellow",
+  green: "Green",
+  blue: "Blue",
+  pink: "Pink",
+  red: "Red",
+  resizeTopLeft: "Top left corner — resize",
+  resizeTopMiddle: "Top middle — resize",
+  resizeTopRight: "Top right corner — resize",
+  resizeMiddleRight: "Middle right — resize",
+  resizeBottomRight: "Bottom right corner — resize",
+  resizeBottomMiddle: "Bottom middle — resize",
+  resizeBottomLeft: "Bottom left corner — resize",
+  resizeMiddleLeft: "Middle left — resize",
+};
 
 /** Jumps kept for `back()`. */
 const HISTORY_LIMIT = 50;
@@ -265,6 +335,8 @@ const PINCH_SLOP = 16;
 const GESTURE_EVENTS = ["gesturestart", "gesturechange", "gestureend"] as const;
 /** What Ctrl or ⌘ with + and - zooms by. */
 const ZOOM_STEP = 1.25;
+/** Pages `getText()` asks the engine for ahead of the one it reads. */
+const TEXT_READ_AHEAD = 4;
 /** Search publishes partial results at most this often. */
 const SEARCH_PUBLISH_INTERVAL = 100;
 
@@ -337,6 +409,43 @@ function selectedRects(
 }
 
 /**
+ * The place in the document's text of a range boundary (`node`, `offset`)
+ * in a text layer whose runs are `elements`, one per item of the page's text;
+ * null outside the runs. A boundary between runs is the start of the next
+ * one, or the end of the last.
+ */
+function textPointOf(
+  pageIndex: number,
+  elements: readonly HTMLElement[],
+  node: Node,
+  offset: number,
+): TextPoint | null {
+  const items = new Map<Node, number>(elements.map((element, item) => [element, item]));
+  for (let at: Node | null = node; at; at = at.parentNode) {
+    const item = items.get(at);
+    if (item === undefined) continue;
+    // Inside a run: count the text before the boundary.
+    const range = document.createRange();
+    range.selectNodeContents(at);
+    range.setEnd(node, offset);
+    return { pageIndex, item, offset: range.toString().length };
+  }
+  // Between runs, in the layer or a marked-content span that holds them.
+  const point = document.createRange();
+  point.setStart(node, offset);
+  for (const [item, element] of elements.entries()) {
+    const run = document.createRange();
+    run.selectNode(element);
+    if (point.compareBoundaryPoints(Range.START_TO_START, run) <= 0) {
+      return { pageIndex, item, offset: 0 };
+    }
+  }
+  const last = elements.length - 1;
+  if (last < 0) return null;
+  return { pageIndex, item: last, offset: elements[last]?.textContent?.length ?? 0 };
+}
+
+/**
  * How fast the shown content moves along the direction pages follow each
  * other: full-resolution work waits while it moves fast.
  */
@@ -376,6 +485,7 @@ type PageElements = [
   HTMLElement | null,
   HTMLElement | null,
   HTMLCanvasElement | null,
+  HTMLElement | null,
 ];
 
 /** The scroller's size, which rows are centered in. */
@@ -494,6 +604,9 @@ export class PdfViewerRuntime {
     metadata: null,
     attachments: null,
     layers: null,
+    annotationTool: "none",
+    annotationState: null,
+    annotationStyles: null,
   });
   readonly #engine: PdfEngine;
   readonly #gap: number;
@@ -513,6 +626,16 @@ export class PdfViewerRuntime {
     "maxDetailPixels" | "maxDetailViewports" | "maxBasePixels" | "maxCanvasPixels"
   >;
   readonly #links: LinkHandlers;
+  readonly #annotationEditing: boolean;
+  readonly #annotationLabels: AnnotationLabels;
+  /** Edits the open document's annotations once the document and the viewport are there. */
+  #editor: AnnotationEditor | null = null;
+  /** The editor while its code loads. */
+  #editorStarting: Promise<AnnotationEditor> | null = null;
+  /** The page the editor was last told is current. */
+  #editorPage = -1;
+  /** Annotations kept while no viewport is attached, which the next one shows again. */
+  #keptAnnotations: SavedAnnotation[] | null = null;
   /**
    * Positions before link and outline jumps: the page at the viewport's
    * top-left corner and where that corner is, as a share of the page.
@@ -589,6 +712,10 @@ export class PdfViewerRuntime {
         options.openAttachment ?? (({ filename, content }) => downloadBytes(content, filename)),
       setLayers: (action) => this.#changeLayers((layers) => layers.apply(action)),
     };
+    this.#annotationEditing = options.annotationEditing ?? false;
+    this.#annotationLabels = { ...ANNOTATION_LABELS, ...options.annotationLabels };
+    // The editor follows the zoom, turns, and the current page as they are published.
+    this.store.subscribe(this.#followView);
     this.#canvasLimits = {
       maxDetailPixels: options.maxDetailPixels,
       maxDetailViewports: options.maxDetailViewports,
@@ -615,6 +742,11 @@ export class PdfViewerRuntime {
     return this.#annotationLayer;
   }
 
+  /** Whether the reader may create annotations (`ViewerOptions.annotationEditing`). */
+  get annotationEditing(): boolean {
+    return this.#annotationEditing;
+  }
+
   get scroller(): HTMLElement | null {
     return this.#scroller;
   }
@@ -636,31 +768,36 @@ export class PdfViewerRuntime {
   open(source: PdfSource): () => void {
     const generation = ++this.#generation;
     let closed = false;
-    const lease = acquireDocument(this.#engine, source, {
-      onProgress: (loaded, total) => {
-        if (closed) return;
-        this.#progress = { loaded, total };
-        // Chunks arrive many times a frame; the store hears of them once a frame.
-        this.#progressFrame ||= requestAnimationFrame(() => {
-          this.#progressFrame = 0;
-          if (!closed && this.#progress) this.store.set({ progress: this.#progress });
-        });
+    const lease = acquireDocument(
+      this.#engine,
+      source,
+      {
+        onProgress: (loaded, total) => {
+          if (closed) return;
+          this.#progress = { loaded, total };
+          // Chunks arrive many times a frame; the store hears of them once a frame.
+          this.#progressFrame ||= requestAnimationFrame(() => {
+            this.#progressFrame = 0;
+            if (!closed && this.#progress) this.store.set({ progress: this.#progress });
+          });
+        },
+        onPassword: (reason) => {
+          if (closed) return;
+          if (this.#passwordPrompt) {
+            this.store.set({ status: "password", passwordReason: reason });
+            return;
+          }
+          // Fails this viewer only, with pdf.js's own messages: other viewers
+          // of the same document may still answer.
+          const error =
+            reason === "incorrect"
+              ? "PasswordException: Incorrect Password"
+              : "PasswordException: No password given";
+          this.store.set({ status: "error", error, passwordReason: null });
+        },
       },
-      onPassword: (reason) => {
-        if (closed) return;
-        if (this.#passwordPrompt) {
-          this.store.set({ status: "password", passwordReason: reason });
-          return;
-        }
-        // Fails this viewer only, with pdf.js's own messages: other viewers
-        // of the same document may still answer.
-        const error =
-          reason === "incorrect"
-            ? "PasswordException: Incorrect Password"
-            : "PasswordException: No password given";
-        this.store.set({ status: "error", error, passwordReason: null });
-      },
-    });
+      this.#annotationEditing ? this : undefined,
+    );
     this.#lease = lease;
     this.#sourceName = "url" in source ? filenameFromUrl(source.url) : null;
     this.#firstPaintAt = null;
@@ -713,9 +850,8 @@ export class PdfViewerRuntime {
             this.#highlights.clearPage(pageIndex);
           },
         });
-        for (const [index, [base, detail, text, annotations, structure, spare]] of this
-          .#pendingPages) {
-          this.#scheduler.attach(index, base, detail, text, annotations, structure, spare);
+        for (const [index, elements] of this.#pendingPages) {
+          this.#scheduler.attach(index, ...elements);
         }
         this.#pendingPages.clear();
         this.#thumbnails.refresh();
@@ -730,6 +866,7 @@ export class PdfViewerRuntime {
         });
         if (this.#initialPage > 0) this.goToPage(this.#initialPage);
         this.#update();
+        this.#startEditor();
         this.#background(this.#refineSizes(doc, generation), "measuring page sizes", generation);
         // The outline and the rest parse in the worker; each is published when ready.
         this.#publishLater(generation, doc.getOutline(), "outline", []);
@@ -764,6 +901,9 @@ export class PdfViewerRuntime {
       if (this.#generation === generation) {
         // Work still running for this document now sees a stale generation.
         this.#generation++;
+        // Its annotations go with it: an application keeps them through
+        // exportAnnotations() or save() first.
+        this.#stopEditor(false);
         this.#scheduler?.dispose();
         this.#thumbnails.reset();
         this.#searchGeneration++;
@@ -816,10 +956,13 @@ export class PdfViewerRuntime {
   }
 
   /**
-   * The document's bytes, with what was typed into its form fields saved in
-   * them; null while no document is open.
+   * The document's bytes, with what was typed into its form fields and the
+   * annotations the reader created saved in them; null while no document
+   * is open.
    */
   async save(): Promise<Uint8Array | null> {
+    // The text being typed counts, as it would once the reader clicks away.
+    this.#editor?.commit();
     return (await this.#doc?.save()) ?? null;
   }
 
@@ -859,7 +1002,224 @@ export class PdfViewerRuntime {
    */
   async print(options?: PrintOptions): Promise<void> {
     const doc = this.#doc;
+    this.#editor?.commit();
     if (doc) await printDocument(doc, { ...options, layers: this.#layers });
+  }
+
+  /**
+   * Start editing annotations if `ViewerOptions.annotationEditing` is on,
+   * once the document is open and a viewport attached, with the annotations
+   * a viewport that detached left. The editor's code loads first.
+   */
+  #startEditor(): void {
+    const doc = this.#doc;
+    const scheduler = this.#scheduler;
+    const scroller = this.#scroller;
+    const content = this.#content;
+    if (!this.#annotationEditing || this.#editor || this.#editorStarting) return;
+    if (!doc || !scheduler || !scroller || !content) return;
+    const { layout, rotation, scale } = this.store.get();
+    let editor: AnnotationEditor | null = null;
+    const starting = doc.createAnnotationEditor({
+      container: scroller,
+      pages: content,
+      labels: this.#annotationLabels,
+      ...(this.#pageColors ? { pageColors: this.#pageColors } : {}),
+      scale: layout?.scale ?? scale,
+      rotation,
+      onStateChange: (annotationState) => {
+        if (editor && this.#editor === editor) this.store.set({ annotationState });
+      },
+      onStylesChange: (annotationStyles) => {
+        if (editor && this.#editor === editor) this.store.set({ annotationStyles });
+      },
+      onToolChange: (annotationTool) => {
+        if (!editor || this.#editor !== editor) return;
+        this.store.set({ annotationTool });
+        content.classList.toggle("parapdf-annotating", annotationTool !== "none");
+      },
+    });
+    this.#editorStarting = starting;
+    starting.then(
+      (started) => {
+        const current =
+          this.#editorStarting === starting &&
+          this.#doc === doc &&
+          this.#scheduler === scheduler &&
+          this.#scroller === scroller;
+        if (this.#editorStarting === starting) this.#editorStarting = null;
+        if (!current) {
+          started.destroy();
+          return;
+        }
+        editor = started;
+        this.#editor = started;
+        const { currentPage, layout: shown, rotation: turn } = this.store.get();
+        // The view may have changed while the editor's code loaded.
+        if (shown) started.setView(shown.scale, turn);
+        this.#editorPage = currentPage;
+        started.setCurrentPage(currentPage);
+        scheduler.setAnnotationEditor(started);
+        this.store.set({
+          annotationTool: "none",
+          annotationState: started.state,
+          annotationStyles: started.styles,
+        });
+        const kept = this.#keptAnnotations;
+        this.#keptAnnotations = null;
+        if (kept?.length) this.#background(started.import(kept), "restoring annotations");
+      },
+      (error: unknown) => {
+        if (this.#editorStarting === starting) this.#editorStarting = null;
+        console.error("starting the annotation editor failed", error);
+      },
+    );
+  }
+
+  /**
+   * Stop editing annotations; with `keep`, the next editor shows them
+   * again, as it does annotations kept while this one was starting.
+   */
+  #stopEditor(keep: boolean): void {
+    const editor = this.#editor;
+    this.#editorStarting = null;
+    if (!keep) this.#keptAnnotations = null;
+    if (!editor) return;
+    if (keep) {
+      editor.commit();
+      this.#keptAnnotations = editor.export();
+    }
+    this.#editor = null;
+    this.#scheduler?.setAnnotationEditor(null);
+    editor.destroy();
+    this.#content?.classList.remove("parapdf-annotating");
+    this.store.set({ annotationTool: "none", annotationState: null, annotationStyles: null });
+  }
+
+  #followView = (): void => {
+    const editor = this.#editor;
+    if (!editor) return;
+    const { layout, currentPage } = this.store.get();
+    if (layout) editor.setView(layout.scale, layout.rotation);
+    if (currentPage !== this.#editorPage) {
+      this.#editorPage = currentPage;
+      editor.setCurrentPage(currentPage);
+    }
+  };
+
+  /**
+   * Choose what a pointer does on the pages: "highlight" highlights the
+   * text the reader selects, or, dragged outside text, draws a highlight
+   * freehand; "freetext" adds text where the reader clicks; "ink" draws;
+   * "stamp" and "signature" select and move images and signatures, which
+   * `addImage()` and `addSignature()` add. With any of them, the reader can
+   * select, move, resize, and delete the annotations created, and keys undo
+   * and redo. "none" leaves them shown but out of reach. Needs
+   * `annotationEditing`.
+   */
+  async setAnnotationTool(tool: AnnotationTool): Promise<void> {
+    const editor = this.#editor;
+    if (!editor) return;
+    this.store.set({ annotationTool: tool });
+    // Links and comments are out of reach while a tool is chosen, as in pdf.js's viewer.
+    this.#content?.classList.toggle("parapdf-annotating", tool !== "none");
+    await editor.setTool(tool);
+  }
+
+  /**
+   * Restyle the selected annotations, or, with none selected, the next
+   * ones `tool` creates, as pdf.js's toolbar of that tool does.
+   * `annotationStyles` shows the result.
+   */
+  setAnnotationStyle<T extends keyof AnnotationStyles>(
+    tool: T,
+    style: Partial<AnnotationStyles[T]>,
+  ): void {
+    this.#editor?.setStyle(tool, style);
+  }
+
+  undoAnnotation(): void {
+    this.#editor?.undo();
+  }
+
+  redoAnnotation(): void {
+    this.#editor?.redo();
+  }
+
+  deleteSelectedAnnotations(): void {
+    this.#editor?.deleteSelected();
+  }
+
+  selectAllAnnotations(): void {
+    this.#editor?.selectAll();
+  }
+
+  /**
+   * Add an image, from a Blob or a URL the page may fetch, to page
+   * `pageIndex` (default: the current page), in the middle of its visible
+   * part, selected so that the reader can move and resize it. `altText`
+   * describes it to assistive technology, in the PDF too. Switches to the
+   * "stamp" tool. Resolves false when the image cannot be added.
+   */
+  async addImage(
+    image: Blob | string,
+    options: { pageIndex?: number; altText?: string } = {},
+  ): Promise<boolean> {
+    const pageIndex = await this.#editablePage(options.pageIndex);
+    const editor = this.#editor;
+    if (pageIndex === null || !editor) return false;
+    this.store.set({ annotationTool: "stamp" });
+    this.#content?.classList.add("parapdf-annotating");
+    return editor.addImage(pageIndex, image, options.altText);
+  }
+
+  /**
+   * Add a signature to page `pageIndex` (default: the current page) as
+   * `addImage()` adds an image: typed text, an image, or drawn strokes, as
+   * outlines. `description` names it for assistive technology. Switches to
+   * the "signature" tool.
+   */
+  async addSignature(
+    signature: SignatureInput,
+    options: { pageIndex?: number; description?: string } = {},
+  ): Promise<boolean> {
+    const pageIndex = await this.#editablePage(options.pageIndex);
+    const editor = this.#editor;
+    if (pageIndex === null || !editor) return false;
+    this.store.set({ annotationTool: "signature" });
+    this.#content?.classList.add("parapdf-annotating");
+    return editor.addSignature(pageIndex, signature, options.description);
+  }
+
+  /** Page `requested`, or the current one, once its annotations can be edited; null if never. */
+  async #editablePage(requested: number | undefined): Promise<number | null> {
+    const scheduler = this.#scheduler;
+    const { pageCount, currentPage, first, last } = this.store.get();
+    const pageIndex = requested ?? currentPage;
+    if (!scheduler || !this.#editor || pageIndex < 0 || pageIndex >= pageCount) return null;
+    if (pageIndex < first || pageIndex > last) this.goToPage(pageIndex);
+    return (await scheduler.whenEditable(pageIndex)) && this.#scheduler === scheduler
+      ? pageIndex
+      : null;
+  }
+
+  /**
+   * Every annotation the reader created, on any page, mounted or not, as
+   * JSON-compatible data to keep and give back to `importAnnotations()`. The
+   * text being typed counts once the reader commits it. Empty while
+   * editing is off.
+   */
+  exportAnnotations(): SavedAnnotation[] {
+    return this.#editor?.export() ?? [];
+  }
+
+  /**
+   * Add annotations `exportAnnotations()` gave, where they were, without an
+   * undo step: say, after the same document opens again. Resolves with how
+   * many were added; 0 while editing is off.
+   */
+  async importAnnotations(annotations: readonly SavedAnnotation[]): Promise<number> {
+    return (await this.#editor?.import(annotations)) ?? 0;
   }
 
   /** The content of the embedded file `id` (see `attachments`), null when there is none. */
@@ -907,7 +1267,10 @@ export class PdfViewerRuntime {
     resize.observe(scroller);
     const detachSelection = this.#selection.attachPages(content);
     this.#requestUpdate();
+    this.#startEditor();
     return () => {
+      // The annotations stay for the next viewport.
+      if (this.#scroller === scroller) this.#stopEditor(true);
       scroller.removeEventListener("scroll", this.#onScroll);
       scroller.removeEventListener("wheel", this.#onWheel);
       scroller.removeEventListener("pointerdown", this.#onPointerDown);
@@ -935,6 +1298,8 @@ export class PdfViewerRuntime {
    * Register a mounted page's layers; returns the function that releases
    * them. With `spare`, a second detail canvas stacked over the base like
    * `detail`, a new detail is drawn there while the page shows the old one.
+   * `editor` receives the annotations the reader creates on the page, and
+   * the drawings of highlights and lines go into `base`'s parent.
    */
   attachPage(
     index: number,
@@ -944,24 +1309,25 @@ export class PdfViewerRuntime {
     annotations: HTMLElement | null = null,
     structure: HTMLElement | null = null,
     spare: HTMLCanvasElement | null = null,
+    editor: HTMLElement | null = null,
   ): () => void {
     const textLayer = this.#textLayer ? text : null;
     const annotationLayer = this.#annotationLayer ? annotations : null;
     // The structure takes the text layer's runs in, so it comes with them.
     const structureLayer = textLayer ? structure : null;
+    const editorLayer = this.#annotationEditing ? editor : null;
+    const elements: PageElements = [
+      base,
+      detail,
+      textLayer,
+      annotationLayer,
+      structureLayer,
+      spare,
+      editorLayer,
+    ];
     const scheduler = this.#scheduler;
-    if (scheduler) {
-      scheduler.attach(index, base, detail, textLayer, annotationLayer, structureLayer, spare);
-    } else {
-      this.#pendingPages.set(index, [
-        base,
-        detail,
-        textLayer,
-        annotationLayer,
-        structureLayer,
-        spare,
-      ]);
-    }
+    if (scheduler) scheduler.attach(index, ...elements);
+    else this.#pendingPages.set(index, elements);
     return () => {
       this.#pendingPages.delete(index);
       if (this.#scheduler === scheduler) scheduler?.detach(index);
@@ -1015,13 +1381,75 @@ export class PdfViewerRuntime {
       }
     }
     if (rectsByPage.size === 0) return null;
+    const first = selection.getRangeAt(0);
+    const last = selection.getRangeAt(selection.rangeCount - 1);
     return {
       // The selection's own text keeps its line breaks.
       text: outside ? text : selection.toString(),
       pages: [...rectsByPage]
         .sort(([a], [b]) => a - b)
         .map(([pageIndex, rects]) => ({ pageIndex, rects })),
+      start: this.#textPointAt(first.startContainer, first.startOffset),
+      end: this.#textPointAt(last.endContainer, last.endOffset),
     };
+  }
+
+  /** Where a range boundary in a mounted page's text layer lies in the document's text. */
+  #textPointAt(node: Node, offset: number): TextPoint | null {
+    const element = node instanceof Element ? node : node.parentElement;
+    const layer = element?.closest<HTMLElement>(".parapdf-text-layer");
+    const section = layer?.closest<HTMLElement>("section[data-page]");
+    if (!layer || !section || !this.#content?.contains(section)) return null;
+    const pageIndex = Number(section.dataset.page) - 1;
+    const handle = this.#textPages.get(pageIndex);
+    return handle ? textPointOf(pageIndex, handle.elements, node, offset) : null;
+  }
+
+  /**
+   * The document's text, read from the engine's text content of every page
+   * between `from` and `to`, mounted or not: items in content order, as
+   * search and the text layers read them, with "\n" where lines end or, with
+   * `lineBreaks: "join"`, lines joined as search joins them. Pages are
+   * parsed in the engine's worker, a few at a time; the texts are kept, so a
+   * second read, or a search, parses nothing again. Rejects while no
+   * document is open, and once it closes.
+   */
+  async getText(options: TextOptions = {}): Promise<DocumentText> {
+    const doc = this.#doc;
+    if (!doc) throw new Error("No document is open");
+    const { from, to, lineBreaks = "keep", signal } = options;
+    signal?.throwIfAborted();
+    const lastPage = doc.pageCount - 1;
+    const start = typeof from === "number" ? { pageIndex: from } : from;
+    const end = typeof to === "number" ? { pageIndex: to } : to;
+    const first = clamp(start?.pageIndex ?? 0, 0, lastPage);
+    const last = clamp(end?.pageIndex ?? lastPage, 0, lastPage);
+    // Pages are asked for ahead of the one being read: the worker parses
+    // them one after another while the main thread joins the text.
+    const requested = new Map<number, Promise<PageText>>();
+    const request = (pageIndex: number) => {
+      if (pageIndex > last || requested.has(pageIndex)) return;
+      const text = doc.getText(pageIndex);
+      // Abandoned when the read stops early; the read itself awaits it.
+      text.catch(() => {});
+      requested.set(pageIndex, text);
+    };
+    const pages: PageTextContent[] = [];
+    let text = "";
+    for (let pageIndex = first; pageIndex <= last; pageIndex++) {
+      for (let ahead = pageIndex; ahead < pageIndex + TEXT_READ_AHEAD; ahead++) request(ahead);
+      const content = await requested.get(pageIndex);
+      requested.delete(pageIndex);
+      signal?.throwIfAborted();
+      if (this.#doc !== doc || !content) throw new Error("The document was closed");
+      const startsHere = start && "item" in start && start.pageIndex === pageIndex;
+      const endsHere = end && "item" in end && end.pageIndex === pageIndex;
+      const read = pageText(content, lineBreaks, startsHere ? start : null, endsHere ? end : null);
+      if (pages.length > 0) text += PAGE_SEPARATOR;
+      pages.push({ pageIndex, text: read, offset: text.length });
+      text += read;
+    }
+    return { text, pages };
   }
 
   /** Fraction of the viewport covered by pages that show no pixels yet. */
@@ -1793,7 +2221,9 @@ export class PdfViewerRuntime {
   #pageKey(event: KeyboardEvent): void {
     const scroller = this.#scroller;
     const target = event.target instanceof Element ? event.target : null;
-    if (!scroller || target?.closest("input, select, textarea, button, [contenteditable]")) return;
+    // Arrow keys move a selected annotation.
+    const control = "input, select, textarea, button, [contenteditable], .parapdf-editor-layer";
+    if (!scroller || target?.closest(control)) return;
     // Within a pixel: zooming leaves fractional scroll positions. The far
     // edges are where the browser stops scrolling, which a stable scrollbar
     // gutter puts short of the scroll size less the client size: by 15 px in
@@ -1866,9 +2296,10 @@ export class PdfViewerRuntime {
    * other controls keep their own behavior; touches pan natively.
    */
   #onGrabStart = (event: PointerEvent): void => {
-    if (this.store.get().tool !== "hand" || event.pointerType === "touch" || event.button !== 0) {
-      return;
-    }
+    const { tool, annotationTool } = this.store.get();
+    // An annotation tool takes the pointer over the hand tool.
+    if (tool !== "hand" || annotationTool !== "none") return;
+    if (event.pointerType === "touch" || event.button !== 0) return;
     const target = event.target as Element | null;
     if (target?.closest("a, button, input, select, textarea, [contenteditable]")) return;
     // Keeps the drag from selecting text or dragging images, and the press

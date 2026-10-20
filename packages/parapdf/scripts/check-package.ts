@@ -108,8 +108,10 @@ try {
     JSON.stringify({ dependencies: manifest.dependencies, shippedVersion }),
   );
 
+  // The styles and the editor's icons are strings, which server and client share.
+  const dataModules = new Set(["styles.js", "editor-styles.js", "editor-icons.js"]);
   const clientModules = readdirSync(join(installed, "dist", "react")).filter(
-    (name) => name.endsWith(".js") && name !== "styles.js",
+    (name) => name.endsWith(".js") && !dataModules.has(name),
   );
   const withoutDirective = clientModules.filter(
     (name) =>

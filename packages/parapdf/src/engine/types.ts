@@ -252,6 +252,187 @@ export interface AnnotationLayerTask {
   cancel(): void;
 }
 
+/**
+ * What a pointer does on the pages while annotations are edited: create
+ * one kind of annotation, or, with "none", nothing: annotations created
+ * before still show, but cannot be selected.
+ */
+export type AnnotationTool = "none" | "highlight" | "freetext" | "ink" | "stamp" | "signature";
+
+/** The kinds of annotation a viewer creates. */
+export type AnnotationType = Exclude<AnnotationTool, "none">;
+
+/**
+ * The style each tool gives the annotations it creates, or, while some are
+ * selected, the style of the last one selected. Colors are CSS hex colors
+ * ("#ff0000"); thicknesses and font sizes are in PDF points.
+ */
+export interface AnnotationStyles {
+  /** `thickness` is the width of a highlight drawn freehand, outside text. */
+  highlight: { color: string; thickness: number };
+  freetext: { color: string; fontSize: number };
+  ink: { color: string; thickness: number; opacity: number };
+}
+
+/** What can be done with the annotations a viewer edits. */
+export interface AnnotationEditingState {
+  canUndo: boolean;
+  canRedo: boolean;
+  /** Some are selected: deleting and styling apply to them. */
+  hasSelection: boolean;
+  /** None was created, or every one created was deleted. */
+  isEmpty: boolean;
+}
+
+/**
+ * A signature to place on a page: typed text, drawn in a font of the
+ * application's choice (default "serif", italic); an image, whose outline
+ * is traced; or strokes drawn in a box of `width` by `height` units, each a
+ * list of points as alternating x and y coordinates, y downward.
+ */
+export type SignatureInput =
+  | { text: string; fontFamily?: string; fontStyle?: string; fontWeight?: string }
+  | { image: Blob | ImageBitmap }
+  | {
+      strokes: readonly (readonly number[])[];
+      width: number;
+      height: number;
+      /** Stroke width in the same units (default 1). */
+      thickness?: number;
+    };
+
+/**
+ * An annotation a viewer created, as JSON-compatible data the application
+ * can keep and give back to `importAnnotations()`, in this or another
+ * session. `data` belongs to the engine: keep it as it is.
+ */
+export interface SavedAnnotation {
+  pageIndex: number;
+  type: AnnotationType;
+  data: unknown;
+}
+
+/**
+ * The accessible names of the controls and annotations the editor shows,
+ * in the application's language.
+ */
+export interface AnnotationLabels {
+  highlight: string;
+  freeText: string;
+  /** What an empty text annotation shows until the reader types. */
+  freeTextPlaceholder: string;
+  ink: string;
+  stamp: string;
+  signature: string;
+  removeHighlight: string;
+  removeFreeText: string;
+  removeInk: string;
+  removeStamp: string;
+  removeSignature: string;
+  /** The button that opens a highlight's colors, and the list of them. */
+  color: string;
+  colors: string;
+  textColor: string;
+  inkColor: string;
+  yellow: string;
+  green: string;
+  blue: string;
+  pink: string;
+  red: string;
+  resizeTopLeft: string;
+  resizeTopMiddle: string;
+  resizeTopRight: string;
+  resizeMiddleRight: string;
+  resizeBottomRight: string;
+  resizeBottomMiddle: string;
+  resizeBottomLeft: string;
+  resizeMiddleLeft: string;
+}
+
+export interface AnnotationEditorOptions {
+  /** The scroll container: editing keys work while focus is in it. */
+  container: HTMLElement;
+  /** The element that holds the pages; dragging an annotation turns text selection off on it. */
+  pages: HTMLElement;
+  labels: AnnotationLabels;
+  /** The colors pages are drawn in, which images and highlights follow. */
+  pageColors?: PageColors;
+  /** CSS pixels per PDF point and the view's rotation the pages show now. */
+  scale: number;
+  rotation: Rotation;
+  onStateChange(state: AnnotationEditingState): void;
+  onStylesChange(styles: AnnotationStyles): void;
+  /** The editor switched tools by itself, as when the reader selects an annotation of another kind. */
+  onToolChange(tool: AnnotationTool): void;
+}
+
+export interface AnnotationLayerElements {
+  pageIndex: number;
+  /** Receives the page's annotations being edited; laid out unturned and turned by the engine. */
+  container: HTMLElement;
+  /**
+   * Receives the drawings of highlights and freehand lines, under the text
+   * layer: the page's canvases' parent, unturned.
+   */
+  drawings: HTMLElement;
+  /** The page's text layer, whose selections become highlights; null without one. */
+  textLayer: HTMLElement | null;
+  /** CSS pixels per PDF point, and the view's rotation. */
+  cssScale: number;
+  rotation: Rotation;
+}
+
+export interface AnnotationLayerEditor {
+  /** The view turned; zooming needs nothing. */
+  update(cssScale: number, rotation: Rotation): void;
+  destroy(): void;
+}
+
+export interface AnnotationEditorLayerTask {
+  readonly promise: Promise<AnnotationLayerEditor>;
+  cancel(): void;
+}
+
+/**
+ * The annotations one viewer creates and edits. Annotations stay with it
+ * while their pages unmount and are shown again on the pages' new layers.
+ */
+export interface AnnotationEditor {
+  readonly state: AnnotationEditingState;
+  readonly styles: AnnotationStyles;
+  setTool(tool: AnnotationTool): Promise<void>;
+  /** Restyle the selected annotations, or with none selected, the next ones `tool` creates. */
+  setStyle<T extends keyof AnnotationStyles>(tool: T, style: Partial<AnnotationStyles[T]>): void;
+  undo(): void;
+  redo(): void;
+  deleteSelected(): void;
+  selectAll(): void;
+  /** Finish the annotation being typed or drawn, before saving or printing. */
+  commit(): void;
+  /**
+   * Add an image to page `pageIndex`, whose annotation layer must be built,
+   * centered in its visible part; false when the image cannot be read.
+   */
+  addImage(pageIndex: number, image: Blob | string, altText?: string): Promise<boolean>;
+  /** Add a signature to page `pageIndex` as `addImage` adds an image. */
+  addSignature(
+    pageIndex: number,
+    signature: SignatureInput,
+    description?: string,
+  ): Promise<boolean>;
+  /** Every annotation created, as data `import` takes. */
+  export(): SavedAnnotation[];
+  /** Add annotations `export` gave, on mounted pages or not, without an undo step. */
+  import(annotations: readonly SavedAnnotation[]): Promise<number>;
+  /** The view zoomed or turned. */
+  setView(cssScale: number, rotation: Rotation): void;
+  /** The page keyboard shortcuts and pasting act on. */
+  setCurrentPage(pageIndex: number): void;
+  renderLayer(elements: AnnotationLayerElements): AnnotationEditorLayerTask;
+  /** Ends editing and forgets every annotation that was not saved. */
+  destroy(): void;
+}
+
 export interface PdfEngineDocument {
   readonly pageCount: number;
   /**
@@ -275,10 +456,20 @@ export interface PdfEngineDocument {
   /** The document's embedded files; empty when it has none. */
   getAttachments(): Promise<readonly PdfAttachment[]>;
   getAttachmentContent(id: string): Promise<Uint8Array | null>;
-  /** The document's bytes, with what was typed into its form fields saved in them. */
+  /**
+   * The document's bytes, with what was typed into its form fields and the
+   * annotations its editor created saved in them.
+   */
   save(): Promise<Uint8Array>;
   /** A new state of the document's layers, as the document shows them by default. */
   createLayerState(): Promise<LayerState>;
+  /**
+   * Start editing annotations, once the editor's code has loaded. The
+   * document then belongs to this editor:
+   * its annotations go into the document's bytes that `save` returns, and
+   * a second editor of the same document would mix them up.
+   */
+  createAnnotationEditor(options: AnnotationEditorOptions): Promise<AnnotationEditor>;
   resolveDestination(dest: DestinationRef): Promise<ResolvedDestination | null>;
   /** Drop cached parsing results for a page that left the mounted window. */
   releasePage(pageIndex: number): void;

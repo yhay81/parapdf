@@ -2,7 +2,9 @@
  * Functional checks for the text layer: selection, search highlights,
  * normalization, accessibility semantics including the text's language, and
  * text runs ending on their glyphs on English and Japanese pages and after
- * zooming. Exits non-zero on failure.
+ * zooming; and for `getText()`, the document's text read from every page,
+ * mounted or not, between search matches' and selections' ends. Exits
+ * non-zero on failure.
  *
  * Usage: pnpm --filter @parapdf/prototype build && pnpm --filter @parapdf/prototype check:text
  * SCREENSHOT=path.png saves the search view for visual review.
@@ -831,6 +833,133 @@ try {
     "a drag out of a page sideways in 1 px steps holds beside it",
     stepPressed !== undefined && stepSideways > 0 && stepSideways < stepPressed.chars,
     `${stepSideways} characters; the line holds ${stepPressed?.chars}; page 1's box reaches ${beyond} px right of its text layer`,
+  );
+
+  // The document's text, read from every page through the search index's
+  // text content, mounted or not.
+  await page.context().close();
+  page = await newPage();
+  await openViewer(page, baseUrl, "bill-hr815.pdf");
+  const documentText = await page.evaluate(async () => {
+    type Point = { pageIndex: number; item: number; offset: number };
+    const viewer = (
+      window as {
+        __viewer?: {
+          store: { get(): { pageCount: number } };
+          getText(options?: object): Promise<{
+            text: string;
+            pages: { pageIndex: number; text: string; offset: number }[];
+          }>;
+          getSelection(): { text: string; start: Point | null; end: Point | null } | null;
+        };
+      }
+    ).__viewer;
+    if (!viewer) return null;
+    const { text, pages } = await viewer.getText();
+    const layer = document.querySelector('section[data-page="1"] .parapdf-text-layer');
+    const runs = [...(layer?.querySelectorAll(":scope span:not(.markedContent)") ?? [])]
+      .map((span) => span.textContent)
+      .join("");
+    const joined = await viewer.getText({ lineBreaks: "join" });
+    const last = pages.at(-1);
+    // A selection of page 1's first two runs, as the reader would drag it.
+    const spans = [
+      ...(layer?.querySelectorAll<HTMLElement>(":scope span:not(.markedContent)") ?? []),
+    ]
+      .filter((span) => (span.textContent?.length ?? 0) > 3)
+      .slice(0, 2);
+    const range = document.createRange();
+    const first = spans[0]?.firstChild;
+    const second = spans[1]?.firstChild;
+    if (first && second) {
+      range.setStart(first, 1);
+      range.setEnd(second, 3);
+      getSelection()?.removeAllRanges();
+      getSelection()?.addRange(range);
+    }
+    const selection = viewer.getSelection();
+    const selected =
+      selection?.start && selection.end
+        ? await viewer.getText({ from: selection.start, to: selection.end })
+        : null;
+    getSelection()?.removeAllRanges();
+    const aborted = await viewer.getText({ signal: AbortSignal.abort() }).then(
+      () => false,
+      (error: Error) => error.name === "AbortError",
+    );
+    return {
+      pageCount: viewer.store.get().pageCount,
+      pages: pages.length,
+      mounted: document.querySelectorAll("section[data-page]").length,
+      separated: pages.every(
+        (page) => text.slice(page.offset, page.offset + page.text.length) === page.text,
+      ),
+      firstMatchesLayer: pages[0]?.text.replaceAll("\n", "") === runs,
+      lastPage: last?.text.length ?? 0,
+      lastIndex: last?.pageIndex,
+      joinedLineBreaks: joined.pages.some((page) => page.text.includes("\n")),
+      selection: selection?.text.replace(/\s+/g, " ") ?? null,
+      selected: selected?.text.replace(/\s+/g, " ") ?? null,
+      aborted,
+    };
+  });
+  check(
+    "getText() reads every page, the unmounted ones too",
+    documentText !== null &&
+      documentText.pages === documentText.pageCount &&
+      documentText.mounted < documentText.pageCount &&
+      documentText.lastIndex === documentText.pageCount - 1 &&
+      documentText.lastPage > 0,
+    JSON.stringify(documentText && { pages: documentText.pages, mounted: documentText.mounted }),
+  );
+  check(
+    "a page's text is its text layer's, with line breaks",
+    documentText?.firstMatchesLayer === true && documentText.separated,
+  );
+  check("joined lines hold no line breaks", documentText?.joinedLineBreaks === false);
+  check(
+    "a selection's ends read the same text back",
+    documentText?.selection !== null && documentText?.selection === documentText?.selected,
+    `${JSON.stringify(documentText?.selection)} vs ${JSON.stringify(documentText?.selected)}`,
+  );
+  check("an aborted read rejects", documentText?.aborted === true);
+  const matched = await page.evaluate(async () => {
+    const viewer = (
+      window as {
+        __viewer?: {
+          store: {
+            get(): {
+              search: {
+                status: string;
+                matches: { pageIndex: number; start: object; end: object }[];
+              };
+            };
+          };
+          search(query: string): void;
+          getText(options?: object): Promise<{ text: string }>;
+        };
+      }
+    ).__viewer;
+    if (!viewer) return null;
+    viewer.search("appropriations");
+    while (viewer.store.get().search.status !== "done") {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    const { matches } = viewer.store.get().search;
+    const match = matches.at(-1);
+    if (!match) return null;
+    const { text } = await viewer.getText({
+      from: { pageIndex: match.pageIndex, ...match.start },
+      to: { pageIndex: match.pageIndex, ...match.end },
+      // Joined as search joins lines: a match may span a hyphenated word.
+      lineBreaks: "join",
+    });
+    return { text, pageIndex: match.pageIndex, matches: matches.length };
+  });
+  check(
+    "a search match's points read the matched text, on any page",
+    matched?.text.toLowerCase() === "appropriations",
+    JSON.stringify(matched),
   );
 
   check("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));

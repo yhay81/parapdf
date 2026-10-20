@@ -4,6 +4,30 @@ Changes to the `parapdf` package. It follows
 [Semantic Versioning](https://semver.org/); until 1.0, a minor release may
 change the API.
 
+## Unreleased
+
+- Annotation editing, with `annotationEditing: true`, through pdf.js's
+  editors: highlights of selected text and freehand, text, drawings, images
+  (`addImage()`), and signatures typed, traced from an image, or drawn by the
+  application (`addSignature()`). `setAnnotationTool()` chooses the tool and
+  `setAnnotationStyle()` the colors, thicknesses, and font size;
+  `undoAnnotation()`, `redoAnnotation()`, `deleteSelectedAnnotations()`, and
+  `selectAllAnnotations()`; the state publishes `annotationTool`,
+  `annotationState`, and `annotationStyles`. Pages build the layer of their
+  annotations after the text layer, during idle periods, and pages that
+  mount again show them without taking focus or adding undo steps. `save()`,
+  `download()`, and `print()` include them; `exportAnnotations()` returns
+  them as JSON-compatible data, and `importAnnotations()` adds them again,
+  on pages that are not mounted too. `annotationLabels` names the editor's
+  controls in the application's language. A viewer that edits annotations
+  opens its own copy of the document.
+- `getText()` reads the document's text from every page, mounted or not, as
+  search reads it: whole, by pages, or between two points, such as a search
+  match's or a selection's ends, with line breaks kept or joined as search
+  joins them.
+- `getSelection()` also returns where the selection starts and ends in the
+  document's text (`start`, `end`), for `getText()`.
+
 ## 0.3.1 — 2026-10-20
 
 - In `"page"` mode, a key pressed right after a flip flips from the row

@@ -14,6 +14,7 @@ import {
   type ViewerOptions,
 } from "parapdf";
 import { Profiler, type ProfilerOnRenderCallback, Suspense, use, useEffect, useState } from "react";
+import { AnnotationToolbar } from "./AnnotationToolbar.tsx";
 import { BenchDriver } from "./BenchDriver.tsx";
 import { configureEngine, type Pdfjs } from "./engines.ts";
 import { PasswordPrompt } from "./PasswordPrompt.tsx";
@@ -45,6 +46,8 @@ const settings = {
   password: params.get("password"),
   /** Form fields the reader can fill in. */
   forms: params.get("forms") === "1",
+  /** Highlights, text, drawings, images, and signatures the reader creates. */
+  annotations: params.get("annotations") === "1",
   /** "0" fails encrypted documents instead of asking for their password. */
   passwordPrompt: params.get("passwordPrompt") !== "0",
   /** "odd" or "even" shows pages side by side in pairs. */
@@ -150,6 +153,7 @@ const viewerOptions: ViewerOptions = {
   annotationLayer: settings.links,
   externalLinks: settings.externalLinks,
   forms: settings.forms,
+  annotationEditing: settings.annotations,
   passwordPrompt: settings.passwordPrompt,
   spread: settings.spread,
   scrollMode: settings.scrollMode,
@@ -224,10 +228,17 @@ function Viewer(_props: { renders: number }) {
           sidebar={sidebar}
           onToggleSidebar={(view) => setSidebar((open) => (open === view ? null : view))}
         />
+        {settings.annotations ? <AnnotationToolbar file={settings.file} /> : null}
         <PasswordPrompt />
         {sidebar ? <Sidebar view={sidebar} id="sidebar" /> : null}
         <PdfViewport
-          className={sidebar ? "viewport with-sidebar" : "viewport"}
+          className={[
+            "viewport",
+            sidebar ? "with-sidebar" : "",
+            settings.annotations ? "with-annotations" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
           {...(japanese ? { label: "PDF 文書", pageLabel } : {})}
           renderOverlay={renderOverlay}
         />
