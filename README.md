@@ -316,6 +316,30 @@ about 20 ms as noise.
   Firefox alike, the band reached 190 and 292 CSS pixels before the change
   and stays at 0 now, with every page in view drawn by the last move. The
   iPadOS simulator has not been tried again.
+- **Two-finger drags that zoomed (2026-10-20).** Two touches only pan until
+  the distance between them changes by 16 CSS pixels. The runtime measured
+  that distance at each finger's move, but browsers deliver the two
+  fingers' moves one after the other, so it measured the moved finger
+  against where the other had been a frame before. A two-finger drag
+  therefore zoomed once one frame's movement changed that measure by 16
+  pixels: at 17 pixels a frame with one finger above the other, about one
+  pixel per millisecond, but not at 15; at 23 with the fingers at 45° but
+  not at 21; and at 100 side by side 300 pixels apart but not at 98. Each
+  drag committed the ratio that the transient distance predicts, in
+  Chromium, WebKit, and Firefox alike. In
+  [`check-pinch.ts`](examples/prototype/scripts/check-pinch.ts), fingers
+  150 pixels apart, one above the other, that dragged 30 pixels a frame
+  committed a zoom of 0.833 and scrolled 74 of their 600 pixels, and a
+  flick of fingers 300 apart side by side at 150 a frame committed 0.894
+  and scrolled 551 of 900, through Chromium's own input handling as well.
+  The runtime now reads the touches once a frame, after all of the frame's
+  moves, and before a commit: those drags scroll by their whole distance at
+  the same zoom, their preview follows the fingers to the pixel in every
+  frame, and pinches of dispatched pointers zoom by the same ratios as
+  before. Read once a frame, a pinch starts zooming relative to its first
+  frame past the 16 pixels, so Chromium's synthesized pinches now vary with
+  how their moves fall into frames: a pinch out by 2 committed 2.04 to 2.14
+  over three runs, 2.14 each time before. Real devices have not been tried.
 - **Zoom cost.** Against a React wrapper of pdf.js's own viewer
   (`PDFViewer`), measured in another project's harness, the main thread was
   1.4–5.6 times busier while zooming.

@@ -86,6 +86,11 @@ engine, or switches over `status` or `zoomMode`, needs changes.
 - A canvas stays hidden while it is drawn again: with pdf.js's renderer
   worker (`rendererSrc`), a redraw used to show black until the worker's
   first frame arrived, over the low-resolution page or in its place.
+- A two-finger drag only scrolls, however fast it moves and however the
+  fingers sit. The distance between the touches was measured at each
+  finger's move, against where the other finger had been a frame before,
+  so a drag zoomed once one frame's movement changed it by 16 CSS pixels:
+  with one finger above the other, at about one pixel per millisecond.
 - `ViewerState.status` has the new value `"password"`, and `ZoomMode`
   `"fit-page"`. `Layout` describes rows: `rowTops`, `rowWidths`,
   `rowHeights`, `rowFirst`, `rowLast`, `offsets`, `spread`, `scrollMode`,
