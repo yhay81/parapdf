@@ -10,6 +10,8 @@ ParaPDF work, from the finding recorded in `AGENTS.md` (Runtime prototype,
 the `TextLayer` and `lang` item) and worked around in ParaPDF by
 `inLayerLanguage()` in `packages/parapdf/src/engine/pdfjs.ts`.
 
+Pull request: https://github.com/mozilla/pdf.js/pull/22261, opened on 2026-10-20.
+
 Reproduction: `bench/scripts/textlayer-lang-repro.html` (the page: pdf.js's
 display API only, `getDocument`, `PDFPageProxy.render`, and `TextLayer`,
 styled by pdf.js's own `.textLayer` rules) and

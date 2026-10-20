@@ -11,6 +11,8 @@ the item on drag selections over space without text) and in commit a0ef709,
 which fixed the same behaviour in ParaPDF (`TextSelectionTracker`,
 `packages/parapdf/src/runtime/selection.ts`).
 
+Pull request: https://github.com/mozilla/pdf.js/pull/22262, opened on 2026-10-20.
+
 Reproduction: `bench/scripts/selection-drag-repro.html` (the page: pdf.js's
 viewer components, `pdf_viewer.mjs`, or with `mode=layers` the display API's
 `TextLayer` alone) and `bench/scripts/selection-drag-repro.ts` (the

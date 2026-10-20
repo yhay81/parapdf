@@ -8,6 +8,8 @@ the zoom measurement whose JavaScript profile put 85 ms of `drawImage` in
 `CanvasGraphics#compositeKnockoutSurface`. Not done before filing: checking
 release Chrome, Firefox, and Safari by hand, and other govinfo.gov PDFs.
 
+Pull request: https://github.com/mozilla/pdf.js/pull/22260, opened on 2026-10-20.
+
 Reproduction: `bench/scripts/knockout-repro.html` (the page: pdf.js's display
 API only, with timing wrappers) and `bench/scripts/knockout-repro.ts` (the
 Playwright driver that serves it and runs the configurations below). Raw
