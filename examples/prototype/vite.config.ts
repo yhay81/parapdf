@@ -20,12 +20,15 @@ const isolationHeaders = {
 function stageStaticFiles(): Plugin {
   const stage = () => {
     const pdfjsDir = join(exampleDir, "node_modules/pdfjs-dist");
-    for (const dir of ["cmaps", "standard_fonts", "wasm", "iccs"]) {
+    for (const dir of ["cmaps", "standard_fonts", "wasm", "iccs", "web/images"]) {
       cpSync(join(pdfjsDir, dir), join(publicDir, "pdfjs", dir), { recursive: true });
       if (hasPdfjsNext) {
-        cpSync(join(pdfjsNextDir, "web", dir), join(publicDir, "pdfjs-next", dir), {
-          recursive: true,
-        });
+        // The generic build keeps its assets, the annotation icons included, under web/.
+        const source =
+          dir === "web/images" ? join(pdfjsNextDir, dir) : join(pdfjsNextDir, "web", dir);
+        if (existsSync(source)) {
+          cpSync(source, join(publicDir, "pdfjs-next", dir), { recursive: true });
+        }
       }
     }
     const corpusOut = join(publicDir, "corpus");

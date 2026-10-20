@@ -10,12 +10,19 @@ export {
   type AnnotationLayerTask,
   type DestinationRef,
   isRenderCancelled,
+  type LayerState,
   type LinkHandlers,
+  type OpenOptions,
   type OutlineNode,
+  type PageColors,
   type PageSize,
   type PageText,
+  type PasswordReason,
+  type PdfAttachment,
   type PdfEngine,
   type PdfEngineDocument,
+  type PdfLayer,
+  type PdfMetadata,
   type PdfSource,
   RenderCancelledError,
   type RenderRegion,
@@ -31,13 +38,20 @@ export { usePdfDocument, usePdfState, usePdfViewer } from "./react/context.ts";
 export { type PdfNavigation, usePdfNavigation, usePdfOutline } from "./react/navigation.ts";
 export { PdfDocument, type PdfDocumentProps } from "./react/PdfDocument.tsx";
 export { PdfPageRect, type PdfPageRectProps } from "./react/PdfPageRect.tsx";
+export { PdfThumbnail, type PdfThumbnailProps } from "./react/PdfThumbnail.tsx";
 export { PdfViewport, type PdfViewportProps } from "./react/PdfViewport.tsx";
 export { type PdfSearch, usePdfSearch } from "./react/search.ts";
-export type { Layout } from "./runtime/layout.ts";
+export { usePdfSelection } from "./react/selection.ts";
+export type { Layout, SpreadMode } from "./runtime/layout.ts";
+export type { PrintOptions } from "./runtime/print.ts";
 export type { SchedulerStats } from "./runtime/scheduler.ts";
-export type { SearchMatch, TextPosition } from "./runtime/text-search.ts";
+export type { SearchMatch, SearchOptions, TextPosition } from "./runtime/text-search.ts";
 export {
+  type LoadProgress,
+  type PdfRect,
+  type PdfSelection,
   PdfViewerRuntime,
+  type PointerTool,
   type SearchState,
   type ViewerOptions,
   type ViewerState,

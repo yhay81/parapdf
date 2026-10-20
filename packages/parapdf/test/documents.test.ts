@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it, mock } from "node:test";
-import type { PdfEngine, PdfEngineDocument, PdfSource } from "../src/engine/types.ts";
+import type { OpenOptions, PdfEngine, PdfEngineDocument, PdfSource } from "../src/engine/types.ts";
 import { acquireDocument, sourceKey } from "../src/runtime/documents.ts";
 
 /** An engine that counts opened and destroyed documents; `fail` rejects every open. */
@@ -87,6 +87,120 @@ describe("acquireDocument", () => {
   });
 });
 
+/**
+ * An engine whose documents need the password "secret": it reports progress,
+ * then asks until it gets the password, and fails when it gets null.
+ */
+function lockedEngine() {
+  const calls = { opens: 0, asked: [] as string[], aborted: 0 };
+  const engine: PdfEngine = {
+    name: "locked",
+    async open(_source, options: OpenOptions = {}) {
+      calls.opens++;
+      options.signal?.addEventListener("abort", () => calls.aborted++);
+      options.onProgress?.(10, 100);
+      let reason: "required" | "incorrect" = "required";
+      for (;;) {
+        calls.asked.push(reason);
+        const password = (await options.password?.(reason)) ?? null;
+        if (password === null) throw new Error("PasswordException");
+        if (password === "secret") break;
+        reason = "incorrect";
+      }
+      options.onProgress?.(100, 100);
+      return { pageCount: 1, destroy: async () => {} } as unknown as PdfEngineDocument;
+    },
+  };
+  return { engine, calls };
+}
+
+describe("acquireDocument with passwords and progress", () => {
+  beforeEach(() => mock.timers.enable({ apis: ["setTimeout"] }));
+  afterEach(() => mock.timers.reset());
+
+  it("asks every viewer of the document, and any of them may answer", async () => {
+    const { engine, calls } = lockedEngine();
+    const heard: string[] = [];
+    const a = acquireDocument(
+      engine,
+      { url: "/locked.pdf" },
+      {
+        onPassword: (reason) => heard.push(`a:${reason}`),
+      },
+    );
+    await settle();
+    // A viewer that joins while the request is pending hears it too.
+    const b = acquireDocument(
+      engine,
+      { url: "/locked.pdf" },
+      {
+        onPassword: (reason) => heard.push(`b:${reason}`),
+      },
+    );
+    assert.deepEqual(heard, ["a:required", "b:required"]);
+    a.submitPassword("wrong");
+    await settle();
+    assert.deepEqual(heard, ["a:required", "b:required", "a:incorrect", "b:incorrect"]);
+    b.submitPassword("secret");
+    assert.equal(await a.document, await b.document);
+    assert.deepEqual(calls.asked, ["required", "incorrect"]);
+    assert.equal(calls.opens, 1);
+  });
+
+  it("fails to open when a viewer gives up", async () => {
+    const { engine } = lockedEngine();
+    const lease = acquireDocument(engine, { url: "/locked.pdf" });
+    await settle();
+    lease.submitPassword(null);
+    await assert.rejects(lease.document, /PasswordException/);
+  });
+
+  it("reports progress, also to viewers that join late", async () => {
+    const { engine } = lockedEngine();
+    const early: (number | null)[][] = [];
+    const late: (number | null)[][] = [];
+    const a = acquireDocument(
+      engine,
+      { url: "/locked.pdf" },
+      {
+        onProgress: (loaded, total) => early.push([loaded, total]),
+      },
+    );
+    await settle();
+    acquireDocument(
+      engine,
+      { url: "/locked.pdf" },
+      {
+        onProgress: (loaded, total) => late.push([loaded, total]),
+      },
+    );
+    a.submitPassword("secret");
+    await a.document;
+    assert.deepEqual(early, [
+      [10, 100],
+      [100, 100],
+    ]);
+    assert.deepEqual(late, [
+      [10, 100],
+      [100, 100],
+    ]);
+  });
+
+  it("stops loading once the last viewer leaves while it waits for a password", async () => {
+    const { engine, calls } = lockedEngine();
+    const lease = acquireDocument(engine, { url: "/locked.pdf" });
+    await settle();
+    lease.release();
+    mock.timers.tick(1000);
+    await settle();
+    assert.equal(calls.aborted, 1);
+    await assert.rejects(lease.document, /PasswordException/);
+    // The next viewer opens it again.
+    acquireDocument(engine, { url: "/locked.pdf" });
+    assert.equal(calls.opens, 2);
+  });
+});
+
 describe("sourceKey", () => {
   it("is equal for the same URL in another object", () => {
     const a: PdfSource = { url: "/a.pdf" };
@@ -97,5 +211,17 @@ describe("sourceKey", () => {
   it("is the bytes themselves for data", () => {
     const data = new ArrayBuffer(8);
     assert.equal(sourceKey({ data }), data);
+  });
+
+  it("tells requests with other headers or credentials apart", () => {
+    const key = sourceKey({ url: "/a.pdf", httpHeaders: { b: "2", a: "1" } });
+    assert.equal(key, sourceKey({ url: "/a.pdf", httpHeaders: { a: "1", b: "2" } }));
+    assert.notEqual(key, sourceKey({ url: "/a.pdf" }));
+    assert.notEqual(
+      sourceKey({ url: "/a.pdf", withCredentials: true }),
+      sourceKey({ url: "/a.pdf" }),
+    );
+    // The password is not part of the key: viewers share the unlocked document.
+    assert.equal(sourceKey({ url: "/a.pdf", password: "x" }), sourceKey({ url: "/a.pdf" }));
   });
 });

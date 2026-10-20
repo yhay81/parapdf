@@ -88,8 +88,11 @@ with the API.
   `ENGINES`, `FILES`, `RUNS`, `PAGES`, and `SCALE` narrow a run.
 - `pnpm --filter @parapdf/prototype dev` — run the demo; query parameters
   select `engine` (`pdfjs` or `pdfjs-next`), `hwa`, `text`, `file`,
-  `preload`, `lang` (the page's language, `en` by default), and `source`
-  (`data` opens the PDF from bytes the demo fetched instead of its URL).
+  `preload`, `lang` (the page's language, `en` by default), `source`
+  (`data` opens the PDF from bytes the demo fetched instead of its URL),
+  `forms` (`1` for fillable fields), `spread` (`odd` or `even`), `page` (the
+  one-based page shown first), `scale` (a number, `fit-width`, or
+  `fit-page`), and `password` (the source's password).
 - `pnpm --filter @parapdf/prototype build && pnpm --filter @parapdf/prototype bench`
   — scripted scroll benchmark; `BROWSER` picks the browser, and `VARIANTS`,
   `TEXT`, `LINKS`, `FILES`, `SPEEDS` (CSS px per second), `RUNS`, `DURATION`,
@@ -109,6 +112,16 @@ with the API.
   equal source object, and for data sources, whose bytes must stay the
   application's and open again after their document was destroyed (run
   after `build`; `BROWSER` applies).
+- `pnpm --filter @parapdf/prototype check:features` — functional checks for
+  what a document viewer offers besides its pages, the features other React
+  PDF viewers have: the password prompt, load progress, page labels,
+  metadata, attachments, layers, comment popups, form filling and saving,
+  printing, downloading, thumbnails, "fit-page", keyboard zoom, the initial
+  page, the hand tool, search options, spreads, selections in PDF points,
+  and tagged structure (run after `pnpm --filter @parapdf/bench corpus` and
+  `build`; `BROWSER` and `ENGINE` apply). It reads colors on pages from
+  screenshots, because pdf.js's renderer worker draws into canvases the main
+  thread cannot read.
 - `pnpm --filter @parapdf/prototype check:rotation` — functional checks for
   view rotation (page boxes, canvases, text, overlays, search, link jumps)
   and the `usePdfDocument()` escape hatch (run after `build`; `BROWSER`
@@ -182,10 +195,11 @@ with the API.
 ## Runtime prototype
 
 - `PdfViewerRuntime` owns scrolling, layout, zoom, and the render scheduler.
-  It publishes only `status`, `layout`, the mounted window (`first`/`last`),
-  `currentPage`, `scale`, and `zoomMode` through a small store read with
-  `useSyncExternalStore`; scrolling and gesture previews recompute every
-  frame but publish only changes.
+  It publishes `status`, `layout`, the mounted window (`first`/`last`),
+  `currentPage`, `scale`, and `zoomMode`, and document information that
+  changes rarely, through a small store read with `useSyncExternalStore`;
+  scrolling and gesture previews recompute every frame but publish only
+  changes.
 - Layouts are immutable per zoom level. The runtime sizes the content element
   imperatively so zoom can restore the anchored scroll position before React
   re-renders the mounted pages. A zoom keeps its anchor as a share of the same
@@ -293,7 +307,11 @@ with the API.
   does, where going past the cap leaves canvases blank. Visible pages used to
   keep all the detail `maxDetailPixels` allowed, whatever the budget.
   A render clears its canvas, so the page counts that layer as empty until
-  the render completes.
+  the render completes, and the canvas stays hidden until then: a resized
+  canvas with pdf.js's opaque context is black, and pdf.js's renderer worker
+  sends its first frame a round trip later, so with it a detail render
+  covered its base with black and a base render showed a black page, which
+  `check:features` caught after a refit.
   Unmounted pages zero their canvases and release pdf.js page data.
   `sharpness()` reports the resolution of the visible pixels as a share of
   full device resolution. The zoom goes up to 10 CSS pixels per point.
@@ -460,9 +478,68 @@ with the API.
   `document`). Its `native` is the engine's own object, and
   `pdfjsDocumentOf()` returns pdf.js's `PDFDocumentProxy` for documents a
   pdf.js engine opened, for APIs ParaPDF does not wrap.
+- Features that other React PDF viewers have, added in one pass after 0.2.0
+  so ParaPDF is not behind them (react-pdf 11, EmbedPDF, pdf.js's own
+  viewer, and react-pdf-viewer, archived in March 2026):
+  - Encrypted documents: the engine's `open()` takes `OpenOptions`
+    (`onProgress`, `password`, `signal`). `acquireDocument` passes a shared
+    document's progress and password requests to every viewer of it,
+    replays them to viewers that join late, lets any of them answer
+    (`submitPassword()`; null gives up), and aborts a load still waiting
+    when its last viewer leaves. The viewer publishes `status: "password"`,
+    `passwordReason`, and `progress` (once a frame).
+  - Forms: with `forms`, renders pass the page's annotation container as
+    `formLayer`, which the pdf.js engine turns into
+    `AnnotationMode.ENABLE_FORMS` plus a per-container `annotationCanvasMap`:
+    pdf.js draws check boxes and radio buttons into canvases of their own,
+    one per state, which the annotation layer takes after it is built and
+    again after every render (`refreshCanvases()`). Values live in pdf.js's
+    `annotationStorage`, so a page's fields keep them when it remounts;
+    `save()` is `saveDocument()` once anything was typed. A page drawn with
+    forms is not copied into thumbnails, as in pdf.js. The viewer CSS keeps
+    pdf.js's widget and popup rules: without the popup rules, comment
+    popups used to open as unstyled transparent text.
+  - Layers: each viewer gets a `LayerState` from the engine (pdf.js's
+    display `OptionalContentConfig`) that renders, annotation layers,
+    thumbnails, and printouts take. It loads beside the first paint, not
+    before it: until it arrives, renders draw the document's default
+    layers, which it starts with (`setLayers()`). A change bumps the scheduler's content
+    version (`invalidateContent()`): pages are drawn again but keep their
+    old pixels meanwhile, and annotation layers are rebuilt. pdf.js refuses
+    a display configuration for a print render, so printing replays the
+    viewer's changes on a print configuration.
+  - Thumbnails (`ThumbnailRenderer`) take render slots only when no page
+    layer waits, and leave one slot free for the next page that scrolls in
+    (`RenderScheduler.enqueue`); they copy a page's whole-page drawing when
+    it is at least as large. An `IntersectionObserver` per scroll container,
+    with a margin of its height, draws thumbnails near view and clears the
+    rest, which bounds their canvas memory.
+  - Printing (`runtime/print.ts`, after pdf.js's `PDFPrintService`): pages
+    drawn one at a time with the print intent into PNG images in a
+    print-only container, `@page` sized by the first page.
+  - Spreads: the layout has rows (`rowTops`, `rowWidths`, `rowHeights`,
+    `offsets`); each row is centered like a page used to be, and pages are
+    centered vertically in their row. `pageAt()` returns a row's first page;
+    `pageAtPoint()` picks the page under a point, which zoom anchors and the
+    current page use. Fitting in a spread mode counts two pages, as pdf.js
+    does, so the zoom stays the same from row to row.
+  - Tagged PDFs: `engine/struct-tree.ts` ports pdf.js's
+    `StructTreeLayerBuilder`. Each page renders a 0×0 canvas
+    (`.parapdf-structure`) whose fallback content, as in pdf.js's viewer,
+    holds the tree: read by assistive technology, never drawn or selected.
+    The text layer's marked-content spans carry the ids it owns. The
+    annotation layer gets the same builder for the labels the tree gives
+    annotations.
+  - Also: page labels, metadata, attachments and file attachment
+    annotations (`openAttachment`), "fit-page", Ctrl or ⌘ with +, -, and 0
+    on the viewport, `initialPage`, the hand tool (pointer capture on the
+    scroller; a prevented `pointerdown` also suppresses the mouse events the
+    selection tracker listens to), search options (`caseSensitive`,
+    `entireWord`, `matchDiacritics`), `getSelection()` in unturned PDF
+    points, and `pageColors`.
 - Browsers: `check:text`, `check:links`, `check:lifecycle`,
-  `check:rotation`, `check:options`, and `check:pinch` pass in Playwright's
-  Chromium, WebKit, and Firefox. Playwright's WebKit cannot put two fingers
+  `check:rotation`, `check:options`, `check:pinch`, and `check:features`
+  pass in Playwright's Chromium, WebKit, and Firefox. Playwright's WebKit cannot put two fingers
   down, and its `GestureEvent` is a function whose objects are not events, so
   touch and Safari's gesture events were checked by hand in Safari 27 in the
   iPadOS 27 simulator (iPad Pro 11-inch): pinches, the point between the
@@ -473,10 +550,10 @@ with the API.
   devices are not verified yet. WebKit has neither
   `requestIdleCallback` nor `scheduler.yield`, so idle text and annotation
   layers fall back to a 16 ms timer and search yields through `setTimeout(0)`.
-- Not yet implemented: form filling, structure tree (tagged PDF) semantics,
-  text for pages outside the mounted window, highlight fallback for browsers
-  without the CSS Custom Highlight API, optional content toggles, and
-  attachments.
+- Not yet implemented: horizontal, wrapped, and page-at-a-time scrolling
+  (pdf.js's scroll modes), annotation editing, form scripts (pdf.js's
+  sandbox), XFA forms, text for pages outside the mounted window, and a
+  highlight fallback for browsers without the CSS Custom Highlight API.
 
 ## Benchmark methodology
 

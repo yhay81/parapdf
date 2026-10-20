@@ -1,27 +1,38 @@
 import type {
   DestinationRef,
+  LayerState,
   LinkHandlers,
   OutlineNode,
+  PageColors,
   PageSize,
+  PasswordReason,
+  PdfAttachment,
   PdfEngine,
   PdfEngineDocument,
+  PdfLayer,
+  PdfMetadata,
   PdfSource,
   Rotation,
   TextLayerHandle,
 } from "../engine/types.ts";
-import { acquireDocument } from "./documents.ts";
+import { acquireDocument, type DocumentLease } from "./documents.ts";
+import { downloadBytes, filenameFromUrl } from "./files.ts";
 import { SearchHighlights } from "./highlights.ts";
 import {
   computeLayout,
   type Layout,
   pageAt,
+  pageAtPoint,
   pageLeft,
+  rowBounds,
+  type SpreadMode,
   turnBox,
   turnedSize,
   type Viewport,
   visibleArea,
   visibleRange,
 } from "./layout.ts";
+import { type PrintOptions, printDocument } from "./print.ts";
 import { RenderScheduler, type SchedulerStats } from "./scheduler.ts";
 import { TextSelectionTracker } from "./selection.ts";
 import { Store } from "./store.ts";
@@ -31,10 +42,14 @@ import {
   normalizeQuery,
   type PageIndex,
   type SearchMatch,
+  type SearchOptions,
 } from "./text-search.ts";
+import { ThumbnailRenderer } from "./thumbnails.ts";
 
 export interface SearchState {
   query: string;
+  /** How the query compares with the text. */
+  options: SearchOptions;
   status: "idle" | "searching" | "done";
   /** Matches in page order. */
   matches: readonly SearchMatch[];
@@ -44,8 +59,19 @@ export interface SearchState {
 }
 
 export interface ViewerState {
-  status: "idle" | "loading" | "ready" | "error";
+  /**
+   * "password" while an encrypted document waits for `submitPassword()`;
+   * `passwordReason` says whether one is needed or the last one was wrong.
+   */
+  status: "idle" | "loading" | "password" | "ready" | "error";
   error: string | null;
+  passwordReason: PasswordReason | null;
+  /**
+   * Bytes of the document received so far, and its size when the server
+   * reported it; null before any arrive. pdf.js may keep fetching the rest
+   * of a large document in the background after it is ready.
+   */
+  progress: LoadProgress | null;
   pageCount: number;
   layout: Layout | null;
   /** Mounted page window: visible pages plus overscan. */
@@ -57,11 +83,19 @@ export interface ViewerState {
   scale: number;
   /**
    * "fit-width" keeps fitting the width of the page at the viewport's center
-   * as the viewport resizes or the view turns; "custom" keeps `scale`.
+   * as the viewport resizes or the view turns, "fit-page" all of that page;
+   * "custom" keeps `scale`.
    */
   zoomMode: ZoomMode;
+  /**
+   * What a mouse drag does: "select" selects text, "hand" scrolls the
+   * document like grabbing paper.
+   */
+  tool: PointerTool;
   /** Clockwise view rotation of every page. */
   rotation: Rotation;
+  /** Whether pages show one per row or side by side in pairs. */
+  spread: SpreadMode;
   /** The open document, for engine features ParaPDF does not wrap; null until it loads. */
   document: PdfEngineDocument | null;
   search: SearchState;
@@ -69,30 +103,92 @@ export interface ViewerState {
   outline: readonly OutlineNode[] | null;
   /** Whether `back()` can return to a position before a link or outline jump. */
   canGoBack: boolean;
+  /** Each page's label, such as "iv"; null while loading and when the PDF defines none. */
+  pageLabels: readonly string[] | null;
+  /** The document's title, author, dates, and so on; null until loaded. */
+  metadata: PdfMetadata | null;
+  /** Files embedded in the document; null until loaded, empty when it has none. */
+  attachments: readonly PdfAttachment[] | null;
+  /**
+   * The document's layers (optional content) in its own order, and which
+   * show; null until loaded, empty when it has none.
+   */
+  layers: readonly PdfLayer[] | null;
 }
 
-export type ZoomMode = "fit-width" | "custom";
+export type ZoomMode = "fit-width" | "fit-page" | "custom";
+
+/** A rectangle in PDF points from the top-left corner of a page, unturned by the view. */
+export interface PdfRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** The text selected in a viewer and where it lies on its pages. */
+export interface PdfSelection {
+  /** The selected text, as the browser copies it. */
+  text: string;
+  /** The rectangles the selected text covers, page by page, in page order. */
+  pages: readonly { pageIndex: number; rects: readonly PdfRect[] }[];
+}
+
+export type PointerTool = "select" | "hand";
+
+export interface LoadProgress {
+  loaded: number;
+  total: number | null;
+}
 
 export interface ViewerOptions {
   /** Space between pages in CSS pixels. */
   gap?: number;
+  /** One page per row (the default), or pairs side by side; see `setSpread()`. */
+  spread?: SpreadMode;
   /** Pages mounted beyond each edge of the viewport. */
   overscan?: number;
   maxConcurrentRenders?: number;
-  /** A scale in CSS pixels per point, or "fit-width" (the default) to keep fitting the page width. */
-  initialScale?: number | "fit-width";
+  /**
+   * A scale in CSS pixels per point, "fit-width" (the default) to keep
+   * fitting the page width, or "fit-page" to keep fitting the whole page.
+   */
+  initialScale?: number | "fit-width" | "fit-page";
+  /** The zero-based page shown first, at the top of the viewport (default 0). */
+  initialPage?: number;
+  /** What a mouse drag does at first (default "select"); see `setTool()`. */
+  initialTool?: PointerTool;
   minScale?: number;
   maxScale?: number;
   /** Build selectable, searchable text layers (default true). */
   textLayer?: boolean;
-  /** Build focusable link layers (default true). */
+  /**
+   * Build annotation layers (default true): focusable links, comment popups,
+   * and, with `forms`, form fields.
+   */
   annotationLayer?: boolean;
+  /**
+   * Show form fields as HTML that the reader can fill in (default false: the
+   * drawing shows them as they are). Typed values belong to the document,
+   * which `save()` writes them into. Needs `annotationLayer`.
+   */
+  forms?: boolean;
+  /**
+   * Draw pages in these two colors instead of their own, for example
+   * `{ background: "Canvas", foreground: "CanvasText" }` in forced-colors mode.
+   */
+  pageColors?: PageColors;
   /**
    * What links to other documents do: open in a new tab (the default), or
    * nothing, for apps that must not lead away from the document. Internal
    * links and the outline keep working.
    */
   externalLinks?: "new-tab" | "disabled";
+  /**
+   * Called when the reader opens a file attachment annotation or a link to
+   * an embedded file. By default the browser downloads the file.
+   */
+  openAttachment?: (attachment: { filename: string; content: Uint8Array }) => void;
   /**
    * The most pixels one page's detail canvas holds (default 16 777 216, the
    * canvas area limit of iOS). A page larger at full resolution gets detail
@@ -140,11 +236,14 @@ const ZOOM_COMMIT_DELAY = 150;
 const PINCH_SLOP = 16;
 /** Safari's events for trackpad pinches, which iPadOS also sends for touch pinches. */
 const GESTURE_EVENTS = ["gesturestart", "gesturechange", "gestureend"] as const;
+/** What Ctrl or ⌘ with + and - zooms by. */
+const ZOOM_STEP = 1.25;
 /** Search publishes partial results at most this often. */
 const SEARCH_PUBLISH_INTERVAL = 100;
 
 const IDLE_SEARCH: SearchState = {
   query: "",
+  options: {},
   status: "idle",
   matches: [],
   current: -1,
@@ -160,6 +259,50 @@ const viewportOf = (scroller: HTMLElement): Viewport => ({
   height: scroller.clientHeight,
   scrollerWidth: scroller.clientWidth,
 });
+
+/**
+ * Add the rectangles of the text `range` selects in a text `layer` to
+ * `rects`, in PDF points of its unturned page of `size`: each text node's
+ * selected part, measured on screen against the page's box, then turned
+ * back by the view's rotation.
+ */
+function selectedRects(
+  range: Range,
+  layer: HTMLElement,
+  section: HTMLElement,
+  size: PageSize,
+  rotation: Rotation,
+  rects: PdfRect[],
+): void {
+  const box = section.getBoundingClientRect();
+  if (box.width === 0 || box.height === 0) return;
+  const turned = turnedSize(size, rotation);
+  const back = ((360 - rotation) % 360) as Rotation;
+  const walker = document.createTreeWalker(layer, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (!range.intersectsNode(node) || !(node instanceof Text)) continue;
+    const part = document.createRange();
+    part.selectNodeContents(node);
+    if (node === range.startContainer) part.setStart(node, range.startOffset);
+    if (node === range.endContainer) part.setEnd(node, range.endOffset);
+    if (part.collapsed) continue;
+    for (const rect of part.getClientRects()) {
+      if (rect.width < 0.5 || rect.height < 0.5) continue;
+      rects.push(
+        turnBox(
+          {
+            x: ((rect.left - box.left) / box.width) * turned.width,
+            y: ((rect.top - box.top) / box.height) * turned.height,
+            width: (rect.width / box.width) * turned.width,
+            height: (rect.height / box.height) * turned.height,
+          },
+          turned,
+          back,
+        ),
+      );
+    }
+  }
+}
 
 /** How fast the shown content moves: full-resolution work waits while it moves fast. */
 interface Motion {
@@ -187,7 +330,13 @@ const yieldToMain = (): Promise<void> => {
   return scheduler?.yield ? scheduler.yield() : new Promise((resolve) => setTimeout(resolve, 0));
 };
 
-type PageElements = [HTMLCanvasElement, HTMLCanvasElement, HTMLElement | null, HTMLElement | null];
+type PageElements = [
+  HTMLCanvasElement,
+  HTMLCanvasElement,
+  HTMLElement | null,
+  HTMLElement | null,
+  HTMLElement | null,
+];
 
 /**
  * The scroll position at which the content point `point` of `layout` shows
@@ -203,7 +352,7 @@ function zoomTarget(
   anchor: { x: number; y: number },
   point: { x: number; y: number },
 ): { left: number; top: number } {
-  const page = pageAt(layout, point.y);
+  const page = pageAtPoint(layout, point.x, point.y, viewportWidth);
   const withinX = (point.x - pageLeft(layout, page, viewportWidth)) / (layout.widths[page] || 1);
   const withinY = (point.y - (layout.tops[page] ?? 0)) / (layout.heights[page] || 1);
   return {
@@ -270,6 +419,8 @@ export class PdfViewerRuntime {
   readonly store = new Store<ViewerState>({
     status: "idle",
     error: null,
+    passwordReason: null,
+    progress: null,
     pageCount: 0,
     layout: null,
     first: 0,
@@ -277,21 +428,30 @@ export class PdfViewerRuntime {
     currentPage: 0,
     scale: 1,
     zoomMode: "custom",
+    tool: "select",
     search: IDLE_SEARCH,
     outline: null,
     canGoBack: false,
     rotation: 0,
+    spread: "none",
     document: null,
+    pageLabels: null,
+    metadata: null,
+    attachments: null,
+    layers: null,
   });
   readonly #engine: PdfEngine;
   readonly #gap: number;
   readonly #overscan: number;
   readonly #maxConcurrentRenders: number;
-  readonly #initialScale: number | "fit-width";
+  readonly #initialScale: number | "fit-width" | "fit-page";
+  readonly #initialPage: number;
   readonly #minScale: number;
   readonly #maxScale: number;
   readonly #textLayer: boolean;
   readonly #annotationLayer: boolean;
+  readonly #forms: boolean;
+  readonly #pageColors: PageColors | undefined;
   readonly #canvasLimits: Pick<
     ViewerOptions,
     "maxDetailPixels" | "maxDetailViewports" | "maxBasePixels" | "maxCanvasPixels"
@@ -301,13 +461,29 @@ export class PdfViewerRuntime {
   #history: { pageIndex: number; offset: number }[] = [];
   readonly #highlights = new SearchHighlights();
   readonly #selection = new TextSelectionTracker();
+  readonly #thumbnails = new ThumbnailRenderer({
+    scheduler: () => this.#scheduler,
+    pageSize: (pageIndex) => this.#sizes[pageIndex],
+    rotation: () => this.store.get().rotation,
+    layers: () => this.#layers,
+  });
+  /** Which of the open document's layers show in this viewer. */
+  #layers: LayerState | null = null;
   #generation = 0;
+  /** The open document's lease, through which a password is submitted. */
+  #lease: DocumentLease | null = null;
+  /** Progress waiting to be published at the next animation frame. */
+  #progress: LoadProgress | null = null;
+  #progressFrame = 0;
   #doc: PdfEngineDocument | null = null;
+  /** The file name the open document's URL gives, for download(). */
+  #sourceName: string | null = null;
   #scheduler: RenderScheduler | null = null;
   #sizes: PageSize[] = [];
   #pendingPages = new Map<number, PageElements>();
   #textPages = new Map<number, TextLayerHandle>();
-  #indexes = new Map<number, Promise<PageIndex>>();
+  /** Each page's search index, by the options that shape it ("case-sensitive diacritics"). */
+  #indexes = new Map<string, Map<number, Promise<PageIndex>>>();
   #searchGeneration = 0;
   #scroller: HTMLElement | null = null;
   #content: HTMLElement | null = null;
@@ -326,8 +502,11 @@ export class PdfViewerRuntime {
   /** The gesture scale at which a gesture zoom's factor is 1. */
   #gestureBase = 1;
   #firstPaintAt: number | null = null;
-  /** Viewport width the "fit-width" scale was last computed for. */
+  /** Viewport size the "fit-width" or "fit-page" scale was last computed for. */
   #fittedWidth = 0;
+  #fittedHeight = 0;
+  /** The hand tool's drag in progress: the pointer and where it last was. */
+  #grab: { pointerId: number; x: number; y: number } | null = null;
 
   constructor(engine: PdfEngine, options: ViewerOptions = {}) {
     this.#engine = engine;
@@ -335,14 +514,20 @@ export class PdfViewerRuntime {
     this.#overscan = options.overscan ?? 2;
     this.#maxConcurrentRenders = options.maxConcurrentRenders ?? 2;
     this.#initialScale = options.initialScale ?? "fit-width";
+    this.#initialPage = options.initialPage ?? 0;
     this.#minScale = options.minScale ?? 0.25;
     this.#maxScale = options.maxScale ?? 10;
     this.#textLayer = options.textLayer ?? true;
     this.#annotationLayer = options.annotationLayer ?? true;
+    this.#forms = options.forms ?? false;
+    this.#pageColors = options.pageColors;
     this.#links = {
       navigate: (dest) => void this.goToDestination(dest),
       namedAction: (action) => this.#namedAction(action),
       externalLinks: options.externalLinks ?? "new-tab",
+      openAttachment:
+        options.openAttachment ?? (({ filename, content }) => downloadBytes(content, filename)),
+      setLayers: (action) => this.#changeLayers((layers) => layers.apply(action)),
     };
     this.#canvasLimits = {
       maxDetailPixels: options.maxDetailPixels,
@@ -350,7 +535,11 @@ export class PdfViewerRuntime {
       maxBasePixels: options.maxBasePixels,
       maxCanvasPixels: options.maxCanvasPixels,
     };
-    this.store.set({ zoomMode: this.#initialZoomMode() });
+    this.store.set({
+      zoomMode: this.#initialZoomMode(),
+      tool: options.initialTool ?? "select",
+      spread: options.spread ?? "none",
+    });
   }
 
   get engineName(): string {
@@ -385,19 +574,40 @@ export class PdfViewerRuntime {
    */
   open(source: PdfSource): () => void {
     const generation = ++this.#generation;
-    const lease = acquireDocument(this.#engine, source);
     let closed = false;
+    const lease = acquireDocument(this.#engine, source, {
+      onProgress: (loaded, total) => {
+        if (closed) return;
+        this.#progress = { loaded, total };
+        // Chunks arrive many times a frame; the store hears of them once a frame.
+        this.#progressFrame ||= requestAnimationFrame(() => {
+          this.#progressFrame = 0;
+          if (!closed && this.#progress) this.store.set({ progress: this.#progress });
+        });
+      },
+      onPassword: (reason) => {
+        if (!closed) this.store.set({ status: "password", passwordReason: reason });
+      },
+    });
+    this.#lease = lease;
+    this.#sourceName = "url" in source ? filenameFromUrl(source.url) : null;
     this.#firstPaintAt = null;
     this.#history = [];
     this.store.set({
       status: "loading",
       error: null,
+      passwordReason: null,
+      progress: null,
       search: IDLE_SEARCH,
       outline: null,
       canGoBack: false,
       rotation: 0,
       zoomMode: this.#initialZoomMode(),
       document: null,
+      pageLabels: null,
+      metadata: null,
+      attachments: null,
+      layers: null,
     });
 
     void (async () => {
@@ -413,6 +623,8 @@ export class PdfViewerRuntime {
           maxConcurrent: this.#maxConcurrentRenders,
           ...this.#canvasLimits,
           links: this.#links,
+          forms: this.#forms,
+          ...(this.#pageColors ? { pageColors: this.#pageColors } : {}),
           selection: this.#selection,
           onPainted: (pageIndex) => {
             if (pageIndex === 0 && this.#firstPaintAt === null) {
@@ -428,35 +640,58 @@ export class PdfViewerRuntime {
             this.#highlights.clearPage(pageIndex);
           },
         });
-        for (const [index, [base, detail, text, annotations]] of this.#pendingPages) {
-          this.#scheduler.attach(index, base, detail, text, annotations);
+        for (const [index, [base, detail, text, annotations, structure]] of this.#pendingPages) {
+          this.#scheduler.attach(index, base, detail, text, annotations, structure);
         }
         this.#pendingPages.clear();
-        const scale = this.#resolveInitialScale(firstSize);
+        this.#thumbnails.refresh();
+        const scale = this.#resolveInitialScale();
         this.#applyLayout(scale);
-        this.store.set({ status: "ready", pageCount: doc.pageCount, scale, document: doc });
+        this.store.set({
+          status: "ready",
+          passwordReason: null,
+          pageCount: doc.pageCount,
+          scale,
+          document: doc,
+        });
+        if (this.#initialPage > 0) this.goToPage(this.#initialPage);
         this.#update();
         this.#background(this.#refineSizes(doc, generation), "measuring page sizes", generation);
-        // The outline parses in the worker; publish it whenever it is ready.
-        void doc.getOutline().then(
-          (outline) => {
-            if (this.#generation === generation) this.store.set({ outline });
-          },
-          () => {
-            if (this.#generation === generation) this.store.set({ outline: [] });
-          },
+        // The outline and the rest parse in the worker; each is published when ready.
+        this.#publishLater(generation, doc.getOutline(), "outline", []);
+        this.#publishLater(generation, doc.getPageLabels(), "pageLabels", null);
+        this.#publishLater(generation, doc.getMetadata(), "metadata", null);
+        this.#publishLater(generation, doc.getAttachments(), "attachments", []);
+        // Until its own state arrives, the viewer draws the document's
+        // default layers, which that state starts with: nothing is drawn again.
+        this.#publishLater(
+          generation,
+          doc.createLayerState().then((layers) => {
+            if (this.#generation === generation) {
+              this.#layers = layers;
+              this.#scheduler?.setLayers(layers);
+            }
+            return layers.layers();
+          }),
+          "layers",
+          [],
         );
       } catch (error) {
-        if (!closed) this.store.set({ status: "error", error: String(error) });
+        if (!closed)
+          this.store.set({ status: "error", error: String(error), passwordReason: null });
       }
     })();
 
     return () => {
       closed = true;
+      cancelAnimationFrame(this.#progressFrame);
+      this.#progressFrame = 0;
+      if (this.#lease === lease) this.#lease = null;
       if (this.#generation === generation) {
         // Work still running for this document now sees a stale generation.
         this.#generation++;
         this.#scheduler?.dispose();
+        this.#thumbnails.reset();
         this.#searchGeneration++;
         this.#highlights.clear();
         this.#selection.clear();
@@ -464,9 +699,12 @@ export class PdfViewerRuntime {
         this.#indexes.clear();
         this.#history = [];
         this.#doc = null;
+        this.#layers = null;
         this.#scheduler = null;
         this.store.set({
           status: "idle",
+          passwordReason: null,
+          progress: null,
           pageCount: 0,
           layout: null,
           first: 0,
@@ -475,11 +713,101 @@ export class PdfViewerRuntime {
           outline: null,
           canGoBack: false,
           document: null,
+          pageLabels: null,
+          metadata: null,
+          attachments: null,
+          layers: null,
         });
       }
       // Destroyed once no viewer uses it, even if it is still loading.
       lease.release();
     };
+  }
+
+  /** Publish what `work` loads as `field` while `generation` is open, or `fallback` if it fails. */
+  #publishLater<K extends keyof ViewerState>(
+    generation: number,
+    work: Promise<ViewerState[K]>,
+    field: K,
+    fallback: ViewerState[K],
+  ): void {
+    const publish = (value: ViewerState[K]) => {
+      if (this.#generation === generation)
+        this.store.set({ [field]: value } as Partial<ViewerState>);
+    };
+    work.then(publish, (error: unknown) => {
+      if (this.#generation === generation) console.error(`loading ${field} failed`, error);
+      publish(fallback);
+    });
+  }
+
+  /**
+   * The document's bytes, with what was typed into its form fields saved in
+   * them; null while no document is open.
+   */
+  async save(): Promise<Uint8Array | null> {
+    return (await this.#doc?.save()) ?? null;
+  }
+
+  /**
+   * Save the document as `save()` does and hand it to the browser as a
+   * download, named `filename`, by default after the document's URL.
+   */
+  async download(filename?: string): Promise<void> {
+    const bytes = await this.save();
+    if (!bytes) return;
+    downloadBytes(bytes, filename ?? this.#sourceName ?? "document.pdf", "application/pdf");
+  }
+
+  /**
+   * Show or hide one of the document's layers (see `layers`) in this viewer.
+   * Showing one of a set of exclusive layers hides the others. Pages keep
+   * their pixels until they are drawn again.
+   */
+  setLayerVisible(id: string, visible: boolean): void {
+    this.#changeLayers((layers) => layers.setVisible(id, visible));
+  }
+
+  #changeLayers(change: (layers: LayerState) => void): void {
+    const layers = this.#layers;
+    if (!layers) return;
+    change(layers);
+    this.store.set({ layers: layers.layers() });
+    this.#scheduler?.invalidateContent();
+    this.#thumbnails.reset();
+    this.#thumbnails.refresh();
+  }
+
+  /**
+   * Print the document through the browser's print dialog: every page is
+   * drawn for printing, with what was typed into its form fields, and only
+   * those pages print. Resolves once the browser returns from printing.
+   */
+  async print(options?: PrintOptions): Promise<void> {
+    const doc = this.#doc;
+    if (doc) await printDocument(doc, { ...options, layers: this.#layers });
+  }
+
+  /** The content of the embedded file `id` (see `attachments`), null when there is none. */
+  async getAttachmentContent(id: string): Promise<Uint8Array | null> {
+    return (await this.#doc?.getAttachmentContent(id)) ?? null;
+  }
+
+  /** Open an embedded file the way activating its annotation does: by default, download it. */
+  async openAttachment(attachment: PdfAttachment): Promise<void> {
+    const content = await this.getAttachmentContent(attachment.id);
+    if (content) this.#links.openAttachment?.({ filename: attachment.filename, content });
+  }
+
+  /**
+   * Try a password for the encrypted document that waits for one (status
+   * "password"); a wrong one asks again with the reason "incorrect". Null
+   * stops opening the document, which then fails.
+   */
+  submitPassword(password: string | null): void {
+    if (this.store.get().status !== "password") return;
+    this.store.set({ status: "loading", passwordReason: null });
+    this.#lease?.submitPassword(password);
   }
 
   /** Bind the scroll container and its sized content element. */
@@ -491,6 +819,12 @@ export class PdfViewerRuntime {
     scroller.addEventListener("scroll", this.#onScroll, { passive: true });
     scroller.addEventListener("wheel", this.#onWheel, { passive: false });
     scroller.addEventListener("pointerdown", this.#onPointerDown, { passive: true });
+    scroller.addEventListener("pointerdown", this.#onGrabStart);
+    scroller.addEventListener("pointermove", this.#onGrabMove, { passive: true });
+    scroller.addEventListener("pointerup", this.#onGrabEnd, { passive: true });
+    scroller.addEventListener("pointercancel", this.#onGrabEnd, { passive: true });
+    scroller.addEventListener("keydown", this.#onKeyDown);
+    scroller.classList.toggle("parapdf-hand", this.store.get().tool === "hand");
     // Not passive: Safari zooms the whole page unless they are prevented.
     for (const type of GESTURE_EVENTS) {
       scroller.addEventListener(type, this.#onGesture, { passive: false });
@@ -503,6 +837,13 @@ export class PdfViewerRuntime {
       scroller.removeEventListener("scroll", this.#onScroll);
       scroller.removeEventListener("wheel", this.#onWheel);
       scroller.removeEventListener("pointerdown", this.#onPointerDown);
+      scroller.removeEventListener("pointerdown", this.#onGrabStart);
+      scroller.removeEventListener("pointermove", this.#onGrabMove);
+      scroller.removeEventListener("pointerup", this.#onGrabEnd);
+      scroller.removeEventListener("pointercancel", this.#onGrabEnd);
+      scroller.removeEventListener("keydown", this.#onKeyDown);
+      scroller.classList.remove("parapdf-hand", "parapdf-grabbing");
+      this.#grab = null;
       for (const type of GESTURE_EVENTS) scroller.removeEventListener(type, this.#onGesture);
       resize.disconnect();
       detachSelection();
@@ -523,20 +864,78 @@ export class PdfViewerRuntime {
     detail: HTMLCanvasElement,
     text: HTMLElement | null,
     annotations: HTMLElement | null = null,
+    structure: HTMLElement | null = null,
   ): () => void {
     const textLayer = this.#textLayer ? text : null;
     const annotationLayer = this.#annotationLayer ? annotations : null;
+    // The structure takes the text layer's runs in, so it comes with them.
+    const structureLayer = textLayer ? structure : null;
     const scheduler = this.#scheduler;
-    if (scheduler) scheduler.attach(index, base, detail, textLayer, annotationLayer);
-    else this.#pendingPages.set(index, [base, detail, textLayer, annotationLayer]);
+    if (scheduler) {
+      scheduler.attach(index, base, detail, textLayer, annotationLayer, structureLayer);
+    } else {
+      this.#pendingPages.set(index, [base, detail, textLayer, annotationLayer, structureLayer]);
+    }
     return () => {
       this.#pendingPages.delete(index);
       if (this.#scheduler === scheduler) scheduler?.detach(index);
     };
   }
 
+  /**
+   * Draw page `pageIndex` into `canvas` as a thumbnail `width` CSS pixels
+   * wide while it is near the visible part of its scroll container; returns
+   * the function that releases it. `<PdfThumbnail>` calls this.
+   */
+  attachThumbnail(pageIndex: number, canvas: HTMLCanvasElement, width: number): () => void {
+    return this.#thumbnails.attach(pageIndex, canvas, width);
+  }
+
   hasPixels(index: number): boolean {
     return this.#scheduler?.hasPixels(index) ?? false;
+  }
+
+  /**
+   * The text selected in this viewer's pages and the rectangles it covers,
+   * in the coordinates `<PdfPageRect>` takes, for example to keep it as a
+   * highlight; null when nothing is selected there. Only mounted pages have
+   * text to select.
+   */
+  getSelection(): PdfSelection | null {
+    const content = this.#content;
+    const layout = this.store.get().layout;
+    const selection = document.getSelection();
+    if (!content || !layout || !selection || selection.isCollapsed) return null;
+    const rectsByPage = new Map<number, PdfRect[]>();
+    let text = "";
+    let outside = false;
+    for (let at = 0; at < selection.rangeCount; at++) {
+      const range = selection.getRangeAt(at);
+      if (!range.intersectsNode(content)) {
+        outside = true;
+        continue;
+      }
+      if (!content.contains(range.commonAncestorContainer)) outside = true;
+      text += range.toString();
+      for (const layer of content.querySelectorAll<HTMLElement>(".parapdf-text-layer")) {
+        if (!range.intersectsNode(layer)) continue;
+        const section = layer.closest<HTMLElement>("section[data-page]");
+        const pageIndex = Number(section?.dataset.page) - 1;
+        const size = layout.sizes[pageIndex];
+        if (!section || !size) continue;
+        const rects = rectsByPage.get(pageIndex) ?? [];
+        rectsByPage.set(pageIndex, rects);
+        selectedRects(range, layer, section, size, layout.rotation, rects);
+      }
+    }
+    if (rectsByPage.size === 0) return null;
+    return {
+      // The selection's own text keeps its line breaks.
+      text: outside ? text : selection.toString(),
+      pages: [...rectsByPage]
+        .sort(([a], [b]) => a - b)
+        .map(([pageIndex, rects]) => ({ pageIndex, rects })),
+    };
   }
 
   /** Fraction of the viewport covered by pages that show no pixels yet. */
@@ -590,9 +989,16 @@ export class PdfViewerRuntime {
 
   goToPage(index: number): void {
     const layout = this.store.get().layout;
-    if (!layout || !this.#scroller) return;
+    const scroller = this.#scroller;
+    if (!layout || !scroller) return;
     const target = clamp(index, 0, layout.tops.length - 1);
-    this.#scroller.scrollTop = (layout.tops[target] ?? 0) - layout.gap;
+    scroller.scrollTop = (layout.rowTops[target] ?? 0) - layout.gap;
+    // A page of a spread wider than the viewport may lie beside it.
+    const left = pageLeft(layout, target, scroller.clientWidth);
+    const right = left + (layout.widths[target] ?? 0);
+    if (left < scroller.scrollLeft || right > scroller.scrollLeft + scroller.clientWidth) {
+      scroller.scrollLeft = left - layout.gap;
+    }
   }
 
   /**
@@ -709,37 +1115,113 @@ export class PdfViewerRuntime {
     this.#scheduler?.rotate(turned);
     this.#update();
     // A turned page has another width to fit.
-    this.#fitWidth();
+    this.#fit();
+  }
+
+  /**
+   * Show pages one per row ("none"), or side by side in pairs: "odd" pairs
+   * pages 1–2, 3–4, and "even" shows page 1 alone and pairs 2–3, 4–5, like a
+   * book. The page at the viewport's center stays in view.
+   */
+  setSpread(spread: SpreadMode): void {
+    if (spread === this.store.get().spread) return;
+    this.#finishZoom();
+    const layout = this.store.get().layout;
+    const scroller = this.#scroller;
+    this.store.set({ spread });
+    if (!layout || !scroller) return;
+    const page = this.store.get().currentPage;
+    this.#applyLayout(layout.scale);
+    this.goToPage(page);
+    this.#update();
+    // A pair is wider than a page, a page alone narrower than a pair.
+    this.#fit();
   }
 
   /**
    * Change the zoom level, keeping the point under `anchor` (viewport
    * coordinates, default center) in place. "fit-width" fits the width of the
    * page at the viewport's center and keeps fitting it as the viewport
-   * resizes or the view turns, like pdf.js's "page-width"; a number stops
-   * that.
+   * resizes or the view turns, like pdf.js's "page-width"; "fit-page" fits
+   * all of that page and shows it from its top, like "page-fit"; a number
+   * stops that.
    */
-  setScale(requested: number | "fit-width", anchor?: { x: number; y: number }): void {
+  setScale(requested: number | "fit-width" | "fit-page", anchor?: { x: number; y: number }): void {
     this.#finishZoom();
-    if (requested === "fit-width") {
-      this.store.set({ zoomMode: "fit-width" });
-      this.#fitWidth();
+    if (requested === "fit-width" || requested === "fit-page") {
+      this.store.set({ zoomMode: requested });
+      this.#fit();
       return;
     }
     this.store.set({ zoomMode: "custom" });
     this.#zoomTo(requested, anchor);
   }
 
-  /** Fit the page at the viewport's center to the viewport's width, in "fit-width" mode only. */
-  #fitWidth(): void {
+  /** Back to the zoom the viewer started with (`initialScale`), as Ctrl or ⌘ with 0 does. */
+  resetScale(): void {
+    this.setScale(this.#initialScale);
+  }
+
+  /** What a mouse drag does from now on: select text, or scroll with the hand tool. */
+  setTool(tool: PointerTool): void {
+    this.store.set({ tool });
+    this.#scroller?.classList.toggle("parapdf-hand", tool === "hand");
+    if (tool !== "hand") {
+      this.#grab = null;
+      this.#scroller?.classList.remove("parapdf-grabbing");
+    }
+  }
+
+  /**
+   * Fit the page at the viewport's center to the viewport: its width in
+   * "fit-width" mode, all of it in "fit-page" mode, which also scrolls it to
+   * the viewport's top. Nothing in "custom" mode.
+   */
+  #fit(): void {
     const scroller = this.#scroller;
     const state = this.store.get();
-    if (state.zoomMode !== "fit-width" || !scroller || scroller.clientWidth === 0) return;
-    const size = this.#sizes[state.currentPage] ?? this.#sizes[0];
-    const width = size ? turnedSize(size, state.rotation).width : 0;
-    if (width === 0) return;
+    const mode = state.zoomMode;
+    if (mode === "custom" || !scroller || scroller.clientWidth === 0) return;
+    const page = state.currentPage;
+    const scale = this.#fitScale(page, mode);
+    if (scale === null) return;
     this.#fittedWidth = scroller.clientWidth;
-    this.#zoomTo((scroller.clientWidth - 2 * this.#gap) / width);
+    this.#fittedHeight = scroller.clientHeight;
+    this.#zoomTo(scale);
+    if (mode === "fit-page") this.goToPage(page);
+  }
+
+  /**
+   * The scale that fits the row of page `index`, the page or its spread, to
+   * the viewport in `mode`; null while the pages' sizes are unknown. In a
+   * spread mode, a page alone in its row, such as a cover, counts twice, as
+   * in pdf.js: the zoom then stays the same from row to row.
+   */
+  #fitScale(index: number, mode: "fit-width" | "fit-page"): number | null {
+    const { rotation, spread } = this.store.get();
+    const { first, last } = rowBounds(spread, index, this.#sizes.length);
+    let width = 0;
+    let height = 0;
+    for (let page = first; page <= last; page++) {
+      const size = this.#sizes[page];
+      if (!size) return null;
+      const turned = turnedSize(size, rotation);
+      width += turned.width;
+      height = Math.max(height, turned.height);
+    }
+    const pages = spread === "none" ? 1 : 2;
+    if (last === first) width *= pages;
+    if (width === 0 || height === 0) return null;
+    const scroller = this.#scroller;
+    // The gaps around the row and between its pages stay the same at every zoom.
+    const room = (scroller?.clientWidth ?? 0) - (1 + pages) * this.#gap;
+    const roomHeight = (scroller?.clientHeight ?? 0) - 2 * this.#gap;
+    const scale = room / width;
+    return clamp(
+      mode === "fit-page" && roomHeight > 0 ? Math.min(scale, roomHeight / height) : scale,
+      this.#minScale,
+      this.#maxScale,
+    );
   }
 
   /**
@@ -777,21 +1259,22 @@ export class PdfViewerRuntime {
 
   /**
    * Search the whole document. Results arrive progressively; the first match
-   * at or after the current page is selected and scrolled into view.
+   * at or after the current page is selected and scrolled into view. By
+   * default case and diacritics are ignored and matches may be parts of words.
    */
-  search(query: string): void {
+  search(query: string, options: SearchOptions = {}): void {
     const generation = ++this.#searchGeneration;
     this.#highlights.clear();
-    const normalized = normalizeQuery(query);
+    const normalized = normalizeQuery(query, options);
     const doc = this.#doc;
     if (!normalized || !doc) {
-      this.store.set({ search: { ...IDLE_SEARCH, query } });
+      this.store.set({ search: { ...IDLE_SEARCH, query, options } });
       return;
     }
     this.store.set({
-      search: { query, status: "searching", matches: [], current: -1, pagesSearched: 0 },
+      search: { query, options, status: "searching", matches: [], current: -1, pagesSearched: 0 },
     });
-    this.#runSearch(doc, query, normalized, generation).catch((error: unknown) => {
+    this.#runSearch(doc, query, normalized, options, generation).catch((error: unknown) => {
       if (generation !== this.#searchGeneration) return;
       console.error("search failed", error);
       this.store.set({ search: { ...this.store.get().search, status: "done" } });
@@ -818,6 +1301,7 @@ export class PdfViewerRuntime {
     doc: PdfEngineDocument,
     query: string,
     normalized: string,
+    options: SearchOptions,
     generation: number,
   ): Promise<void> {
     const matches: SearchMatch[] = [];
@@ -827,14 +1311,14 @@ export class PdfViewerRuntime {
     let publishedAt = performance.now();
     const publish = (status: SearchState["status"]) => {
       this.store.set({
-        search: { query, status, matches: [...matches], current, pagesSearched },
+        search: { query, options, status, matches: [...matches], current, pagesSearched },
       });
       this.#refreshHighlights();
     };
     for (let page = 0; page < doc.pageCount; page++) {
-      const index = await this.#pageIndex(doc, page);
+      const index = await this.#pageIndex(doc, page, options);
       if (generation !== this.#searchGeneration) return;
-      const found = findMatches(index, normalized, page);
+      const found = findMatches(index, normalized, page, undefined, options);
       const select = current === -1 && page >= startPage && found.length > 0;
       if (select) current = matches.length;
       matches.push(...found);
@@ -857,11 +1341,21 @@ export class PdfViewerRuntime {
     publish("done");
   }
 
-  #pageIndex(doc: PdfEngineDocument, pageIndex: number): Promise<PageIndex> {
-    let index = this.#indexes.get(pageIndex);
+  #pageIndex(
+    doc: PdfEngineDocument,
+    pageIndex: number,
+    options: SearchOptions,
+  ): Promise<PageIndex> {
+    const key = `${Boolean(options.caseSensitive)} ${Boolean(options.matchDiacritics)}`;
+    let indexes = this.#indexes.get(key);
+    if (!indexes) {
+      indexes = new Map();
+      this.#indexes.set(key, indexes);
+    }
+    let index = indexes.get(pageIndex);
     if (!index) {
-      index = doc.getText(pageIndex).then(buildPageIndex);
-      this.#indexes.set(pageIndex, index);
+      index = doc.getText(pageIndex).then((text) => buildPageIndex(text, options));
+      indexes.set(pageIndex, index);
     }
     return index;
   }
@@ -920,19 +1414,26 @@ export class PdfViewerRuntime {
   }
 
   #initialZoomMode(): ZoomMode {
-    return this.#initialScale === "fit-width" ? "fit-width" : "custom";
+    return typeof this.#initialScale === "number" ? "custom" : this.#initialScale;
   }
 
-  #resolveInitialScale(firstPage: PageSize): number {
+  #resolveInitialScale(): number {
     if (typeof this.#initialScale === "number") return this.#initialScale;
-    const width = this.#scroller?.clientWidth ?? 0;
-    if (width === 0 || firstPage.width === 0) return 1;
-    this.#fittedWidth = width;
-    return clamp((width - 2 * this.#gap) / firstPage.width, this.#minScale, this.#maxScale);
+    const scroller = this.#scroller;
+    if (!scroller || scroller.clientWidth === 0) return 1;
+    const scale = this.#fitScale(
+      clamp(this.#initialPage, 0, this.#sizes.length - 1),
+      this.#initialScale,
+    );
+    if (scale === null) return 1;
+    this.#fittedWidth = scroller.clientWidth;
+    this.#fittedHeight = scroller.clientHeight;
+    return scale;
   }
 
   #applyLayout(scale: number): Layout {
-    const layout = computeLayout(this.#sizes, scale, this.#gap, this.store.get().rotation);
+    const { rotation, spread } = this.store.get();
+    const layout = computeLayout(this.#sizes, scale, this.#gap, rotation, spread);
     this.#sizeContent(layout);
     this.store.set({ layout });
     return layout;
@@ -984,20 +1485,84 @@ export class PdfViewerRuntime {
     if (scroller) scroller.scrollTop = (next.tops[anchorPage] ?? 0) + offset;
     this.#update();
     // The page at the center may turn out wider or narrower than the first.
-    this.#fitWidth();
+    this.#fit();
   }
 
   #onResize = (): void => {
     const scroller = this.#scroller;
+    const mode = this.store.get().zoomMode;
     if (
       scroller &&
-      scroller.clientWidth !== this.#fittedWidth &&
-      this.store.get().zoomMode === "fit-width"
+      ((mode === "fit-width" && scroller.clientWidth !== this.#fittedWidth) ||
+        (mode === "fit-page" &&
+          (scroller.clientWidth !== this.#fittedWidth ||
+            scroller.clientHeight !== this.#fittedHeight)))
     ) {
       this.#finishZoom();
-      this.#fitWidth();
+      this.#fit();
     }
     this.#requestUpdate();
+  };
+
+  /**
+   * Ctrl or ⌘ with +, -, or 0 zooms the document instead of the page while
+   * focus is in the viewport, as in pdf.js's viewer.
+   */
+  #onKeyDown = (event: KeyboardEvent): void => {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+    switch (event.key) {
+      case "+":
+      case "=":
+        this.zoomBy(ZOOM_STEP);
+        break;
+      case "-":
+      case "_":
+        this.zoomBy(1 / ZOOM_STEP);
+        break;
+      case "0":
+        this.resetScale();
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+  };
+
+  /**
+   * The hand tool scrolls with a mouse or pen drag. Links, form fields, and
+   * other controls keep their own behavior; touches pan natively.
+   */
+  #onGrabStart = (event: PointerEvent): void => {
+    if (this.store.get().tool !== "hand" || event.pointerType === "touch" || event.button !== 0) {
+      return;
+    }
+    const target = event.target as Element | null;
+    if (target?.closest("a, button, input, select, textarea, [contenteditable]")) return;
+    // Keeps the drag from selecting text or dragging images, and the press
+    // from focusing the viewport, which keys then would not scroll.
+    event.preventDefault();
+    const scroller = this.#scroller;
+    if (!scroller) return;
+    scroller.focus({ preventScroll: true });
+    this.#grab = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+    scroller.setPointerCapture(event.pointerId);
+    scroller.classList.add("parapdf-grabbing");
+  };
+
+  #onGrabMove = (event: PointerEvent): void => {
+    const grab = this.#grab;
+    const scroller = this.#scroller;
+    if (!grab || !scroller || grab.pointerId !== event.pointerId) return;
+    scroller.scrollLeft -= event.clientX - grab.x;
+    scroller.scrollTop -= event.clientY - grab.y;
+    grab.x = event.clientX;
+    grab.y = event.clientY;
+  };
+
+  #onGrabEnd = (event: PointerEvent): void => {
+    if (this.#grab?.pointerId !== event.pointerId) return;
+    this.#grab = null;
+    this.#scroller?.classList.remove("parapdf-grabbing");
   };
 
   #onScroll = (): void => {
@@ -1200,7 +1765,7 @@ export class PdfViewerRuntime {
     let target = { left: left - zoom.panX, top: top - zoom.panY };
     const scale = layout.scale * zoom.factor;
     if (Math.abs(scale - layout.scale) >= 1e-4) {
-      next = computeLayout(this.#sizes, scale, this.#gap, layout.rotation);
+      next = computeLayout(this.#sizes, scale, this.#gap, layout.rotation, layout.spread);
       target = zoomTarget(
         layout,
         next,
@@ -1312,7 +1877,12 @@ export class PdfViewerRuntime {
     }
     const { first, last } = visibleRange(layout, viewport.top, viewport.height);
     const lastIndex = layout.tops.length - 1;
-    const focus = pageAt(layout, viewport.top + viewport.height / 2);
+    const focus = pageAtPoint(
+      layout,
+      viewport.left + viewport.width / 2,
+      viewport.top + viewport.height / 2,
+      viewport.scrollerWidth,
+    );
     // Publishing is cheap when nothing changed: the store ignores equal values.
     this.store.set({
       first: Math.max(0, first - this.#overscan),

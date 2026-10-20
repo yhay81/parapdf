@@ -2,10 +2,13 @@ import {
   type AnnotationLayerHandle,
   type AnnotationLayerTask,
   isRenderCancelled,
+  type LayerState,
   type LinkHandlers,
+  type PageColors,
   type PageSize,
   type PdfEngineDocument,
   type RenderRegion,
+  type RenderRequest,
   type RenderTask,
   type Rotation,
   type TextLayerHandle,
@@ -50,9 +53,14 @@ interface Slot {
   readonly detail: HTMLCanvasElement;
   readonly text: HTMLElement | null;
   readonly annotations: HTMLElement | null;
+  /** Receives a tagged page's structure with its text layer. */
+  readonly structure: HTMLElement | null;
   /** Device pixels per point of the last completed render, 0 when empty. */
   baseScale: number;
   detailScale: number;
+  /** The content version (see `invalidateContent`) each layer's pixels show. */
+  baseVersion: number;
+  detailVersion: number;
   /** The part of the page the detail layer covers; null for the whole page. */
   detailRegion: PageArea | null;
   job: { layer: Layer; scale: number; region: PageArea | null; task: RenderTask } | undefined;
@@ -121,6 +129,12 @@ export interface SchedulerOptions {
   maxCanvasPixels?: number;
   /** Where activated links in annotation layers go. */
   links?: LinkHandlers;
+  /** Annotation layers show form fields the reader can fill in; the drawings leave them out. */
+  forms?: boolean;
+  /** Colors pages are drawn in instead of their own. */
+  pageColors?: PageColors;
+  /** Which layers renders and annotation layers show; see `invalidateContent`. */
+  layers?: LayerState;
   /** Keeps drag selections inside rendered text layers. */
   selection?: TextSelectionTracker;
   onPainted?: (pageIndex: number, layer: Layer) => void;
@@ -242,6 +256,14 @@ function followZoom(slot: Slot, scale: number): void {
   slot.text.style.scale = scale === slot.textScale ? "" : String(scale / slot.textScale);
 }
 
+/** A render outside the page layers, such as a thumbnail, waiting for a free render slot. */
+interface ExtraJob {
+  readonly request: RenderRequest;
+  readonly done: (error: unknown) => void;
+  task: RenderTask | undefined;
+  cancelled: boolean;
+}
+
 const whenIdle: (callback: () => void) => void =
   typeof requestIdleCallback === "function"
     ? (callback) => requestIdleCallback(callback, { timeout: 300 })
@@ -272,6 +294,14 @@ export class RenderScheduler {
   /** Bumped when every canvas becomes stale, so renders started before are dropped. */
   #epoch = 0;
   #textScheduled = false;
+  /** Renders outside the page layers, in the order they were asked for. */
+  readonly #extras: ExtraJob[] = [];
+  /**
+   * Bumped when what pages show changes but not where, as when a layer is
+   * shown or hidden: pixels of an older version stay until new ones replace
+   * them, so the page never goes blank.
+   */
+  #version = 0;
 
   constructor(doc: PdfEngineDocument, options: SchedulerOptions = {}) {
     this.#doc = doc;
@@ -289,6 +319,7 @@ export class RenderScheduler {
     detail: HTMLCanvasElement,
     text: HTMLElement | null,
     annotations: HTMLElement | null,
+    structure: HTMLElement | null = null,
   ): void {
     this.detach(index);
     this.#slots.set(index, {
@@ -297,8 +328,11 @@ export class RenderScheduler {
       detail,
       text,
       annotations,
+      structure,
       baseScale: 0,
       detailScale: 0,
+      baseVersion: 0,
+      detailVersion: 0,
       detailRegion: null,
       job: undefined,
       textTask: undefined,
@@ -327,6 +361,7 @@ export class RenderScheduler {
       pinTextLayer(slot.text, null);
     }
     slot.annotations?.replaceChildren();
+    slot.structure?.replaceChildren();
     // Zero-sized canvases hand their backing memory back immediately, which
     // matters on iOS where total canvas memory is capped.
     for (const canvas of [slot.base, slot.detail]) {
@@ -363,9 +398,83 @@ export class RenderScheduler {
     // The next update() brings the turned layout and starts the new renders.
   }
 
+  /**
+   * Draw with `layers` from now on. It must show what renders drew without
+   * it, the document's default layers; `invalidateContent` draws changes.
+   */
+  setLayers(layers: LayerState): void {
+    this.#options.layers = layers;
+  }
+
+  /**
+   * What the pages show changed, say a layer was shown or hidden: every
+   * page is drawn again, keeping its old pixels until the new ones are in,
+   * and annotation layers are built again.
+   */
+  invalidateContent(): void {
+    this.#version++;
+    for (const slot of this.#slots.values()) {
+      slot.job?.task.cancel();
+      if (slot.annotations) {
+        slot.annotationTask?.cancel();
+        slot.annotationTask = undefined;
+        slot.annotationHandle = undefined;
+        slot.annotations.replaceChildren();
+      }
+    }
+    this.#pump();
+  }
+
   /** Cancels all work and releases every page, for example when the document closes. */
   dispose(): void {
     for (const index of [...this.#slots.keys()]) this.detach(index);
+    for (const job of this.#extras.splice(0)) {
+      job.cancelled = true;
+      job.task?.cancel();
+    }
+  }
+
+  /**
+   * Draw `request` once no page layer waits for a render slot: thumbnails
+   * never delay the pages in view. `done` hears null on success, or the
+   * error. Returns the function that cancels the render.
+   */
+  enqueue(request: RenderRequest, done: (error: unknown) => void): () => void {
+    const job: ExtraJob = { request, done, task: undefined, cancelled: false };
+    this.#extras.push(job);
+    this.#pump();
+    return () => {
+      if (job.cancelled) return;
+      job.cancelled = true;
+      if (job.task) job.task.cancel();
+      else this.#extras.splice(this.#extras.indexOf(job), 1);
+    };
+  }
+
+  /**
+   * Copy page `index`'s drawing to `canvas`, already sized, if a whole-page
+   * layer at least as large as it is drawn for `rotation`; false otherwise.
+   */
+  copyPage(index: number, canvas: HTMLCanvasElement, rotation: Rotation): boolean {
+    const slot = this.#slots.get(index);
+    if (!slot || (this.#input?.layout.rotation ?? 0) !== rotation) return false;
+    // With form fields shown as HTML, the drawing leaves them out, as pdf.js's
+    // viewer knows when it declines to reuse such a drawing for a thumbnail.
+    if (this.#options.forms && slot.annotations) return false;
+    const source =
+      slot.detailScale > 0 &&
+      slot.detailRegion === null &&
+      slot.detailVersion === this.#version &&
+      !slot.job
+        ? slot.detail
+        : slot.baseScale > 0 && slot.baseVersion === this.#version && slot.job?.layer !== "base"
+          ? slot.base
+          : null;
+    if (!source || source.width < canvas.width) return false;
+    const context = canvas.getContext("2d");
+    if (!context) return false;
+    context.drawImage(source, 0, 0, canvas.width, canvas.height);
+    return true;
   }
 
   update(input: ScheduleInput): void {
@@ -503,7 +612,8 @@ export class RenderScheduler {
   }
 
   #needsDetail(slot: Slot, plan: DetailPlan, input: ScheduleInput): boolean {
-    if (!sameScale(slot.detailScale, plan.scale)) return true;
+    if (!sameScale(slot.detailScale, plan.scale) || slot.detailVersion !== this.#version)
+      return true;
     // A detail far over the page's budget, say after its share shrank, is drawn again smaller.
     if (
       slot.detail.width * slot.detail.height >
@@ -602,7 +712,12 @@ export class RenderScheduler {
     // so refreshing it comes last.
     const staleBase = (slot: Slot) => {
       const target = this.#baseScale(slot.index, input);
-      return slot.baseScale > 0 && (slot.baseScale > target * 2 || slot.baseScale < target / 2);
+      return (
+        slot.baseScale > 0 &&
+        (slot.baseScale > target * 2 ||
+          slot.baseScale < target / 2 ||
+          slot.baseVersion !== this.#version)
+      );
     };
 
     // A base under current whole-page detail would never show. Once scrolling
@@ -610,8 +725,10 @@ export class RenderScheduler {
     // it without a base first: the detail has time to arrive before the page
     // scrolls in, and drawing both doubled the work for every page that slow
     // scrolling brought in.
+    // A base of an older content version shows wherever the detail does not.
     const needsBase = (slot: Slot) =>
-      slot.baseScale === 0 &&
+      (slot.baseScale === 0 ||
+        (slot.baseVersion !== this.#version && slot.detailRegion !== null)) &&
       !(slot.detailScale > 0 && slot.detailRegion === null && !needsDetail(slot));
     const detailFirst = (slot: Slot) => input.settled && planOf(slot)?.region === null;
     // See QUICK_DETAIL_BASES.
@@ -671,7 +788,43 @@ export class RenderScheduler {
       if (!next) break;
       this.#start(next.slot, next.layer, next.scale, next.region);
     }
+    // Extra renders leave a slot free for the page that scrolls in next.
+    const extraSlots = Math.max(1, this.#maxConcurrent - 1);
+    while (
+      this.#running < this.#maxConcurrent &&
+      this.#extras.filter((extra) => extra.task).length < extraSlots
+    ) {
+      const job = this.#extras.find((extra) => !extra.task);
+      if (!job) break;
+      this.#startExtra(job);
+    }
     this.#scheduleText();
+  }
+
+  #startExtra(job: ExtraJob): void {
+    const task = this.#doc.render(job.request);
+    job.task = task;
+    this.#running++;
+    task.promise
+      .then(
+        () => {
+          if (!job.cancelled) job.done(null);
+        },
+        (error: unknown) => {
+          if (isRenderCancelled(error)) this.stats.cancelled++;
+          else {
+            this.stats.failed++;
+            console.error(`page ${job.request.pageIndex + 1}: render failed`, error);
+          }
+          if (!job.cancelled) job.done(error);
+        },
+      )
+      .finally(() => {
+        this.#running--;
+        const at = this.#extras.indexOf(job);
+        if (at >= 0) this.#extras.splice(at, 1);
+        this.#pump();
+      });
   }
 
   #start(slot: Slot, layer: Layer, scale: number, plannedRegion: PageArea | null): void {
@@ -694,19 +847,29 @@ export class RenderScheduler {
     }
     // The canvas is resized, which clears it, before the page next paints, so
     // moving it now never shows old pixels in the new place, and the page has
-    // none of this layer's pixels until the render completes.
+    // none of this layer's pixels until the render completes. It stays hidden
+    // until then: a resized canvas with pdf.js's opaque context is black, and
+    // pdf.js's renderer worker sends its first frame a round trip later, so a
+    // detail render covered the base below it with black, and a base render
+    // showed a black page.
+    canvas.style.visibility = "hidden";
     if (layer === "detail") {
       placeDetail(canvas, region);
       slot.detailScale = 0;
       slot.detailRegion = null;
     } else slot.baseScale = 0;
+    const { forms, pageColors, layers } = this.#options;
     const task = this.#doc.render({
       pageIndex: slot.index,
       scale,
       rotation: layout?.rotation ?? 0,
       canvas,
       ...(pixels ? { region: pixels } : {}),
+      ...(forms && slot.annotations ? { formLayer: slot.annotations } : {}),
+      ...(pageColors ? { colors: pageColors } : {}),
+      ...(layers ? { layers } : {}),
     });
+    const version = this.#version;
     slot.job = { layer, scale, region, task };
     this.#running++;
     const epoch = this.#epoch;
@@ -715,11 +878,14 @@ export class RenderScheduler {
       .then(
         () => {
           if (!current()) return;
+          canvas.style.visibility = "";
           if (layer === "base") {
             slot.baseScale = scale;
+            slot.baseVersion = version;
             this.stats.base++;
           } else {
             slot.detailScale = scale;
+            slot.detailVersion = version;
             slot.detailRegion = region;
             this.stats.detail++;
           }
@@ -825,6 +991,8 @@ export class RenderScheduler {
       cssScale,
       rotation,
       links,
+      forms: this.#options.forms ?? false,
+      ...(this.#options.layers ? { layers: this.#options.layers } : {}),
     });
     slot.annotationTask = task;
     this.#textRunning = true;
@@ -859,11 +1027,13 @@ export class RenderScheduler {
     container.replaceChildren();
     pinTextLayer(container, cssScale);
     slot.textScale = cssScale;
+    slot.structure?.replaceChildren();
     const task = this.#doc.renderTextLayer({
       pageIndex: slot.index,
       container,
       cssScale,
       rotation,
+      ...(slot.structure ? { structure: slot.structure } : {}),
     });
     slot.textTask = task;
     this.#textRunning = true;

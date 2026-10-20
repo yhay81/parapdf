@@ -10,9 +10,9 @@ export interface PdfDocumentProps {
   /** The engine that opens the document; read once, when the component mounts. */
   engine: PdfEngine;
   /**
-   * The document to show. It reopens when its URL changes or, for data, when
-   * the bytes are another object; a new object for the same URL keeps the
-   * open document.
+   * The document to show. It reopens when its URL, request headers, or
+   * password change or, for data, when the bytes are another object or the
+   * password changes; a new object for the same URL keeps the open document.
    */
   source: PdfSource;
   /** Read once, when the component mounts; give it a new `key` to change them. */
@@ -27,7 +27,10 @@ export function PdfDocument({ engine, source, options, children }: PdfDocumentPr
   // One effect owns the document. StrictMode's mount-unmount-mount cycle and
   // quick remounts reuse the loaded document instead of loading it again.
   const key = sourceKey(source);
+  // Viewers share a document whatever password opened it, but a new password
+  // tries again, say after a wrong one failed it.
+  const password = source.password;
   // biome-ignore lint/correctness/useExhaustiveDependencies: the key identifies the source, so an inline `{ url }` does not reopen the document at every render.
-  useEffect(() => runtime.open(source), [runtime, key]);
+  useEffect(() => runtime.open(source), [runtime, key, password]);
   return <RuntimeContext value={runtime}>{children}</RuntimeContext>;
 }
