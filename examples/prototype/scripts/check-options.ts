@@ -102,11 +102,19 @@ const canvasPixels = (page: Page) =>
       const index = Number(section.dataset.page) - 1;
       const pageTop = layout?.tops[index] ?? 0;
       const pageBottom = pageTop + (layout?.heights[index] ?? 0);
-      const [base, detail] = section.querySelectorAll("canvas");
+      // The base, then the two detail canvases: the one shown and the one a
+      // new detail is drawn into.
+      const [base, ...details] = section.querySelectorAll<HTMLCanvasElement>(
+        ":scope > div[aria-hidden] > canvas",
+      );
       const basePixels = (base?.width ?? 0) * (base?.height ?? 0);
-      const detailPixels = (detail?.width ?? 0) * (detail?.height ?? 0);
+      let detailPixels = 0;
+      for (const detail of details) {
+        const pixels = detail.width * detail.height;
+        detailPixels += pixels;
+        largestDetail = Math.max(largestDetail, pixels);
+      }
       largestBase = Math.max(largestBase, basePixels);
-      largestDetail = Math.max(largestDetail, detailPixels);
       if (pageBottom > top && pageTop < bottom) visible += basePixels + detailPixels;
       else outside += basePixels + detailPixels;
     }
@@ -276,7 +284,12 @@ try {
       `section[data-page="${viewer.store.get().currentPage + 1}"]`,
     ) as HTMLElement;
     const pageBox = section.getBoundingClientRect();
-    const [, detail] = section.querySelectorAll("canvas");
+    // The detail canvas shown: drawn, and not hidden while a new detail is drawn into it.
+    const detail = [
+      ...section.querySelectorAll<HTMLCanvasElement>(":scope > div[aria-hidden] > canvas"),
+    ]
+      .slice(1)
+      .find((canvas) => canvas.width > 0 && canvas.style.visibility !== "hidden");
     const box = detail?.getBoundingClientRect();
     // The part of the page the viewport shows must lie inside the detail canvas.
     const left = Math.max(view.left, pageBox.left);

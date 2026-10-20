@@ -13,8 +13,10 @@ A fast PDF viewer for React, built on [pdf.js](https://github.com/mozilla/pdf.js
 - **Only what is near the viewport exists.** Pages outside a small window are
   unmounted and give their canvas memory back. Each page draws a quick
   low-resolution base first and full device resolution once scrolling
-  settles; at high zoom only the visible part is drawn sharp, within pixel
-  budgets you can set for memory-capped browsers such as iOS Safari.
+  settles, and after a zoom keeps showing its old drawing, scaled, until the
+  new one is complete; at high zoom only the visible part is drawn sharp,
+  within pixel budgets you can set for memory-capped browsers such as iOS
+  Safari.
 - **A real document.** pdf.js text layers make pages selectable and readable
   by screen readers, in the structure a tagged PDF gives them; whole-document
   search matches the way pdf.js's own viewer does, Japanese and other CJK
@@ -359,7 +361,7 @@ component mounts; give it a new `key` to change them.
 | `maxDetailPixels` | 16,777,216 | Pixels of one page's full-resolution canvas; larger pages are drawn sharp only around the visible area. |
 | `maxDetailViewports` | unlimited | The same limit as a multiple of the viewport's device pixels, so the sharp margin around the visible area follows the viewport's size. |
 | `maxBasePixels` | 2,097,152 | Pixels of one page's low-resolution canvas. |
-| `maxCanvasPixels` | unlimited | Pixels of all of this viewer's canvases together. Pages outside the viewport give theirs back first; past the budget, visible pages lose their sharp margin and then resolution, but keep their low-resolution canvases. |
+| `maxCanvasPixels` | unlimited | Pixels of all of this viewer's canvases together. Pages outside the viewport give theirs back first; past the budget, visible pages lose their sharp margin and then resolution, but keep their low-resolution canvases. A page drawn sharp again, after a zoom for example, keeps its old sharp canvas until the new one is complete when both fit, and shows its low-resolution one meanwhile when they do not. |
 | `maxConcurrentRenders` | `2` | Pages drawn at once. |
 
 `PdfViewport` takes `className`, `style`, `label` (the accessible name of

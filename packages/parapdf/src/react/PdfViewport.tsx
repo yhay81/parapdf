@@ -163,6 +163,7 @@ const PdfPage = memo(function PdfPage({
   const runtime = usePdfViewer();
   const baseRef = useRef<HTMLCanvasElement>(null);
   const detailRef = useRef<HTMLCanvasElement>(null);
+  const spareRef = useRef<HTMLCanvasElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
   const annotationRef = useRef<HTMLDivElement>(null);
   const structureRef = useRef<HTMLCanvasElement>(null);
@@ -178,6 +179,7 @@ const PdfPage = memo(function PdfPage({
       textRef.current,
       annotationRef.current,
       structureRef.current,
+      spareRef.current,
     );
   }, [runtime, index]);
 
@@ -211,7 +213,9 @@ const PdfPage = memo(function PdfPage({
       {/* Pixels only; the text layer carries the content for assistive technology. */}
       <div aria-hidden="true" style={layerStyle}>
         <canvas ref={baseRef} style={layerStyle} />
+        {/* Two detail canvases: a new detail is drawn into one while the other shows the old. */}
         <canvas ref={detailRef} style={layerStyle} />
+        <canvas ref={spareRef} style={layerStyle} />
       </div>
       {textLayer ? (
         // A tagged page's structure, as pdf.js's viewer keeps it: a canvas's

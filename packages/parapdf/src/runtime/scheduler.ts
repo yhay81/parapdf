@@ -28,13 +28,23 @@ import type { TextSelectionTracker } from "./selection.ts";
 type Layer = "base" | "detail";
 
 /**
- * Each mounted page owns two stacked canvases. The base layer is a quick,
- * low-resolution render that fills the page as soon as it scrolls in; the
- * detail layer covers it at full device resolution once scrolling settles.
- * Because the base stays underneath, re-rendering the detail layer (for
- * example after zooming) never flashes an empty page. Pages that slow
- * scrolling brings into the mounted window render their detail before they
- * scroll in and get a base only once they need one in view.
+ * Each mounted page owns two stacked canvas layers. The base layer is a
+ * quick, low-resolution render that fills the page as soon as it scrolls in;
+ * the detail layer covers it at full device resolution once scrolling
+ * settles. Pages that slow scrolling brings into the mounted window render
+ * their detail before they scroll in and get a base only once they need one
+ * in view.
+ *
+ * The detail layer has a spare canvas: a page that shows a detail draws its
+ * next one, after a zoom for example, into the spare, and the two change
+ * places once the new one is complete, as pdf.js's viewer replaces a page's
+ * canvas only once the new one is drawn. Until then the page shows its old
+ * detail, scaled by CSS. Drawn in place, a detail showed white while pdf.js
+ * drew it, for 80 to 175 ms after each zoom in Safari in the iPadOS
+ * simulator; hidden until complete, it left the page to its base, at a
+ * quarter of the device's resolution, for 100 to 130 ms there. Within
+ * maxCanvasPixels, a detail that does not fit beside the old one is still
+ * drawn in place, over the base.
  *
  * The text and annotation layers are DOM built on the main thread, so they
  * are the last things a page gets: one layer at a time, only after scrolling
@@ -50,7 +60,10 @@ type Layer = "base" | "detail";
 interface Slot {
   readonly index: number;
   readonly base: HTMLCanvasElement;
-  readonly detail: HTMLCanvasElement;
+  /** The detail canvas the page shows. */
+  detail: HTMLCanvasElement;
+  /** The other detail canvas, which the next detail is drawn into while the page shows one. */
+  spare: HTMLCanvasElement | null;
   readonly text: HTMLElement | null;
   readonly annotations: HTMLElement | null;
   /** Receives a tagged page's structure with its text layer. */
@@ -63,7 +76,7 @@ interface Slot {
   detailVersion: number;
   /** The part of the page the detail layer covers; null for the whole page. */
   detailRegion: PageArea | null;
-  job: { layer: Layer; scale: number; region: PageArea | null; task: RenderTask } | undefined;
+  job: Job | undefined;
   textTask: TextLayerTask | undefined;
   textHandle: TextLayerHandle | undefined;
   /** CSS pixels per point and view rotation the text runs were laid out for; 0 before any. */
@@ -73,6 +86,16 @@ interface Slot {
   annotationHandle: AnnotationLayerHandle | undefined;
   annotationScale: number;
   annotationRotation: Rotation;
+}
+
+/** A render of one of a page's layers. */
+interface Job {
+  layer: Layer;
+  scale: number;
+  region: PageArea | null;
+  task: RenderTask;
+  /** The canvas it draws into: the layer's own, or for a detail beside a shown one, the spare. */
+  canvas: HTMLCanvasElement;
 }
 
 export interface ScheduleInput {
@@ -230,6 +253,20 @@ function capScale(scale: number, size: PageSize | undefined, maxPixels: number):
   return pixels > maxPixels ? scale * Math.sqrt(maxPixels / pixels) : scale;
 }
 
+/**
+ * Hands a canvas's pixels back: a zero-sized canvas releases its backing
+ * memory at once, which matters on iOS where total canvas memory is capped.
+ * It is hidden too: Chromium draws a canvas with pdf.js's opaque context
+ * black over its whole box once its size is zero, so a zeroed detail canvas
+ * stacked over the shown one covered the page with black. A render shows it
+ * again once it completes.
+ */
+function release(canvas: HTMLCanvasElement): void {
+  canvas.width = 0;
+  canvas.height = 0;
+  canvas.style.visibility = "hidden";
+}
+
 /** Positions a detail canvas over `region` of its page, or over the whole page. */
 function placeDetail(canvas: HTMLCanvasElement, region: PageArea | null): void {
   const { style } = canvas;
@@ -320,12 +357,16 @@ export class RenderScheduler {
     text: HTMLElement | null,
     annotations: HTMLElement | null,
     structure: HTMLElement | null = null,
+    spare: HTMLCanvasElement | null = null,
   ): void {
     this.detach(index);
+    // Canvas pixels are counted by size, and a new canvas is 300 by 150.
+    if (spare) release(spare);
     this.#slots.set(index, {
       index,
       base,
       detail,
+      spare,
       text,
       annotations,
       structure,
@@ -362,11 +403,8 @@ export class RenderScheduler {
     }
     slot.annotations?.replaceChildren();
     slot.structure?.replaceChildren();
-    // Zero-sized canvases hand their backing memory back immediately, which
-    // matters on iOS where total canvas memory is capped.
-    for (const canvas of [slot.base, slot.detail]) {
-      canvas.width = 0;
-      canvas.height = 0;
+    for (const canvas of [slot.base, slot.detail, slot.spare]) {
+      if (canvas) release(canvas);
     }
     this.#doc.releasePage(index);
   }
@@ -383,8 +421,7 @@ export class RenderScheduler {
         slot.job = undefined;
       }
       slot.baseScale = 0;
-      slot.base.width = 0;
-      slot.base.height = 0;
+      release(slot.base);
       this.#clearDetail(slot);
       if (slot.textHandle) {
         slot.textHandle.update(slot.textScale, rotation);
@@ -461,13 +498,14 @@ export class RenderScheduler {
     // With form fields shown as HTML, the drawing leaves them out, as pdf.js's
     // viewer knows when it declines to reuse such a drawing for a thumbnail.
     if (this.#options.forms && slot.annotations) return false;
+    // A layer being drawn in place holds no finished drawing.
     const source =
       slot.detailScale > 0 &&
       slot.detailRegion === null &&
       slot.detailVersion === this.#version &&
-      !slot.job
+      slot.job?.canvas !== slot.detail
         ? slot.detail
-        : slot.baseScale > 0 && slot.baseVersion === this.#version && slot.job?.layer !== "base"
+        : slot.baseScale > 0 && slot.baseVersion === this.#version && slot.job?.canvas !== slot.base
           ? slot.base
           : null;
     if (!source || source.width < canvas.width) return false;
@@ -634,12 +672,30 @@ export class RenderScheduler {
     return size.width * scale * size.height * scale * (region ? areaSize(region) : 1);
   }
 
-  /** Pixels a layer holds, or will hold once its running render sizes the canvas. */
+  /**
+   * Pixels a layer holds, or will hold once its running render sizes the
+   * canvas it draws into: a detail drawn into the spare holds both canvases'
+   * until it completes, and a replaced one until it is released.
+   */
   #layerPixels(slot: Slot, layer: Layer, input: ScheduleInput): number {
     const job = slot.job;
-    if (job?.layer === layer) return this.#pixels(slot.index, job.scale, job.region, input);
-    const canvas = layer === "base" ? slot.base : slot.detail;
-    return canvas.width * canvas.height;
+    const canvases = layer === "base" ? [slot.base] : [slot.detail, slot.spare];
+    let pixels = 0;
+    for (const canvas of canvases) {
+      if (canvas && canvas !== job?.canvas) pixels += canvas.width * canvas.height;
+    }
+    if (job?.layer === layer) pixels += this.#pixels(slot.index, job.scale, job.region, input);
+    return pixels;
+  }
+
+  /**
+   * Whether a detail of `pixels` would be drawn into the page's spare canvas
+   * while the shown one stays: the page shows a detail, has a spare, and has
+   * room for both within maxCanvasPixels beside `total`, the pixels all
+   * canvases hold now.
+   */
+  #keepsDetail(slot: Slot, pixels: number, total: number): boolean {
+    return slot.spare !== null && slot.detailScale > 0 && total + pixels <= this.#maxCanvasPixels;
   }
 
   #canvasPixels(input: ScheduleInput): number {
@@ -671,8 +727,7 @@ export class RenderScheduler {
         if (layer === "detail") this.#clearDetail(slot);
         else {
           slot.baseScale = 0;
-          slot.base.width = 0;
-          slot.base.height = 0;
+          release(slot.base);
         }
         this.stats.trimmed++;
         total -= pixels;
@@ -680,11 +735,13 @@ export class RenderScheduler {
     }
   }
 
+  /** Drops the page's detail pixels, the spare's included; any detail render is cancelled first. */
   #clearDetail(slot: Slot): void {
     slot.detailScale = 0;
     slot.detailRegion = null;
-    slot.detail.width = 0;
-    slot.detail.height = 0;
+    for (const canvas of [slot.detail, slot.spare]) {
+      if (canvas) release(canvas);
+    }
   }
 
   #byDistance(input: ScheduleInput): Slot[] {
@@ -720,16 +777,30 @@ export class RenderScheduler {
       );
     };
 
-    // A base under current whole-page detail would never show. Once scrolling
-    // settles, a page outside the viewport that gets whole-page detail renders
-    // it without a base first: the detail has time to arrive before the page
-    // scrolls in, and drawing both doubled the work for every page that slow
-    // scrolling brought in.
+    // Pages outside the viewport render only within maxCanvasPixels.
+    const total = this.#canvasPixels(input);
+    // A base under whole-page detail would never show: under a current one,
+    // or under a stale one that stays until a whole-page detail drawn into the
+    // spare replaces it, as after a zoom. Once scrolling settles, a page
+    // outside the viewport that gets whole-page detail renders it without a
+    // base first: the detail has time to arrive before the page scrolls in,
+    // and drawing both doubled the work for every page that slow scrolling
+    // brought in.
+    const coveredByDetail = (slot: Slot) => {
+      if (slot.detailScale === 0 || slot.detailRegion !== null) return false;
+      if (!needsDetail(slot)) return true;
+      const plan = planOf(slot);
+      return (
+        plan !== null &&
+        plan.region === null &&
+        this.#keepsDetail(slot, this.#pixels(slot.index, plan.scale, null, input), total)
+      );
+    };
     // A base of an older content version shows wherever the detail does not.
     const needsBase = (slot: Slot) =>
       (slot.baseScale === 0 ||
         (slot.baseVersion !== this.#version && slot.detailRegion !== null)) &&
-      !(slot.detailScale > 0 && slot.detailRegion === null && !needsDetail(slot));
+      !coveredByDetail(slot);
     const detailFirst = (slot: Slot) => input.settled && planOf(slot)?.region === null;
     // See QUICK_DETAIL_BASES.
     const quickDetail = (slot: Slot) => {
@@ -742,8 +813,6 @@ export class RenderScheduler {
           this.#maxBasePixels * QUICK_DETAIL_BASES
       );
     };
-    // Pages outside the viewport render only within maxCanvasPixels.
-    const total = this.#canvasPixels(input);
     const fits = (slot: Slot, layer: Layer) => {
       const plan = layer === "detail" ? planOf(slot) : null;
       const pixels =
@@ -828,10 +897,23 @@ export class RenderScheduler {
   }
 
   #start(slot: Slot, layer: Layer, scale: number, plannedRegion: PageArea | null): void {
-    const canvas = layer === "base" ? slot.base : slot.detail;
+    const input = this.#input;
+    // A page that shows a detail keeps it until the next one, drawn into the
+    // spare canvas, is complete.
+    const spare =
+      layer === "detail" &&
+      input &&
+      this.#keepsDetail(
+        slot,
+        this.#pixels(slot.index, scale, plannedRegion, input),
+        this.#canvasPixels(input),
+      )
+        ? slot.spare
+        : null;
+    const canvas = layer === "base" ? slot.base : (spare ?? slot.detail);
     let region = plannedRegion;
     let pixels: RenderRegion | undefined;
-    const layout = this.#input?.layout;
+    const layout = input?.layout;
     const unturned = layout?.sizes[slot.index];
     const size = layout && unturned ? turnedSize(unturned, layout.rotation) : undefined;
     if (region && size) {
@@ -846,17 +928,21 @@ export class RenderScheduler {
       region = { minX: x / width, minY: y / height, maxX: right / width, maxY: bottom / height };
     }
     // The canvas is resized, which clears it, before the page next paints, so
-    // moving it now never shows old pixels in the new place, and the page has
-    // none of this layer's pixels until the render completes. It stays hidden
-    // until then: a resized canvas with pdf.js's opaque context is black, and
-    // pdf.js's renderer worker sends its first frame a round trip later, so a
-    // detail render covered the base below it with black, and a base render
-    // showed a black page.
+    // moving it now never shows old pixels in the new place. It stays hidden
+    // until the render completes: a resized canvas with pdf.js's opaque
+    // context is black, pdf.js's renderer worker sends its first frame a
+    // round trip later, and pdf.js drawing on the main thread fills the
+    // canvas white and draws over it in chunks, one per animation frame. So
+    // a detail render covered the base below it with black or white, and a
+    // base render showed a black page. Drawn in place, a layer has none of
+    // its pixels until then.
     canvas.style.visibility = "hidden";
     if (layer === "detail") {
       placeDetail(canvas, region);
-      slot.detailScale = 0;
-      slot.detailRegion = null;
+      if (!spare) {
+        slot.detailScale = 0;
+        slot.detailRegion = null;
+      }
     } else slot.baseScale = 0;
     const { forms, pageColors, layers } = this.#options;
     const task = this.#doc.render({
@@ -870,7 +956,7 @@ export class RenderScheduler {
       ...(layers ? { layers } : {}),
     });
     const version = this.#version;
-    slot.job = { layer, scale, region, task };
+    slot.job = { layer, scale, region, task, canvas };
     this.#running++;
     const epoch = this.#epoch;
     const current = () => this.#slots.get(slot.index) === slot && epoch === this.#epoch;
@@ -884,6 +970,13 @@ export class RenderScheduler {
             slot.baseVersion = version;
             this.stats.base++;
           } else {
+            if (spare) {
+              // The new detail takes the shown one's place in the same frame.
+              const shown = slot.detail;
+              slot.detail = spare;
+              slot.spare = shown;
+              release(shown);
+            }
             slot.detailScale = scale;
             slot.detailVersion = version;
             slot.detailRegion = region;
@@ -897,7 +990,11 @@ export class RenderScheduler {
             this.stats.failed++;
             console.error(`page ${slot.index + 1}: ${layer} render failed`, error);
           }
-          if (layer === "detail" && current()) {
+          if (layer !== "detail" || !current()) return;
+          if (spare) {
+            // The shown detail stays; the spare's half drawing goes.
+            release(spare);
+          } else {
             // Hide a half-drawn detail layer so the base shows through.
             this.#clearDetail(slot);
           }

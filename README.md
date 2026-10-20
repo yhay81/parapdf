@@ -336,9 +336,9 @@ browser, and treat differences under about 20 ms as noise.
   CSS pixels, against 208 for the build before the change in the same run,
   and every page in view showed pixels before the fingers lifted, where that
   build drew the page under the band 101 ms after the lift. With released
-  pdf.js, a zoom's commit there still turns pages white for 80 to 175 ms,
-  before the change as after it, apparently because a full-resolution
-  redraw fills its canvas white and covers the base until it finishes.
+  pdf.js, a zoom's commit there turned pages white for 80 to 175 ms, before
+  the change as after it: a full-resolution redraw filled its canvas white
+  and covered the base until it finished (see Zoom commits below).
 - **Two-finger drags that zoomed (2026-10-20).** Two touches only pan until
   the distance between them changes by 16 CSS pixels. The runtime measured
   that distance at each finger's move, but browsers deliver the two
@@ -363,6 +363,42 @@ browser, and treat differences under about 20 ms as noise.
   frame past the 16 pixels, so Chromium's synthesized pinches now vary with
   how their moves fall into frames: a pinch out by 2 committed 2.04 to 2.14
   over three runs, 2.14 each time before. Real devices have not been tried.
+- **Zoom commits (2026-10-20).** In Safari in the iPadOS simulator, a zoom's
+  commit turned the pages in view white for 80–175 ms with released pdf.js.
+  The scheduler drew a page's new detail into the canvas that showed its old
+  one, and pdf.js, drawing on the main thread, fills a canvas white before it
+  draws over it in chunks, one per animation frame; `hasPixels()` held all
+  the while, so neither the simulator's probe nor
+  [`check-pinch.ts`](examples/prototype/scripts/check-pinch.ts) saw it.
+  [`commit-bench.ts`](examples/prototype/scripts/commit-bench.ts) now reads
+  what each page in view shows in every frame after ten kinds of zoom
+  commit, compositing its canvases as the page shows them. On 258f693, nine
+  of the ten showed a page white for a few frames in Chromium, WebKit, and
+  Firefox, for up to 48, 100, and 154 ms
+  ([`commit-chromium-258f693.md`](examples/prototype/results/commit-chromium-258f693.md)).
+  99b435b, which hides a canvas until its render completes, had replaced
+  the white with the page's base, at a quarter of the device's resolution,
+  for as many frames
+  ([`commit-chromium-8e33a94.md`](examples/prototype/results/commit-chromium-8e33a94.md)),
+  and for 100–130 ms in the simulator. A page that shows a detail now draws
+  the next one into a spare canvas and swaps the two when it is complete, as
+  pdf.js's viewer replaces a page's canvas only once the new one is drawn: no
+  frame after any of the ten commits shows a page blank or only its base, in
+  any of the three browsers or at Chromium's CPU slowed down four times
+  ([`commit-chromium.md`](examples/prototype/results/commit-chromium.md)),
+  nor in the simulator after a pinch out, a pinch in at the document's
+  start, or a pinch in while dragging. The stale detail needs no base under
+  it, so the ten commits draw 15–16 bases instead of 32–34, and the pages in
+  view are sharp after 3–36 ms instead of 11–173 in Chromium; zooming to 5
+  and back draws the same as before and took up to 12 ms more or less. The
+  loss: a commit holds both details while the new one is drawn, up to 28 MiB
+  more canvas memory at its peak, 115–118 instead of 89 MiB after a 10% zoom
+  step. `check-pinch.ts` now reads the canvases in every frame after a pinch
+  out and a pinch in commit, and fails on both earlier builds in all three
+  browsers. Chromium also paints a canvas with pdf.js's opaque context black
+  over its box once its size is zero, so after a turn pages showed black
+  until they were drawn again; canvases a page gives back are now hidden
+  too.
 - **Zoom cost.** Against a React wrapper of pdf.js's own viewer
   (`PDFViewer`), measured in another project's harness, the main thread was
   1.4–5.6 times busier while zooming.

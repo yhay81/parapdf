@@ -375,6 +375,7 @@ type PageElements = [
   HTMLElement | null,
   HTMLElement | null,
   HTMLElement | null,
+  HTMLCanvasElement | null,
 ];
 
 /** The scroller's size, which rows are centered in. */
@@ -712,8 +713,9 @@ export class PdfViewerRuntime {
             this.#highlights.clearPage(pageIndex);
           },
         });
-        for (const [index, [base, detail, text, annotations, structure]] of this.#pendingPages) {
-          this.#scheduler.attach(index, base, detail, text, annotations, structure);
+        for (const [index, [base, detail, text, annotations, structure, spare]] of this
+          .#pendingPages) {
+          this.#scheduler.attach(index, base, detail, text, annotations, structure, spare);
         }
         this.#pendingPages.clear();
         this.#thumbnails.refresh();
@@ -929,7 +931,11 @@ export class PdfViewerRuntime {
     };
   }
 
-  /** Register a mounted page's layers; returns the function that releases them. */
+  /**
+   * Register a mounted page's layers; returns the function that releases
+   * them. With `spare`, a second detail canvas stacked over the base like
+   * `detail`, a new detail is drawn there while the page shows the old one.
+   */
   attachPage(
     index: number,
     base: HTMLCanvasElement,
@@ -937,6 +943,7 @@ export class PdfViewerRuntime {
     text: HTMLElement | null,
     annotations: HTMLElement | null = null,
     structure: HTMLElement | null = null,
+    spare: HTMLCanvasElement | null = null,
   ): () => void {
     const textLayer = this.#textLayer ? text : null;
     const annotationLayer = this.#annotationLayer ? annotations : null;
@@ -944,9 +951,16 @@ export class PdfViewerRuntime {
     const structureLayer = textLayer ? structure : null;
     const scheduler = this.#scheduler;
     if (scheduler) {
-      scheduler.attach(index, base, detail, textLayer, annotationLayer, structureLayer);
+      scheduler.attach(index, base, detail, textLayer, annotationLayer, structureLayer, spare);
     } else {
-      this.#pendingPages.set(index, [base, detail, textLayer, annotationLayer, structureLayer]);
+      this.#pendingPages.set(index, [
+        base,
+        detail,
+        textLayer,
+        annotationLayer,
+        structureLayer,
+        spare,
+      ]);
     }
     return () => {
       this.#pendingPages.delete(index);

@@ -94,6 +94,25 @@ engine, or switches over `status` or `zoomMode`, needs changes.
 - A canvas stays hidden while it is drawn again: with pdf.js's renderer
   worker (`rendererSrc`), a redraw used to show black until the worker's
   first frame arrived, over the low-resolution page or in its place.
+- After a zoom, each page shows its old drawing, scaled, until the new one is
+  complete, as pdf.js's own viewer does: `PdfViewport` gives each page a
+  second sharp canvas to draw into. The sharp canvas used to be drawn again
+  in place, and the page showed white while pdf.js drew it: for 80–175 ms
+  after each zoom in Safari in the iPadOS simulator, and for a few frames
+  after nine of ten kinds of zoom in Chromium, WebKit, and Firefox. Hidden
+  while drawn, as the item above says, it left the page to its
+  low-resolution canvas for as many frames, and for 100–130 ms in the
+  simulator. Now neither shows. Zooms draw half as many low-resolution
+  canvases, and the pages in view are sharp sooner: after 3–36 ms instead of
+  11–173 in Chromium, 4–36 instead of 12–150 in WebKit, and 4–90 instead of
+  29–102 in Firefox. But a zoom holds the old and the new sharp canvases
+  while the new ones are drawn: up to 28 MiB more canvas memory at its peak.
+  With `maxCanvasPixels`, a page whose new sharp canvas does not fit beside
+  the old one shows its low-resolution canvas meanwhile, as before.
+- In Chromium, pages no longer show black after the view turns until they
+  are drawn again: Chromium paints a canvas with pdf.js's opaque context
+  black over its whole box once its size is zero, and the canvases a page
+  gives back are now hidden too.
 - A two-finger drag only scrolls, however fast it moves and however the
   fingers sit. The distance between the touches was measured at each
   finger's move, against where the other finger had been a frame before,
