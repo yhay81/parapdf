@@ -1794,11 +1794,19 @@ export class PdfViewerRuntime {
     const scroller = this.#scroller;
     const target = event.target instanceof Element ? event.target : null;
     if (!scroller || target?.closest("input, select, textarea, button, [contenteditable]")) return;
-    // Within a pixel: zooming leaves fractional scroll positions.
-    const atTop = scroller.scrollTop <= 1;
-    const atBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1;
-    const atLeft = scroller.scrollLeft <= 1;
-    const atRight = scroller.scrollLeft + scroller.clientWidth >= scroller.scrollWidth - 1;
+    // Within a pixel: zooming leaves fractional scroll positions. The far
+    // edges are where the browser stops scrolling, which a stable scrollbar
+    // gutter puts short of the scroll size less the client size: by 15 px in
+    // Chromium on Linux, where → never flipped a row wider than the viewport.
+    const { scrollLeft, scrollTop } = scroller;
+    scroller.scrollTo(Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER);
+    const maxLeft = scroller.scrollLeft;
+    const maxTop = scroller.scrollTop;
+    scroller.scrollTo(scrollLeft, scrollTop);
+    const atTop = scrollTop <= 1;
+    const atBottom = scrollTop >= maxTop - 1;
+    const atLeft = scrollLeft <= 1;
+    const atRight = scrollLeft >= maxLeft - 1;
     let flipped = false;
     switch (event.key) {
       case "PageDown":

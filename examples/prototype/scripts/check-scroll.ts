@@ -552,9 +552,10 @@ try {
       const after = await page.evaluate(() => {
         const scroller = document.querySelector(".parapdf-viewport") as HTMLElement;
         const viewer = (window as unknown as Demo).__viewer as unknown as {
-          store: { get(): { currentPage: number } };
+          store: { get(): { currentPage: number; scale: number; zoomMode: string } };
         };
-        return `scroll ${scroller.scrollLeft},${scroller.scrollTop} of ${scroller.scrollWidth}x${scroller.scrollHeight} in ${scroller.clientWidth}x${scroller.clientHeight}, current ${viewer.store.get().currentPage}`;
+        const state = viewer.store.get();
+        return `scroll ${scroller.scrollLeft},${scroller.scrollTop} of ${scroller.scrollWidth}x${scroller.scrollHeight} in ${scroller.clientWidth}x${scroller.clientHeight}, current ${state.currentPage}, scale ${state.scale.toFixed(3)} ${state.zoomMode}`;
       });
       flips.push(`${key} ${await shownFirst()} (${after})`);
       return shownFirst();

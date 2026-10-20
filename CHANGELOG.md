@@ -9,6 +9,11 @@ change the API.
 - In `"page"` mode, a key pressed right after a flip flips from the row
   shown: it flipped from the current page, which follows the row a frame
   later, and so could show the same row again.
+- In `"page"` mode, → and ↓ flip a row wider or taller than the viewport
+  once it is scrolled to its edge where scrollbars take space, as in
+  Chromium on Linux: the far edge was taken as the scroll size less the
+  client size, which the stable scrollbar gutter puts 15 px past where the
+  browser stops, so those keys never flipped.
 - A thumbnail keeps one size whether it is copied from its page's drawing
   or drawn: a drawn one came out a pixel shorter, rounded down as pdf.js
   sizes a render where the copy rounded to the nearest pixel.
