@@ -4,7 +4,7 @@ Changes to the `parapdf` package. It follows
 [Semantic Versioning](https://semver.org/); until 1.0, a minor release may
 change the API.
 
-## Unreleased
+## 0.3.1 — 2026-10-20
 
 - In `"page"` mode, a key pressed right after a flip flips from the row
   shown: it flipped from the current page, which follows the row a frame
