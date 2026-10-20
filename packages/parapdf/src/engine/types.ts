@@ -9,7 +9,36 @@ export interface PageSize {
   height: number;
 }
 
-export type PdfSource = { url: string } | { data: ArrayBuffer | Uint8Array };
+/**
+ * Where a document comes from. A URL source may carry the request's headers
+ * and credentials mode, and any source the password of an encrypted
+ * document: the engine tries it first and asks for another (see
+ * `OpenOptions.password`) only when it is wrong.
+ */
+export type PdfSource =
+  | {
+      url: string;
+      httpHeaders?: Readonly<Record<string, string>>;
+      withCredentials?: boolean;
+      password?: string;
+    }
+  | { data: ArrayBuffer | Uint8Array; password?: string };
+
+/** Why an encrypted document asks for a password: none was given, or the last one was wrong. */
+export type PasswordReason = "required" | "incorrect";
+
+export interface OpenOptions {
+  /** Bytes received so far, and the document's size when the server reported it. */
+  onProgress?(loaded: number, total: number | null): void;
+  /**
+   * Asked whenever an encrypted document needs a password. Resolve with the
+   * password to try, or with null to stop opening it: `open` then rejects.
+   * Without this callback, an encrypted document fails to open.
+   */
+  password?(reason: PasswordReason): Promise<string | null>;
+  /** Aborting stops loading and frees what the engine holds for the document. */
+  signal?: AbortSignal;
+}
 
 /** A rectangle of a page in pixels at a render's scale. */
 export interface RenderRegion {
@@ -30,6 +59,27 @@ export interface RenderRequest {
   canvas: HTMLCanvasElement;
   /** Draw only this part of the page; the canvas takes its size. The whole page when absent. */
   region?: RenderRegion;
+  /**
+   * "print" draws what a printout shows, with the values typed into form
+   * fields; "display" (the default) what a screen shows.
+   */
+  intent?: "display" | "print";
+  /**
+   * The container of this page's annotation layer when it shows form fields
+   * as HTML (`AnnotationLayerRequest.forms`): the drawing leaves the fields
+   * out, and what the layer needs drawn for them goes to it.
+   */
+  formLayer?: HTMLElement;
+  /** Colors to draw the page in instead of its own, for high-contrast reading. */
+  colors?: PageColors;
+  /** Which layers to draw; the document's default when absent. */
+  layers?: LayerState;
+}
+
+/** A page drawn in two colors: its background and everything else. */
+export interface PageColors {
+  background: string;
+  foreground: string;
 }
 
 export interface RenderTask {
@@ -63,6 +113,13 @@ export interface TextLayerRequest {
   /** CSS pixels per PDF point. */
   cssScale: number;
   rotation?: Rotation;
+  /**
+   * Receives a tagged page's structure, after the text: elements with ARIA
+   * roles (headings, lists, tables, figures with their alternative text)
+   * that take the text layer's runs in through `aria-owns`. It should be
+   * accessible but not rendered, as a canvas's fallback content is.
+   */
+  structure?: HTMLElement;
 }
 
 export interface TextLayerHandle {
@@ -107,16 +164,83 @@ export interface LinkHandlers {
   namedAction(action: string): void;
   /** Links to other documents open in a new tab (the default) or stay inert. */
   externalLinks?: "new-tab" | "disabled";
+  /** A file attachment annotation or a link to an embedded file was activated. */
+  openAttachment?(attachment: { filename: string; content: Uint8Array }): void;
+  /** A link that shows and hides layers was activated; the action is the engine's own. */
+  setLayers?(action: unknown): void;
+}
+
+/**
+ * A layer (optional content group) of the document, or a heading that only
+ * groups the layers under it.
+ */
+export interface PdfLayer {
+  /** Null for a heading. */
+  id: string | null;
+  name: string;
+  /** Whether the layer shows; true for a heading. */
+  visible: boolean;
+  /** Layers listed under this one. */
+  children: readonly PdfLayer[];
+}
+
+/**
+ * Which of a document's layers show, for one viewer: renders and annotation
+ * layers that get it draw what it shows, and its changes apply to the next
+ * ones.
+ */
+export interface LayerState {
+  /** The document's layers in its own order, with their visibility now; empty when it has none. */
+  layers(): readonly PdfLayer[];
+  /** Show or hide a layer. Showing one of a set of exclusive layers hides the others. */
+  setVisible(id: string, visible: boolean): void;
+  /** Apply a link's action from `LinkHandlers.setLayers`. */
+  apply(action: unknown): void;
+}
+
+/** The document's information dictionary and XMP metadata, as far as it has them. */
+export interface PdfMetadata {
+  title: string | null;
+  author: string | null;
+  subject: string | null;
+  keywords: string | null;
+  creator: string | null;
+  producer: string | null;
+  creationDate: Date | null;
+  modificationDate: Date | null;
+  /** The version in the file's header, such as "1.7". */
+  pdfVersion: string | null;
+  /** The document's natural language (/Lang), such as "ja". */
+  language: string | null;
+}
+
+/** A file embedded in the document. */
+export interface PdfAttachment {
+  /** Identifies it for `getAttachmentContent`. */
+  id: string;
+  /** The file's name without a path. */
+  filename: string;
+  description: string | null;
 }
 
 export interface AnnotationLayerRequest {
   pageIndex: number;
-  /** Receives positioned link elements; sized by the `--total-scale-factor` CSS variable. */
+  /**
+   * Receives positioned links, comment popups, and, with `forms`, form
+   * fields; sized by the `--total-scale-factor` CSS variable.
+   */
   container: HTMLElement;
   /** CSS pixels per PDF point. */
   cssScale: number;
   rotation?: Rotation;
   links: LinkHandlers;
+  /**
+   * Show form fields as HTML that the reader can fill in. The page's renders
+   * then pass this container as their `formLayer`.
+   */
+  forms?: boolean;
+  /** Hide the annotations of hidden layers; the document's default when absent. */
+  layers?: LayerState;
 }
 
 export interface AnnotationLayerHandle {
@@ -145,6 +269,16 @@ export interface PdfEngineDocument {
   renderAnnotationLayer(request: AnnotationLayerRequest): AnnotationLayerTask;
   /** The document outline (bookmarks); empty when the PDF has none. */
   getOutline(): Promise<readonly OutlineNode[]>;
+  /** Each page's label, such as "iv" or "A-3"; null when the PDF defines none. */
+  getPageLabels(): Promise<readonly string[] | null>;
+  getMetadata(): Promise<PdfMetadata>;
+  /** The document's embedded files; empty when it has none. */
+  getAttachments(): Promise<readonly PdfAttachment[]>;
+  getAttachmentContent(id: string): Promise<Uint8Array | null>;
+  /** The document's bytes, with what was typed into its form fields saved in them. */
+  save(): Promise<Uint8Array>;
+  /** A new state of the document's layers, as the document shows them by default. */
+  createLayerState(): Promise<LayerState>;
   resolveDestination(dest: DestinationRef): Promise<ResolvedDestination | null>;
   /** Drop cached parsing results for a page that left the mounted window. */
   releasePage(pageIndex: number): void;
@@ -153,7 +287,7 @@ export interface PdfEngineDocument {
 
 export interface PdfEngine {
   readonly name: string;
-  open(source: PdfSource): Promise<PdfEngineDocument>;
+  open(source: PdfSource, options?: OpenOptions): Promise<PdfEngineDocument>;
 }
 
 export class RenderCancelledError extends Error {

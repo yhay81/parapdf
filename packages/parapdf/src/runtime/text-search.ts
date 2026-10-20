@@ -13,6 +13,16 @@ export interface SearchMatch {
   end: TextPosition;
 }
 
+/** How a search compares text. Every option is off by default, as in pdf.js's find bar. */
+export interface SearchOptions {
+  /** Upper and lower case differ. */
+  caseSensitive?: boolean;
+  /** A match must be a whole word, not part of a longer one. */
+  entireWord?: boolean;
+  /** Accented letters differ from their base letters, and from each other. */
+  matchDiacritics?: boolean;
+}
+
 /**
  * The searchable form of one page: normalized text plus, for every UTF-16
  * code unit of it, the item and source offsets it came from.
@@ -25,14 +35,18 @@ export interface PageIndex {
 }
 
 /*
- * Search normalization follows normalize() and the default matching options
- * of PDFFindController in PDF.js `web/pdf_find_controller.js` (pdfjs-dist
+ * Search normalization follows normalize() and the matching options of
+ * PDFFindController in PDF.js `web/pdf_find_controller.js` (pdfjs-dist
  * 6.4.299; Copyright Mozilla Foundation, Apache License 2.0; see NOTICE.md):
- * compatibility forms, case, and diacritics are ignored, a line end inside a
- * CJK run or a hyphenated word joins the lines, and any other line end reads
- * as a space. pdf.js keeps diacritics in the page text and lets its query
- * regular expression skip them; stripping them from both sides gives the
- * same matches with plain substring search.
+ * compatibility forms are ignored, and by default case and diacritics too; a
+ * line end inside a CJK run or a hyphenated word joins the lines, and any
+ * other line end reads as a space. pdf.js keeps diacritics in the page text
+ * and lets its query regular expression skip them; stripping them from both
+ * sides gives the same matches with plain substring search. With
+ * `matchDiacritics`, both keep them, and a match may not end before a mark
+ * that changes its last letter. Whole words are ParaPDF's own rule: the
+ * characters around a match must not be letters, marks, digits, or
+ * underscores where the match's own edge is one.
  */
 
 /** pdf.js's CHARACTERS_TO_NORMALIZE: typographic quotes, the hyphen, and fractions. */
@@ -77,12 +91,21 @@ const JOINS_LINES = /^(?:\p{Ideographic}|[\u3040-\u30FF]|\u3099|\u309A)$/u;
  * write a voiced sound mark as a character of its own (ﾃﾞ), which matches the
  * composed letter (デ) only in decomposed form.
  */
-function normalizeChar(char: string): string {
+function normalizeChar(char: string, options: SearchOptions): string {
   const replacement = CHARACTERS_TO_NORMALIZE.get(char);
   if (replacement) return replacement;
   let out = "";
-  for (const unit of char.normalize("NFKC").toLowerCase().normalize("NFD")) {
-    if (MARK.test(unit) && !DIACRITICS_EXCEPTION.has(unit.codePointAt(0) ?? 0)) continue;
+  const compatible = char.normalize("NFKC");
+  for (const unit of (options.caseSensitive ? compatible : compatible.toLowerCase()).normalize(
+    "NFD",
+  )) {
+    if (
+      !options.matchDiacritics &&
+      MARK.test(unit) &&
+      !DIACRITICS_EXCEPTION.has(unit.codePointAt(0) ?? 0)
+    ) {
+      continue;
+    }
     out += unit;
   }
   return out;
@@ -91,11 +114,11 @@ function normalizeChar(char: string): string {
 /** True when `char` decomposes into a letter followed by combining marks. */
 const endsWithMark = (char: string): boolean => MARK.test(char.normalize("NFD").slice(-1));
 
-export function normalizeQuery(query: string): string {
+export function normalizeQuery(query: string, options: SearchOptions = {}): string {
   let out = "";
   let lastWasSpace = true;
   for (const char of query) {
-    for (const unit of normalizeChar(char)) {
+    for (const unit of normalizeChar(char, options)) {
       const space = SPACE.test(unit);
       if (space && lastWasSpace) continue;
       out += space ? " " : unit;
@@ -113,7 +136,8 @@ interface SourceChar {
   end: number;
 }
 
-export function buildPageIndex(page: PageText): PageIndex {
+/** The page's searchable text; only `caseSensitive` and `matchDiacritics` change it. */
+export function buildPageIndex(page: PageText, options: SearchOptions = {}): PageIndex {
   const parts: string[] = [];
   const itemOf: number[] = [];
   const startOf: number[] = [];
@@ -172,7 +196,7 @@ export function buildPageIndex(page: PageText): PageIndex {
         continue;
       }
     }
-    append(normalizeChar(source.char), source);
+    append(normalizeChar(source.char, options), source);
   }
   return {
     text: parts.join(""),
@@ -182,12 +206,35 @@ export function buildPageIndex(page: PageText): PageIndex {
   };
 }
 
-/** Non-overlapping matches of an already normalized query, at most `limit`. */
+const WORD = /^[\p{L}\p{M}\p{N}_]/u;
+
+/** The character (code point) of `text` that ends just before `at`, "" at the start. */
+function charBefore(text: string, at: number): string {
+  if (at <= 0) return "";
+  const low = text.charCodeAt(at - 1);
+  return low >= 0xdc00 && low <= 0xdfff && at >= 2 ? text.slice(at - 2, at) : text.charAt(at - 1);
+}
+
+/** Whether `text` from `at` for `length` code units is not part of a longer word. */
+function isEntireWord(text: string, at: number, length: number): boolean {
+  const first = String.fromCodePoint(text.codePointAt(at) ?? 0);
+  const last = charBefore(text, at + length);
+  const before = charBefore(text, at);
+  const after =
+    at + length < text.length ? String.fromCodePoint(text.codePointAt(at + length) ?? 0) : "";
+  return !(WORD.test(before) && WORD.test(first)) && !(WORD.test(after) && WORD.test(last));
+}
+
+/**
+ * Non-overlapping matches of a query normalized with the same options, at
+ * most `limit`.
+ */
 export function findMatches(
   index: PageIndex,
   query: string,
   pageIndex: number,
   limit = 10_000,
+  options: SearchOptions = {},
 ): SearchMatch[] {
   const matches: SearchMatch[] = [];
   if (!query) return matches;
@@ -195,7 +242,16 @@ export function findMatches(
   while (matches.length < limit) {
     const at = index.text.indexOf(query, from);
     if (at < 0) break;
-    const last = at + query.length - 1;
+    const end = at + query.length;
+    if (
+      (options.matchDiacritics && MARK.test(index.text.charAt(end))) ||
+      (options.entireWord && !isEntireWord(index.text, at, query.length))
+    ) {
+      // A letter whose mark the query lacks, or part of a longer word: look on.
+      from = at + 1;
+      continue;
+    }
+    const last = end - 1;
     matches.push({
       pageIndex,
       start: { item: index.itemOf[at] ?? 0, offset: index.startOf[at] ?? 0 },

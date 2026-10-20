@@ -7,7 +7,10 @@ change the API.
 ## Unreleased
 
 pdf.js comes with ParaPDF: `<PdfDocument source="/manual.pdf">` is all an
-application writes. This changes the API.
+application writes. ParaPDF also gains what other React PDF viewers offer and
+it lacked: forms, printing, thumbnails, encrypted documents, scroll modes,
+and the rest of a document viewer. This changes the API: code that passed an
+engine, or switches over `status` or `zoomMode`, needs changes.
 
 - ParaPDF depends on pdfjs-dist 6.4.299 exactly, no longer as a peer, and
   ships its worker and the files it loads on demand: CMaps, the Symbol and
@@ -33,6 +36,61 @@ application writes. This changes the API.
 - Components that render `PdfDocument` need no browser-only wrapper such as
   `next/dynamic`: pdf.js loads only in the browser, and out of the bundle
   that renders the page.
+- Form fields the reader can fill in, with `forms: true`, through pdf.js's
+  annotation layer; `save()` returns the PDF with the values written in, and
+  `download()` hands it to the browser.
+- Comment popups show, styled as in pdf.js's viewer: they used to open as
+  unstyled, transparent text. Their icons come from `${assetBase}web/images/`,
+  which the package's `pdfjs/` directory now holds, or from
+  `configurePdfjs({ imageResourcesPath })`, and are transparent without
+  either: they used to request a file from the application's own origin.
+- `print()` draws every page for printing, typed form values and the layers
+  the viewer shows included, and opens the print dialog with only those
+  pages.
+- `PdfThumbnail`, drawn after the pages in view and from their drawing when
+  the viewer has one; only thumbnails near view hold pixels.
+- Encrypted documents: `status` is `"password"` until `submitPassword()`
+  gets the right one, and `passwordReason` says whether the last one was
+  wrong. Sources take a `password`, which `PdfDocument` tries again when it
+  changes, and URL sources `httpHeaders` and `withCredentials`.
+- Load progress (`progress`), page labels (`pageLabels`), metadata
+  (`metadata`), and attachments (`attachments`, `getAttachmentContent()`,
+  `openAttachment()`, and the `openAttachment` option, which also handles
+  file attachment annotations).
+- Layers: `layers` and `setLayerVisible()`, per viewer, which links that
+  switch layers use too.
+- Two-page spreads (`spread`, `setSpread()`), "fit-page" zoom, `resetScale()`,
+  Ctrl or ⌘ with +, -, and 0 in the viewport, `initialPage`, and a hand tool
+  (`tool`, `setTool()`, `initialTool`).
+- Scroll modes, as in pdf.js (`scrollMode`, `setScrollMode()`): pages in a
+  column (`"vertical"`, as before), in one row scrolled sideways
+  (`"horizontal"`), in rows filling the viewport's width (`"wrapped"`), or
+  one page or spread at a time (`"page"`). In `"page"` mode, `goToPage()`,
+  links, search, and the keys that would scroll past the page's edge flip
+  pages, and a zoomed page scrolls within itself. Spreads work in every mode.
+- `nextPage()` and `previousPage()` go to the next or previous spread or
+  row; links with the NextPage and PrevPage actions do the same.
+- The current page stays current while all of it is in view, as in pdf.js,
+  and `goToPage()`, links, `back()`, and search make the page they show
+  current: at the start of a row of pages narrower than half the viewport,
+  or of pages shorter than half of it, the page at the viewport's center was
+  the second or third. Pages taller than the viewport, as at "fit-width",
+  change pages at the center as before.
+- Search options: `caseSensitive`, `entireWord`, and `matchDiacritics`.
+- `getSelection()` and `usePdfSelection()`: the selected text and the
+  rectangles it covers in PDF points, for highlights of your own.
+- A tagged PDF's structure gives text layers their headings, lists, tables,
+  and figures' alternative text for assistive technology, as in pdf.js's
+  viewer.
+- `pageColors` draws pages in two colors, for forced-colors mode.
+- A canvas stays hidden while it is drawn again: with pdf.js's renderer
+  worker (`rendererSrc`), a redraw used to show black until the worker's
+  first frame arrived, over the low-resolution page or in its place.
+- `ViewerState.status` has the new value `"password"`, and `ZoomMode`
+  `"fit-page"`. `Layout` describes rows: `rowTops`, `rowWidths`,
+  `rowHeights`, `rowFirst`, `rowLast`, `offsets`, `spread`, `scrollMode`,
+  and, in `"page"` mode, the row `shown`. In `"horizontal"` and `"page"`
+  mode, `tops` are before a row is centered in the viewport's height.
 
 ## 0.2.0 — 2026-10-20
 

@@ -22,11 +22,14 @@ const isolationHeaders = {
  */
 function stageStaticFiles(): Plugin {
   const stage = () => {
-    for (const dir of ["cmaps", "standard_fonts", "wasm", "iccs"]) {
+    for (const dir of ["cmaps", "standard_fonts", "wasm", "iccs", "web/images"]) {
       if (hasPdfjsNext) {
-        cpSync(join(pdfjsNextDir, "web", dir), join(publicDir, "pdfjs-next", dir), {
-          recursive: true,
-        });
+        // The generic build keeps its assets, the annotation icons included, under web/.
+        const source =
+          dir === "web/images" ? join(pdfjsNextDir, dir) : join(pdfjsNextDir, "web", dir);
+        if (existsSync(source)) {
+          cpSync(source, join(publicDir, "pdfjs-next", dir), { recursive: true });
+        }
       }
     }
     const corpusOut = join(publicDir, "corpus");

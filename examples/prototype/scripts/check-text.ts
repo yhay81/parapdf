@@ -311,9 +311,16 @@ try {
       label: document.querySelector(".parapdf-viewport")?.getAttribute("aria-label"),
     },
     firstPageLabel: document.querySelector('section[data-page="1"]')?.getAttribute("aria-label"),
-    canvasesHidden: [...document.querySelectorAll("section[data-page] canvas")].every(
-      (canvas) => canvas.parentElement?.getAttribute("aria-hidden") === "true",
-    ),
+    // The pixels are hidden; the structure canvas, whose fallback content is
+    // a tagged page's structure, is read but never drawn.
+    canvasesHidden: [
+      ...document.querySelectorAll("section[data-page] canvas:not(.parapdf-structure)"),
+    ].every((canvas) => canvas.parentElement?.getAttribute("aria-hidden") === "true"),
+    structureUndrawn: [
+      ...document.querySelectorAll<HTMLCanvasElement>(
+        "section[data-page] canvas.parapdf-structure",
+      ),
+    ].every((canvas) => canvas.width === 0 && canvas.height === 0),
     textRuns: document.querySelectorAll('section[data-page="1"] .parapdf-text-layer span').length,
     textContent: document
       .querySelector('section[data-page="1"] .parapdf-text-layer')
@@ -331,6 +338,7 @@ try {
     String(semantics.firstPageLabel),
   );
   check("canvases are hidden from assistive technology", semantics.canvasesHidden);
+  check("structure canvases hold no pixels", semantics.structureUndrawn);
   check(
     "page 1 exposes its text",
     semantics.textRuns > 20 && /Making emergency supplemental/.test(semantics.textContent ?? ""),

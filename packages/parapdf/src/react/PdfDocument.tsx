@@ -11,8 +11,9 @@ import { RuntimeContext } from "./context.ts";
 export interface PdfDocumentProps {
   /**
    * The document to show: its URL, `{ url }`, or `{ data }` with its bytes.
-   * It reopens when its URL changes or, for data, when the bytes are another
-   * object; a new object for the same URL keeps the open document.
+   * It reopens when its URL, request headers, or password change or, for
+   * data, when the bytes are another object or the password changes; a new
+   * object for the same URL keeps the open document.
    */
   source: string | PdfSource;
   /** Read once, when the component mounts; give it a new `key` to change them. */
@@ -37,7 +38,10 @@ export function PdfDocument({ source, options, children }: PdfDocumentProps) {
   // One effect owns the document. StrictMode's mount-unmount-mount cycle and
   // quick remounts reuse the loaded document instead of loading it again.
   const key = sourceKey(resolved);
+  // Viewers share a document whatever password opened it, but a new password
+  // tries again, say after a wrong one failed it.
+  const password = resolved.password;
   // biome-ignore lint/correctness/useExhaustiveDependencies: the key identifies the source, so an inline `{ url }` does not reopen the document at every render.
-  useEffect(() => runtime.open(resolved), [runtime, key]);
+  useEffect(() => runtime.open(resolved), [runtime, key, password]);
   return <RuntimeContext value={runtime}>{children}</RuntimeContext>;
 }

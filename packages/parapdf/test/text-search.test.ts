@@ -6,6 +6,7 @@ import {
   findMatches,
   normalizeQuery,
   type SearchMatch,
+  type SearchOptions,
 } from "../src/runtime/text-search.ts";
 
 /** A page of text items; `endsLine` marks the items a line end follows. */
@@ -16,8 +17,14 @@ const page = (items: string[], endsLine: boolean[] = items.map(() => false)): Pa
 });
 
 /** The source text each match covers, read back through its item positions. */
-function search(text: PageText, query: string): string[] {
-  const matches = findMatches(buildPageIndex(text), normalizeQuery(query), 0);
+function search(text: PageText, query: string, options: SearchOptions = {}): string[] {
+  const matches = findMatches(
+    buildPageIndex(text, options),
+    normalizeQuery(query, options),
+    0,
+    undefined,
+    options,
+  );
   return matches.map(({ start, end }: SearchMatch) => {
     if (start.item === end.item)
       return text.items[start.item]?.slice(start.offset, end.offset) ?? "";
@@ -92,5 +99,39 @@ describe("findMatches", () => {
     assert.equal(findMatches(index, "aa", 0).length, 2);
     assert.equal(findMatches(index, "a", 0, 3).length, 3);
     assert.deepEqual(findMatches(index, "", 0), []);
+  });
+});
+
+describe("search options", () => {
+  it("tells upper and lower case apart when case-sensitive", () => {
+    const text = page(["Rose rose ROSE"]);
+    assert.deepEqual(search(text, "rose", { caseSensitive: true }), ["rose"]);
+    assert.deepEqual(search(text, "Rose", { caseSensitive: true }), ["Rose"]);
+    assert.deepEqual(search(text, "rose"), ["Rose", "rose", "ROSE"]);
+  });
+
+  it("still ignores compatibility forms when case-sensitive", () => {
+    assert.deepEqual(search(page(["ＰＤＦ"]), "PDF", { caseSensitive: true }), ["ＰＤＦ"]);
+  });
+
+  it("tells accented letters apart when diacritics match", () => {
+    const text = page(["resume résumé"]);
+    assert.deepEqual(search(text, "resume", { matchDiacritics: true }), ["resume"]);
+    assert.deepEqual(search(text, "résumé", { matchDiacritics: true }), ["résumé"]);
+    // The e of é is not an e on its own.
+    assert.deepEqual(search(page(["café"]), "cafe", { matchDiacritics: true }), []);
+    assert.deepEqual(search(text, "resume"), ["resume", "résumé"]);
+  });
+
+  it("finds whole words only when asked", () => {
+    const text = page(["cat concatenate cat-like (cat) cats"]);
+    assert.deepEqual(search(text, "cat", { entireWord: true }), ["cat", "cat", "cat"]);
+    assert.equal(search(text, "cat").length, 5);
+    // A query that starts or ends with a non-word character may touch a word there.
+    assert.deepEqual(search(text, "(cat", { entireWord: true }), ["(cat"]);
+  });
+
+  it("treats accented letters as part of a word", () => {
+    assert.deepEqual(search(page(["naïve nai"]), "nai", { entireWord: true }), ["nai"]);
   });
 });

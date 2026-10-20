@@ -45,6 +45,17 @@ writeFileSync(
 );
 cpSync(join(pdfjsDist, "LICENSE"), join(out, "LICENSE"));
 
+// The icons of comments without an appearance of their own, for
+// applications that serve a copy of pdfjs/ (configurePdfjs({ assetBase })).
+// The annotation layer appends their names to one base URL, so bundlers,
+// which rename each file they emit, cannot serve them.
+mkdirSync(join(out, "web/images"), { recursive: true });
+for (const name of readdirSync(join(pdfjsDist, "web/images"))) {
+  if (/^annotation-.*\.svg$/.test(name)) {
+    cpSync(join(pdfjsDist, "web/images", name), join(out, "web/images", name));
+  }
+}
+
 const entries: string[] = [];
 const names = new Set<string>();
 for (const { dir, files } of directories) {

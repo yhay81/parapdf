@@ -1,4 +1,4 @@
-import { usePdfSearch, usePdfState } from "parapdf";
+import { type SearchOptions, usePdfSearch, usePdfState } from "parapdf";
 import { useEffect, useRef, useState } from "react";
 
 /**
@@ -10,14 +10,22 @@ export function SearchBox() {
   const search = usePdfSearch();
   const pageCount = usePdfState((state) => state.pageCount);
   const [value, setValue] = useState("");
+  const [options, setOptions] = useState<SearchOptions>({});
   const inputRef = useRef<HTMLInputElement>(null);
   const { search: run, query } = search;
 
   useEffect(() => {
     if (value === query) return;
-    const timer = setTimeout(() => run(value), 250);
+    const timer = setTimeout(() => run(value, options), 250);
     return () => clearTimeout(timer);
-  }, [value, query, run]);
+  }, [value, query, run, options]);
+
+  /** Changing an option searches again at once. */
+  const toggle = (name: keyof SearchOptions) => {
+    const next = { ...options, [name]: !options[name] };
+    setOptions(next);
+    if (value) run(value, next);
+  };
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -53,7 +61,7 @@ export function SearchBox() {
         onKeyDown={(event) => {
           if (event.key === "Enter") {
             event.preventDefault();
-            if (value !== query) run(value);
+            if (value !== query) run(value, options);
             else if (event.shiftKey) search.previous();
             else search.next();
           } else if (event.key === "Escape") {
@@ -73,6 +81,23 @@ export function SearchBox() {
       <button type="button" onClick={search.next} disabled={total === 0} aria-label="Next match">
         ↓
       </button>
+      {(
+        [
+          ["caseSensitive", "Aa", "Match case"],
+          ["entireWord", "W", "Whole words"],
+          ["matchDiacritics", "é", "Match diacritics"],
+        ] as const
+      ).map(([name, text, label]) => (
+        <button
+          key={name}
+          type="button"
+          aria-label={label}
+          aria-pressed={Boolean(options[name])}
+          onClick={() => toggle(name)}
+        >
+          {text}
+        </button>
+      ))}
       {/* Announced politely so screen-reader users hear result counts. */}
       <output aria-live="polite" className="search-summary">
         {summary}

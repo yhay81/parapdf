@@ -18,6 +18,13 @@ export interface PdfjsConfig {
    * worker is then `${assetBase}pdf.worker.js`.
    */
   assetBase?: string;
+  /**
+   * Base URL of pdf.js's annotation icons, ending with a slash; by default
+   * `${assetBase}web/images/`. Without either, comments that have no
+   * appearance of their own get a transparent icon that still opens their
+   * popup.
+   */
+  imageResourcesPath?: string;
   /** URL of pdf.js's worker script, when it is not `${assetBase}pdf.worker.js`. */
   workerSrc?: string;
   /**
@@ -179,6 +186,7 @@ async function createEngine(options: PdfjsConfig): Promise<PdfEngine> {
     ...(port ? { port } : {}),
     rendererSrc: options.rendererSrc,
     assetBase,
+    imageResourcesPath: options.imageResourcesPath,
     enableHWA: options.enableHWA,
     documentOptions: {
       ...(shipped ? SHIPPED_FILE_OPTIONS : {}),

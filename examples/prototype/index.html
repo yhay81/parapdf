@@ -18,18 +18,34 @@
       .search { display: flex; gap: 4px; align-items: center; margin-left: auto; }
       .search input { width: 200px; }
       .search-summary { min-width: 9em; color: #c9cdd2; }
-      .viewport.with-outline { left: 280px; }
-      .outline {
+      .viewport.with-sidebar { left: 280px; }
+      .sidebar {
         position: absolute; inset: 40px auto 0 0; width: 280px; overflow: auto;
         background: #2f3134; box-sizing: border-box; padding: 8px 4px;
       }
-      .outline ul { list-style: none; margin: 0; padding-left: 12px; }
-      .outline > ul { padding-left: 0; }
-      .outline :is(button, a) {
+      .sidebar ul, .sidebar ol { list-style: none; margin: 0; padding-left: 12px; }
+      .sidebar > ul, .sidebar > ol { padding-left: 0; }
+      .outline :is(button, a), .attachments button {
         display: block; width: 100%; text-align: left; padding: 4px 8px; border: 0;
         background: none; color: #e8e8e8; font: inherit; cursor: pointer; border-radius: 4px;
       }
-      .outline :is(button, a):hover, .outline :is(button, a):focus-visible { background: #45484c; }
+      .outline :is(button, a):hover, .outline :is(button, a):focus-visible,
+      .attachments button:hover { background: #45484c; }
+      .thumbnails li { display: flex; justify-content: center; padding: 6px 0; }
+      .thumbnails button {
+        display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 4px;
+        border: 2px solid transparent; border-radius: 4px; background: none; color: #e8e8e8;
+        font: inherit; cursor: pointer;
+      }
+      .thumbnails button[aria-current="page"] { border-color: #8ab4f8; }
+      .layers label { display: flex; gap: 6px; align-items: center; padding: 4px 8px; }
+      .layers .heading { display: block; padding: 4px 8px; color: #9aa0a6; }
+      .password {
+        position: absolute; inset: 40px 0 auto 0; z-index: 10; display: flex; gap: 8px;
+        align-items: center; padding: 12px; background: #2a2b2e;
+      }
+      .password label { display: flex; gap: 8px; align-items: center; }
+      .toolbar { overflow-x: auto; white-space: nowrap; }
     </style>
   </head>
   <body>

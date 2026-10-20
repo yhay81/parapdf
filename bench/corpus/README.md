@@ -34,3 +34,9 @@ Generated stress documents live in `generated/`, are recreated with
 - `synthetic-mixed-sizes.pdf` — eight pages of different sizes and
   orientations (A4, A3 landscape, Letter, A5, and an A4 page shown landscape
   by /Rotate 90), for page placement and fitting the page width.
+- `synthetic-features.pdf` — six pages with page labels (i, ii, 1–4), an
+  embedded file, two layers (optional content) of which one starts hidden, a
+  comment with a popup, form fields of every common kind, metadata, and text
+  for search options.
+- `synthetic-encrypted.pdf` — three pages encrypted with the user password
+  `parapdf` (standard security handler, revision 2), for password prompts.
