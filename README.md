@@ -260,14 +260,21 @@ about 20 ms as noise.
   pages and the scheduler followed the scroll position alone. A long
   two-finger drag at a low zoom therefore showed a blank band below the
   mounted pages until the fingers lifted: 218 CSS pixels after a 900-point
-  drag at 23% in Safari in the iPadOS simulator, where the pages mounted
-  about 500 ms after the lift. They now follow the part of the content the
-  preview shows. [`check-pinch.ts`](examples/prototype/scripts/check-pinch.ts)
-  drags touch pointers over 96% of the viewport's height at the lowest zoom
-  and pinches in from 0.5 while dragging as far. In Chromium, WebKit, and
-  Firefox alike, the band reached 190 and 292 CSS pixels before the change
-  and stays at 0 now, with every page in view drawn by the last move. The
-  iPadOS simulator has not been tried again.
+  drag at 23% in Safari in the iPadOS simulator, where the pages the drag
+  brought into view mounted only after the lift. They now follow the part
+  of the content the preview shows.
+  [`check-pinch.ts`](examples/prototype/scripts/check-pinch.ts) drags touch
+  pointers over 96% of the viewport's height at the lowest zoom and pinches
+  in from 0.5 while dragging as far. In Chromium, WebKit, and Firefox alike,
+  the band reached 190 and 292 CSS pixels before the change and stays at 0
+  now, with every page in view drawn by the last move. In the iPadOS
+  simulator, the same 900-point drag now leaves no more than a page gap, 12
+  CSS pixels, against 208 for the build before the change in the same run,
+  and every page in view showed pixels before the fingers lifted, where that
+  build drew the page under the band 101 ms after the lift. With released
+  pdf.js, a zoom's commit there still turns pages white for 80 to 175 ms,
+  before the change as after it, apparently because a full-resolution
+  redraw fills its canvas white and covers the base until it finishes.
 - **Zoom cost.** Against a React wrapper of pdf.js's own viewer
   (`PDFViewer`), measured in another project's harness, the main thread was
   1.4–5.6 times busier while zooming.
