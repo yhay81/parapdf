@@ -494,7 +494,9 @@ with the API.
   starts master's renderer worker. An embedding app found that with the
   legacy build set up through `workerSrc`, the shipped worker's early start
   and prelude did not apply and it still served its own 6.4 MB copy of the
-  files. `passwordPrompt: false` (a viewer option) fails an encrypted
+  files; with `legacyBuild` it dropped that copy and its asset script, and
+  its Next.js 16 static output fell from 14.5 to 9.4 MB, both workers
+  included, with CMYK red at rgb(236 31 37) in WebKit. `passwordPrompt: false` (a viewer option) fails an encrypted
   document for that viewer instead of waiting, as before 0.3.0.
 - Text layers use pdf.js's core `TextLayer` inside `.parapdf-text-layer`, styled
   by rules derived from pdf.js's viewer CSS (attributed in `NOTICE.md`). Pages

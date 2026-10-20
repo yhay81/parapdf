@@ -34,6 +34,8 @@ engine, or switches over `status` or `zoomMode`, needs changes.
 - pdf.js's legacy build comes with its own worker from the package:
   `configurePdfjs({ build: legacyBuild })`, with `legacyBuild` from the new
   `parapdf/legacy`, needs no `workerSrc`, `assetBase`, or copy of the files.
+  Only builds that import `parapdf/legacy` emit its worker; they still emit
+  the modern one too.
 - `pdfjsVersion` is the version of pdf.js the package ships.
 - `usePdfDocument()` returns pdf.js's `PDFDocumentProxy`, and
   `pdfjsDocumentOf()` is gone.
@@ -56,8 +58,9 @@ engine, or switches over `status` or `zoomMode`, needs changes.
 - Encrypted documents: `status` is `"password"` until `submitPassword()`
   gets the right one, and `passwordReason` says whether the last one was
   wrong. They used to fail with `status` `"error"`: applications that show
-  no password prompt pass `passwordPrompt: false` to keep that. Sources take a `password`, which `PdfDocument` tries again when it
-  changes, and URL sources `httpHeaders` and `withCredentials`.
+  no password prompt pass `passwordPrompt: false` to keep that. Sources
+  take a `password`, which `PdfDocument` tries again when it changes, and
+  URL sources `httpHeaders` and `withCredentials`.
 - Load progress (`progress`), page labels (`pageLabels`), metadata
   (`metadata`), and attachments (`attachments`, `getAttachmentContent()`,
   `openAttachment()`, and the `openAttachment` option, which also handles
