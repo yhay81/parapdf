@@ -1,11 +1,9 @@
 import {
   PdfDocument,
-  type PdfEngine,
   type PdfjsDocumentOptions,
   PdfPageRect,
   type PdfSource,
   PdfViewport,
-  pdfjsDocumentOf,
   usePdfDocument,
   usePdfNavigation,
   usePdfOutline,
@@ -14,9 +12,8 @@ import {
   type ViewerOptions,
 } from "parapdf";
 import { Profiler, type ProfilerOnRenderCallback, Suspense, use, useEffect, useState } from "react";
-import { preload } from "react-dom";
 import { BenchDriver } from "./BenchDriver.tsx";
-import { loadEngine } from "./engines.ts";
+import { configureEngine, type Pdfjs } from "./engines.ts";
 import { OutlinePanel } from "./OutlinePanel.tsx";
 import { SearchBox } from "./SearchBox.tsx";
 
@@ -39,7 +36,6 @@ const settings = {
     timerLagP95Ms: Number(params.get("idleLag") ?? "2"),
     frameIntervalMs: Number(params.get("idleFrame") ?? "16.7"),
   },
-  preload: params.get("preload") !== "0",
   /** "data" opens the PDF from bytes the application fetched instead of from its URL. */
   source: params.get("source") === "data" ? "data" : "url",
   /** CSS pixels per PDF point the zoom may reach; the runtime's default when absent. */
@@ -92,27 +88,30 @@ window.addEventListener("unhandledrejection", (event) => {
   unhandled.push(String(event.reason));
 });
 
-function countEngineWork(engine: PdfEngine): PdfEngine {
+/** Counts the documents pdf.js opens and destroys (`?count=1`). */
+function countEngineWork(pdfjs: Pdfjs): Pdfjs {
   return {
-    name: engine.name,
-    async open(source) {
+    ...pdfjs,
+    getDocument(...args: Parameters<Pdfjs["getDocument"]>) {
       engineStats.opens++;
-      const doc = await engine.open(source);
-      return {
-        ...doc,
-        destroy() {
-          engineStats.destroys++;
-          return doc.destroy();
-        },
+      const task = pdfjs.getDocument(...args);
+      const destroy = task.destroy.bind(task);
+      task.destroy = () => {
+        engineStats.destroys++;
+        return destroy();
       };
+      return task;
     },
   };
 }
 
-// Module-level values stay referentially stable across renders.
-const enginePromise = loadEngine(settings.engine, settings.hwa, settings.documentOptions).then(
-  countEngineWork,
+configureEngine(
+  settings.engine,
+  settings.hwa,
+  settings.documentOptions,
+  params.has("count") ? countEngineWork : undefined,
 );
+// Module-level values stay referentially stable across renders.
 const url = `/corpus/${settings.file}`;
 const bytesPromise: Promise<Uint8Array | null> =
   settings.source === "data"
@@ -140,7 +139,6 @@ const benchLabel = {
   text: settings.text,
   links: settings.links,
   speed: settings.autoscroll,
-  preload: settings.preload,
 };
 
 /** One highlight in PDF points, to show overlays follow zoom without re-rendering. */
@@ -157,11 +155,6 @@ const renderOverlay = (pageIndex: number) =>
   ) : null;
 
 export function App() {
-  // Start downloading the PDF while the engine module loads. The request
-  // matches the CORS mode pdf.js uses, so its fetch reuses this response.
-  if (settings.preload && settings.source === "url") {
-    preload(url, { as: "fetch", crossOrigin: "anonymous" });
-  }
   // A new key mounts a new viewer with a new runtime for the same source.
   const [mounted, setMounted] = useState(true);
   const [generation, setGeneration] = useState(0);
@@ -178,7 +171,7 @@ export function App() {
     };
   }, []);
   return (
-    <Suspense fallback={<div className="status">Loading the engine…</div>}>
+    <Suspense fallback={<div className="status">Loading…</div>}>
       {mounted ? <Viewer key={generation} renders={renders} /> : null}
     </Suspense>
   );
@@ -186,15 +179,16 @@ export function App() {
 
 /** A new `renders` only renders the viewer again (see `__lifecycle.rerender`). */
 function Viewer(_props: { renders: number }) {
-  const engine = use(enginePromise);
-  const data = use(bytesPromise);
+  // Only a data source waits for its bytes: suspending for a URL would delay
+  // PdfDocument's render, which starts loading pdf.js and the PDF.
+  const data = settings.source === "data" ? use(bytesPromise) : null;
   const [outlineOpen, setOutlineOpen] = useState(false);
   // A new object at every render: the document stays open while its URL or
   // its bytes stay the same.
   const source: PdfSource = data ? { data } : { url };
   return (
     <Profiler id="viewer" onRender={countCommit}>
-      <PdfDocument engine={engine} source={source} options={viewerOptions}>
+      <PdfDocument source={source} options={viewerOptions}>
         <Toolbar
           outlineOpen={outlineOpen}
           onToggleOutline={() => setOutlineOpen((open) => !open)}
@@ -246,8 +240,7 @@ function Toolbar({
   // Exposed for the Playwright probes; not part of the library surface.
   (window as { __viewer?: unknown }).__viewer = viewer;
   // The escape hatch: pdf.js's own PDFDocumentProxy, for check-rotation.ts.
-  const pdfDocument = usePdfDocument();
-  (window as { __pdfDocument?: unknown }).__pdfDocument = pdfjsDocumentOf(pdfDocument) ?? undefined;
+  (window as { __pdfDocument?: unknown }).__pdfDocument = usePdfDocument() ?? undefined;
   const status = usePdfState((state) => state.status);
   const error = usePdfState((state) => state.error);
   const page = usePdfState((state) => state.currentPage);

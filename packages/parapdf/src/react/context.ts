@@ -1,7 +1,8 @@
 "use client";
 
+import type { PDFDocumentProxy } from "pdfjs-dist";
 import { createContext, useContext, useSyncExternalStore } from "react";
-import type { PdfEngineDocument } from "../engine/types.ts";
+import { pdfjsDocumentOf } from "../engine/pdfjs.ts";
 import type { PdfViewerRuntime, ViewerState } from "../runtime/viewer.ts";
 
 export const RuntimeContext = createContext<PdfViewerRuntime | null>(null);
@@ -28,10 +29,9 @@ export function usePdfState<T>(selector: (state: ViewerState) => T): T {
 }
 
 /**
- * The open document, null until it loads: an escape hatch to engine features
- * ParaPDF does not wrap. With a pdf.js engine, pdfjsDocumentOf() turns it into
- * pdf.js's PDFDocumentProxy.
+ * pdf.js's own document, null until it loads: an escape hatch to pdf.js's
+ * APIs that ParaPDF does not wrap, such as metadata or attachments.
  */
-export function usePdfDocument(): PdfEngineDocument | null {
-  return usePdfState((state) => state.document);
+export function usePdfDocument(): PDFDocumentProxy | null {
+  return pdfjsDocumentOf(usePdfState((state) => state.document));
 }

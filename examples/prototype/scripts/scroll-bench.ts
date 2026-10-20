@@ -7,8 +7,9 @@
  *
  * Usage: pnpm --filter @parapdf/prototype build && pnpm --filter @parapdf/prototype bench
  * Environment: BROWSER (chromium, webkit, or firefox), VARIANTS, TEXT and LINKS (1, 0, or 1,0),
- * FILES, SPEEDS (CSS px per second, 900,3600), RUNS (2), DURATION (ms, 4000), PRELOAD (1),
- * OUTPUT (the browser name).
+ * FILES, SPEEDS (CSS px per second, 900,3600), RUNS (2), DURATION (ms, 4000), LATENCY (ms added
+ * to every request, Chromium only), BANDWIDTH (Mbit/s, Chromium only), and OUTPUT (the browser
+ * name).
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { arch, cpus, loadavg, platform, release } from "node:os";
@@ -65,8 +66,14 @@ const files = (process.env.FILES ?? "synthetic-text-1000.pdf,bill-hr815.pdf").sp
 const speeds = (process.env.SPEEDS ?? "900,3600").split(",").map(Number);
 const runs = Number(process.env.RUNS ?? "2");
 const durationMs = Number(process.env.DURATION ?? "4000");
-const preloadPdf = process.env.PRELOAD !== "0";
 const browserName = browserFromEnv();
+// Network conditions, which a server on this machine otherwise lacks.
+const latencyMs = Number(process.env.LATENCY ?? "0");
+const bandwidthMbps = Number(process.env.BANDWIDTH ?? "0");
+const throttled = latencyMs > 0 || bandwidthMbps > 0;
+if (throttled && browserName !== "chromium") {
+  throw new Error("LATENCY and BANDWIDTH need Chromium's DevTools protocol");
+}
 const output = process.env.OUTPUT ?? browserName;
 
 interface IdleBaseline {
@@ -134,7 +141,10 @@ const launched = await launchBrowser(browserName, {
     });
     const page = await context.newPage();
     await restoreScaleFactor(page, `${baseUrl}calibrate.html`);
-    await page.goto(`${baseUrl}?file=${files[0]}&autoscroll=60&duration=100`);
+    // The first variant's engine: the demo's default needs a pdf.js master build.
+    await page.goto(
+      `${baseUrl}?engine=${variants[0]?.engine ?? "pdfjs"}&file=${files[0]}&autoscroll=60&duration=100`,
+    );
     await waitForDone(page);
     await context.close();
   },
@@ -164,6 +174,16 @@ try {
               const idle = (await page.evaluate(
                 () => (window as { __result?: unknown }).__result,
               )) as IdleBaseline;
+              if (throttled) {
+                const cdp = await context.newCDPSession(page);
+                await cdp.send("Network.enable");
+                await cdp.send("Network.emulateNetworkConditions", {
+                  offline: false,
+                  latency: latencyMs,
+                  downloadThroughput: bandwidthMbps > 0 ? (bandwidthMbps * 1e6) / 8 : -1,
+                  uploadThroughput: -1,
+                });
+              }
               const query = new URLSearchParams({
                 engine: variant.engine,
                 hwa: variant.hwa ? "1" : "0",
@@ -172,7 +192,6 @@ try {
                 file,
                 autoscroll: String(speed),
                 duration: String(durationMs),
-                preload: preloadPdf ? "1" : "0",
                 idleLag: String(idle.timerLagP95Ms),
                 idleFrame: String(idle.frameIntervalMs),
               });
@@ -263,7 +282,14 @@ const environment = {
     timerLagP95Ms: median(okResults.map((result) => result.idle?.timerLagP95Ms ?? Number.NaN)),
     frameIntervalMs: median(okResults.map((result) => result.idle?.frameIntervalMs ?? Number.NaN)),
   },
-  settings: { runs, durationMs, preloadPdf, viewport: "1280x900", devicePixelRatio: 2 },
+  settings: {
+    runs,
+    durationMs,
+    latencyMs,
+    bandwidthMbps,
+    viewport: "1280x900",
+    devicePixelRatio: 2,
+  },
 };
 const round = (_key: string, value: unknown) =>
   typeof value === "number" && !Number.isInteger(value) ? Math.round(value * 10) / 10 : value;
@@ -284,7 +310,7 @@ const markdown = [
   `- Run at: ${environment.runAt}`,
   `- Machine: ${environment.os}, ${environment.cpu}; ${environment.browser} (Playwright build, ${environment.headless ? "headless" : "headed"}); power: ${power.source === "ac" && !power.lowPowerMode ? "AC" : `**${power.source}${power.lowPowerMode ? ", Low Power Mode" : ""}; not comparable with AC runs**`}; one-minute load average ${environment.loadAverage.start.toFixed(1)} at the start, ${environment.loadAverage.end.toFixed(1)} at the end; ${turnTakingSummary()}`,
   `- Idle baseline (calibrate.html, median of jobs): 4 ms timer late by ${fmt(environment.idle.timerLagP50Ms, 1)} ms (median) / ${fmt(environment.idle.timerLagP95Ms, 1)} ms (p95); animation frames every ${fmt(environment.idle.frameIntervalMs, 1)} ms.`,
-  `- Method: 1280×900 viewport at devicePixelRatio 2, fit-width zoom, ${durationMs} ms of scrolling at a constant speed in CSS pixels per second after the first page is painted, median of ${runs} runs. PDF preload: ${preloadPdf ? "on" : "off"}.`,
+  `- Method: 1280×900 viewport at devicePixelRatio 2, fit-width zoom, ${durationMs} ms of scrolling at a constant speed in CSS pixels per second after the first page is painted, median of ${runs} runs.${throttled ? ` Network: ${latencyMs} ms latency, ${bandwidthMbps > 0 ? `${bandwidthMbps} Mbit/s` : "unlimited bandwidth"} (DevTools protocol).` : ""}`,
   "- First paint: time from navigation start until page 1 shows pixels.",
   "- Blank: share of the viewport covered by pages without pixels, averaged over frames; blank frames: frames where more than 1% was blank.",
   "- Main thread: summed lateness of a 4 ms timer while scrolling, beyond 2 ms or the idle page's 95th percentile, whichever is larger, plus the raw p95 and maximum lateness.",

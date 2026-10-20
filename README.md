@@ -13,7 +13,7 @@ parallel rendering on worker threads.
 ## Use it
 
 ```bash
-npm install parapdf pdfjs-dist
+npm install parapdf
 ```
 
 [`packages/parapdf/README.md`](packages/parapdf/README.md) shows how to set
@@ -396,6 +396,38 @@ about 20 ms as noise.
   `lang` resolves apart from an unknown one, Firefox's built-in viewer
   included when its UI language differs from the system's; not reported
   upstream yet.
+- **pdf.js in the package (2026-10-20).** An application no longer chooses
+  or builds an engine: `<PdfDocument source="/manual.pdf">` is all it
+  writes. `parapdf` depends on pdfjs-dist 6.4.299 exactly and ships its worker
+  and the files pdf.js loads on demand, each referenced with
+  `new URL(…, import.meta.url)`, which Vite 8 (development server and build),
+  webpack 5, Rsbuild 2, and Next.js 16 (Turbopack and webpack) emit with the
+  application's assets. Parcel 2 wraps the worker in a script that does not
+  start, and esbuild and Bun copy nothing; those take a copy of the files and
+  `configurePdfjs({ assetBase })`. pdf.js builds every file's URL from a
+  directory, so the worker's URL carries the files' own URLs and a prelude in
+  front of pdf.js's worker code routes its requests to them. The worker must
+  fetch them itself for pdf.js to manage ICC colors: when the main thread
+  fetched them for it, CMYK red (0, 1, 1, 0) showed as rgb(255 46 23)
+  instead of rgb(236 31 37).
+  [`check-bundle.ts`](examples/prototype/scripts/check-bundle.ts) packs the
+  package into a Vite application that configures nothing and checks CMaps,
+  standard fonts, image decoders, and ICC colors in Chromium, WebKit, and
+  Firefox. The first `PdfDocument` loads pdf.js and preloads its PDF, and the
+  shipped worker starts at once, not after pdf.js's module. With 100 ms
+  added to every request and 20 Mbit/s in Chromium, page 1 showed 115–129 ms
+  sooner than with 0.2.0 set up as its README said: 835 and 782 against 964
+  and 903 ms on bill-hr815 and a Japanese page, the medians of five
+  interleaved runs. That is within 3–16 ms of 0.2.0 with pdf.js in the main
+  bundle and a preload written by hand, which ParaPDF matches with neither,
+  and on localhost the three were within 20 ms of each other
+  ([`startup-bundled.md`](examples/prototype/results/startup-bundled.md)).
+  The demo's own Suspense boundary, which waited for the engine, had held
+  page 1 back by 270 ms on localhost; the demo no longer suspends for a URL.
+  Losses: the build output holds about 5 MB more files, fetched only when a
+  PDF needs them, and Playwright's WebKit, which keeps no HTTP cache,
+  downloads a preloaded PDF twice; whether Safari takes the preload is not
+  verified yet.
 - **Not yet built.** Form filling, structure-tree semantics for tagged PDFs,
   and text for pages outside the mounted window.
 

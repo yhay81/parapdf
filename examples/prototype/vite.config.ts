@@ -16,12 +16,13 @@ const isolationHeaders = {
   "Cross-Origin-Embedder-Policy": "require-corp",
 };
 
-/** Stage pdf.js binary assets and the benchmark corpus as same-origin files. */
+/**
+ * Stage the benchmark corpus, and pdf.js master's binary assets, as
+ * same-origin files. The released pdf.js's come with ParaPDF.
+ */
 function stageStaticFiles(): Plugin {
   const stage = () => {
-    const pdfjsDir = join(exampleDir, "node_modules/pdfjs-dist");
     for (const dir of ["cmaps", "standard_fonts", "wasm", "iccs"]) {
-      cpSync(join(pdfjsDir, dir), join(publicDir, "pdfjs", dir), { recursive: true });
       if (hasPdfjsNext) {
         cpSync(join(pdfjsNextDir, "web", dir), join(publicDir, "pdfjs-next", dir), {
           recursive: true,

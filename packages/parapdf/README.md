@@ -21,37 +21,27 @@ A fast PDF viewer for React, built on [pdf.js](https://github.com/mozilla/pdf.js
   a back stack navigate within the document.
 - **Gestures.** Ctrl or ⌘ with the wheel, trackpad pinches, touch pinches,
   and Safari's gesture events zoom the document instead of the page.
+- **pdf.js included.** ParaPDF ships pdf.js with its worker and the files it
+  loads on demand, and your bundler serves them from your application's
+  origin: there is nothing to set up.
 
 ## Install
 
 ```bash
-npm install parapdf pdfjs-dist
+npm install parapdf
 ```
 
-ParaPDF needs React 19.2 or later and pdfjs-dist 6. pdf.js is a peer
-dependency: your application owns its version and passes the module in.
+ParaPDF needs React 19.2 or later. It depends on pdfjs-dist 6.4.299
+exactly, because it ships that version's worker and files.
 
 ## Quick start
 
-With [Vite](https://vite.dev):
-
 ```tsx
-import * as pdfjs from "pdfjs-dist";
-import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-import { createPdfjsEngine, PdfDocument, PdfViewport } from "parapdf";
-
-// One engine for the whole application: it starts pdf.js's worker once.
-const engine = createPdfjsEngine({
-  pdfjs,
-  workerSrc,
-  // pdf.js's cmaps/, standard_fonts/, wasm/, and iccs/ directories of the
-  // same version, for CJK text, non-embedded fonts, and some image formats.
-  assetBase: `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjs.version}/`,
-});
+import { PdfDocument, PdfViewport } from "parapdf";
 
 export function App() {
   return (
-    <PdfDocument engine={engine} source={{ url: "/manual.pdf" }}>
+    <PdfDocument source="/manual.pdf">
       <PdfViewport style={{ height: "100vh" }} />
     </PdfDocument>
   );
@@ -61,11 +51,13 @@ export function App() {
 - `PdfViewport` is the scroll container. Give it a definite height, as above
   or through a flex or grid layout: it contains its own layout and does not
   grow with the document.
-- `workerSrc` is the URL of pdf.js's worker script of the same version. Other
-  bundlers have their own ways to emit it as a file, or you can serve a copy
-  of `node_modules/pdfjs-dist/build/pdf.worker.min.mjs` yourself.
-- `assetBase` can point at your own copy of those four directories from
-  `node_modules/pdfjs-dist/` instead of a CDN. It ends with a slash.
+- The first `PdfDocument` to render loads pdf.js and starts its worker, and
+  each one starts downloading its PDF while it renders, from the page's
+  head when the page is rendered on the server. pdf.js takes the preloaded
+  response, so the PDF downloads once (see [Limitations](#limitations) for
+  Safari).
+- This works as it is with bundlers that emit files referenced with
+  `new URL(…, import.meta.url)`: see [Bundlers](#bundlers).
 
 ## Controls and state
 
@@ -107,7 +99,6 @@ state (`ViewerState`) has:
 | `rotation` | The view's clockwise rotation: 0, 90, 180, or 270. |
 | `search` | The search in progress or done (see below). |
 | `outline`, `canGoBack` | The document outline (`null` while it loads), and whether `back()` has a position to return to. |
-| `document` | The open document (see [pdf.js's own API](#pdfjss-own-api)). |
 
 `usePdfViewer()` returns the viewer runtime, whose methods change the view:
 `goToPage(index)`, `zoomBy(factor)`, `setScale(scale | "fit-width")`,
@@ -201,8 +192,8 @@ zoom and rotation through layout alone, without re-rendering:
 
 ## Options
 
-`<PdfDocument options={…}>` takes `ViewerOptions`. They, like `engine`, are
-read when the component mounts; give it a new `key` to change them.
+`<PdfDocument options={…}>` takes `ViewerOptions`. They are read when the
+component mounts; give it a new `key` to change them.
 
 | Option | Default | |
 |---|---|---|
@@ -224,19 +215,63 @@ the document, "PDF document" by default), `pageLabel` (the accessible name
 of each page, `(pageNumber, pageCount) => string`, "Page 3 of 12" by
 default), and `renderOverlay`.
 
-`createPdfjsEngine` takes `pdfjs`, `workerSrc`, `assetBase`, `enableHWA`
-(GPU-backed canvases, `true` by default; `false` asks pdf.js for CPU-backed
-ones, which block the main thread for longer in Chromium and drop more frames
-in WebKit, though WebKit holds less memory with them), `documentOptions` (more
-pdf.js `getDocument` parameters for every document, such as `withCredentials`
-or `httpHeaders`), and `rendererSrc` (see [Limitations](#limitations)). For
-older browsers, pass pdf.js's legacy build, `pdfjs-dist/legacy/build/pdf.mjs`,
-and its worker.
+## Configuring pdf.js
+
+Most applications configure nothing. `configurePdfjs()`, called once before
+the first `PdfDocument` renders, changes how ParaPDF loads pdf.js:
+
+```tsx
+import { configurePdfjs } from "parapdf";
+
+configurePdfjs({ documentOptions: { withCredentials: true } });
+```
+
+| Option | |
+|---|---|
+| `assetBase` | Base URL of a copy of `node_modules/parapdf/pdfjs/`, ending with a slash, for bundlers that do not emit the files themselves (see [Bundlers](#bundlers)). |
+| `workerSrc` | URL of pdf.js's worker script, when it is not `${assetBase}pdf.worker.js`. |
+| `pdfjs` | Loads another build of the same pdf.js version, such as the legacy build for older browsers: `() => import("pdfjs-dist/legacy/build/pdf.mjs")`, with its worker as `workerSrc` and its files as `assetBase`. |
+| `enableHWA` | GPU-backed canvases, `true` by default; `false` asks pdf.js for CPU-backed ones, which block the main thread for longer in Chromium and drop more frames in WebKit, though WebKit holds less memory with them. |
+| `documentOptions` | More pdf.js `getDocument` parameters for every document, such as `withCredentials`, `httpHeaders`, or `password`. |
+| `rendererSrc` | pdf.js's renderer worker (see [Limitations](#limitations)). |
+
+`preloadPdfjs()` starts loading pdf.js and its worker before any
+`PdfDocument` renders, for example when the pointer moves over a link to a
+document.
+
+## Bundlers
+
+The package holds pdf.js's worker and the files pdf.js loads on demand:
+CMaps for CJK text in fonts without their own encoding, the Symbol and
+ZapfDingbats fonts, the JPEG 2000 and JBIG2 image decoders, and the ICC
+profile and decoder pdf.js converts CMYK colors with. ParaPDF refers to
+each with `new URL(…, import.meta.url)`, so bundlers copy them to the build
+output, about 5 MB, and the browser fetches one only when a PDF needs it.
+The worker's own URL passes it the others' URLs, so pdf.js manages colors as
+it does with its files served from one directory: a fill in CMYK red (0, 1,
+1, 0) shows as rgb(236 31 37), where pdf.js without its ICC profile shows
+rgb(255 46 23).
+
+That works as it is with Vite 8 (development server and build), webpack 5,
+Rsbuild 2, and Next.js 16 (Turbopack and webpack), which were tested. Parcel
+2 bundles the worker again into a script that does not start, and esbuild
+and Bun copy none of the files. With those, copy
+`node_modules/parapdf/pdfjs/` to where your application serves static files,
+such as `public/pdfjs/`, and tell ParaPDF where it is:
+
+```tsx
+configurePdfjs({ assetBase: "/pdfjs/" });
+```
+
+With a Content Security Policy, the worker needs `worker-src 'self'` and the
+decoders `script-src 'wasm-unsafe-eval'`. When the files come from another
+origin than the page, such as a CDN, pdf.js starts its worker from a
+`blob:` URL, which `worker-src` must then allow.
 
 ## Sources
 
-A source is `{ url }` or `{ data }`, where `data` is a `Uint8Array` or an
-`ArrayBuffer`. Viewers of the same URL, or of the same bytes, share one
+A source is a URL, `{ url }`, or `{ data }`, where `data` is a `Uint8Array`
+or an `ArrayBuffer`. Viewers of the same URL, or of the same bytes, share one
 loaded document, and React's StrictMode or a quick remount reuses it instead
 of loading it again. A document is closed a second after its last viewer
 unmounts. A new source object with the same URL keeps the open document, so
@@ -245,16 +280,15 @@ transfers it to its worker, so your bytes stay usable.
 
 ## pdf.js's own API
 
-`usePdfDocument()` returns the open document, and `pdfjsDocumentOf()` turns
-it into pdf.js's `PDFDocumentProxy` for what ParaPDF does not wrap, such as
-metadata or attachments:
+`usePdfDocument()` returns pdf.js's `PDFDocumentProxy` of the open document,
+for what ParaPDF does not wrap, such as metadata or attachments:
 
 ```tsx
-import { pdfjsDocumentOf, usePdfDocument } from "parapdf";
+import { usePdfDocument } from "parapdf";
 import { useEffect, useState } from "react";
 
 function Title() {
-  const proxy = pdfjsDocumentOf(usePdfDocument());
+  const proxy = usePdfDocument();
   const [title, setTitle] = useState<string | null>(null);
   useEffect(() => {
     void proxy?.getMetadata().then(({ info }) => setTitle((info as { Title?: string }).Title ?? null));
@@ -266,9 +300,9 @@ function Title() {
 ## Server rendering
 
 ParaPDF's React modules declare `"use client"`, and its components render on
-the server as an empty viewport. The engine runs only in the browser: create
-it in browser-only code. With Next.js, load the component that creates it
-with `next/dynamic` and `{ ssr: false }`.
+the server as an empty viewport, with a preload of the PDF in the page's
+head. pdf.js loads only in the browser, so components that render
+`PdfDocument` need no `next/dynamic` or other browser-only wrapper.
 
 ## Accessibility
 
@@ -281,12 +315,15 @@ its pages in your application's language with `label` and `pageLabel`.
 ## Limitations
 
 - Released pdfjs-dist draws pages on the main thread. Drawing in a worker
-  needs pdf.js's renderer worker (`rendererSrc`), which is only in unreleased
-  pdf.js builds so far.
+  needs pdf.js's renderer worker (`configurePdfjs({ rendererSrc })`), which
+  is only in unreleased pdf.js builds so far.
 - Not yet supported: filling forms (fields show but cannot be edited),
   tagged-PDF structure, optional content toggles, attachments, and
   per-document passwords (`documentOptions.password` applies to every
-  document of an engine).
+  document).
+- Chromium and Firefox give pdf.js the PDF's preloaded download. Whether
+  Safari does is not verified yet; where a browser does not, the PDF
+  downloads twice.
 - Text exists only for mounted pages, so the browser's own find sees only
   those; use `usePdfSearch`.
 - Search highlights need the CSS Custom Highlight API; browsers without it

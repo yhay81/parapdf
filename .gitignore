@@ -19,3 +19,6 @@ examples/*/results/raw/
 packages/parapdf/LICENSE
 packages/parapdf/NOTICE.md
 packages/parapdf/LICENSES/
+
+# Copied from pdfjs-dist on install (packages/parapdf/scripts/pdfjs-files.ts)
+packages/parapdf/pdfjs/

@@ -35,6 +35,9 @@ with the API.
 - A narrow internal engine boundary (load, page metadata, region rendering,
   text, cancellation) keeps alternative engines measurable. Another engine
   replaces pdf.js only after the benchmark shows a reproducible win.
+- Applications choose no engine. The package depends on one exact pdfjs-dist,
+  ships its worker and the files it loads on demand, and exports nothing of
+  the engine boundary: `<PdfDocument source={url}>` needs no setup.
 - Performance claims must be measured. Publish wins and losses together.
 - Domain-neutral. ParaPDF shows PDFs as documents (reading, search,
   selection, links, annotations, forms) and knows nothing of drawings or any
@@ -59,13 +62,19 @@ with the API.
     `webkit`, `firefox` as `.md` and `.json`) and the cross-browser summary
     `browsers.md`.
 - `packages/parapdf/` — the runtime, published as `parapdf`: engine
-  boundary (`engine/`), layout, scheduler, and viewer runtime (`runtime/`),
-  and React bindings (`react/`), whose modules declare `"use client"`; unit
-  tests of the modules that need no DOM (`test/`, Node's test runner); and
-  `README.md`, the user documentation npm shows. The workspace consumes its
-  TypeScript source. `build` emits JavaScript and declarations to `dist/`,
-  and packing ships `dist/` (through `publishConfig`, so pack and publish
-  with pnpm), `src/` for the source maps, the README, and the license and
+  boundary, the pdf.js adapter, and the loader that creates it (`engine/`),
+  layout, scheduler, and viewer runtime (`runtime/`), and React bindings
+  (`react/`), whose modules declare `"use client"`; unit tests of the modules
+  that need no DOM (`test/`, Node's test runner); and `README.md`, the user
+  documentation npm shows. `scripts/pdfjs-files.ts`, run by `pnpm install`
+  (prepare) and `build`, copies pdf.js's worker, behind ParaPDF's prelude
+  (`scripts/worker-prelude.js`), and the files it loads on demand from
+  pdfjs-dist into `pdfjs/` (not committed), and writes
+  `src/engine/pdfjs-files.ts` (committed), which references each with
+  `new URL(…, import.meta.url)`. The workspace consumes its TypeScript
+  source. `build` emits JavaScript and declarations to `dist/`, and packing
+  ships `dist/` (through `publishConfig`, so pack and publish with pnpm),
+  `src/` for the source maps, `pdfjs/`, the README, and the license and
   notices the pdf.js code it derives from requires.
 - `examples/prototype/` — Vite + React 19 demo, the scripted scroll
   benchmark (`scripts/scroll-bench.ts`, results per browser in `results/`,
@@ -87,13 +96,17 @@ with the API.
   `BROWSER` (`chromium`, `webkit`, or `firefox`) picks the browser;
   `ENGINES`, `FILES`, `RUNS`, `PAGES`, and `SCALE` narrow a run.
 - `pnpm --filter @parapdf/prototype dev` — run the demo; query parameters
-  select `engine` (`pdfjs` or `pdfjs-next`), `hwa`, `text`, `file`,
-  `preload`, `lang` (the page's language, `en` by default), and `source`
-  (`data` opens the PDF from bytes the demo fetched instead of its URL).
+  select `engine` (`pdfjs`, the pdf.js the package ships, or `pdfjs-next`),
+  `hwa`, `text`, `file`, `lang` (the page's language, `en` by default),
+  `source` (`data` opens the PDF from bytes the demo fetched instead of its
+  URL), and `count` (count the documents pdf.js opens and destroys, for
+  `check:lifecycle`).
 - `pnpm --filter @parapdf/prototype build && pnpm --filter @parapdf/prototype bench`
   — scripted scroll benchmark; `BROWSER` picks the browser, and `VARIANTS`,
   `TEXT`, `LINKS`, `FILES`, `SPEEDS` (CSS px per second), `RUNS`, `DURATION`,
-  `PRELOAD`, and `OUTPUT` narrow or rename a run. `node
+  and `OUTPUT` narrow or rename a run; `LATENCY` (ms) and `BANDWIDTH`
+  (Mbit/s) give Chromium's requests the delays a server on this machine
+  lacks, through the DevTools protocol. `node
   examples/prototype/scripts/compare.ts` then rewrites `results/browsers.md`.
 - `pnpm --filter @parapdf/prototype check:text` — functional checks for text
   selection, search highlights, normalization, accessibility semantics
@@ -132,6 +145,14 @@ with the API.
   Chromium gets real touches through the DevTools protocol; Playwright cannot
   put two fingers down in WebKit or Firefox, so there the check dispatches
   touch pointer events, and in WebKit gesture events.
+- `pnpm --filter @parapdf/prototype check:bundle` — functional checks for
+  the pdf.js files the package ships: packs the package into a temporary Vite
+  application that configures nothing and opens a Japanese PDF without
+  embedded fonts, a JBIG2 scan, a page in Symbol and ZapfDingbats, and a CMYK
+  page, from Vite's development server and from a build, checking that the
+  worker, CMaps, fonts, decoders, and ICC color management load, and that
+  pdf.js takes the preloaded download (run after `pnpm --filter @parapdf/bench
+  corpus`; `BROWSER` applies).
 - `pnpm --filter parapdf build` — JavaScript and declarations in
   `packages/parapdf/dist/`; `pnpm --filter parapdf pack` builds and packs the
   tarball.
@@ -297,16 +318,54 @@ with the API.
   Unmounted pages zero their canvases and release pdf.js page data.
   `sharpness()` reports the resolution of the visible pixels as a share of
   full device resolution. The zoom goes up to 10 CSS pixels per point.
-- The pdf.js adapter starts its parsing worker when the engine is created, and
-  the demo preloads the PDF with React's `preload()`, matching the CORS mode
-  pdf.js fetches with. The adapter asks for GPU-backed canvases unless
-  `enableHWA` is `false`: in an embedding app's preview they blocked the main
-  thread for 256 instead of 560 ms in Chromium, and 770 instead of 1,393 ms
-  in WebKit, while panning a zoomed drawing. `documentOptions` (typed
-  `PdfjsDocumentOptions`) adds getDocument parameters for every document,
-  overriding `enableHWA` and the asset URLs from `assetBase`; the source and
-  the worker stay the adapter's. The `pdfjs` option takes the legacy build as
-  is.
+- `engine/bundled.ts` loads pdf.js when the first `PdfDocument` renders in a
+  browser (`preloadPdfjs()`): it imports `pdfjs-dist` and at once starts the
+  shipped worker, whose file list (`pdfjs-files.ts`, 3 KB compressed) is in
+  the bundle, so that the worker's download overlaps pdf.js's module instead
+  of following it, and gives the worker to the one pdf.js adapter every viewer
+  shares once its script runs. A worker that fails to load leaves pdf.js to
+  start its own, or to parse on the page, as before; a cross-origin worker
+  script is left to pdf.js, which starts it from a `blob:` URL. `PdfDocument`
+  also preloads a URL source's PDF with React's `preload()` while it renders,
+  matching the CORS mode pdf.js fetches with, so pdf.js takes the response;
+  with server rendering the preload is in the page's head. With 100 ms added
+  to every request and 20 Mbit/s in Chromium, page 1 showed 115–129 ms sooner
+  than with 0.2.0 set up as its README said, and within 3–16 ms of 0.2.0 with
+  pdf.js in the main bundle and a preload written by hand
+  (`results/startup-bundled.md`, from setups run in turn, one job each, five
+  times over). The demo waits in a Suspense boundary only for a data source's
+  bytes: waiting for 0.2.0's engine there held page 1 back by 270 ms on
+  localhost. Headers and `disableStream`, which no preload can match, skip it.
+- Bundlers give every shipped file a URL of its own, but pdf.js's worker
+  fetches CMaps, standard fonts, decoders, and ICC profiles as a directory
+  URL plus a file name. So the worker's URL carries the files' URLs by name,
+  as JSON in its fragment, and the prelude in front of pdf.js's worker code
+  sends the worker's `fetch` and synchronous XHR requests for those names to
+  them; pdf.js gets `parapdf:/` as their directory. The worker must fetch
+  them itself (`useWorkerFetch`): pdf.js manages ICC colors only then, and
+  CMYK red came out as rgb(255 46 23) instead of rgb(236 31 37) when the main
+  thread fetched them through a `BinaryDataFactory`. The standard fonts'
+  directory stays unset, because pdf.js also adds fonts from it to the page
+  as a CSS `url()` fallback for missing system fonts, which every browser
+  logs as an error when the URL does not load; the worker then asks for
+  "null" plus the font's name, which the prelude also routes. The worker,
+  1.2 MB, keeps any bundler from inlining it as a `data:` URL: a separate
+  1.6 KB entry was inlined by Vite, and pdf.js started it from a `blob:` URL,
+  which a strict CSP refuses. Vite 8 (development server and build), webpack
+  5, Rsbuild 2, and Next.js 16 (Turbopack development and build, webpack
+  build) emit the files; Parcel 2 wraps the worker in its own module system,
+  which does not start, and esbuild and Bun copy nothing. Those take a copy of
+  `pdfjs/` and `configurePdfjs({ assetBase })`, which uses pdf.js's own
+  directory URLs.
+- `configurePdfjs()` sets, before pdf.js loads, what the adapter takes: the
+  adapter asks for GPU-backed canvases unless `enableHWA` is `false` (in an
+  embedding app's preview they blocked the main thread for 256 instead of
+  560 ms in Chromium, and 770 instead of 1,393 ms in WebKit, while panning a
+  zoomed drawing); `documentOptions` (typed `PdfjsDocumentOptions`) adds
+  getDocument parameters for every document, overriding `enableHWA` and the
+  file options; `pdfjs` with `workerSrc` and `assetBase` loads another build,
+  such as the legacy build, or the demo's pdf.js master; and `rendererSrc`
+  starts master's renderer worker.
 - Text layers use pdf.js's core `TextLayer` inside `.parapdf-text-layer`, styled
   by rules derived from pdf.js's viewer CSS (attributed in `NOTICE.md`). Pages
   set `--total-scale-factor` and `--scale-round-x/y`, which `TextLayer` sizes
@@ -456,13 +515,15 @@ with the API.
   A turn drops the old canvases at once and re-renders them, while layers
   only change their attribute. Search scrolling and destinations map unturned
   points with `turnBox()`.
-- `usePdfDocument()` returns the open `PdfEngineDocument` (published as
-  `document`). Its `native` is the engine's own object, and
-  `pdfjsDocumentOf()` returns pdf.js's `PDFDocumentProxy` for documents a
-  pdf.js engine opened, for APIs ParaPDF does not wrap.
+- `usePdfDocument()` returns pdf.js's `PDFDocumentProxy` of the open
+  document, for APIs ParaPDF does not wrap; the runtime publishes the
+  engine's document as `document`, whose `native` it is.
 - Browsers: `check:text`, `check:links`, `check:lifecycle`,
-  `check:rotation`, `check:options`, and `check:pinch` pass in Playwright's
-  Chromium, WebKit, and Firefox. Playwright's WebKit cannot put two fingers
+  `check:rotation`, `check:options`, `check:pinch`, and `check:bundle` pass
+  in Playwright's Chromium, WebKit, and Firefox. Playwright's WebKit keeps no
+  HTTP cache, so it downloads a preloaded PDF again (it fetched a response
+  with `max-age=3600` twice as well); `check:bundle` reports that as a note.
+  Whether Safari takes the preload is not verified yet. Playwright's WebKit cannot put two fingers
   down, and its `GestureEvent` is a function whose objects are not events, so
   touch and Safari's gesture events were checked by hand in Safari 27 in the
   iPadOS 27 simulator (iPad Pro 11-inch): pinches, the point between the

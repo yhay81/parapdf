@@ -1,42 +1,43 @@
-import { createPdfjsEngine, type PdfEngine, type PdfjsDocumentOptions } from "parapdf";
+import { configurePdfjs, type PdfjsDocumentOptions } from "parapdf";
+import nextRendererSrc from "pdfjs-next/pdf.renderer.mjs?url";
+import nextWorkerSrc from "pdfjs-next/pdf.worker.mjs?url";
+
+export type Pdfjs = typeof import("pdfjs-dist");
 
 /**
- * `pdfjs` is released pdfjs-dist (main-thread drawing); `pdfjs-next` is pdf.js
- * master with its renderer worker. Both load lazily so neither inflates the
- * other's startup.
+ * Sets how ParaPDF loads pdf.js for the demo's `engine` parameter. `pdfjs` is
+ * the pdf.js ParaPDF ships (main-thread drawing) and needs nothing;
+ * `pdfjs-next` is pdf.js master with its renderer worker, loaded lazily.
+ * `instrument` wraps the module, for the lifecycle check's counters.
  */
-export async function loadEngine(
+export function configureEngine(
   kind: string,
   enableHWA: boolean,
-  documentOptions?: PdfjsDocumentOptions,
-): Promise<PdfEngine> {
+  documentOptions: PdfjsDocumentOptions | undefined,
+  instrument: ((pdfjs: Pdfjs) => Pdfjs) | undefined,
+): void {
+  const options = {
+    ...(enableHWA ? {} : { enableHWA: false }),
+    ...(documentOptions ? { documentOptions } : {}),
+  };
   if (kind === "pdfjs-next") {
-    const [pdfjs, worker, renderer] = await Promise.all([
-      import("pdfjs-next/pdf.mjs"),
-      import("pdfjs-next/pdf.worker.mjs?url"),
-      import("pdfjs-next/pdf.renderer.mjs?url"),
-    ]);
-    if ("unavailable" in pdfjs) {
-      throw new Error("pdf.js master is not built; run bench/scripts/build-pdfjs-next.sh");
-    }
-    return createPdfjsEngine({
-      pdfjs,
-      workerSrc: worker.default,
-      rendererSrc: renderer.default,
+    configurePdfjs({
+      ...options,
+      async pdfjs() {
+        const pdfjs = await import("pdfjs-next/pdf.mjs");
+        if ("unavailable" in pdfjs) {
+          throw new Error("pdf.js master is not built; run bench/scripts/build-pdfjs-next.sh");
+        }
+        return instrument ? instrument(pdfjs) : pdfjs;
+      },
+      workerSrc: nextWorkerSrc,
+      rendererSrc: nextRendererSrc,
       assetBase: "/pdfjs-next/",
-      enableHWA,
-      documentOptions,
+    });
+  } else if (instrument || Object.keys(options).length > 0) {
+    configurePdfjs({
+      ...options,
+      ...(instrument ? { pdfjs: () => import("pdfjs-dist").then(instrument) } : {}),
     });
   }
-  const [pdfjs, worker] = await Promise.all([
-    import("pdfjs-dist"),
-    import("pdfjs-dist/build/pdf.worker.min.mjs?url"),
-  ]);
-  return createPdfjsEngine({
-    pdfjs,
-    workerSrc: worker.default,
-    assetBase: "/pdfjs/",
-    enableHWA,
-    documentOptions,
-  });
 }

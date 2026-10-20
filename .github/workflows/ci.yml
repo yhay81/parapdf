@@ -50,3 +50,4 @@ jobs:
       - run: pnpm --filter @parapdf/prototype check:rotation
       - run: pnpm --filter @parapdf/prototype check:options
       - run: pnpm --filter @parapdf/prototype check:pinch
+      - run: pnpm --filter @parapdf/prototype check:bundle

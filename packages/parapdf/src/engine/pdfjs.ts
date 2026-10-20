@@ -28,11 +28,14 @@ export type PdfjsDocumentOptions = Omit<
 
 export interface PdfjsEngineOptions {
   /**
-   * The pdf.js module; the application owns its version. The legacy build
-   * (`pdfjs-dist/legacy/build/pdf.mjs`), which older Safari needs, fits as is.
+   * The pdf.js module: the pdfjs-dist ParaPDF depends on, unless
+   * configurePdfjs() loads another build, such as the legacy build
+   * (`pdfjs-dist/legacy/build/pdf.mjs`) older Safari needs.
    */
   pdfjs: typeof Pdfjs;
   workerSrc: string;
+  /** pdf.js's worker, started already from `workerSrc`; the adapter starts one otherwise. */
+  port?: Worker;
   /**
    * Renderer worker script (pdf.js master and later). When set, pdf.js draws
    * pages into an OffscreenCanvas on its own thread instead of the main thread.
@@ -188,7 +191,13 @@ export function createPdfjsEngine(options: PdfjsEngineOptions): PdfEngine {
   }
   // Start the parsing worker now, while React mounts, instead of when the
   // first document opens. One worker serves every document of this engine.
-  const worker = new pdfjs.PDFWorker();
+  // pdf.js takes any Worker as its port; its typings infer the type from the
+  // default, null.
+  const worker = new pdfjs.PDFWorker(
+    (options.port ? { port: options.port } : {}) as ConstructorParameters<
+      typeof pdfjs.PDFWorker
+    >[0],
+  );
 
   return {
     name: options.rendererSrc ? "pdf.js (renderer worker)" : "pdf.js (main-thread drawing)",

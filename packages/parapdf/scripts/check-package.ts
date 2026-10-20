@@ -1,10 +1,10 @@
 /**
  * Checks the package as npm would install it: packs it, unpacks the tarball
  * into a temporary project next to this workspace's React, React DOM, and
- * pdf.js, and then checks the files it ships, the manifest, the "use client"
- * directives, that TypeScript resolves and accepts its declarations under
- * the bundler and nodenext module resolutions, and that its components
- * render on the server. Exits non-zero on failure.
+ * pdf.js, and then checks the files it ships, pdf.js's files among them, the
+ * manifest, the "use client" directives, that TypeScript resolves and accepts
+ * its declarations under the bundler and nodenext module resolutions, and
+ * that its components render on the server. Exits non-zero on failure.
  * Usage: node scripts/check-package.ts
  */
 import { execFileSync } from "node:child_process";
@@ -55,6 +55,10 @@ try {
     "LICENSES/pdf.js-Apache-2.0.txt",
     "dist/index.js",
     "dist/index.d.ts",
+    "pdfjs/LICENSE",
+    "pdfjs/pdf.worker.js",
+    "pdfjs/standard_fonts/LICENSE_FOXIT",
+    "pdfjs/standard_fonts/LICENSE_LIBERATION",
   ];
   const missing = required.filter((name) => !files.includes(name));
   check(
@@ -67,6 +71,19 @@ try {
   );
   check("the tarball holds no tests, scripts, or tarballs", stray.length === 0, stray.join(", "));
 
+  // Every file the code references with new URL(…, import.meta.url) ships.
+  const references = [
+    ...readFileSync(join(installed, "dist/engine/pdfjs-files.js"), "utf8").matchAll(
+      /new URL\(\s*"\.\.\/\.\.\/(pdfjs\/[^"]+)"/g,
+    ),
+  ].map((match) => match[1] ?? "");
+  const unshipped = references.filter((name) => !files.includes(name));
+  check(
+    "the tarball holds every pdf.js file the code references",
+    references.length > 150 && unshipped.length === 0,
+    `${references.length} references; ${unshipped.slice(0, 3).join(", ")}`,
+  );
+
   const manifest = JSON.parse(readFileSync(join(installed, "package.json"), "utf8"));
   const exported = manifest.exports?.["."];
   check(
@@ -76,6 +93,17 @@ try {
       exported?.default === "./dist/index.js" &&
       manifest.types === "./dist/index.d.ts",
     JSON.stringify({ private: manifest.private, exports: manifest.exports, types: manifest.types }),
+  );
+
+  // The shipped worker and decoders must be the pdf.js the code imports.
+  const shippedVersion = /from pdfjs-dist (\S+);/.exec(
+    readFileSync(join(installed, "src/engine/pdfjs-files.ts"), "utf8"),
+  )?.[1];
+  check(
+    "the manifest depends on exactly the pdf.js whose files ship",
+    manifest.dependencies?.["pdfjs-dist"] === shippedVersion &&
+      manifest.peerDependencies?.["pdfjs-dist"] === undefined,
+    JSON.stringify({ dependencies: manifest.dependencies, shippedVersion }),
   );
 
   const clientModules = readdirSync(join(installed, "dist", "react")).filter(
@@ -91,7 +119,7 @@ try {
     withoutDirective.join(", "),
   );
 
-  // The peers, as the application would install them.
+  // The peers and the dependency, as the application would install them.
   for (const name of ["react", "react-dom", "pdfjs-dist", "@types/react", "@types/react-dom"]) {
     const target = join(project, "node_modules", name);
     mkdirSync(dirname(target), { recursive: true });
@@ -102,13 +130,12 @@ try {
   // An application's use of the API, type-checked against the declarations.
   writeFileSync(
     join(project, "consumer.tsx"),
-    `import * as pdfjs from "pdfjs-dist";
-import {
-  createPdfjsEngine,
+    `import {
+  configurePdfjs,
   PdfDocument,
   PdfPageRect,
   PdfViewport,
-  pdfjsDocumentOf,
+  preloadPdfjs,
   usePdfDocument,
   usePdfSearch,
   usePdfState,
@@ -116,12 +143,13 @@ import {
   type ViewerOptions,
 } from "parapdf";
 
-const engine = createPdfjsEngine({ pdfjs, workerSrc: "/pdf.worker.min.mjs", assetBase: "/pdfjs/" });
+configurePdfjs({ enableHWA: true, documentOptions: { withCredentials: true } });
+preloadPdfjs();
 const options: ViewerOptions = { initialScale: "fit-width", maxCanvasPixels: 50_000_000 };
 
 export function Viewer() {
   return (
-    <PdfDocument engine={engine} source={{ url: "/manual.pdf" }} options={options}>
+    <PdfDocument source="/manual.pdf" options={options}>
       <Toolbar />
       <PdfViewport
         style={{ height: 600 }}
@@ -138,7 +166,7 @@ function Toolbar() {
   const viewer = usePdfViewer();
   const search = usePdfSearch();
   const page: number = usePdfState((state) => state.currentPage);
-  const pages: number | undefined = pdfjsDocumentOf(usePdfDocument())?.numPages;
+  const pages: number | undefined = usePdfDocument()?.numPages;
   return (
     <button type="button" onClick={() => { viewer.setScale("fit-width"); search.search("pdf"); }}>
       {page + 1} / {pages}
@@ -195,17 +223,16 @@ export const misuse = <PdfViewport pageLabel={5} />;
   }
 
   // The components render on the server, for frameworks that prerender
-  // client components; the engine only runs in the browser.
+  // client components; pdf.js only loads in the browser.
   writeFileSync(
     join(project, "ssr.js"),
     `import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { PdfDocument, PdfViewport } from "parapdf";
 
-const engine = { name: "never", open: () => new Promise(() => {}) };
 process.stdout.write(
   renderToString(
-    createElement(PdfDocument, { engine, source: { url: "/manual.pdf" } }, createElement(PdfViewport, { label: "Manual" })),
+    createElement(PdfDocument, { source: "/manual.pdf" }, createElement(PdfViewport, { label: "Manual" })),
   ),
 );
 `,
@@ -218,6 +245,11 @@ process.stdout.write(
   }
   const rendered = html.includes('role="document"') && html.includes('aria-label="Manual"');
   check("the components render on the server", rendered, rendered ? "" : html.slice(0, 200));
+  check(
+    "the server's page starts downloading the PDF",
+    /<link rel="preload" href="\/manual\.pdf" as="fetch" crossorigin="(anonymous|)"\/>/.test(html),
+    html.slice(0, 200),
+  );
 } finally {
   rmSync(project, { recursive: true, force: true });
 }
