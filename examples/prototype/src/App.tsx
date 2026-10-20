@@ -45,6 +45,8 @@ const settings = {
   password: params.get("password"),
   /** Form fields the reader can fill in. */
   forms: params.get("forms") === "1",
+  /** "0" fails encrypted documents instead of asking for their password. */
+  passwordPrompt: params.get("passwordPrompt") !== "0",
   /** "odd" or "even" shows pages side by side in pairs. */
   spread: (["odd", "even"].includes(params.get("spread") ?? "")
     ? params.get("spread")
@@ -148,6 +150,7 @@ const viewerOptions: ViewerOptions = {
   annotationLayer: settings.links,
   externalLinks: settings.externalLinks,
   forms: settings.forms,
+  passwordPrompt: settings.passwordPrompt,
   spread: settings.spread,
   scrollMode: settings.scrollMode,
   ...(settings.initialPage > 0 ? { initialPage: settings.initialPage } : {}),

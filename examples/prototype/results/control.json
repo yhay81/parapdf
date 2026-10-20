@@ -1,7 +1,12 @@
 {
-  "runAt": "2026-10-18T12:39:04.709Z",
+  "runAt": "2026-10-20T07:29:07.409Z",
   "file": "bill-hr815.pdf",
-  "runs": 5,
+  "runs": 3,
+  "turnTaking": {
+    "waits": 3,
+    "waitedMs": 117177,
+    "repeatedJobs": 3
+  },
   "results": [
     {
       "browser": "Chromium 156.0.8078.4",
@@ -9,31 +14,19 @@
       "mode": "still",
       "samples": [
         {
+          "idleLagP95Ms": 0.5,
+          "blockedMs": 0,
+          "maxLagMs": 0.7,
+          "renders": 0
+        },
+        {
+          "idleLagP95Ms": 0.6,
+          "blockedMs": 0,
+          "maxLagMs": 0.7,
+          "renders": 0
+        },
+        {
           "idleLagP95Ms": 0.7,
-          "blockedMs": 0,
-          "maxLagMs": 0.7,
-          "renders": 0
-        },
-        {
-          "idleLagP95Ms": 0.6,
-          "blockedMs": 0,
-          "maxLagMs": 0.7,
-          "renders": 0
-        },
-        {
-          "idleLagP95Ms": 0.6,
-          "blockedMs": 0,
-          "maxLagMs": 0.7,
-          "renders": 0
-        },
-        {
-          "idleLagP95Ms": 0.6,
-          "blockedMs": 0,
-          "maxLagMs": 0.7,
-          "renders": 0
-        },
-        {
-          "idleLagP95Ms": 0.6,
           "blockedMs": 0,
           "maxLagMs": 0.7,
           "renders": 0
@@ -48,31 +41,19 @@
         {
           "idleLagP95Ms": 0.6,
           "blockedMs": 0,
+          "maxLagMs": 1.9,
+          "renders": 0
+        },
+        {
+          "idleLagP95Ms": 0.5,
+          "blockedMs": 0,
           "maxLagMs": 1.5,
           "renders": 0
         },
         {
           "idleLagP95Ms": 0.5,
           "blockedMs": 0,
-          "maxLagMs": 1.4,
-          "renders": 0
-        },
-        {
-          "idleLagP95Ms": 0.5,
-          "blockedMs": 0,
-          "maxLagMs": 2,
-          "renders": 0
-        },
-        {
-          "idleLagP95Ms": 0.6,
-          "blockedMs": 0,
           "maxLagMs": 1.5,
-          "renders": 0
-        },
-        {
-          "idleLagP95Ms": 0.6,
-          "blockedMs": 0,
-          "maxLagMs": 1.6,
           "renders": 0
         }
       ]
@@ -84,69 +65,45 @@
       "samples": [
         {
           "idleLagP95Ms": 4.7,
-          "blockedMs": 5.6,
+          "blockedMs": 4.1,
           "maxLagMs": 5,
-          "renders": 0
-        },
-        {
-          "idleLagP95Ms": 4.7,
-          "blockedMs": 3.2,
-          "maxLagMs": 5,
-          "renders": 0
-        },
-        {
-          "idleLagP95Ms": 4.6,
-          "blockedMs": 8.8,
-          "maxLagMs": 5,
-          "renders": 0
-        },
-        {
-          "idleLagP95Ms": 4.7,
-          "blockedMs": 5,
-          "maxLagMs": 5,
-          "renders": 0
-        },
-        {
-          "idleLagP95Ms": 4.5,
-          "blockedMs": 6.2,
-          "maxLagMs": 5,
-          "renders": 0
-        }
-      ]
-    },
-    {
-      "browser": "WebKit 27.2",
-      "name": "webkit",
-      "mode": "scroll",
-      "samples": [
-        {
-          "idleLagP95Ms": 4.7,
-          "blockedMs": 22.5,
-          "maxLagMs": 6.2,
-          "renders": 0
-        },
-        {
-          "idleLagP95Ms": 4.6,
-          "blockedMs": 22,
-          "maxLagMs": 6.5,
-          "renders": 0
-        },
-        {
-          "idleLagP95Ms": 4.7,
-          "blockedMs": 22.9,
-          "maxLagMs": 6.5,
-          "renders": 0
-        },
-        {
-          "idleLagP95Ms": 4.7,
-          "blockedMs": 31.7,
-          "maxLagMs": 6.3,
           "renders": 0
         },
         {
           "idleLagP95Ms": 4.8,
-          "blockedMs": 4.2,
-          "maxLagMs": 5.4,
+          "blockedMs": 2,
+          "maxLagMs": 5,
+          "renders": 0
+        },
+        {
+          "idleLagP95Ms": 4.8,
+          "blockedMs": 1.4,
+          "maxLagMs": 5,
+          "renders": 0
+        }
+      ]
+    },
+    {
+      "browser": "WebKit 27.2",
+      "name": "webkit",
+      "mode": "scroll",
+      "samples": [
+        {
+          "idleLagP95Ms": 4.8,
+          "blockedMs": 3.3,
+          "maxLagMs": 5,
+          "renders": 0
+        },
+        {
+          "idleLagP95Ms": 4.8,
+          "blockedMs": 3.6,
+          "maxLagMs": 5.1,
+          "renders": 0
+        },
+        {
+          "idleLagP95Ms": 4.7,
+          "blockedMs": 9.3,
+          "maxLagMs": 5,
           "renders": 0
         }
       ]
@@ -157,33 +114,21 @@
       "mode": "still",
       "samples": [
         {
-          "idleLagP95Ms": 6.3,
-          "blockedMs": 0,
-          "maxLagMs": 4.3,
-          "renders": 0
-        },
-        {
-          "idleLagP95Ms": 3.7,
-          "blockedMs": 43.3,
-          "maxLagMs": 10.3,
-          "renders": 0
-        },
-        {
-          "idleLagP95Ms": 1.2,
-          "blockedMs": 0.5,
-          "maxLagMs": 2.4,
-          "renders": 0
-        },
-        {
           "idleLagP95Ms": 1.1,
-          "blockedMs": 0,
-          "maxLagMs": 1.7,
+          "blockedMs": 4.8,
+          "maxLagMs": 6.8,
           "renders": 0
         },
         {
           "idleLagP95Ms": 1,
-          "blockedMs": 1.9,
-          "maxLagMs": 3.1,
+          "blockedMs": 0,
+          "maxLagMs": 1.6,
+          "renders": 0
+        },
+        {
+          "idleLagP95Ms": 1,
+          "blockedMs": 0,
+          "maxLagMs": 1.7,
           "renders": 0
         }
       ]
@@ -194,33 +139,21 @@
       "mode": "scroll",
       "samples": [
         {
-          "idleLagP95Ms": 8.4,
-          "blockedMs": 42,
-          "maxLagMs": 14.9,
-          "renders": 0
-        },
-        {
-          "idleLagP95Ms": 1,
-          "blockedMs": 5.5,
-          "maxLagMs": 5.1,
-          "renders": 0
-        },
-        {
-          "idleLagP95Ms": 1,
+          "idleLagP95Ms": 1.1,
           "blockedMs": 10,
-          "maxLagMs": 5.6,
+          "maxLagMs": 8,
           "renders": 0
         },
         {
-          "idleLagP95Ms": 1.1,
-          "blockedMs": 1.9,
-          "maxLagMs": 3.5,
+          "idleLagP95Ms": 1,
+          "blockedMs": 1.4,
+          "maxLagMs": 3.4,
           "renders": 0
         },
         {
-          "idleLagP95Ms": 1.1,
-          "blockedMs": 1.6,
-          "maxLagMs": 3.1,
+          "idleLagP95Ms": 1,
+          "blockedMs": 7.4,
+          "maxLagMs": 9.2,
           "renders": 0
         }
       ]

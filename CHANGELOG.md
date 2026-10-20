@@ -31,6 +31,10 @@ engine, or switches over `status` or `zoomMode`, needs changes.
   than with 0.2.0 set up as its README said, and within 3–16 ms of 0.2.0
   with pdf.js in the main bundle and a preload written by hand.
 - `source` takes a URL as a string.
+- pdf.js's legacy build comes with its own worker from the package:
+  `configurePdfjs({ build: legacyBuild })`, with `legacyBuild` from the new
+  `parapdf/legacy`, needs no `workerSrc`, `assetBase`, or copy of the files.
+- `pdfjsVersion` is the version of pdf.js the package ships.
 - `usePdfDocument()` returns pdf.js's `PDFDocumentProxy`, and
   `pdfjsDocumentOf()` is gone.
 - Components that render `PdfDocument` need no browser-only wrapper such as
@@ -40,10 +44,10 @@ engine, or switches over `status` or `zoomMode`, needs changes.
   annotation layer; `save()` returns the PDF with the values written in, and
   `download()` hands it to the browser.
 - Comment popups show, styled as in pdf.js's viewer: they used to open as
-  unstyled, transparent text. Their icons come from `${assetBase}web/images/`,
-  which the package's `pdfjs/` directory now holds, or from
-  `configurePdfjs({ imageResourcesPath })`, and are transparent without
-  either: they used to request a file from the application's own origin.
+  unstyled, transparent text. Comments without an appearance of their own
+  show pdf.js's icons, which the package ships, or the ones under
+  `configurePdfjs({ imageResourcesPath })` or `${assetBase}web/images/`:
+  they used to request a file from the application's own origin.
 - `print()` draws every page for printing, typed form values and the layers
   the viewer shows included, and opens the print dialog with only those
   pages.
@@ -51,7 +55,8 @@ engine, or switches over `status` or `zoomMode`, needs changes.
   the viewer has one; only thumbnails near view hold pixels.
 - Encrypted documents: `status` is `"password"` until `submitPassword()`
   gets the right one, and `passwordReason` says whether the last one was
-  wrong. Sources take a `password`, which `PdfDocument` tries again when it
+  wrong. They used to fail with `status` `"error"`: applications that show
+  no password prompt pass `passwordPrompt: false` to keep that. Sources take a `password`, which `PdfDocument` tries again when it
   changes, and URL sources `httpHeaders` and `withCredentials`.
 - Load progress (`progress`), page labels (`pageLabels`), metadata
   (`metadata`), and attachments (`attachments`, `getAttachmentContent()`,

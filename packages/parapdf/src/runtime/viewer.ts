@@ -194,6 +194,13 @@ export interface ViewerOptions {
    */
   forms?: boolean;
   /**
+   * Whether an encrypted document waits for `submitPassword()` (status
+   * "password", the default) or fails at once (status "error") when its
+   * source has no password or a wrong one, for applications that show no
+   * password prompt.
+   */
+  passwordPrompt?: boolean;
+  /**
    * Draw pages in these two colors instead of their own, for example
    * `{ background: "Canvas", foreground: "CanvasText" }` in forced-colors mode.
    */
@@ -499,6 +506,7 @@ export class PdfViewerRuntime {
   readonly #textLayer: boolean;
   readonly #annotationLayer: boolean;
   readonly #forms: boolean;
+  readonly #passwordPrompt: boolean;
   readonly #pageColors: PageColors | undefined;
   readonly #canvasLimits: Pick<
     ViewerOptions,
@@ -571,6 +579,7 @@ export class PdfViewerRuntime {
     this.#textLayer = options.textLayer ?? true;
     this.#annotationLayer = options.annotationLayer ?? true;
     this.#forms = options.forms ?? false;
+    this.#passwordPrompt = options.passwordPrompt ?? true;
     this.#pageColors = options.pageColors;
     this.#links = {
       navigate: (dest) => void this.goToDestination(dest),
@@ -638,7 +647,18 @@ export class PdfViewerRuntime {
         });
       },
       onPassword: (reason) => {
-        if (!closed) this.store.set({ status: "password", passwordReason: reason });
+        if (closed) return;
+        if (this.#passwordPrompt) {
+          this.store.set({ status: "password", passwordReason: reason });
+          return;
+        }
+        // Fails this viewer only, with pdf.js's own messages: other viewers
+        // of the same document may still answer.
+        const error =
+          reason === "incorrect"
+            ? "PasswordException: Incorrect Password"
+            : "PasswordException: No password given";
+        this.store.set({ status: "error", error, passwordReason: null });
       },
     });
     this.#lease = lease;

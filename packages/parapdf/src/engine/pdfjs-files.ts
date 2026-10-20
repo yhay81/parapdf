@@ -8,6 +8,9 @@
  * before they are needed, as on the server.
  */
 
+/** The version of pdf.js the package ships. */
+export const pdfjsVersion = "6.4.299";
+
 /** pdf.js's worker script, after ParaPDF's prelude (scripts/worker-prelude.js). */
 export const pdfjsWorkerUrl = (): URL => new URL("../../pdfjs/pdf.worker.js", import.meta.url);
 
@@ -254,6 +257,36 @@ export const fileUrls = (): Record<string, URL> => ({
   "qcms_bg.wasm": new URL("../../pdfjs/wasm/qcms_bg.wasm", import.meta.url),
   "CGATS001Compat-v2-micro.icc": new URL(
     "../../pdfjs/iccs/CGATS001Compat-v2-micro.icc",
+    import.meta.url,
+  ),
+});
+
+/** pdf.js's annotation icons, by file name, for comments without an appearance of their own. */
+export const iconUrls = (): Record<string, URL> => ({
+  "annotation-check.svg": new URL("../../pdfjs/web/images/annotation-check.svg", import.meta.url),
+  "annotation-comment.svg": new URL(
+    "../../pdfjs/web/images/annotation-comment.svg",
+    import.meta.url,
+  ),
+  "annotation-help.svg": new URL("../../pdfjs/web/images/annotation-help.svg", import.meta.url),
+  "annotation-insert.svg": new URL("../../pdfjs/web/images/annotation-insert.svg", import.meta.url),
+  "annotation-key.svg": new URL("../../pdfjs/web/images/annotation-key.svg", import.meta.url),
+  "annotation-newparagraph.svg": new URL(
+    "../../pdfjs/web/images/annotation-newparagraph.svg",
+    import.meta.url,
+  ),
+  "annotation-noicon.svg": new URL("../../pdfjs/web/images/annotation-noicon.svg", import.meta.url),
+  "annotation-note.svg": new URL("../../pdfjs/web/images/annotation-note.svg", import.meta.url),
+  "annotation-paperclip.svg": new URL(
+    "../../pdfjs/web/images/annotation-paperclip.svg",
+    import.meta.url,
+  ),
+  "annotation-paragraph.svg": new URL(
+    "../../pdfjs/web/images/annotation-paragraph.svg",
+    import.meta.url,
+  ),
+  "annotation-pushpin.svg": new URL(
+    "../../pdfjs/web/images/annotation-pushpin.svg",
     import.meta.url,
   ),
 });

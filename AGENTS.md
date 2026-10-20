@@ -106,11 +106,15 @@ with the API.
   `fit-page`), and `password` (the source's password).
 - `pnpm --filter @parapdf/prototype build && pnpm --filter @parapdf/prototype bench`
   — scripted scroll benchmark; `BROWSER` picks the browser, and `VARIANTS`,
-  `TEXT`, `LINKS`, `FILES`, `SPEEDS` (CSS px per second), `RUNS`, `DURATION`,
-  and `OUTPUT` narrow or rename a run; `LATENCY` (ms) and `BANDWIDTH`
-  (Mbit/s) give Chromium's requests the delays a server on this machine
-  lacks, through the DevTools protocol. `node
-  examples/prototype/scripts/compare.ts` then rewrites `results/browsers.md`.
+  `TEXT`, `LINKS`, `SCROLL` (scroll modes: `vertical`, `horizontal`,
+  `wrapped`, or a list; it scrolls sideways in `horizontal`), `SCALE`
+  (`fit-width`, `fit-page`, CSS px per point, or a list), `FILES`, `SPEEDS`
+  (CSS px per second), `RUNS`, `DURATION`, and `OUTPUT` narrow or rename a
+  run; `LATENCY` (ms) and `BANDWIDTH` (Mbit/s) give Chromium's requests the
+  delays a server on this machine lacks, through the DevTools protocol.
+  `node examples/prototype/scripts/compare.ts` then rewrites
+  `results/browsers.md`; with `PREFIX`, it summarizes the runs written as
+  `OUTPUT=<PREFIX><browser>` in `results/<PREFIX>browsers.md`.
 - `pnpm --filter @parapdf/prototype check:text` — functional checks for text
   selection, search highlights, normalization, accessibility semantics
   including the text's language, and text runs ending on their glyphs on
@@ -208,9 +212,10 @@ with the API.
   from the DevTools protocol, a JavaScript CPU profile, and the renders the
   scheduler completed. Run after `build`, or after `pnpm --filter
   @parapdf/prototype exec vite build --minify false` to read function names in
-  the profile. `SCENARIOS`, `VARIANTS`, `TEXT`, `LINKS`, `FILE`, `DPR`,
-  `START_SCALE`, `ZOOM` (zoom factors), `SPEED`, `DURATION`, `RUNS`, and
-  `OUTPUT` apply.
+  the profile. `SCENARIOS`, `VARIANTS`, `TEXT`, `LINKS`, `SCROLL` (scroll
+  modes, as for the scroll benchmark), `FILE`, `DPR`, `START_SCALE` (CSS px
+  per point, `fit-width`, or `fit-page`), `ZOOM` (zoom factors), `SPEED`,
+  `DURATION`, `RUNS`, and `OUTPUT` apply.
 - `node examples/prototype/scripts/hwa-bench.ts` — GPU-backed against
   CPU-backed canvases (`enableHWA`): blocked main thread, dropped frames, and
   the physical footprint of every process of a browser launched for each job
@@ -354,6 +359,50 @@ with the API.
   viewport's height, or of wrapped rows, the page at the center was the
   second or third. A page taller than the viewport is never all in view, so
   at "fit-width" the current page is still the one at the center.
+- Scroll modes cost what the pages they bring into view cost
+  (`results/scroll-modes-browsers.md`, `main-thread-scroll-modes*.md`:
+  `synthetic-text-1000.pdf` on released pdf.js with GPU canvases, measured at
+  6d85eb8, before pdf.js shipped in the package). The scroll benchmark
+  scrolls sideways in "horizontal" mode and downward in the others; "page"
+  mode flips instead and is not measured. In all three browsers, at 900 and
+  3600 CSS px per second and at "fit-width", "fit-page", and 0.5 CSS px per
+  point, no run left any of the viewport blank, and the median run dropped
+  no frame, except one of 289 in WebKit in "horizontal" and "wrapped" mode
+  at 0.5 and 900 px/s; the worst run dropped 6 (WebKit, "wrapped" at 0.5
+  and 900 px/s). In every run, React committed exactly as often as the store
+  published a new mounted window or current page, 1 to 17 times a second
+  against 60 frames (72 in WebKit). Fast sideways scrolling defers full-resolution renders as
+  vertical scrolling does: at 3600 px/s and "fit-width", 11 bases and no
+  detail (vertical: 9 and none). "wrapped" at "fit-width" and "fit-page"
+  lays out one page per row, as "vertical" does, and shows the noise of main
+  thread blocked: up to 7 ms apart in Chromium, 12 in WebKit, and 23 in
+  Firefox.
+  - "horizontal" at "fit-width" costs what "vertical" does: main thread
+    blocked within that noise in every browser and speed, and in Chromium's
+    profile, slow scrolling took 74 against 69 ms of main-thread tasks and
+    four zoom steps 84 against 72, within the runs' spread.
+  - At "fit-page" and at 0.5, pages are narrower than they are tall, so the
+    same speed crosses 1.3 times as many pages sideways (22 against 17 at
+    3600 px/s and "fit-page"), and the window, which is not rounded to rows
+    there, changes when a page enters and again when one leaves (41 against
+    16 changes). Chromium blocked 39 against 8 ms at "fit-page" and 3600
+    px/s and 50 against 24 at 0.5; its profile of that scroll at "fit-page"
+    found 270 against 187 ms of tasks, most of it drawing (`fillText` 48
+    against 31 ms for 21 bases against 16), which released pdf.js does on
+    the main thread. WebKit at 0.5 and 900 px/s blocked 38 against 6 ms and
+    Firefox 83 against 44; the other cells are within the noise.
+  - "wrapped" at 0.5 fits four pages to a row and crosses three times as
+    many pages as "vertical" at the same zoom and speed (28 against 9 at 900
+    px/s, 109 against 36 at 3600) and draws three times as many, while
+    commits stay per row (24 against 23 at 900 px/s). Main thread blocked
+    1.6 to 18 times as long: 60 against 16 and 168 against 24 ms in Chromium,
+    113 against 6 and 57 against 22 in WebKit, and 167 against 44 and 286
+    against 175 in Firefox, with longest stalls of 11, 15, and 18 ms. In
+    Chromium's profile, slow scrolling took 292 against 147 ms of tasks:
+    drawing (`fillText` 30 against 14 ms) and the style and layout that
+    reading the scroll position flushes over the larger number of mounted
+    pages (`viewportOf` 30 against 13 ms). Four zoom steps took 183 against
+    124 ms, rewrapping the rows included.
 - Each mounted page stacks a base canvas (half a device pixel per CSS pixel,
   at most 2 MP) under a detail canvas at full device resolution, which has a
   spare beside it (see below). A page whose
@@ -480,9 +529,17 @@ with the API.
   560 ms in Chromium, and 770 instead of 1,393 ms in WebKit, while panning a
   zoomed drawing); `documentOptions` (typed `PdfjsDocumentOptions`) adds
   getDocument parameters for every document, overriding `enableHWA` and the
-  file options; `pdfjs` with `workerSrc` and `assetBase` loads another build,
-  such as the legacy build, or the demo's pdf.js master; and `rendererSrc`
-  starts master's renderer worker.
+  file options; `build: legacyBuild` (`parapdf/legacy`, `src/legacy.ts`)
+  loads pdf.js's legacy build with the package's `pdf.worker.legacy.js`,
+  the legacy worker behind the same prelude, whose URL lives in a module of
+  its own (`pdfjs-legacy-files.ts`) so that only applications importing
+  `parapdf/legacy` emit it; `pdfjs` with `workerSrc` and `assetBase` loads
+  any other build, such as the demo's pdf.js master; and `rendererSrc`
+  starts master's renderer worker. An embedding app found that with the
+  legacy build set up through `workerSrc`, the shipped worker's early start
+  and prelude did not apply and it still served its own 6.4 MB copy of the
+  files. `passwordPrompt: false` (a viewer option) fails an encrypted
+  document for that viewer instead of waiting, as before 0.3.0.
 - Text layers use pdf.js's core `TextLayer` inside `.parapdf-text-layer`, styled
   by rules derived from pdf.js's viewer CSS (attributed in `NOTICE.md`). Pages
   set `--total-scale-factor` and `--scale-round-x/y`, which `TextLayer` sizes
@@ -656,7 +713,11 @@ with the API.
     `save()` is `saveDocument()` once anything was typed. A page drawn with
     forms is not copied into thumbnails, as in pdf.js. The viewer CSS keeps
     pdf.js's widget and popup rules: without the popup rules, comment
-    popups used to open as unstyled transparent text.
+    popups used to open as unstyled transparent text. pdf.js builds a
+    comment icon's URL from one base (`imageResourcesPath`), which the files
+    a bundler emits do not share, so with the shipped files the engine
+    gives the layer a transparent data URL as the base and then points each
+    icon, named in the URL's fragment, at its emitted file (`placeIcons()`).
   - Layers: each viewer gets a `LayerState` from the engine (pdf.js's
     display `OptionalContentConfig`) that renders, annotation layers,
     thumbnails, and printouts take. It loads beside the first paint, not
@@ -737,9 +798,9 @@ with the API.
     devicePixelRatio 1. `restoreScaleFactor()` visits `calibrate.html` and
     applies the viewport again before the real navigation, and the scroll and
     zoom benchmarks reject jobs whose devicePixelRatio is wrong. The Firefox
-    scroll and control results measured before this fix (`firefox.md`,
-    `browsers.md`, and `control.md` in `examples/prototype/results/`) ran at
-    devicePixelRatio 1 and need a rerun.
+    scroll and control results measured before this fix ran at
+    devicePixelRatio 1; `firefox.md`, `browsers.md`, and `control.md` in
+    `examples/prototype/results/` were measured again on 2026-10-20 at 2.
   - WebKit refuses some ports outright (4190 among them); the runners use
     4179–4189. Their servers bind 127.0.0.1: with `localhost` they could listen
     on `::1` beside another session's server on 127.0.0.1, and the browser

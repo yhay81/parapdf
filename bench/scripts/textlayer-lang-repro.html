@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>pdf.js TextLayer width and lang</title>
+    <style>
+      body {
+        font: 13px system-ui, sans-serif;
+        margin: 16px;
+      }
+      #page {
+        position: relative;
+        margin-top: 8px;
+        border: 1px solid #ccc;
+      }
+      #page canvas {
+        display: block;
+      }
+      /* With show=1, every run gets a translucent box, to compare with the glyphs. */
+      .show .textLayer :is(span, br) {
+        background: rgb(255 0 0 / 0.2);
+      }
+    </style>
+  </head>
+  <body>
+    <p>
+      Renders one page and its text layer with pdf.js's display API (<code>getDocument</code>,
+      <code>PDFPageProxy.render</code>, and <code>TextLayer</code>) and compares the width of every
+      text run with the width pdf.js gives its text item. <code>TextLayer</code> scales each run to
+      that width after measuring it on a hidden canvas whose <code>lang</code> is the text
+      content's: the PDF's <code>/Lang</code>, or <code>""</code> when the PDF declares none. The
+      runs themselves inherit the page's language. Width ratios far from 1 mean the runs were
+      measured in another font than the one they are drawn in.
+    </p>
+    <p>
+      Query parameters: <code>lib</code> and <code>worker</code> (pdf.js scripts), <code>css</code>
+      (the stylesheet with pdf.js's <code>.textLayer</code> rules), <code>assets</code> (the
+      directory holding <code>cmaps/</code> and <code>standard_fonts/</code>), <code>file</code>,
+      <code>page</code>, <code>scale</code> (CSS pixels per PDF point), <code>lang</code> (the
+      page's <code>lang</code>; <code>none</code> removes the attribute), <code>fill</code>
+      (<code>1</code> gives text content without a language the page's, the workaround), and
+      <code>show</code> (<code>1</code> shades every run).
+    </p>
+    <pre id="log">Loading…</pre>
+    <div id="page"></div>
+    <script type="module">
+      const params = new URLSearchParams(location.search);
+      const option = (name, fallback) => params.get(name) ?? fallback;
+      const absolute = (url) => new URL(url, location.href).href;
+      const libUrl = absolute(option("lib", "pdfjs-dist/build/pdf.mjs"));
+      const workerUrl = absolute(option("worker", libUrl.replace(/pdf\.mjs$/, "pdf.worker.mjs")));
+      const cssUrl = absolute(option("css", "pdfjs-dist/web/pdf_viewer.css"));
+      const assets = absolute(option("assets", "pdfjs-dist/"));
+      const file = option("file", "compressed.tracemonkey-pldi-09.pdf");
+      const pageNumber = Number(option("page", "1"));
+      const scale = Number(option("scale", "1.5"));
+      const lang = option("lang", "en");
+      const fill = option("fill", "0") === "1";
+      const log = document.getElementById("log");
+      const container = document.getElementById("page");
+
+      if (lang === "none") document.documentElement.removeAttribute("lang");
+      else document.documentElement.lang = lang;
+      if (option("show", "0") === "1") document.body.classList.add("show");
+      const stylesheet = Object.assign(document.createElement("link"), {
+        rel: "stylesheet",
+        href: cssUrl,
+      });
+      document.head.append(stylesheet);
+      await new Promise((resolve, reject) => {
+        stylesheet.onload = resolve;
+        stylesheet.onerror = () => reject(new Error(`${cssUrl} did not load`));
+      });
+
+      const pdfjs = await import(libUrl);
+      pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+      const doc = await pdfjs.getDocument({
+        url: file,
+        cMapUrl: `${assets}cmaps/`,
+        cMapPacked: true,
+        standardFontDataUrl: `${assets}standard_fonts/`,
+      }).promise;
+      const page = await doc.getPage(pageNumber);
+      const viewport = page.getViewport({ scale });
+      const outputScale = devicePixelRatio;
+
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.floor(viewport.width * outputScale);
+      canvas.height = Math.floor(viewport.height * outputScale);
+      canvas.style.width = `${Math.floor(viewport.width)}px`;
+      canvas.style.height = `${Math.floor(viewport.height)}px`;
+      const textLayerDiv = document.createElement("div");
+      textLayerDiv.className = "textLayer";
+      container.style.width = canvas.style.width;
+      // TextLayer sizes the layer and its runs against these, as the viewer sets them.
+      container.style.setProperty("--total-scale-factor", String(scale));
+      container.style.setProperty("--scale-round-x", "1px");
+      container.style.setProperty("--scale-round-y", "1px");
+      container.replaceChildren(canvas, textLayerDiv);
+      await page.render({
+        canvas,
+        viewport,
+        transform: outputScale === 1 ? null : [outputScale, 0, 0, outputScale, 0, 0],
+      }).promise;
+
+      const textOptions = { includeMarkedContent: true, disableNormalization: true };
+      const { items, lang: pdfLang } = await page.getTextContent(textOptions);
+      let textContentSource = page.streamTextContent(textOptions);
+      if (fill) {
+        // The workaround: text content without a language takes the one the
+        // runs inherit, so the hidden canvas resolves the same fonts.
+        const inherited = textLayerDiv.closest("[lang]")?.lang ?? "";
+        textContentSource = textContentSource.pipeThrough(
+          new TransformStream({
+            transform(chunk, controller) {
+              chunk.lang ||= inherited;
+              controller.enqueue(chunk);
+            },
+          }),
+        );
+      }
+      const textLayer = new pdfjs.TextLayer({ textContentSource, container: textLayerDiv, viewport });
+      await textLayer.render();
+
+      // Width of each run of two or more characters (the runs TextLayer
+      // scales) against its item's width. Runs and items are matched in order.
+      const spans = textLayer.textDivs;
+      const ratios = [];
+      let cursor = 0;
+      for (const item of items) {
+        if (!item.str || item.str.length < 2) continue;
+        while (cursor < spans.length && spans[cursor].textContent !== item.str) cursor++;
+        const span = spans[cursor++];
+        if (!span) break;
+        const expected = (item.width || item.height) * scale;
+        if (expected < 1) continue;
+        ratios.push(span.getBoundingClientRect().width / expected);
+      }
+      const sorted = [...ratios].sort((a, b) => a - b);
+      const quantile = (q) => sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))];
+
+      // The hidden canvases TextLayer measures on, and what the same string
+      // measures in the generic families under their lang and under the page's.
+      const hidden = [...document.body.querySelectorAll(":scope > canvas")].map((element) =>
+        element.getAttribute("lang"),
+      );
+      const sample = "The quick brown fox jumps over the lazy dog";
+      const measure = (family, measuredLang) => {
+        const probe = document.createElement("canvas");
+        if (measuredLang !== null) probe.setAttribute("lang", measuredLang);
+        probe.style.display = "none";
+        document.body.append(probe);
+        const ctx = probe.getContext("2d");
+        ctx.font = `100px ${family}`;
+        const { width } = ctx.measureText(sample);
+        probe.remove();
+        return Math.round(width * 10) / 10;
+      };
+      const families = ["sans-serif", "serif", "monospace"].map((family) => ({
+        family,
+        // lang="" is what TextLayer sets for a PDF without /Lang; no attribute
+        // inherits the page's language.
+        emptyLang: measure(family, ""),
+        inherited: measure(family, null),
+      }));
+      const result = {
+        environment: {
+          userAgent: navigator.userAgent,
+          languages: navigator.languages,
+          pdfjs: `${pdfjs.version} (${pdfjs.build})`,
+          crossOriginIsolated,
+        },
+        file,
+        page: pageNumber,
+        scale,
+        pageLang: document.documentElement.getAttribute("lang"),
+        pdfLang,
+        fill,
+        hiddenCanvasLangs: hidden,
+        layerFamilies: [...new Set(spans.map((span) => span.style.fontFamily))],
+        runs: ratios.length,
+        widthRatio: ratios.length
+          ? { median: quantile(0.5), p10: quantile(0.1), p90: quantile(0.9), min: sorted[0], max: sorted.at(-1) }
+          : null,
+        families,
+      };
+      window.repro = result;
+      const percent = (ratio) => `${((ratio - 1) * 100).toFixed(1)}%`;
+      log.textContent = `${JSON.stringify(result.environment)}
+page lang ${JSON.stringify(result.pageLang)}, PDF /Lang ${JSON.stringify(pdfLang)}, hidden canvas lang ${JSON.stringify(hidden)}${fill ? ", filled" : ""}
+${result.runs} runs: width against the item's, median ${percent(result.widthRatio.median)} (10th–90th percentile ${percent(result.widthRatio.p10)} to ${percent(result.widthRatio.p90)})
+100px "${sample}": ${families.map((entry) => `${entry.family} ${entry.emptyLang} px with lang="", ${entry.inherited} px inheriting`).join("; ")}`;
+    </script>
+  </body>
+</html>

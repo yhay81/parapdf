@@ -6,7 +6,8 @@
  * beside this workspace's React and pdf.js, and opens a Japanese PDF without
  * embedded fonts, a JBIG2 scan, a page in Symbol and ZapfDingbats, and a
  * CMYK page, from Vite's development server, which pre-bundles dependencies,
- * and from a production build.
+ * and from a production build, once as the application that configures
+ * nothing and once with pdf.js's legacy build (parapdf/legacy).
  *
  * Usage: pnpm --filter @parapdf/bench corpus && pnpm --filter @parapdf/prototype check:bundle
  * Environment: BROWSER (chromium, webkit, or firefox).
@@ -122,14 +123,17 @@ async function visit(browser: Browser, url: string): Promise<Visit> {
 const loaded = (result: Visit, pattern: RegExp) =>
   result.responses.some(({ path, status }) => pattern.test(path) && status === 200);
 
-async function checkFiles(mode: string, baseUrl: string): Promise<void> {
-  const open = (file: string) => visit(launched.browser, `${baseUrl}?file=${file}`);
+/** Checks one page of the application: index.html (the modern build) or legacy.html. */
+async function checkFiles(mode: string, baseUrl: string, legacy = false): Promise<void> {
+  const pageUrl = legacy ? `${baseUrl}legacy.html` : baseUrl;
+  const open = (file: string) => visit(launched.browser, `${pageUrl}?file=${file}`);
 
   const cjk = await open("synthetic-cjk-nonembedded.pdf");
   check(`${mode}: a Japanese PDF without embedded fonts paints`, cjk.painted);
   check(
-    `${mode}: pdf.js's worker starts from the shipped file, not a data: or blob: URL`,
-    loaded(cjk, /\/pdf\.worker[^/]*\.js$/) &&
+    `${mode}: pdf.js's ${legacy ? "legacy " : ""}worker starts from the shipped file, not a data: or blob: URL`,
+    loaded(cjk, legacy ? /\/pdf\.worker\.legacy[^/]*\.js$/ : /\/pdf\.worker[^/]*\.js$/) &&
+      (legacy || !loaded(cjk, /\/pdf\.worker\.legacy/)) &&
       !cjk.responses.some(({ path }) => /^\/[0-9a-f-]{36}$/.test(path)),
     cjk.responses.map(({ path }) => path).join(" "),
   );
@@ -224,9 +228,29 @@ try {
 </html>
 `,
   );
+  writeFileSync(
+    join(app, "legacy.html"),
+    `<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><title>parapdf bundle check, legacy build</title></head>
+  <body style="margin: 0"><div id="root"></div><script type="module" src="/legacy.js"></script></body>
+</html>
+`,
+  );
+  writeFileSync(join(app, "main.js"), `import { start } from "./app.js";\n\nstart();\n`);
+  writeFileSync(
+    join(app, "legacy.js"),
+    `import { configurePdfjs } from "parapdf";
+import { legacyBuild } from "parapdf/legacy";
+import { start } from "./app.js";
+
+configurePdfjs({ build: legacyBuild });
+start();
+`,
+  );
   // The application as its README shows it, without JSX to stay plugin-free.
   writeFileSync(
-    join(app, "main.js"),
+    join(app, "app.js"),
     `import { createElement as h } from "react";
 import { createRoot } from "react-dom/client";
 import { PdfDocument, PdfViewport, usePdfViewer } from "parapdf";
@@ -236,10 +260,12 @@ function Probe() {
   return null;
 }
 
-const file = new URLSearchParams(location.search).get("file");
-createRoot(document.getElementById("root")).render(
-  h(PdfDocument, { source: "/" + file }, h(Probe), h(PdfViewport, { style: { height: "100vh" } })),
-);
+export function start() {
+  const file = new URLSearchParams(location.search).get("file");
+  createRoot(document.getElementById("root")).render(
+    h(PdfDocument, { source: "/" + file }, h(Probe), h(PdfViewport, { style: { height: "100vh" } })),
+  );
+}
 `,
   );
 
@@ -251,12 +277,38 @@ createRoot(document.getElementById("root")).render(
   });
   await dev.listen();
   try {
-    await checkFiles("development server", dev.resolvedUrls?.local[0] ?? "http://127.0.0.1:4183/");
+    const url = dev.resolvedUrls?.local[0] ?? "http://127.0.0.1:4183/";
+    await checkFiles("development server", url);
+    await checkFiles("development server, legacy build", url, true);
   } finally {
     await dev.close();
   }
 
-  await build({ root: app, configFile: false, logLevel: "warn" });
+  // An application that does not import parapdf/legacy emits no legacy worker.
+  const modernOnly = join(app, "dist-modern");
+  await build({
+    root: app,
+    configFile: false,
+    logLevel: "warn",
+    build: { outDir: modernOnly },
+  });
+  const emitted = readdirSync(join(modernOnly, "assets"));
+  check(
+    "a build without parapdf/legacy emits the modern worker only",
+    emitted.some((name) => /^pdf\.worker-/.test(name)) &&
+      !emitted.some((name) => name.startsWith("pdf.worker.legacy")),
+    emitted.filter((name) => name.startsWith("pdf.worker")).join(" "),
+  );
+  rmSync(modernOnly, { recursive: true, force: true });
+
+  await build({
+    root: app,
+    configFile: false,
+    logLevel: "warn",
+    build: {
+      rollupOptions: { input: { main: join(app, "index.html"), legacy: join(app, "legacy.html") } },
+    },
+  });
   const server = await preview({
     root: app,
     configFile: false,
@@ -264,7 +316,9 @@ createRoot(document.getElementById("root")).render(
     preview: { port: 4184, host: "127.0.0.1", strictPort: false },
   });
   try {
-    await checkFiles("production build", server.resolvedUrls?.local[0] ?? "http://127.0.0.1:4184/");
+    const url = server.resolvedUrls?.local[0] ?? "http://127.0.0.1:4184/";
+    await checkFiles("production build", url);
+    await checkFiles("production build, legacy build", url, true);
   } finally {
     await new Promise<void>((resolve) => server.httpServer.close(() => resolve()));
   }

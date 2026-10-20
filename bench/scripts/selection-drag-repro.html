@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>pdf.js upward drag selection between pages</title>
+    <style>
+      body {
+        font: 13px system-ui, sans-serif;
+        margin: 0;
+        background: #808080;
+      }
+      #info {
+        position: absolute;
+        inset: 0 0 auto;
+        height: 120px;
+        overflow: auto;
+        padding: 0 16px;
+        background: #fff;
+      }
+      #viewerContainer {
+        position: absolute;
+        inset: 120px 0 0;
+        overflow: auto;
+      }
+      /* mode=layers: the display API's TextLayer alone, pages stacked as in the viewer. */
+      .layers .page {
+        position: relative;
+        margin: 1px auto -8px;
+        border: 9px solid transparent;
+        background: #fff;
+        background-clip: content-box;
+      }
+      .layers .page canvas {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="info">
+      <p>
+        Shows the first pages of a document with pdf.js's viewer components
+        (<code>pdf_viewer.mjs</code>: <code>PDFViewer</code>, whose <code>TextLayerBuilder</code>
+        handles selections), or, with <code>mode=layers</code>, with the display API's
+        <code>TextLayer</code> alone. By hand: press at the end of page 2's third line, drag up
+        across the gap between the pages into the blank space below page 1's last line, and
+        release. The dragged lines are expected to be selected; in WebKit and Firefox the viewer
+        selects all of page 1 as well. The log shows how many characters the selection holds.
+      </p>
+      <p>
+        Query parameters: <code>lib</code> and <code>viewer</code> (pdf.js's
+        <code>pdf.mjs</code> and <code>pdf_viewer.mjs</code>), <code>css</code>
+        (<code>pdf_viewer.css</code>), <code>assets</code>, <code>file</code>, <code>scale</code>
+        (a number or <code>page-width</code>), and <code>mode</code> (<code>viewer</code> or
+        <code>layers</code>).
+      </p>
+      <pre id="log">Loading…</pre>
+    </div>
+    <div id="viewerContainer"><div id="viewer" class="pdfViewer"></div></div>
+    <script type="module">
+      const params = new URLSearchParams(location.search);
+      const option = (name, fallback) => params.get(name) ?? fallback;
+      const absolute = (url) => new URL(url, location.href).href;
+      const libUrl = absolute(option("lib", "pdfjs-dist/build/pdf.mjs"));
+      const workerUrl = absolute(option("worker", libUrl.replace(/pdf\.mjs$/, "pdf.worker.mjs")));
+      const viewerUrl = absolute(option("viewer", "pdfjs-dist/web/pdf_viewer.mjs"));
+      const cssUrl = absolute(option("css", "pdfjs-dist/web/pdf_viewer.css"));
+      const assets = absolute(option("assets", "pdfjs-dist/"));
+      const file = option("file", "compressed.tracemonkey-pldi-09.pdf");
+      const scaleValue = option("scale", "page-width");
+      const mode = option("mode", "viewer");
+      const log = document.getElementById("log");
+      const container = document.getElementById("viewerContainer");
+      const viewerElement = document.getElementById("viewer");
+
+      const stylesheet = Object.assign(document.createElement("link"), {
+        rel: "stylesheet",
+        href: cssUrl,
+      });
+      document.head.append(stylesheet);
+      await new Promise((resolve, reject) => {
+        stylesheet.onload = resolve;
+        stylesheet.onerror = () => reject(new Error(`${cssUrl} did not load`));
+      });
+
+      // pdf_viewer.mjs reads pdf.js from globalThis.pdfjsLib, which pdf.mjs sets.
+      const pdfjs = await import(libUrl);
+      pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+      const doc = await pdfjs.getDocument({
+        url: file,
+        cMapUrl: `${assets}cmaps/`,
+        cMapPacked: true,
+        standardFontDataUrl: `${assets}standard_fonts/`,
+      }).promise;
+
+      const textLayers = (count) =>
+        new Promise((resolve) => {
+          const check = () => {
+            const done = [...Array(count)].every((_, index) =>
+              document.querySelector(
+                `.page[data-page-number="${index + 1}"] .textLayer span:not(.markedContent)`,
+              ),
+            );
+            if (done) resolve();
+            else requestAnimationFrame(check);
+          };
+          check();
+        });
+
+      if (mode === "viewer") {
+        const pdfjsViewer = await import(viewerUrl);
+        const eventBus = new pdfjsViewer.EventBus();
+        const linkService = new pdfjsViewer.PDFLinkService({ eventBus });
+        const pdfViewer = new pdfjsViewer.PDFViewer({ container, eventBus, linkService });
+        linkService.setViewer(pdfViewer);
+        eventBus.on("pagesinit", () => {
+          pdfViewer.currentScaleValue = scaleValue;
+        });
+        pdfViewer.setDocument(doc);
+        linkService.setDocument(doc);
+        window.pdfViewer = pdfViewer;
+      } else {
+        // Two pages, each a canvas and a text layer, sized as the viewer sizes them.
+        viewerElement.classList.add("layers");
+        const firstPage = await doc.getPage(1);
+        const width = container.clientWidth - 40;
+        const scale =
+          scaleValue === "page-width"
+            ? width / firstPage.getViewport({ scale: 1 }).width
+            : (Number(scaleValue) * 96) / 72;
+        for (let number = 1; number <= Math.min(3, doc.numPages); number++) {
+          const page = await doc.getPage(number);
+          const viewport = page.getViewport({ scale });
+          const pageDiv = document.createElement("div");
+          pageDiv.className = "page";
+          pageDiv.dataset.pageNumber = String(number);
+          pageDiv.style.width = `${Math.floor(viewport.width)}px`;
+          pageDiv.style.height = `${Math.floor(viewport.height)}px`;
+          pageDiv.style.setProperty("--total-scale-factor", String(scale));
+          pageDiv.style.setProperty("--scale-round-x", "1px");
+          pageDiv.style.setProperty("--scale-round-y", "1px");
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.floor(viewport.width * devicePixelRatio);
+          canvas.height = Math.floor(viewport.height * devicePixelRatio);
+          canvas.style.width = pageDiv.style.width;
+          canvas.style.height = pageDiv.style.height;
+          const textLayerDiv = document.createElement("div");
+          textLayerDiv.className = "textLayer";
+          pageDiv.append(canvas, textLayerDiv);
+          viewerElement.append(pageDiv);
+          await page.render({
+            canvas,
+            viewport,
+            transform: [devicePixelRatio, 0, 0, devicePixelRatio, 0, 0],
+          }).promise;
+          await new pdfjs.TextLayer({
+            textContentSource: page.streamTextContent({ includeMarkedContent: true }),
+            container: textLayerDiv,
+            viewport,
+          }).render();
+        }
+      }
+      await textLayers(2);
+
+      // Brings the gap between pages 1 and 2 to the middle of the viewer.
+      const showGap = () => {
+        const second = document.querySelector('.page[data-page-number="2"]');
+        container.scrollTop += second.getBoundingClientRect().top - container.getBoundingClientRect().top - container.clientHeight / 2;
+      };
+      const selection = () => {
+        const text = window.getSelection()?.toString() ?? "";
+        return { chars: text.replace(/\s/g, "").length, start: text.trim().slice(0, 60), end: text.trim().slice(-60) };
+      };
+      document.addEventListener("selectionchange", () => {
+        const { chars, start, end } = selection();
+        log.textContent = `${chars} characters selected: “${start}” … “${end}”`;
+      });
+      showGap();
+      window.repro = {
+        environment: {
+          userAgent: navigator.userAgent,
+          pdfjs: `${pdfjs.version} (${pdfjs.build})`,
+          mode,
+        },
+        showGap,
+        selection,
+      };
+      log.textContent = "Ready: drag from the end of page 2's third line up into page 1's bottom margin.";
+    </script>
+  </body>
+</html>

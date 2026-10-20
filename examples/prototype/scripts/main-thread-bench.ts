@@ -5,14 +5,17 @@
  * script time, and the renders and layers the scheduler completed. Zoom: steps
  * 600 ms apart (four 1.25× steps from the fit-width zoom by default), then
  * until the pages are sharp and idle work is done. Slow scroll: 900 CSS px
- * per second for 4 seconds by default, then the same settling.
+ * per second for 4 seconds by default, sideways in "horizontal" scroll mode and
+ * downward otherwise, then the same settling.
  *
  * Usage: pnpm --filter @parapdf/prototype build && node examples/prototype/scripts/main-thread-bench.ts
  * Build with `vite build --minify false` first to read function names in the profile.
  * Environment: SCENARIOS (zoom,slow scroll), VARIANTS, TEXT and LINKS (1, 0, or 1,0),
- * FILE (bill-hr815.pdf), DPR (2), START_SCALE (CSS px per point; fit width), ZOOM (zoom
- * factors, 1.25,1.25,1.25,1.25), SPEED (CSS px per second, 900), DURATION (ms, 4000),
- * RUNS (3), OUTPUT (main-thread), LABEL (a note on the code measured, for the report).
+ * SCROLL (scroll modes: vertical, horizontal, wrapped, or a list; vertical), FILE
+ * (bill-hr815.pdf), DPR (2), START_SCALE (CSS px per point, fit-width, or fit-page; fit
+ * width), ZOOM (zoom factors, 1.25,1.25,1.25,1.25), SPEED (CSS px per second, 900), DURATION
+ * (ms, 4000), RUNS (3), OUTPUT (main-thread), LABEL (a note on the code measured, for the
+ * report).
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { arch, cpus, loadavg, platform, release } from "node:os";
@@ -38,21 +41,40 @@ const engines = [
 );
 const textModes = (process.env.TEXT ?? "1,0").split(",").map((mode) => mode !== "0");
 const linkModes = (process.env.LINKS ?? "1").split(",").map((mode) => mode !== "0");
+const scrollModes = (process.env.SCROLL ?? "vertical").split(",");
+for (const mode of scrollModes) {
+  if (!["vertical", "horizontal", "wrapped"].includes(mode)) {
+    throw new Error(`scroll mode ${mode} is not one this benchmark scrolls`);
+  }
+}
 const variants = engines.flatMap((engine) =>
   textModes.flatMap((text) =>
-    linkModes.map((links) => ({
-      ...engine,
-      text,
-      links,
-      label: [engine.name, text ? "" : "no text", links ? "" : "no links"]
-        .filter(Boolean)
-        .join(", "),
-    })),
+    linkModes.flatMap((links) =>
+      scrollModes.map((scroll) => ({
+        ...engine,
+        text,
+        links,
+        scroll,
+        label: [
+          engine.name,
+          text ? "" : "no text",
+          links ? "" : "no links",
+          process.env.SCROLL ? scroll : "",
+        ]
+          .filter(Boolean)
+          .join(", "),
+      })),
+    ),
   ),
 );
 const file = process.env.FILE ?? "bill-hr815.pdf";
 const dpr = Number(process.env.DPR ?? "2");
-const startScale = process.env.START_SCALE ? Number(process.env.START_SCALE) : null;
+// A number, or a fit: "fit-width" or "fit-page".
+const startScale = process.env.START_SCALE
+  ? Number.isNaN(Number(process.env.START_SCALE))
+    ? process.env.START_SCALE
+    : Number(process.env.START_SCALE)
+  : null;
 const zoomSteps = (process.env.ZOOM ?? "1.25,1.25,1.25,1.25").split(",").map(Number);
 const speed = Number(process.env.SPEED ?? "900");
 const durationMs = Number(process.env.DURATION ?? "4000");
@@ -158,15 +180,22 @@ async function run(page: Page, session: CDPSession, scenario: Scenario): Promise
   } else {
     await page.evaluate(
       async ({ speed, durationMs }) => {
-        const { scroller } = (window as unknown as { __viewer: { scroller: HTMLElement } })
-          .__viewer;
+        const { scroller, store } = (
+          window as unknown as {
+            __viewer: { scroller: HTMLElement; store: { get(): { scrollMode: string } } };
+          }
+        ).__viewer;
+        // Pages follow each other sideways in "horizontal" mode.
+        const sideways = store.get().scrollMode === "horizontal";
         const start = performance.now();
-        const top = scroller.scrollTop;
+        const from = sideways ? scroller.scrollLeft : scroller.scrollTop;
         await new Promise<void>((resolve) => {
           const tick = () => {
             const elapsed = performance.now() - start;
             if (elapsed >= durationMs) return resolve();
-            scroller.scrollTop = top + (speed * elapsed) / 1000;
+            const position = from + (speed * elapsed) / 1000;
+            if (sideways) scroller.scrollLeft = position;
+            else scroller.scrollTop = position;
             requestAnimationFrame(tick);
           };
           requestAnimationFrame(tick);
@@ -219,6 +248,7 @@ try {
               hwa: "1",
               text: variant.text ? "1" : "0",
               links: variant.links ? "1" : "0",
+              scroll: variant.scroll,
               file,
             });
             await page.goto(`${baseUrl}?${query}`);
@@ -226,7 +256,7 @@ try {
             if (startScale !== null) {
               await page.evaluate((scale) => {
                 (
-                  window as unknown as { __viewer: { setScale(scale: number): void } }
+                  window as unknown as { __viewer: { setScale(scale: number | string): void } }
                 ).__viewer.setScale(scale);
               }, startScale);
               await settle(page);
@@ -304,7 +334,16 @@ const environment = {
   loadAverage: { start: loadAtStart, end: loadavg()[0] ?? 0 },
   turnTaking: { ...turnTaking },
   code: label,
-  settings: { file, dpr, startScale, zoom: zoomSteps.join(","), speed, durationMs, runs },
+  settings: {
+    file,
+    dpr,
+    startScale,
+    scrollModes,
+    zoom: zoomSteps.join(","),
+    speed,
+    durationMs,
+    runs,
+  },
 };
 const round = (_key: string, value: unknown) =>
   typeof value === "number" && !Number.isInteger(value) ? Math.round(value * 10) / 10 : value;
@@ -320,6 +359,7 @@ const reproduceEnv = [
   "VARIANTS",
   "TEXT",
   "LINKS",
+  "SCROLL",
   "FILE",
   "DPR",
   "START_SCALE",
@@ -340,7 +380,7 @@ const markdown = [
   `- Run at: ${environment.runAt}`,
   ...(label ? [`- Code: ${label}`] : []),
   `- Machine: ${environment.os}, ${environment.cpu}; power: ${power.source === "ac" && !power.lowPowerMode ? "AC" : `**${power.source}; not comparable with AC runs**`}; one-minute load average ${environment.loadAverage.start.toFixed(1)} at the start, ${environment.loadAverage.end.toFixed(1)} at the end; ${turnTakingSummary()}.`,
-  `- Method: ${file} at ${startScale === null ? "the fit-width zoom" : `${startScale} CSS px per point`} on a 1280×900 viewport at devicePixelRatio ${dpr}, once the first page is sharp and idle work is done. Zoom: ${zoomSteps.length === 1 ? `one ${zoomSteps[0]}× step` : `${zoomSteps.length} steps of ${[...new Set(zoomSteps)].join("×, ")}× 600 ms apart`}. Slow scroll: ${speed} CSS px per second for ${durationMs / 1000} seconds. Both end once the visible pages are sharp again plus 1.5 seconds for idle work. Task, script, layout, and style time come from Chromium's Performance.getMetrics; the profile lists JavaScript self time by file and function from a CPU profile sampled every 0.2 ms. Median of ${runs} runs.`,
+  `- Method: ${file} at ${startScale === null ? "the fit-width zoom" : typeof startScale === "string" ? `the ${startScale} zoom` : `${startScale} CSS px per point`}${process.env.SCROLL ? ` in ${scrollModes.join(" or ")} scroll mode` : ""} on a 1280×900 viewport at devicePixelRatio ${dpr}, once the first page is sharp and idle work is done. Zoom: ${zoomSteps.length === 1 ? `one ${zoomSteps[0]}× step` : `${zoomSteps.length} steps of ${[...new Set(zoomSteps)].join("×, ")}× 600 ms apart`}. Slow scroll: ${speed} CSS px per second for ${durationMs / 1000} seconds, sideways in horizontal mode. Both end once the visible pages are sharp again plus 1.5 seconds for idle work. Task, script, layout, and style time come from Chromium's Performance.getMetrics; the profile lists JavaScript self time by file and function from a CPU profile sampled every 0.2 ms. Median of ${runs} runs.`,
   `- Reproduce: \`pnpm --filter @parapdf/prototype exec vite build --minify false && ${reproduceEnv}node examples/prototype/scripts/main-thread-bench.ts\``,
   "",
   "| Scenario | Variant | Task (ms) | Script (ms) | Layout (ms) | Style (ms) | Renders: base / detail / text / text laid out again / links / cancelled |",
