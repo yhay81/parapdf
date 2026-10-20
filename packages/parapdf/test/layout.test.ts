@@ -5,7 +5,9 @@ import {
   computeLayout,
   intersectAreas,
   pageAt,
+  pageAtPoint,
   pageLeft,
+  rowBounds,
   turnBox,
   turnedSize,
   visibleArea,
@@ -111,5 +113,58 @@ describe("turnBox", () => {
   it("turns back to where it started", () => {
     const turned = turnBox(box, size, 90);
     assert.deepEqual(turnBox(turned, turnedSize(size, 90), 270), box);
+  });
+});
+
+describe("spreads", () => {
+  // Five US Letter pages and one A4 landscape page last, 10 CSS pixels apart.
+  const letter = { width: 612, height: 792 };
+  const pages = [letter, letter, letter, letter, letter, { width: 842, height: 595 }];
+
+  it("pairs pages in rows: odd from page 1, even after page 1 alone", () => {
+    assert.deepEqual(rowBounds("none", 3, 6), { first: 3, last: 3 });
+    assert.deepEqual(rowBounds("odd", 0, 6), { first: 0, last: 1 });
+    assert.deepEqual(rowBounds("odd", 3, 6), { first: 2, last: 3 });
+    assert.deepEqual(rowBounds("even", 0, 6), { first: 0, last: 0 });
+    assert.deepEqual(rowBounds("even", 2, 6), { first: 1, last: 2 });
+    // A last page without a partner stays alone.
+    assert.deepEqual(rowBounds("even", 5, 6), { first: 5, last: 5 });
+  });
+
+  it("lays pairs side by side and centers each page in its row's height", () => {
+    const layout = computeLayout(pages, 1, 10, 0, "odd");
+    assert.deepEqual([...layout.rowTops], [10, 10, 812, 812, 1614, 1614]);
+    assert.deepEqual([...layout.offsets], [0, 622, 0, 622, 0, 622]);
+    assert.deepEqual([...layout.rowWidths], [1234, 1234, 1234, 1234, 1464, 1464]);
+    // The landscape page is shorter than its partner: it sits in the middle.
+    assert.equal(layout.tops[5], 1614 + Math.round((792 - 595) / 2));
+    assert.equal(layout.totalHeight, 2416);
+    assert.equal(layout.totalWidth, 1484);
+  });
+
+  it("centers rows and places the second page after the first and the gap", () => {
+    const layout = computeLayout(pages, 1, 10, 0, "even");
+    assert.equal(pageLeft(layout, 0, 2000), (2000 - 612) / 2);
+    assert.equal(pageLeft(layout, 1, 2000), (2000 - 1234) / 2);
+    assert.equal(pageLeft(layout, 2, 2000), (2000 - 1234) / 2 + 622);
+    // A row wider than the viewport starts at the gap.
+    assert.equal(pageLeft(layout, 2, 1000), 10 + 622);
+  });
+
+  it("finds rows by their first page, and the page under a point", () => {
+    const layout = computeLayout(pages, 1, 10, 0, "odd");
+    assert.equal(pageAt(layout, 900), 2);
+    assert.equal(pageAtPoint(layout, 0, 900, 1254), 2);
+    assert.equal(pageAtPoint(layout, 1000, 900, 1254), 3);
+    assert.deepEqual(visibleRange(layout, 0, 900), { first: 0, last: 3 });
+    // A band that starts in the gap below a row begins with the next row.
+    assert.deepEqual(visibleRange(layout, 805, 100), { first: 2, last: 3 });
+  });
+
+  it("is the single-page layout without spreads", () => {
+    const layout = computeLayout(pages, 1, 10);
+    assert.deepEqual([...layout.rowTops], [...layout.tops]);
+    assert.deepEqual([...layout.offsets], [0, 0, 0, 0, 0, 0]);
+    assert.deepEqual([...layout.rowWidths], [...layout.widths]);
   });
 });

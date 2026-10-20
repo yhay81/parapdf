@@ -6,6 +6,57 @@ change the API.
 
 ## Unreleased
 
+What other React PDF viewers offer and ParaPDF lacked: forms, printing,
+thumbnails, encrypted documents, and the rest of a document viewer. Custom
+engines and code that switches over `status` or `zoomMode` need changes (see
+the last items).
+
+- Form fields the reader can fill in, with `forms: true`, through pdf.js's
+  annotation layer; `save()` returns the PDF with the values written in, and
+  `download()` hands it to the browser.
+- Comment popups show, styled as in pdf.js's viewer: they used to open as
+  unstyled, transparent text. Their icons come from `${assetBase}web/images/`
+  or the new `imageResourcesPath`, and are transparent without either: they
+  used to request a file from the application's own origin.
+- `print()` draws every page for printing, typed form values and the layers
+  the viewer shows included, and opens the print dialog with only those
+  pages.
+- `PdfThumbnail`, drawn after the pages in view and from their drawing when
+  the viewer has one; only thumbnails near view hold pixels.
+- Encrypted documents: `status` is `"password"` until `submitPassword()`
+  gets the right one, and `passwordReason` says whether the last one was
+  wrong. Sources take a `password`, which `PdfDocument` tries again when it
+  changes, and URL sources `httpHeaders` and `withCredentials`.
+- Load progress (`progress`), page labels (`pageLabels`), metadata
+  (`metadata`), and attachments (`attachments`, `getAttachmentContent()`,
+  `openAttachment()`, and the `openAttachment` option, which also handles
+  file attachment annotations).
+- Layers: `layers` and `setLayerVisible()`, per viewer, which links that
+  switch layers use too.
+- Two-page spreads (`spread`, `setSpread()`), "fit-page" zoom, `resetScale()`,
+  Ctrl or ⌘ with +, -, and 0 in the viewport, `initialPage`, and a hand tool
+  (`tool`, `setTool()`, `initialTool`).
+- Search options: `caseSensitive`, `entireWord`, and `matchDiacritics`.
+- `getSelection()` and `usePdfSelection()`: the selected text and the
+  rectangles it covers in PDF points, for highlights of your own.
+- A tagged PDF's structure gives text layers their headings, lists, tables,
+  and figures' alternative text for assistive technology, as in pdf.js's
+  viewer.
+- `pageColors` draws pages in two colors, for forced-colors mode.
+- A canvas stays hidden while it is drawn again: with pdf.js's renderer
+  worker (`rendererSrc`), a redraw used to show black until the worker's
+  first frame arrived, over the low-resolution page or in its place.
+- `ViewerState.status` has the new value `"password"`, and `ZoomMode`
+  `"fit-page"`. `Layout` describes rows: `rowTops`, `rowWidths`,
+  `rowHeights`, `offsets`, and `spread`.
+- The engine boundary grew: `PdfEngine.open()` takes `OpenOptions`
+  (progress, passwords, and an abort signal), and `PdfEngineDocument` has
+  `getPageLabels()`, `getMetadata()`, `getAttachments()`,
+  `getAttachmentContent()`, `save()`, and `createLayerState()`; render,
+  text layer, and annotation layer requests carry the print intent, form
+  layers, page colors, layer states, and a container for the structure tree.
+  Engines that wrap another must pass `open()`'s options on.
+
 ## 0.2.0 — 2026-10-20
 
 Canvas budgets that an embedding app can hold to: the sharp margin follows

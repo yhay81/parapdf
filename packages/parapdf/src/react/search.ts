@@ -1,11 +1,12 @@
 "use client";
 
 import { useMemo } from "react";
+import type { SearchOptions } from "../runtime/text-search.ts";
 import type { SearchState } from "../runtime/viewer.ts";
 import { usePdfState, usePdfViewer } from "./context.ts";
 
 export interface PdfSearch extends SearchState {
-  search(query: string): void;
+  search(query: string, options?: SearchOptions): void;
   next(): void;
   previous(): void;
   clear(): void;
@@ -18,7 +19,7 @@ export function usePdfSearch(): PdfSearch {
   return useMemo(
     () => ({
       ...state,
-      search: (query: string) => viewer.search(query),
+      search: (query: string, options?: SearchOptions) => viewer.search(query, options),
       next: () => viewer.nextMatch(),
       previous: () => viewer.previousMatch(),
       clear: () => viewer.clearSearch(),

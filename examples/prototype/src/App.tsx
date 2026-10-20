@@ -6,6 +6,7 @@ import {
   type PdfSource,
   PdfViewport,
   pdfjsDocumentOf,
+  type SpreadMode,
   usePdfDocument,
   usePdfNavigation,
   usePdfOutline,
@@ -17,8 +18,9 @@ import { Profiler, type ProfilerOnRenderCallback, Suspense, use, useEffect, useS
 import { preload } from "react-dom";
 import { BenchDriver } from "./BenchDriver.tsx";
 import { loadEngine } from "./engines.ts";
-import { OutlinePanel } from "./OutlinePanel.tsx";
+import { PasswordPrompt } from "./PasswordPrompt.tsx";
 import { SearchBox } from "./SearchBox.tsx";
+import { Sidebar, type SidebarView } from "./Sidebar.tsx";
 
 const params = new URLSearchParams(location.search);
 const settings = {
@@ -42,6 +44,21 @@ const settings = {
   preload: params.get("preload") !== "0",
   /** "data" opens the PDF from bytes the application fetched instead of from its URL. */
   source: params.get("source") === "data" ? "data" : "url",
+  /** The password the source carries; the viewer asks for one when it is absent or wrong. */
+  password: params.get("password"),
+  /** Form fields the reader can fill in. */
+  forms: params.get("forms") === "1",
+  /** "odd" or "even" shows pages side by side in pairs. */
+  spread: (["odd", "even"].includes(params.get("spread") ?? "")
+    ? params.get("spread")
+    : "none") as SpreadMode,
+  /** The one-based page shown first. */
+  initialPage: Number(params.get("page") ?? "1") - 1,
+  /** A scale in CSS pixels per point, "fit-width", or "fit-page". */
+  initialScale: ((value): ViewerOptions["initialScale"] =>
+    value === "fit-page" || value === "fit-width" ? value : value ? Number(value) : undefined)(
+    params.get("scale"),
+  ),
   /** CSS pixels per PDF point the zoom may reach; the runtime's default when absent. */
   maxScale: params.has("maxScale") ? Number(params.get("maxScale")) : undefined,
   /** More pdf.js getDocument parameters, as JSON. */
@@ -95,9 +112,9 @@ window.addEventListener("unhandledrejection", (event) => {
 function countEngineWork(engine: PdfEngine): PdfEngine {
   return {
     name: engine.name,
-    async open(source) {
+    async open(source, options) {
       engineStats.opens++;
-      const doc = await engine.open(source);
+      const doc = await engine.open(source, options);
       return {
         ...doc,
         destroy() {
@@ -126,6 +143,10 @@ const viewerOptions: ViewerOptions = {
   textLayer: settings.text,
   annotationLayer: settings.links,
   externalLinks: settings.externalLinks,
+  forms: settings.forms,
+  spread: settings.spread,
+  ...(settings.initialPage > 0 ? { initialPage: settings.initialPage } : {}),
+  ...(settings.initialScale !== undefined ? { initialScale: settings.initialScale } : {}),
   ...(settings.maxScale ? { maxScale: settings.maxScale } : {}),
   ...settings.canvasLimits,
 };
@@ -188,20 +209,22 @@ export function App() {
 function Viewer(_props: { renders: number }) {
   const engine = use(enginePromise);
   const data = use(bytesPromise);
-  const [outlineOpen, setOutlineOpen] = useState(false);
+  const [sidebar, setSidebar] = useState<SidebarView | null>(null);
   // A new object at every render: the document stays open while its URL or
   // its bytes stay the same.
-  const source: PdfSource = data ? { data } : { url };
+  const password = settings.password !== null ? { password: settings.password } : {};
+  const source: PdfSource = data ? { data, ...password } : { url, ...password };
   return (
     <Profiler id="viewer" onRender={countCommit}>
       <PdfDocument engine={engine} source={source} options={viewerOptions}>
         <Toolbar
-          outlineOpen={outlineOpen}
-          onToggleOutline={() => setOutlineOpen((open) => !open)}
+          sidebar={sidebar}
+          onToggleSidebar={(view) => setSidebar((open) => (open === view ? null : view))}
         />
-        {outlineOpen ? <OutlinePanel id="outline" /> : null}
+        <PasswordPrompt />
+        {sidebar ? <Sidebar view={sidebar} id="sidebar" /> : null}
         <PdfViewport
-          className={outlineOpen ? "viewport with-outline" : "viewport"}
+          className={sidebar ? "viewport with-sidebar" : "viewport"}
           {...(japanese ? { label: "PDF 文書", pageLabel } : {})}
           renderOverlay={renderOverlay}
         />
@@ -220,16 +243,18 @@ function Viewer(_props: { renders: number }) {
 }
 
 function Toolbar({
-  outlineOpen,
-  onToggleOutline,
+  sidebar,
+  onToggleSidebar,
 }: {
-  outlineOpen: boolean;
-  onToggleOutline: () => void;
+  sidebar: SidebarView | null;
+  onToggleSidebar: (view: SidebarView) => void;
 }) {
   const viewer = usePdfViewer();
   const navigation = usePdfNavigation();
   const outline = usePdfOutline();
   const hasOutline = outline !== null && outline.length > 0;
+  const hasLayers = usePdfState((state) => (state.layers?.length ?? 0) > 0);
+  const hasAttachments = usePdfState((state) => (state.attachments?.length ?? 0) > 0);
   const { back } = navigation;
 
   // Alt+Left returns from a link jump, as browsers do for pages.
@@ -250,28 +275,43 @@ function Toolbar({
   (window as { __pdfDocument?: unknown }).__pdfDocument = pdfjsDocumentOf(pdfDocument) ?? undefined;
   const status = usePdfState((state) => state.status);
   const error = usePdfState((state) => state.error);
+  const progress = usePdfState((state) => state.progress);
   const page = usePdfState((state) => state.currentPage);
   const pageCount = usePdfState((state) => state.pageCount);
+  const label = usePdfState((state) => state.pageLabels?.[state.currentPage] ?? null);
+  const title = usePdfState((state) => state.metadata?.title ?? null);
   const scale = usePdfState((state) => state.scale);
   const zoomMode = usePdfState((state) => state.zoomMode);
+  const spread = usePdfState((state) => state.spread);
+  const tool = usePdfState((state) => state.tool);
+  const sidebarButton = (view: SidebarView, text: string) => (
+    <button
+      type="button"
+      aria-expanded={sidebar === view}
+      aria-controls={sidebar === view ? "sidebar" : undefined}
+      onClick={() => onToggleSidebar(view)}
+    >
+      {text}
+    </button>
+  );
+  const pageText =
+    status === "ready"
+      ? `${label ?? page + 1} (${page + 1} / ${pageCount})`
+      : status === "loading" && progress
+        ? `Loading ${Math.round(progress.loaded / 1024)} KiB${progress.total ? ` of ${Math.round(progress.total / 1024)}` : ""}`
+        : (error ?? status);
   return (
     <header className="toolbar">
-      {hasOutline ? (
-        <button
-          type="button"
-          aria-expanded={outlineOpen}
-          aria-controls="outline"
-          onClick={onToggleOutline}
-        >
-          Outline
-        </button>
-      ) : null}
+      {hasOutline ? sidebarButton("outline", "Outline") : null}
+      {sidebarButton("thumbnails", "Thumbnails")}
+      {hasLayers ? sidebarButton("layers", "Layers") : null}
+      {hasAttachments ? sidebarButton("attachments", "Attachments") : null}
       <button type="button" onClick={back} disabled={!navigation.canGoBack}>
         Back
       </button>
-      <strong>ParaPDF prototype</strong>
+      <strong title={title ?? undefined}>ParaPDF prototype</strong>
       <span className="engine">{viewer.engineName}</span>
-      <span>{status === "ready" ? `${page + 1} / ${pageCount}` : (error ?? status)}</span>
+      <span>{pageText}</span>
       <button type="button" onClick={() => viewer.zoomBy(1 / 1.25)} aria-label="Zoom out">
         −
       </button>
@@ -287,11 +327,40 @@ function Toolbar({
       >
         Fit width
       </button>
+      <button
+        type="button"
+        aria-pressed={zoomMode === "fit-page"}
+        onClick={() => viewer.setScale("fit-page")}
+      >
+        Fit page
+      </button>
+      <select
+        aria-label="Spread"
+        value={spread}
+        onChange={(event) => viewer.setSpread(event.target.value as SpreadMode)}
+      >
+        <option value="none">Single pages</option>
+        <option value="odd">Odd spreads</option>
+        <option value="even">Even spreads</option>
+      </select>
+      <button
+        type="button"
+        aria-pressed={tool === "hand"}
+        onClick={() => viewer.setTool(tool === "hand" ? "select" : "hand")}
+      >
+        Hand tool
+      </button>
       <button type="button" onClick={() => viewer.rotate(-90)} aria-label="Rotate counterclockwise">
         ↺
       </button>
       <button type="button" onClick={() => viewer.rotate(90)} aria-label="Rotate clockwise">
         ↻
+      </button>
+      <button type="button" onClick={() => void viewer.print()} disabled={status !== "ready"}>
+        Print
+      </button>
+      <button type="button" onClick={() => void viewer.download()} disabled={status !== "ready"}>
+        Download
       </button>
       {viewer.textLayer ? <SearchBox /> : null}
     </header>

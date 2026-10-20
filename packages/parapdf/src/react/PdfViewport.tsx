@@ -59,6 +59,8 @@ export function PdfViewport({
           label={pageLabel(index + 1, pageCount)}
           top={layout.tops[index] ?? 0}
           gap={layout.gap}
+          rowWidth={layout.rowWidths[index] ?? 0}
+          offset={layout.offsets[index] ?? 0}
           width={layout.widths[index] ?? 0}
           height={layout.heights[index] ?? 0}
           scale={layout.scale}
@@ -112,6 +114,9 @@ interface PdfPageProps {
   top: number;
   /** Space between pages and around the document, in CSS pixels. */
   gap: number;
+  /** The width of the page's row, and the page's distance from the row's left edge. */
+  rowWidth: number;
+  offset: number;
   width: number;
   height: number;
   /** CSS pixels per PDF point; pdf.js's text layer reads it as `--total-scale-factor`. */
@@ -134,6 +139,8 @@ const PdfPage = memo(function PdfPage({
   label,
   top,
   gap,
+  rowWidth,
+  offset,
   width,
   height,
   scale,
@@ -147,12 +154,20 @@ const PdfPage = memo(function PdfPage({
   const detailRef = useRef<HTMLCanvasElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
   const annotationRef = useRef<HTMLDivElement>(null);
+  const structureRef = useRef<HTMLCanvasElement>(null);
 
   useLayoutEffect(() => {
     const base = baseRef.current;
     const detail = detailRef.current;
     if (!base || !detail) return;
-    return runtime.attachPage(index, base, detail, textRef.current, annotationRef.current);
+    return runtime.attachPage(
+      index,
+      base,
+      detail,
+      textRef.current,
+      annotationRef.current,
+      structureRef.current,
+    );
   }, [runtime, index]);
 
   return (
@@ -164,8 +179,8 @@ const PdfPage = memo(function PdfPage({
         {
           position: "absolute",
           top,
-          // Centered in the viewport, at the gap when wider: pageLeft() in layout.ts.
-          left: `max(${gap}px, calc((100cqw - ${width}px) / 2))`,
+          // Its row centered in the viewport, at the gap when wider: pageLeft() in layout.ts.
+          left: `calc(max(${gap}px, (100cqw - ${rowWidth}px) / 2) + ${offset}px)`,
           width,
           height,
           background: "#fff",
@@ -182,6 +197,11 @@ const PdfPage = memo(function PdfPage({
         <canvas ref={baseRef} style={layerStyle} />
         <canvas ref={detailRef} style={layerStyle} />
       </div>
+      {textLayer ? (
+        // A tagged page's structure, as pdf.js's viewer keeps it: a canvas's
+        // fallback content is read by assistive technology but never drawn.
+        <canvas ref={structureRef} className="parapdf-structure" width={0} height={0} />
+      ) : null}
       {textLayer ? <div ref={textRef} className="parapdf-text-layer" /> : null}
       {annotationLayer ? <div ref={annotationRef} className="parapdf-annotation-layer" /> : null}
       {overlay ? (

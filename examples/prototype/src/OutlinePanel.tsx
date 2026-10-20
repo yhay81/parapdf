@@ -5,7 +5,7 @@ export function OutlinePanel({ id }: { id: string }) {
   const outline = usePdfOutline();
   if (!outline || outline.length === 0) return null;
   return (
-    <nav id={id} className="outline" aria-label="Document outline">
+    <nav id={id} className="sidebar outline" aria-label="Document outline">
       <OutlineList items={outline} />
     </nav>
   );

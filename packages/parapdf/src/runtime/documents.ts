@@ -1,4 +1,4 @@
-import type { PdfEngine, PdfEngineDocument, PdfSource } from "../engine/types.ts";
+import type { PasswordReason, PdfEngine, PdfEngineDocument, PdfSource } from "../engine/types.ts";
 
 /**
  * Loaded documents shared by every viewer of the same source. React
@@ -6,14 +6,28 @@ import type { PdfEngine, PdfEngineDocument, PdfSource } from "../engine/types.ts
  * viewers when routes or layouts change; without sharing, every mount would
  * download and parse the PDF again. A document is destroyed once its last
  * viewer has released it and no viewer has acquired it again within
- * RELEASE_DELAY_MS.
+ * RELEASE_DELAY_MS; one still loading, or waiting for a password, stops
+ * loading then.
  */
 const RELEASE_DELAY_MS = 1000;
 
+/** What a viewer hears about a document while it loads. */
+export interface DocumentListener {
+  onProgress?(loaded: number, total: number | null): void;
+  /** The document needs a password: any viewer of it may submit one. */
+  onPassword?(reason: PasswordReason): void;
+}
+
 interface Entry {
-  readonly document: Promise<PdfEngineDocument>;
+  document: Promise<PdfEngineDocument>;
+  readonly abort: AbortController;
+  readonly listeners: Set<DocumentListener>;
   users: number;
   releaseTimer: ReturnType<typeof setTimeout> | undefined;
+  /** The latest progress, for viewers that join while the document loads. */
+  progress: { loaded: number; total: number | null } | null;
+  /** The engine's request for a password, until a viewer answers it. */
+  passwordRequest: { reason: PasswordReason; answer(password: string | null): void } | null;
 }
 
 export interface DocumentLease {
@@ -21,16 +35,27 @@ export interface DocumentLease {
   readonly document: Promise<PdfEngineDocument>;
   /** Gives the document back. Call it once, even before the document loads. */
   release(): void;
+  /**
+   * Answers the document's request for a password: the password to try, or
+   * null to stop opening it. Nothing happens while no request is pending.
+   */
+  submitPassword(password: string | null): void;
 }
 
 const registries = new WeakMap<PdfEngine, Map<unknown, Entry>>();
 
 /**
- * What identifies a source: its URL, or the identity of its bytes. Sources
- * with equal keys share one loaded document.
+ * What identifies a source: its URL with the request's headers and
+ * credentials mode, or the identity of its bytes. Sources with equal keys
+ * share one loaded document; the password is not part of the key.
  */
-export const sourceKey = (source: PdfSource): unknown =>
-  "url" in source ? `url:${source.url}` : source.data;
+export const sourceKey = (source: PdfSource): unknown => {
+  if (!("url" in source)) return source.data;
+  const { url, httpHeaders, withCredentials } = source;
+  if (!httpHeaders && withCredentials === undefined) return `url:${url}`;
+  const headers = Object.entries(httpHeaders ?? {}).sort(([a], [b]) => (a < b ? -1 : 1));
+  return `url:${url} ${JSON.stringify([headers, withCredentials ?? false])}`;
+};
 
 function registryOf(engine: PdfEngine): Map<unknown, Entry> {
   let registry = registries.get(engine);
@@ -41,7 +66,49 @@ function registryOf(engine: PdfEngine): Map<unknown, Entry> {
   return registry;
 }
 
-export function acquireDocument(engine: PdfEngine, source: PdfSource): DocumentLease {
+function openEntry(engine: PdfEngine, source: PdfSource): Entry {
+  const entry: Entry = {
+    // Replaced at once: the engine's callbacks need the entry before open() returns.
+    document: new Promise<PdfEngineDocument>(() => {}),
+    abort: new AbortController(),
+    listeners: new Set(),
+    users: 0,
+    releaseTimer: undefined,
+    progress: null,
+    passwordRequest: null,
+  };
+  entry.document = engine.open(source, {
+    signal: entry.abort.signal,
+    onProgress(loaded, total) {
+      entry.progress = { loaded, total };
+      for (const listener of entry.listeners) listener.onProgress?.(loaded, total);
+    },
+    password(reason) {
+      return new Promise<string | null>((resolve) => {
+        if (entry.abort.signal.aborted) {
+          resolve(null);
+          return;
+        }
+        const request = {
+          reason,
+          answer(password: string | null) {
+            if (entry.passwordRequest === request) entry.passwordRequest = null;
+            resolve(password);
+          },
+        };
+        entry.passwordRequest = request;
+        for (const listener of entry.listeners) listener.onPassword?.(reason);
+      });
+    },
+  });
+  return entry;
+}
+
+export function acquireDocument(
+  engine: PdfEngine,
+  source: PdfSource,
+  listener: DocumentListener = {},
+): DocumentLease {
   const registry = registryOf(engine);
   const key = sourceKey(source);
   let entry = registry.get(key);
@@ -49,7 +116,7 @@ export function acquireDocument(engine: PdfEngine, source: PdfSource): DocumentL
     clearTimeout(entry.releaseTimer);
     entry.releaseTimer = undefined;
   } else {
-    const created: Entry = { document: engine.open(source), users: 0, releaseTimer: undefined };
+    const created = openEntry(engine, source);
     registry.set(key, created);
     // Forget a failed open at once, so the next viewer tries again.
     created.document.catch(() => {
@@ -59,17 +126,28 @@ export function acquireDocument(engine: PdfEngine, source: PdfSource): DocumentL
   }
   const held = entry;
   held.users++;
+  held.listeners.add(listener);
+  // A viewer that joins late hears what the others already heard.
+  if (held.progress) listener.onProgress?.(held.progress.loaded, held.progress.total);
+  if (held.passwordRequest) listener.onPassword?.(held.passwordRequest.reason);
   let released = false;
   return {
     document: held.document,
+    submitPassword(password) {
+      if (!released) held.passwordRequest?.answer(password);
+    },
     release() {
       if (released) return;
       released = true;
+      held.listeners.delete(listener);
       held.users--;
       if (held.users > 0) return;
       held.releaseTimer = setTimeout(() => {
         if (held.users > 0 || registry.get(key) !== held) return;
         registry.delete(key);
+        // Stops a load still in progress, or waiting for a password.
+        held.abort.abort();
+        held.passwordRequest?.answer(null);
         held.document
           .then((document) => document.destroy())
           .catch(() => {
