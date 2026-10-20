@@ -214,8 +214,8 @@ about 20 ms as noise.
   links, overlays, search highlights, and link jumps follow.
   [`check-rotation.ts`](examples/prototype/scripts/check-rotation.ts) verifies
   them in all three browsers. `usePdfDocument()` exposes the open document,
-  and `pdfjsDocumentOf()` turns it into pdf.js's `PDFDocumentProxy` for the
-  APIs ParaPDF does not wrap.
+  now pdf.js's `PDFDocumentProxy` itself, for the APIs ParaPDF does not
+  wrap.
 - **Embedding options (2026-10-20).** Trying the runtime as the PDF preview
   of a web app that shows uploaded drawings and documents showed what such an
   app needs; [`check-options.ts`](examples/prototype/scripts/check-options.ts)
@@ -258,7 +258,7 @@ about 20 ms as noise.
   pages fill leaves nothing for the next page: scrolling a 24-page document
   at 900 CSS pixels per second showed 8 blank frames in 4 seconds at 6 MP,
   as before, and none at 16 MP, in Chromium and WebKit.
-- **GPU-backed canvases (2026-10-20).** `createPdfjsEngine` now asks pdf.js
+- **GPU-backed canvases (2026-10-20).** The pdf.js engine now asks pdf.js
   for GPU-backed canvases unless `enableHWA` is `false`.
   [`hwa-bench.ts`](examples/prototype/scripts/hwa-bench.ts) opens a document
   at 1280 by 900 CSS pixels and devicePixelRatio 2, scrolls for 3 seconds,
@@ -452,8 +452,20 @@ about 20 ms as noise.
   PDF needs them, and Playwright's WebKit, which keeps no HTTP cache,
   downloads a preloaded PDF twice; whether Safari takes the preload is not
   verified yet.
-- **Not yet built.** Form filling, structure-tree semantics for tagged PDFs,
-  and text for pages outside the mounted window.
+- **What a document viewer does (2026-10-20).** ParaPDF now has what other
+  React PDF viewers have (react-pdf 11, EmbedPDF, pdf.js's own viewer, and
+  react-pdf-viewer): fillable forms that save into the PDF, comment popups,
+  printing, thumbnails, encrypted documents, load progress, page labels,
+  metadata, attachments, layers, two-page spreads, pdf.js's scroll modes
+  (sideways, in rows, and a page at a time), "fit-page", the hand tool,
+  search options, selections in PDF points, and tagged structure for
+  assistive technology.
+  [`check-features.ts`](examples/prototype/scripts/check-features.ts) and
+  [`check-scroll.ts`](examples/prototype/scripts/check-scroll.ts) verify them
+  in Chromium, WebKit, and Firefox on the shipped pdf.js.
+- **Not yet built.** Annotation editing, form scripts (pdf.js's sandbox), XFA
+  forms, text for pages outside the mounted window, and a highlight fallback
+  for browsers without the CSS Custom Highlight API.
 
 ## License
 
