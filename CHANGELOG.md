@@ -6,6 +6,34 @@ change the API.
 
 ## Unreleased
 
+pdf.js comes with ParaPDF: `<PdfDocument source="/manual.pdf">` is all an
+application writes. This changes the API.
+
+- ParaPDF depends on pdfjs-dist 6.4.299 exactly, no longer as a peer, and
+  ships its worker and the files it loads on demand: CMaps, the Symbol and
+  ZapfDingbats fonts, the JPEG 2000 and JBIG2 decoders, and the ICC profile
+  and decoder for CMYK colors. Vite, webpack, Rsbuild, and Next.js copy them
+  to the build output; esbuild, Bun, and Parcel need a copy and
+  `configurePdfjs({ assetBase })`.
+- `PdfDocument` no longer takes `engine`, and `createPdfjsEngine`, the
+  engine types, `isRenderCancelled`, and `RenderCancelledError` are no longer
+  exported. The first `PdfDocument` loads pdf.js; `configurePdfjs()` sets
+  what `createPdfjsEngine` took (`enableHWA`, `documentOptions`, another
+  build with `pdfjs` and `workerSrc`, `assetBase`, `rendererSrc`), and
+  `preloadPdfjs()` loads pdf.js before it is needed.
+- `PdfDocument` starts downloading its PDF while it renders, on the server
+  too, with a preload that pdf.js's request takes over, and the shipped
+  worker starts while pdf.js's module still loads. With 100 ms added to
+  every request and 20 Mbit/s in Chromium, page 1 showed 115–129 ms sooner
+  than with 0.2.0 set up as its README said, and within 3–16 ms of 0.2.0
+  with pdf.js in the main bundle and a preload written by hand.
+- `source` takes a URL as a string.
+- `usePdfDocument()` returns pdf.js's `PDFDocumentProxy`, and
+  `pdfjsDocumentOf()` is gone.
+- Components that render `PdfDocument` need no browser-only wrapper such as
+  `next/dynamic`: pdf.js loads only in the browser, and out of the bundle
+  that renders the page.
+
 ## 0.2.0 — 2026-10-20
 
 Canvas budgets that an embedding app can hold to: the sharp margin follows

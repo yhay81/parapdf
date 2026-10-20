@@ -12,7 +12,8 @@
     "check:rotation": "node scripts/check-rotation.ts",
     "check:options": "node scripts/check-options.ts",
     "check:pinch": "node scripts/check-pinch.ts",
-    "typecheck": "tsc -p ."
+    "typecheck": "tsc -p .",
+    "check:bundle": "node scripts/check-bundle.ts"
   },
   "dependencies": {
     "parapdf": "workspace:*",

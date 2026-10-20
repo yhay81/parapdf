@@ -111,7 +111,7 @@ try {
     const devUrl = dev.resolvedUrls?.local[0] ?? "http://127.0.0.1:4189/";
     const { page, errors } = await openPage(
       launched.browser,
-      `${devUrl}?engine=${engine}&file=bill-hr815.pdf`,
+      `${devUrl}?engine=${engine}&count=1&file=bill-hr815.pdf`,
     );
     const first = await snapshot(page);
     check(
@@ -151,7 +151,7 @@ try {
     const baseUrl = server.resolvedUrls?.local[0] ?? "http://127.0.0.1:4184/";
     const { page, errors } = await openPage(
       launched.browser,
-      `${baseUrl}?engine=${engine}&file=synthetic-text-1000.pdf`,
+      `${baseUrl}?engine=${engine}&count=1&file=synthetic-text-1000.pdf`,
     );
     // Search all 1,000 pages and close the viewer while it runs, along with
     // the page-size pass and any renders still in flight.
@@ -206,7 +206,7 @@ try {
     // a document resets.
     const equal = await openPage(
       launched.browser,
-      `${baseUrl}?engine=${engine}&file=bill-hr815.pdf`,
+      `${baseUrl}?engine=${engine}&count=1&file=bill-hr815.pdf`,
     );
     const rotation = () =>
       equal.page.evaluate(() => {
@@ -233,7 +233,7 @@ try {
     // and the same bytes could not open again once their document was gone.
     const data = await openPage(
       launched.browser,
-      `${baseUrl}?engine=${engine}&file=bill-hr815.pdf&source=data`,
+      `${baseUrl}?engine=${engine}&count=1&file=bill-hr815.pdf&source=data`,
     );
     const bytes = () => data.page.evaluate(() => window.__lifecycle?.sourceBytes() ?? null);
     const loadedBytes = await bytes();
