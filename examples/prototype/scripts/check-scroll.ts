@@ -549,7 +549,14 @@ try {
         await still(page);
       }
       await frames(page);
-      flips.push(`${key} ${await shownFirst()}`);
+      const after = await page.evaluate(() => {
+        const scroller = document.querySelector(".parapdf-viewport") as HTMLElement;
+        const viewer = (window as unknown as Demo).__viewer as unknown as {
+          store: { get(): { currentPage: number } };
+        };
+        return `scroll ${scroller.scrollLeft},${scroller.scrollTop} of ${scroller.scrollWidth}x${scroller.scrollHeight} in ${scroller.clientWidth}x${scroller.clientHeight}, current ${viewer.store.get().currentPage}`;
+      });
+      flips.push(`${key} ${await shownFirst()} (${after})`);
       return shownFirst();
     };
     const keys =

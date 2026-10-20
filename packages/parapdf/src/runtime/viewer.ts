@@ -1126,10 +1126,13 @@ export class PdfViewerRuntime {
     const scroller = this.#scroller;
     if (!layout || !scroller) return false;
     const count = layout.tops.length;
+    // In "page" mode, from the row shown: the current page follows it a
+    // frame later, so a key pressed before then flipped to the same row.
     const row =
-      layout.scrollMode === "horizontal"
+      layout.shown ??
+      (layout.scrollMode === "horizontal"
         ? rowBounds(spread, currentPage, count)
-        : { first: rowStart(layout, currentPage), last: rowEnd(layout, currentPage) };
+        : { first: rowStart(layout, currentPage), last: rowEnd(layout, currentPage) });
     const target = direction > 0 ? row.last + 1 : row.first - 1;
     if (target < 0 || target >= count) return false;
     const { scrollLeft, scrollTop } = scroller;

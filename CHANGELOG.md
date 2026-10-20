@@ -4,6 +4,12 @@ Changes to the `parapdf` package. It follows
 [Semantic Versioning](https://semver.org/); until 1.0, a minor release may
 change the API.
 
+## Unreleased
+
+- In `"page"` mode, a key pressed right after a flip flips from the row
+  shown: it flipped from the current page, which follows the row a frame
+  later, and so could show the same row again.
+
 ## 0.3.0 — 2026-10-20
 
 pdf.js comes with ParaPDF: `<PdfDocument source="/manual.pdf">` is all an
