@@ -724,6 +724,22 @@ with the API.
   `@embedpdf/pdfium` API in a worker, without fallback fonts), and `hayro`
   (wasm-bindgen wrapper with simd128, embedded Standard 14 fonts and CMaps).
   `-hwa` variants set `enableHWA` for a GPU-backed canvas.
+- A hybrid engine, measured on 2026-10-18 and 19 and not shipped, drew
+  image-only pages (scans) with hayro and everything else with pdf.js: a
+  hayro-syntax classifier in the worker sent a page to hayro when it had no
+  visible text, an image over half its crop box, at most 64 path segments,
+  no shadings, and no annotation appearances. Against `pdfjs-next-hwa`, the three
+  scans showed their first paint 10–124 ms sooner and base renders took a
+  third to two thirds of the time, but detail renders took 3–9 times as long
+  in Chromium and up to twice as long in WebKit and Firefox, since hayro
+  decodes a page's images for every render where pdf.js keeps them; hayro's
+  wasm memory grew by 51–103 MiB per scan and never shrank, and Firefox's
+  main thread was blocked 4–6 times longer while scrolling two of the scans. Results:
+  `examples/prototype/results/hybrid*.md`. The code, its benchmark and
+  checks, and a benchmark of ways to show worker bitmaps are kept in the tags
+  `experiment/hybrid-hayro` and `experiment/hybrid-hayro-decode-once` (which
+  rendered a hayro page once for both canvas layers, unmeasured); both start
+  from the API before the engine became internal.
 - Worker engines transfer an ImageBitmap and display it through a
   `bitmaprenderer` context, so no engine pays an extra main-thread copy.
 - "Visible" is the time until pixels are committed to the canvas plus two
