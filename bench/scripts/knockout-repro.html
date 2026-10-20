@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>pdf.js knockout group cost</title>
+    <style>
+      body {
+        font: 13px system-ui, sans-serif;
+        margin: 16px;
+      }
+      canvas {
+        display: block;
+        max-width: 100%;
+        max-height: 60vh;
+        margin-top: 8px;
+        border: 1px solid #ccc;
+      }
+    </style>
+  </head>
+  <body>
+    <p>
+      Renders one page with pdf.js's display API (<code>getDocument</code> and
+      <code>PDFPageProxy.render</code>) and times every <code>drawImage</code> call, on the main
+      thread and, with pdf.js master's renderer worker, in that worker. Calls that read the canvas
+      being rendered are the knockout backdrop copies in <code>#compositeKnockoutSurface</code>.
+      Opened by hand, it renders once to warm up and then <code>runs</code> times, and prints the
+      timings; for the case in the issue, open it with <code>?hwa=0&amp;region=0,0,5000,3360</code>
+      and again with <code>&amp;annotations=0</code> added.
+    </p>
+    <p>
+      Query parameters: <code>lib</code>, <code>worker</code>, and <code>renderer</code> (pdf.js
+      scripts; <code>renderer</code> enables master's renderer worker), <code>assets</code> (the
+      directory holding <code>cmaps/</code> and <code>standard_fonts/</code>), <code>file</code>,
+      <code>page</code>, <code>hwa</code> (1 or 0), <code>scale</code> (device pixels per PDF
+      point), <code>region</code> (<code>x,y,width,height</code> in device pixels; the whole page
+      when absent), <code>annotations</code> (1 or 0), <code>probe</code> (1 to time reading one
+      pixel of the canvas right after each render), and <code>runs</code>.
+    </p>
+    <pre id="log">Loading…</pre>
+    <div id="output"></div>
+    <script type="module">
+      const params = new URLSearchParams(location.search);
+      const option = (name, fallback) => params.get(name) ?? fallback;
+      const absolute = (url) => new URL(url, location.href).href;
+      const libUrl = absolute(option("lib", "pdfjs-dist/build/pdf.mjs"));
+      const workerUrl = absolute(option("worker", libUrl.replace(/pdf\.mjs$/, "pdf.worker.mjs")));
+      const rendererUrl = params.has("renderer") ? absolute(params.get("renderer")) : null;
+      const assets = absolute(option("assets", "pdfjs-dist/"));
+      const file = option("file", "BILLS-118hr815enr.pdf");
+      const pageNumber = Number(option("page", "1"));
+      const hwa = option("hwa", "1") === "1";
+      const scale = Number(option("scale", "8"));
+      const region = params.get("region")?.split(",").map(Number) ?? null;
+      const annotations = option("annotations", "1") === "1";
+      const probe = option("probe", "0") === "1";
+      const runs = Number(option("runs", "5"));
+      const log = document.getElementById("log");
+      const output = document.getElementById("output");
+
+      // Every drawImage call on the main thread while a render runs:
+      // [milliseconds, source width, source height, destination width,
+      // destination height, whether the source is the canvas being rendered].
+      let target = null;
+      let mainCalls = null;
+      const { drawImage } = CanvasRenderingContext2D.prototype;
+      CanvasRenderingContext2D.prototype.drawImage = function (image, ...rest) {
+        if (!mainCalls) return drawImage.call(this, image, ...rest);
+        const start = performance.now();
+        try {
+          return drawImage.call(this, image, ...rest);
+        } finally {
+          const ms = performance.now() - start;
+          const { width, height } = this.canvas;
+          mainCalls.push([ms, image.width, image.height, width, height, image === target]);
+        }
+      };
+
+      const pdfjs = await import(libUrl);
+      pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+
+      // The same in master's renderer worker, which draws into OffscreenCanvases:
+      // a wrapper module patches the worker's drawImage and reports the calls
+      // over a BroadcastChannel, apart from pdf.js's own messages.
+      const channel = new BroadcastChannel("knockout-repro");
+      if (rendererUrl) {
+        const wrapper = `
+          import ${JSON.stringify(rendererUrl)};
+          const channel = new BroadcastChannel("knockout-repro");
+          let calls = [];
+          const { drawImage } = OffscreenCanvasRenderingContext2D.prototype;
+          OffscreenCanvasRenderingContext2D.prototype.drawImage = function (image, ...rest) {
+            const start = performance.now();
+            try {
+              return drawImage.call(this, image, ...rest);
+            } finally {
+              const ms = performance.now() - start;
+              const { width, height } = this.canvas;
+              calls.push([ms, image.width, image.height, width, height, false]);
+            }
+          };
+          channel.onmessage = ({ data }) => {
+            if (data !== "flush") return;
+            channel.postMessage(calls);
+            calls = [];
+          };
+        `;
+        pdfjs.GlobalWorkerOptions.rendererSrc = URL.createObjectURL(
+          new Blob([wrapper], { type: "text/javascript" }),
+        );
+      }
+      const flushWorker = () =>
+        new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error("The renderer worker did not answer")), 5000);
+          channel.onmessage = ({ data }) => {
+            clearTimeout(timeout);
+            resolve(data);
+          };
+          channel.postMessage("flush");
+        });
+
+      const loadingTask = pdfjs.getDocument({
+        url: file,
+        enableHWA: hwa,
+        // pdf.js master draws in its renderer worker unless this is set; it
+        // falls back to the main thread anyway when rendererSrc is unset.
+        disableWorkerRendering: !rendererUrl,
+        cMapUrl: `${assets}cmaps/`,
+        cMapPacked: true,
+        standardFontDataUrl: `${assets}standard_fonts/`,
+        wasmUrl: `${assets}wasm/`,
+        iccUrl: `${assets}iccs/`,
+      });
+      const doc = await loadingTask.promise;
+      const page = await doc.getPage(pageNumber);
+      const viewport = page.getViewport({ scale });
+      const [x, y, width, height] = region ?? [
+        0,
+        0,
+        Math.floor(viewport.width),
+        Math.floor(viewport.height),
+      ];
+
+      const median = (values) => {
+        const sorted = [...values].sort((a, b) => a - b);
+        const mid = Math.floor(sorted.length / 2);
+        if (sorted.length === 0) return null;
+        return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+      };
+      const sum = (values) => values.reduce((total, value) => total + value, 0);
+
+      const summarize = (calls, isBackdrop) => {
+        const backdrop = calls.filter(isBackdrop);
+        const times = backdrop.map((call) => call[0]);
+        // Calls grouped by source and destination size, slowest first.
+        const bySize = new Map();
+        for (const [ms, sourceWidth, sourceHeight, destWidth, destHeight] of calls) {
+          const key = `${sourceWidth}×${sourceHeight} → ${destWidth}×${destHeight}`;
+          const entry = bySize.get(key) ?? { key, calls: 0, ms: 0, maxMs: 0 };
+          entry.calls++;
+          entry.ms += ms;
+          entry.maxMs = Math.max(entry.maxMs, ms);
+          bySize.set(key, entry);
+        }
+        return {
+          drawImageCalls: calls.length,
+          drawImageMs: sum(calls.map((call) => call[0])),
+          backdropCalls: backdrop.length,
+          backdropMs: sum(times),
+          backdropFirstMs: times[0] ?? null,
+          backdropRestMedianMs: median(times.slice(1)),
+          // Destination size of the copies: the knockout group's own canvas.
+          backdropCopy: backdrop.length ? [backdrop[0][3], backdrop[0][4]] : null,
+          backdropCallMs: times.map((ms) => Math.round(ms * 1000) / 1000),
+          bySize: [...bySize.values()].sort((a, b) => b.ms - a.ms),
+        };
+      };
+      const nextFrame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+
+      const probeCanvas = document.createElement("canvas");
+      probeCanvas.width = probeCanvas.height = 1;
+      let lastCanvas = null;
+      async function render() {
+        if (lastCanvas) {
+          // Release the previous canvas's memory, as pdf.js's viewer does.
+          lastCanvas.width = lastCanvas.height = 0;
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        output.replaceChildren(canvas);
+        lastCanvas = canvas;
+        target = canvas;
+        mainCalls = [];
+        const start = performance.now();
+        const task = page.render({
+          canvas,
+          viewport,
+          transform: region ? [1, 0, 0, 1, -x, -y] : null,
+          annotationMode: annotations ? pdfjs.AnnotationMode.ENABLE : pdfjs.AnnotationMode.DISABLE,
+        });
+        await task.promise;
+        const renderMs = performance.now() - start;
+        const calls = mainCalls;
+        mainCalls = null;
+        let probeMs = null;
+        if (probe) {
+          // Reads one pixel of the canvas just rendered, the way a backdrop copy
+          // does, before the browser has presented it.
+          const probeStart = performance.now();
+          probeCanvas.getContext("2d").drawImage(canvas, 0, 0, 1, 1, 0, 0, 1, 1);
+          probeMs = performance.now() - probeStart;
+        }
+        // Work the browser defers past the render, such as flushing the canvas
+        // for display, happens by the second frame after it.
+        await nextFrame();
+        await nextFrame();
+        const settledMs = performance.now() - start;
+        const workerRendering = Boolean(task._internalRenderTask?.isWorkerRendering);
+        const result = {
+          renderMs,
+          settledMs,
+          probeMs,
+          workerRendering,
+          // Backdrop copies read the canvas being rendered.
+          main: summarize(calls, (call) => call[5]),
+        };
+        if (workerRendering) {
+          // In the worker, that canvas is recognized by its size: a full-size
+          // source drawn into a smaller canvas.
+          const workerCalls = await flushWorker();
+          result.worker = summarize(
+            workerCalls,
+            (call) => call[1] === width && call[2] === height && call[3] * call[4] < width * height,
+          );
+        }
+        return result;
+      }
+
+      const gl = document.createElement("canvas").getContext("webgl");
+      // Firefox deprecated the extension; its RENDERER is not masked.
+      const info = /Firefox/.test(navigator.userAgent)
+        ? null
+        : gl?.getExtension("WEBGL_debug_renderer_info");
+      const environment = {
+        userAgent: navigator.userAgent,
+        gpu: gl ? gl.getParameter(info ? info.UNMASKED_RENDERER_WEBGL : gl.RENDERER) : "unknown",
+        crossOriginIsolated,
+        pdfjs: `${pdfjs.version} (${pdfjs.build})`,
+        canvas: [width, height],
+      };
+      // RGBA bytes of part of the last rendered canvas, base64-encoded, to
+      // compare the output of two builds.
+      const pixels = (rect) => {
+        const { data } = lastCanvas.getContext("2d").getImageData(...rect);
+        let binary = "";
+        for (let i = 0; i < data.length; i += 0x8000) {
+          binary += String.fromCharCode(...data.subarray(i, i + 0x8000));
+        }
+        return btoa(binary);
+      };
+      // A Playwright driver calls render() itself; opened by hand, the page runs
+      // one warm-up render and `runs` measured ones.
+      window.repro = { environment, render, pixels };
+      if (navigator.webdriver) {
+        log.textContent = "Ready";
+      } else {
+        const header = JSON.stringify(environment, null, 1);
+        log.textContent = `${header}\n\nWarm-up render…`;
+        await render();
+        const lines = [];
+        for (let run = 1; run <= runs; run++) {
+          const { renderMs, main, worker } = await render();
+          const busy = worker ?? main;
+          lines.push(
+            `run ${run}: render ${renderMs.toFixed(1)} ms; ${worker ? "renderer worker" : "main thread"}: drawImage ${busy.drawImageCalls} calls, ${busy.drawImageMs.toFixed(1)} ms; backdrop copies ${busy.backdropCalls} calls, ${busy.backdropMs.toFixed(1)} ms (first ${busy.backdropFirstMs?.toFixed(2) ?? "-"} ms, then a median of ${busy.backdropRestMedianMs?.toFixed(3) ?? "-"} ms)`,
+          );
+          log.textContent = `${header}\n\n${lines.join("\n")}`;
+        }
+      }
+    </script>
+  </body>
+</html>
