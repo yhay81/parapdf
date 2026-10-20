@@ -4,7 +4,7 @@ Changes to the `parapdf` package. It follows
 [Semantic Versioning](https://semver.org/); until 1.0, a minor release may
 change the API.
 
-## Unreleased
+## 0.3.0 — 2026-10-20
 
 pdf.js comes with ParaPDF: `<PdfDocument source="/manual.pdf">` is all an
 application writes. ParaPDF also gains what other React PDF viewers offer and
