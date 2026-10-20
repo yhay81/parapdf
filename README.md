@@ -336,9 +336,9 @@ browser, and treat differences under about 20 ms as noise.
   CSS pixels, against 208 for the build before the change in the same run,
   and every page in view showed pixels before the fingers lifted, where that
   build drew the page under the band 101 ms after the lift. With released
-  pdf.js, a zoom's commit there still turns pages white for 80 to 175 ms,
-  before the change as after it, apparently because a full-resolution
-  redraw fills its canvas white and covers the base until it finishes.
+  pdf.js, a zoom's commit there turned pages white for 80 to 175 ms, before
+  the change as after it: a full-resolution redraw filled its canvas white
+  and covered the base until it finished (see Zoom commits below).
 - **Two-finger drags that zoomed (2026-10-20).** Two touches only pan until
   the distance between them changes by 16 CSS pixels. The runtime measured
   that distance at each finger's move, but browsers deliver the two
