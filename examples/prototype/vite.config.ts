@@ -72,6 +72,8 @@ export default defineConfig(({ command }) => ({
       input: {
         main: join(exampleDir, "index.html"),
         calibrate: join(exampleDir, "calibrate.html"),
+        // bitmaps.html measures ways of showing worker bitmaps (bitmap-bench.ts).
+        bitmaps: join(exampleDir, "bitmaps.html"),
       },
     },
   },

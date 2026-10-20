@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>ParaPDF bitmap display benchmark</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #6b6b6b;
+      }
+      #scroller {
+        position: absolute;
+        inset: 0;
+        overflow: auto;
+      }
+      #content {
+        position: relative;
+      }
+      .page {
+        position: absolute;
+        left: 0;
+        right: 0;
+        margin: 0 auto;
+        background: #fff;
+        contain: strict;
+      }
+      .page canvas {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="scroller"><div id="content"></div></div>
+    <script type="module" src="/src/bitmaps.ts"></script>
+  </body>
+</html>
