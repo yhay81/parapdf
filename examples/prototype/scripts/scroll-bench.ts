@@ -2,13 +2,15 @@
  * Scripted scroll benchmark for the runtime prototype. Each job measures the
  * browser's idle baseline on calibrate.html, opens the demo in the same fresh
  * page at devicePixelRatio 2, waits for the first page, scrolls at a constant
- * speed, and records blank area, main-thread lag, dropped frames, React
- * commits, and render counts.
+ * speed along the direction pages follow each other, and records blank area,
+ * main-thread lag, dropped frames, React commits, the store's window and
+ * current-page changes, and render counts.
  *
  * Usage: pnpm --filter @parapdf/prototype build && pnpm --filter @parapdf/prototype bench
  * Environment: BROWSER (chromium, webkit, or firefox), VARIANTS, TEXT and LINKS (1, 0, or 1,0),
- * FILES, SPEEDS (CSS px per second, 900,3600), RUNS (2), DURATION (ms, 4000), PRELOAD (1),
- * OUTPUT (the browser name).
+ * SCROLL (scroll modes: vertical, horizontal, wrapped, or a list; vertical), SCALE (fit-width,
+ * fit-page, CSS px per point, or a list; fit-width), FILES, SPEEDS (CSS px per second, 900,3600),
+ * RUNS (2), DURATION (ms, 4000), PRELOAD (1), OUTPUT (the browser name).
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { arch, cpus, loadavg, platform, release } from "node:os";
@@ -35,6 +37,8 @@ interface Variant {
   hwa: boolean;
   text: boolean;
   links: boolean;
+  scroll: string;
+  scale: string;
 }
 
 const engineVariants = [
@@ -49,16 +53,38 @@ const engineVariants = [
 // text and annotation layers.
 const textModes = (process.env.TEXT ?? "1").split(",").map((mode) => mode !== "0");
 const linkModes = (process.env.LINKS ?? "1").split(",").map((mode) => mode !== "0");
+// SCROLL=vertical,horizontal and SCALE=fit-width,0.5 measure every variant in
+// each scroll mode at each zoom; variant names say them when they are set.
+const scrollModes = (process.env.SCROLL ?? "vertical").split(",");
+for (const mode of scrollModes) {
+  if (mode === "page") throw new Error('"page" mode flips pages instead of scrolling them');
+  if (!["vertical", "horizontal", "wrapped"].includes(mode)) {
+    throw new Error(`unknown scroll mode ${mode}`);
+  }
+}
+const scales = (process.env.SCALE ?? "fit-width").split(",");
 const variants: Variant[] = engineVariants.flatMap((variant) =>
   textModes.flatMap((text) =>
-    linkModes.map((links) => ({
-      ...variant,
-      text,
-      links,
-      name: [variant.name, text ? "" : "no text", links ? "" : "no links"]
-        .filter(Boolean)
-        .join(", "),
-    })),
+    linkModes.flatMap((links) =>
+      scrollModes.flatMap((scroll) =>
+        scales.map((scale) => ({
+          ...variant,
+          text,
+          links,
+          scroll,
+          scale,
+          name: [
+            variant.name,
+            text ? "" : "no text",
+            links ? "" : "no links",
+            process.env.SCROLL ? scroll : "",
+            process.env.SCALE ? (Number.isNaN(Number(scale)) ? scale : `scale ${scale}`) : "",
+          ]
+            .filter(Boolean)
+            .join(", "),
+        })),
+      ),
+    ),
   ),
 );
 const files = (process.env.FILES ?? "synthetic-text-1000.pdf,bill-hr815.pdf").split(",");
@@ -83,8 +109,11 @@ interface JobResult {
   error?: string;
   idle?: IdleBaseline;
   firstPaintMs?: number | null;
+  scrollMs?: number;
   pagesCrossed?: number;
   commitsDuringScroll?: number;
+  /** Store notifications while scrolling, and those that moved the window or the current page. */
+  published?: { updates: number; windows: number; currentPages: number };
   blankMeanPct?: number;
   blankFramesPct?: number;
   settleMs?: number;
@@ -134,7 +163,10 @@ const launched = await launchBrowser(browserName, {
     });
     const page = await context.newPage();
     await restoreScaleFactor(page, `${baseUrl}calibrate.html`);
-    await page.goto(`${baseUrl}?file=${files[0]}&autoscroll=60&duration=100`);
+    // The first variant's engine: the demo's default, pdf.js master, may not be built.
+    await page.goto(
+      `${baseUrl}?engine=${variants[0]?.engine ?? "pdfjs"}&file=${files[0]}&autoscroll=60&duration=100`,
+    );
     await waitForDone(page);
     await context.close();
   },
@@ -169,6 +201,8 @@ try {
                 hwa: variant.hwa ? "1" : "0",
                 text: variant.text ? "1" : "0",
                 links: variant.links ? "1" : "0",
+                scroll: variant.scroll,
+                scale: variant.scale,
                 file,
                 autoscroll: String(speed),
                 duration: String(durationMs),
@@ -196,7 +230,7 @@ try {
             `${file} · ${speed} px/s · ${variant.name} · run ${run + 1}/${runs}: ${
               result.error
                 ? `ERROR ${result.error.split("\n")[0]}`
-                : `blank ${result.blankMeanPct?.toFixed(1)}%, blocked ${result.lag?.blockedMs.toFixed(0)} ms, commits ${result.commitsDuringScroll}`
+                : `blank ${result.blankMeanPct?.toFixed(1)}%, blocked ${result.lag?.blockedMs.toFixed(0)} ms, commits ${result.commitsDuringScroll}, window / current-page changes ${result.published?.windows} / ${result.published?.currentPages}`
             }`,
           );
         }
@@ -225,9 +259,17 @@ const summaries = files.flatMap((file) =>
         speed,
         variant: variant.name,
         runs: ok.length,
+        scrollMode: variant.scroll,
+        scale: variant.scale,
         firstPaintMs: pick((result) => result.firstPaintMs),
         pagesCrossed: pick((result) => result.pagesCrossed),
         commitsDuringScroll: pick((result) => result.commitsDuringScroll),
+        commitsPerSecond: pick((result) =>
+          result.scrollMs ? ((result.commitsDuringScroll ?? 0) * 1000) / result.scrollMs : null,
+        ),
+        storeUpdates: pick((result) => result.published?.updates),
+        windowChanges: pick((result) => result.published?.windows),
+        currentPageChanges: pick((result) => result.published?.currentPages),
         blankMeanPct: pick((result) => result.blankMeanPct),
         blankFramesPct: pick((result) => result.blankFramesPct),
         blockedMs: pick((result) => result.lag?.blockedMs),
@@ -263,7 +305,15 @@ const environment = {
     timerLagP95Ms: median(okResults.map((result) => result.idle?.timerLagP95Ms ?? Number.NaN)),
     frameIntervalMs: median(okResults.map((result) => result.idle?.frameIntervalMs ?? Number.NaN)),
   },
-  settings: { runs, durationMs, preloadPdf, viewport: "1280x900", devicePixelRatio: 2 },
+  settings: {
+    runs,
+    durationMs,
+    preloadPdf,
+    scrollModes,
+    scales,
+    viewport: "1280x900",
+    devicePixelRatio: 2,
+  },
 };
 const round = (_key: string, value: unknown) =>
   typeof value === "number" && !Number.isInteger(value) ? Math.round(value * 10) / 10 : value;
@@ -278,30 +328,54 @@ writeFileSync(
 );
 
 const fmt = (value: number, digits = 0) => (Number.isFinite(value) ? value.toFixed(digits) : "—");
+// The settings this run was given, so the report says how to repeat it.
+const reproduceEnv = [
+  "VARIANTS",
+  "TEXT",
+  "LINKS",
+  "SCROLL",
+  "SCALE",
+  "FILES",
+  "SPEEDS",
+  "RUNS",
+  "DURATION",
+  "PRELOAD",
+  "OUTPUT",
+]
+  .filter((name) => process.env[name] !== undefined)
+  .map((name) => {
+    const value = process.env[name] ?? "";
+    return `${name}=${/^[\w.,-]+$/.test(value) ? value : `'${value}'`} `;
+  })
+  .join("");
+const zoomText = scales
+  .map((scale) => (Number.isNaN(Number(scale)) ? `${scale} zoom` : `${scale} CSS px per point`))
+  .join(" or ");
 const markdown = [
   `# ParaPDF runtime prototype: scripted scroll, ${environment.browser}`,
   "",
   `- Run at: ${environment.runAt}`,
   `- Machine: ${environment.os}, ${environment.cpu}; ${environment.browser} (Playwright build, ${environment.headless ? "headless" : "headed"}); power: ${power.source === "ac" && !power.lowPowerMode ? "AC" : `**${power.source}${power.lowPowerMode ? ", Low Power Mode" : ""}; not comparable with AC runs**`}; one-minute load average ${environment.loadAverage.start.toFixed(1)} at the start, ${environment.loadAverage.end.toFixed(1)} at the end; ${turnTakingSummary()}`,
   `- Idle baseline (calibrate.html, median of jobs): 4 ms timer late by ${fmt(environment.idle.timerLagP50Ms, 1)} ms (median) / ${fmt(environment.idle.timerLagP95Ms, 1)} ms (p95); animation frames every ${fmt(environment.idle.frameIntervalMs, 1)} ms.`,
-  `- Method: 1280×900 viewport at devicePixelRatio 2, fit-width zoom, ${durationMs} ms of scrolling at a constant speed in CSS pixels per second after the first page is painted, median of ${runs} runs. PDF preload: ${preloadPdf ? "on" : "off"}.`,
+  `- Method: 1280×900 viewport at devicePixelRatio 2, ${zoomText}, ${scrollModes.join(" or ")} scroll mode, ${durationMs} ms of scrolling at a constant speed in CSS pixels per second after the first page is painted, sideways in horizontal mode and downward otherwise, median of ${runs} runs. PDF preload: ${preloadPdf ? "on" : "off"}.`,
   "- First paint: time from navigation start until page 1 shows pixels.",
   "- Blank: share of the viewport covered by pages without pixels, averaged over frames; blank frames: frames where more than 1% was blank.",
   "- Main thread: summed lateness of a 4 ms timer while scrolling, beyond 2 ms or the idle page's 95th percentile, whichever is larger, plus the raw p95 and maximum lateness.",
   "- Dropped frames: animation frames longer than 1.5 idle frame intervals.",
-  `- Reproduce: \`pnpm --filter @parapdf/prototype build && BROWSER=${browserName} pnpm --filter @parapdf/prototype bench\``,
+  "- React commits: commits of the viewer's React tree while scrolling, and per second. Store updates: how often the store published while scrolling, and how often that moved the mounted window and the current page, the changes that should make React commit.",
+  `- Reproduce: \`pnpm --filter @parapdf/prototype build && BROWSER=${browserName} ${reproduceEnv}pnpm --filter @parapdf/prototype bench\``,
   "",
   ...files.flatMap((file) =>
     speeds.flatMap((speed) => [
       `## ${file}, ${speed} CSS px per second`,
       "",
-      "| Variant | First paint (ms) | Pages crossed | Blank (%) | Blank frames (%) | Main thread blocked (ms) | Lag p95 / max (ms) | Dropped frames | React commits | Renders base / detail / text / links / cancelled |",
-      "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+      "| Variant | First paint (ms) | Pages crossed | Blank (%) | Blank frames (%) | Main thread blocked (ms) | Lag p95 / max (ms) | Dropped frames | React commits (per s) | Store updates (window / current page) | Renders base / detail / text / links / cancelled |",
+      "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
       ...summaries
         .filter((summary) => summary.file === file && summary.speed === speed)
         .map(
           (summary) =>
-            `| ${summary.variant} | ${fmt(summary.firstPaintMs)} | ${fmt(summary.pagesCrossed)} | ${fmt(summary.blankMeanPct, 1)} | ${fmt(summary.blankFramesPct, 1)} | ${fmt(summary.blockedMs)} | ${fmt(summary.lagP95Ms, 1)} / ${fmt(summary.lagMaxMs)} | ${fmt(summary.droppedFrames)} / ${fmt(summary.frames)} | ${fmt(summary.commitsDuringScroll)} | ${fmt(summary.baseRenders)} / ${fmt(summary.detailRenders)} / ${fmt(summary.textLayers)} / ${fmt(summary.annotationLayers)} / ${fmt(summary.cancelledRenders)} |`,
+            `| ${summary.variant} | ${fmt(summary.firstPaintMs)} | ${fmt(summary.pagesCrossed)} | ${fmt(summary.blankMeanPct, 1)} | ${fmt(summary.blankFramesPct, 1)} | ${fmt(summary.blockedMs)} | ${fmt(summary.lagP95Ms, 1)} / ${fmt(summary.lagMaxMs)} | ${fmt(summary.droppedFrames)} / ${fmt(summary.frames)} | ${fmt(summary.commitsDuringScroll)} (${fmt(summary.commitsPerSecond, 1)}) | ${fmt(summary.storeUpdates)} (${fmt(summary.windowChanges)} / ${fmt(summary.currentPageChanges)}) | ${fmt(summary.baseRenders)} / ${fmt(summary.detailRenders)} / ${fmt(summary.textLayers)} / ${fmt(summary.annotationLayers)} / ${fmt(summary.cancelledRenders)} |`,
         ),
       "",
     ]),
