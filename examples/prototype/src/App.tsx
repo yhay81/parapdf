@@ -50,10 +50,13 @@ const settings = {
     : undefined,
   /** Canvas pixel limits (ViewerOptions); the runtime's defaults when absent. */
   canvasLimits: Object.fromEntries(
-    ["maxDetailPixels", "maxBasePixels", "maxCanvasPixels"].flatMap((name) =>
+    ["maxDetailPixels", "maxDetailViewports", "maxBasePixels", "maxCanvasPixels"].flatMap((name) =>
       params.has(name) ? [[name, Number(params.get(name))]] : [],
     ),
-  ) as Pick<ViewerOptions, "maxDetailPixels" | "maxBasePixels" | "maxCanvasPixels">,
+  ) as Pick<
+    ViewerOptions,
+    "maxDetailPixels" | "maxDetailViewports" | "maxBasePixels" | "maxCanvasPixels"
+  >,
 };
 
 // The page's language, which the text layers of PDFs that declare none

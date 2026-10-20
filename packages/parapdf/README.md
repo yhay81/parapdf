@@ -214,8 +214,9 @@ read when the component mounts; give it a new `key` to change them.
 | `annotationLayer` | `true` | Focusable links. |
 | `externalLinks` | `"new-tab"` | `"disabled"` leaves links to other documents inert. |
 | `maxDetailPixels` | 16,777,216 | Pixels of one page's full-resolution canvas; larger pages are drawn sharp only around the visible area. |
+| `maxDetailViewports` | unlimited | The same limit as a multiple of the viewport's device pixels, so the sharp margin around the visible area follows the viewport's size. |
 | `maxBasePixels` | 2,097,152 | Pixels of one page's low-resolution canvas. |
-| `maxCanvasPixels` | unlimited | Pixels of all of this viewer's canvases together; pages outside the viewport give theirs back first. |
+| `maxCanvasPixels` | unlimited | Pixels of all of this viewer's canvases together. Pages outside the viewport give theirs back first; past the budget, visible pages lose their sharp margin and then resolution, but keep their low-resolution canvases. |
 | `maxConcurrentRenders` | `2` | Pages drawn at once. |
 
 `PdfViewport` takes `className`, `style`, `label` (the accessible name of
@@ -224,11 +225,13 @@ of each page, `(pageNumber, pageCount) => string`, "Page 3 of 12" by
 default), and `renderOverlay`.
 
 `createPdfjsEngine` takes `pdfjs`, `workerSrc`, `assetBase`, `enableHWA`
-(ask pdf.js for GPU-backed canvases), `documentOptions` (more pdf.js
-`getDocument` parameters for every document, such as `withCredentials` or
-`httpHeaders`), and `rendererSrc` (see [Limitations](#limitations)). For older
-browsers, pass pdf.js's legacy build, `pdfjs-dist/legacy/build/pdf.mjs`, and
-its worker.
+(GPU-backed canvases, `true` by default; `false` asks pdf.js for CPU-backed
+ones, which block the main thread for longer in Chromium and drop more frames
+in WebKit, though WebKit holds less memory with them), `documentOptions` (more
+pdf.js `getDocument` parameters for every document, such as `withCredentials`
+or `httpHeaders`), and `rendererSrc` (see [Limitations](#limitations)). For
+older browsers, pass pdf.js's legacy build, `pdfjs-dist/legacy/build/pdf.mjs`,
+and its worker.
 
 ## Sources
 

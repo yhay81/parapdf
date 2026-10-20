@@ -153,6 +153,12 @@ with the API.
   the profile. `SCENARIOS`, `VARIANTS`, `TEXT`, `LINKS`, `FILE`, `DPR`,
   `START_SCALE`, `ZOOM` (zoom factors), `SPEED`, `DURATION`, `RUNS`, and
   `OUTPUT` apply.
+- `node examples/prototype/scripts/hwa-bench.ts` — GPU-backed against
+  CPU-backed canvases (`enableHWA`): blocked main thread, dropped frames, and
+  the physical footprint of every process of a browser launched for each job
+  (macOS `footprint`, which counts the IOSurfaces GPU canvases live in) while
+  a document opens, scrolls, zooms, and pans (run after `build`; `BROWSER`,
+  `VARIANTS`, `FILES`, `RUNS`, and `OUTPUT` apply).
 - `pnpm check` — Biome lint and format check. `pnpm format` applies fixes.
 - `pnpm typecheck` — TypeScript checks for every workspace package.
 - The functional checks default to `ENGINE=pdfjs-next`, which needs
@@ -253,7 +259,10 @@ with the API.
   visible pages get detail, drawn through the engine's `region` request for
   the visible area grown by up to its own size on each side within the 16 MP
   budget, and redrawn when the view leaves that region or sits three times
-  closer to one side than the other; pages that leave the viewport drop their
+  closer to one side than the other, margins under 2% of the visible span
+  aside: a region without a margin, which a budget below the visible area
+  leaves, was drawn about 60 times a second in a still view, its sides
+  uneven by the pixel snapping adds. Pages leaving the viewport drop their
   detail canvases. Priority: visible base, visible detail once scrolling
   settles (120 ms quiet or below 2 px/ms), overscan base, overscan detail, then
   stale base. Once scrolling settles, overscan pages that get whole-page detail
@@ -265,11 +274,24 @@ with the API.
   Once scrolling settles, a visible page without pixels also gets its
   whole-page detail without a base when that holds at most four times the
   base budget (`QUICK_DETAIL_BASES`): a base repeats the page's drawing work.
-  `ViewerOptions` sets the two budgets (`maxDetailPixels`, `maxBasePixels`)
-  and `maxCanvasPixels`, a budget for all of a viewer's canvases: pages
-  outside the viewport render only within it and give their pixels back,
-  farthest first and detail before base, when visible pages need more
-  (`stats.trimmed`); visible pages always keep theirs.
+  `ViewerOptions` sets the two budgets (`maxDetailPixels`, `maxBasePixels`),
+  `maxDetailViewports`, which caps the detail at a multiple of the viewport's
+  device pixels so that its margin follows the viewport's size, and
+  `maxCanvasPixels`, a budget for all of a viewer's canvases, visible pages
+  included. Visible pages come first: their bases count whether drawn or not,
+  and each one's detail gets a share of the rest by visible area. A detail
+  that does not fit its share loses its margin first and then resolution, in
+  quarter-octave steps (`REDUCED_DETAIL_STEP`) that small changes of the share
+  do not cross, with what a step leaves spent on its margin again; a detail
+  no sharper than its base is not drawn, and one 25% over its share is drawn
+  again, smaller. Pages outside the viewport render only within what is left
+  and give their pixels back, farthest first and detail before base
+  (`stats.trimmed`). Visible bases are never given back, so a visible page
+  never goes blank. Lowering the resolution, rather than letting visible
+  pages exceed the budget, keeps it a bound an application can rely on: the
+  budget exists for browsers that cap all canvases together, as iOS Safari
+  does, where going past the cap leaves canvases blank. Visible pages used to
+  keep all the detail `maxDetailPixels` allowed, whatever the budget.
   A render clears its canvas, so the page counts that layer as empty until
   the render completes.
   Unmounted pages zero their canvases and release pdf.js page data.
@@ -277,10 +299,14 @@ with the API.
   full device resolution. The zoom goes up to 10 CSS pixels per point.
 - The pdf.js adapter starts its parsing worker when the engine is created, and
   the demo preloads the PDF with React's `preload()`, matching the CORS mode
-  pdf.js fetches with. `documentOptions` (typed `PdfjsDocumentOptions`) adds
-  getDocument parameters for every document, overriding `enableHWA` and the
-  asset URLs from `assetBase`; the source and the worker stay the adapter's.
-  The `pdfjs` option takes the legacy build as is.
+  pdf.js fetches with. The adapter asks for GPU-backed canvases unless
+  `enableHWA` is `false`: in an embedding app's preview they blocked the main
+  thread for 256 instead of 560 ms in Chromium, and 770 instead of 1,393 ms
+  in WebKit, while panning a zoomed drawing. `documentOptions` (typed
+  `PdfjsDocumentOptions`) adds getDocument parameters for every document,
+  overriding `enableHWA` and the asset URLs from `assetBase`; the source and
+  the worker stay the adapter's. The `pdfjs` option takes the legacy build as
+  is.
 - Text layers use pdf.js's core `TextLayer` inside `.parapdf-text-layer`, styled
   by rules derived from pdf.js's viewer CSS (attributed in `NOTICE.md`). Pages
   set `--total-scale-factor` and `--scale-round-x/y`, which `TextLayer` sizes

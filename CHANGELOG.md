@@ -10,6 +10,21 @@ change the API.
   or by zooming out, mount and draw before the gesture commits: a long
   two-finger drag at a low zoom showed a blank band below the mounted pages
   until the fingers lifted.
+- `maxDetailViewports` caps one page's detail canvas at a multiple of the
+  viewport's device pixels: the margin drawn sharp around the visible area
+  then follows the viewport's size, small on a phone and large on a wide
+  panel. `maxDetailPixels` still caps it.
+- `maxCanvasPixels` counts visible pages too: their low-resolution canvases
+  always stay, and each one's sharp canvas gets a share of what they leave,
+  by visible area, losing its margin first and then resolution. Visible pages
+  used to keep all the detail `maxDetailPixels` allowed, whatever the budget,
+  and only pages outside the viewport gave pixels back.
+- `createPdfjsEngine` asks pdf.js for GPU-backed canvases unless
+  `enableHWA` is `false`. It used to leave pdf.js's default, CPU-backed
+  canvases.
+- A detail canvas without a margin around the visible area, which a
+  `maxDetailPixels` below the viewport's device pixels leaves, is drawn once:
+  it was drawn again about 60 times a second while the view stood still.
 
 ## 0.1.0 — 2026-10-20
 

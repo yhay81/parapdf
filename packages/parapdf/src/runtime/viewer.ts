@@ -99,13 +99,26 @@ export interface ViewerOptions {
    * only for its visible area plus a margin, still at full resolution.
    */
   maxDetailPixels?: number;
+  /**
+   * The most pixels one page's detail canvas holds, as a multiple of the
+   * viewport's device pixels (default unlimited): the margin drawn around the
+   * visible area then follows the viewport's size, small on a phone and large
+   * on a wide desktop panel. maxDetailPixels still caps it. At 1 the detail
+   * holds just the viewport; below 1 the visible area loses resolution.
+   */
+  maxDetailViewports?: number;
   /** The most pixels one page's base canvas holds (default 2 097 152). */
   maxBasePixels?: number;
   /**
    * The most pixels all of this viewer's canvases hold together (default
-   * unlimited), for memory-capped browsers such as iOS Safari. Pages outside
-   * the viewport render only within it and give their pixels back first,
-   * detail before base; visible pages always keep theirs.
+   * unlimited), for memory-capped browsers such as iOS Safari. Visible pages
+   * come first: after their bases, each visible page's detail gets a share of
+   * the rest by visible area, losing its margin first and then resolution, in
+   * quarter-octave steps down to its base's. Pages outside the viewport
+   * render only within what is left and give their pixels back, farthest
+   * first and detail before base. Visible bases are never given back, so a
+   * visible page never goes blank, and a budget smaller than they are is
+   * exceeded by them.
    */
   maxCanvasPixels?: number;
 }
@@ -281,7 +294,7 @@ export class PdfViewerRuntime {
   readonly #annotationLayer: boolean;
   readonly #canvasLimits: Pick<
     ViewerOptions,
-    "maxDetailPixels" | "maxBasePixels" | "maxCanvasPixels"
+    "maxDetailPixels" | "maxDetailViewports" | "maxBasePixels" | "maxCanvasPixels"
   >;
   readonly #links: LinkHandlers;
   /** Positions before link and outline jumps, as a page plus a fraction of it. */
@@ -333,6 +346,7 @@ export class PdfViewerRuntime {
     };
     this.#canvasLimits = {
       maxDetailPixels: options.maxDetailPixels,
+      maxDetailViewports: options.maxDetailViewports,
       maxBasePixels: options.maxBasePixels,
       maxCanvasPixels: options.maxCanvasPixels,
     };

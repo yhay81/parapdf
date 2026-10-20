@@ -1,0 +1,132 @@
+{
+  "environment": {
+    "runAt": "2026-10-20T00:56:34.472Z",
+    "os": "darwin 27.0.0 arm64",
+    "cpu": "Apple M2 Pro (12 logical cores)",
+    "browser": "WebKit 27.2",
+    "power": {
+      "source": "ac",
+      "lowPowerMode": false
+    },
+    "loadAverage": {
+      "start": 1.77,
+      "end": 3.8
+    },
+    "turnTaking": {
+      "waits": 0,
+      "waitedMs": 0,
+      "repeatedJobs": 0
+    },
+    "settings": {
+      "files": ["bill-hr815.pdf", "synthetic-vector-200k.pdf"],
+      "runs": 3,
+      "viewport": "1280×900 at devicePixelRatio 2"
+    }
+  },
+  "summaries": [
+    {
+      "file": "bill-hr815.pdf",
+      "variant": "pdfjs-cpu",
+      "runs": 3,
+      "sharpMs": 849.98,
+      "blockedMs": 49.82,
+      "maxLagMs": 15.28,
+      "dropped": 19,
+      "openMiB": 346.1,
+      "endMiB": 365.69,
+      "peakMiB": 552.8,
+      "canvasMiB": 74.04
+    },
+    {
+      "file": "bill-hr815.pdf",
+      "variant": "pdfjs-hwa",
+      "runs": 3,
+      "sharpMs": 698.02,
+      "blockedMs": 91.76,
+      "maxLagMs": 16.52,
+      "dropped": 1,
+      "openMiB": 400,
+      "endMiB": 386.46,
+      "peakMiB": 520.94,
+      "canvasMiB": 74.04
+    },
+    {
+      "file": "bill-hr815.pdf",
+      "variant": "pdfjs-next-cpu",
+      "runs": 3,
+      "sharpMs": 702.98,
+      "blockedMs": 57.3,
+      "maxLagMs": 18.46,
+      "dropped": 20,
+      "openMiB": 505.97,
+      "endMiB": 456.57,
+      "peakMiB": 776.18,
+      "canvasMiB": 74.04
+    },
+    {
+      "file": "bill-hr815.pdf",
+      "variant": "pdfjs-next-hwa",
+      "runs": 3,
+      "sharpMs": 706.9,
+      "blockedMs": 71.92,
+      "maxLagMs": 20.54,
+      "dropped": 2,
+      "openMiB": 474.97,
+      "endMiB": 548.91,
+      "peakMiB": 813.97,
+      "canvasMiB": 74.04
+    },
+    {
+      "file": "synthetic-vector-200k.pdf",
+      "variant": "pdfjs-cpu",
+      "runs": 3,
+      "sharpMs": 729.18,
+      "blockedMs": 79.88,
+      "maxLagMs": 19.66,
+      "dropped": 18,
+      "openMiB": 327.9,
+      "endMiB": 397.25,
+      "peakMiB": 489.4,
+      "canvasMiB": 59.25
+    },
+    {
+      "file": "synthetic-vector-200k.pdf",
+      "variant": "pdfjs-hwa",
+      "runs": 3,
+      "sharpMs": 621.04,
+      "blockedMs": 21.08,
+      "maxLagMs": 9.9,
+      "dropped": 1,
+      "openMiB": 433.97,
+      "endMiB": 471.6,
+      "peakMiB": 616.11,
+      "canvasMiB": 59.25
+    },
+    {
+      "file": "synthetic-vector-200k.pdf",
+      "variant": "pdfjs-next-cpu",
+      "runs": 3,
+      "sharpMs": 745.68,
+      "blockedMs": 7.68,
+      "maxLagMs": 5.1,
+      "dropped": 8,
+      "openMiB": 418.18,
+      "endMiB": 560.51,
+      "peakMiB": 721.44,
+      "canvasMiB": 59.08
+    },
+    {
+      "file": "synthetic-vector-200k.pdf",
+      "variant": "pdfjs-next-hwa",
+      "runs": 3,
+      "sharpMs": 648.98,
+      "blockedMs": 17.7,
+      "maxLagMs": 5.02,
+      "dropped": 1,
+      "openMiB": 466.86,
+      "endMiB": 670.04,
+      "peakMiB": 842.63,
+      "canvasMiB": 59.11
+    }
+  ]
+}
