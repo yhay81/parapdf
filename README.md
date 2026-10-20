@@ -233,6 +233,31 @@ about 20 ms as noise.
   median of nine runs), the first pixels came at 440 instead of 474 ms and
   the sharp page at 456 instead of 515 ms. `pnpm --filter parapdf pack`
   builds a package from `dist/` with the notices pdf.js's license requires.
+- **Canvas budgets (2026-10-20).** Measuring the runtime again as an
+  embedding app's preview (800 by 900 CSS pixels at devicePixelRatio 2,
+  released pdf.js on GPU-backed canvases, synthetic drawings) showed what
+  fixed canvas limits cost. A 4 MP `maxDetailPixels`, chosen for a tablet's
+  memory, left a desktop viewport little margin around the visible area:
+  six 300 ms pans over an A1 drawing at 200% drew the detail 54 times in
+  Chromium, with coarse pixels in 16% of the frames. `maxDetailViewports`
+  sizes the detail by the viewport instead. At 3 viewports the same pans
+  drew it 18 times, with 5% coarse frames, and blocked the main thread for
+  65 instead of 322 ms; in WebKit with an iPad's settings, 14 instead of 51
+  times, 9% instead of 31%, and 332 instead of 725 ms. That costs memory:
+  35–39 MiB of canvases against 19 MiB. Without limits the pans drew 6
+  times with 2–8% coarse frames, but held 72 MiB, and single frames in
+  WebKit took up to 259 ms, where every limited setting kept them under
+  30 ms. `maxCanvasPixels` now counts visible pages: in a 1,000 by 900
+  viewport, a 12 MP budget held 18 MP on bill-hr815 at 3 CSS pixels per
+  point, and a 6 MP budget 17–19 MP on synthetic-vector-200k at 2 and 4;
+  they now hold 12 and 6 MP at full resolution. Losses: a budget below the
+  visible area lowers the detail's resolution in quarter-octave steps, so
+  4 MP under a 1,400-pixel viewport now shows 0.84 of full resolution where
+  the exact fit showed 0.91–0.93, though the view now settles where its
+  detail used to be drawn without end at 400%. And a budget the visible
+  pages fill leaves nothing for the next page: scrolling a 24-page document
+  at 900 CSS pixels per second showed 8 blank frames in 4 seconds at 6 MP,
+  as before, and none at 16 MP, in Chromium and WebKit.
 - **Pinch zoom (2026-10-20).** Only ctrl or meta with the wheel zoomed the
   document, which covers trackpad pinches in Chromium and Firefox. A touch
   pinch, or a trackpad pinch in Safari, zoomed the whole page instead and left
