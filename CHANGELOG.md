@@ -59,6 +59,8 @@ change the API.
 - Preserve the specified coordinate of internal destinations on PDFs whose
   own rotation is 90 or 270 degrees, including `FitH`, `FitV`, and `XYZ`
   destinations with an unspecified coordinate.
+- The README's links to the license and notices work on npm: they pointed at
+  files the repository keeps only at the root.
 
 ## 0.4.0 — 2026-10-20
 

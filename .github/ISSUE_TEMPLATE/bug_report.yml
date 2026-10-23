@@ -1,0 +1,81 @@
+name: Bug report
+description: Something ParaPDF shows or does wrong.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Report security problems through the [security policy](https://github.com/yhay81/parapdf/security/policy), not here. Issues are public: attach a PDF only if it may be shared.
+  - type: input
+    id: version
+    attributes:
+      label: ParaPDF version
+      placeholder: "0.4.0"
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and operating system
+      description: With their versions, and the device for phones and tablets.
+      placeholder: Safari 27 on iPadOS 27, iPad Pro 11-inch
+    validations:
+      required: true
+  - type: input
+    id: bundler
+    attributes:
+      label: Bundler or framework
+      placeholder: Vite 8, Next.js 16 with Turbopack, webpack 5
+  - type: dropdown
+    id: pdfjs
+    attributes:
+      label: pdf.js
+      options:
+        - The pdf.js ParaPDF ships
+        - parapdf/legacy
+        - Another build through configurePdfjs()
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens
+      description: What you see, and what you expected instead. A screenshot or recording helps with rendering and gestures.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open the PDF below.
+        2. Zoom to 400% with a trackpad pinch.
+        3. Scroll to page 3.
+    validations:
+      required: true
+  - type: textarea
+    id: code
+    attributes:
+      label: Code
+      description: How you render `PdfDocument` and `PdfViewport`, with the options you pass.
+      render: tsx
+  - type: textarea
+    id: pdf
+    attributes:
+      label: PDF
+      description: A link to the PDF, or the file attached here. If it may not be shared, say what it holds (scanned pages, forms, CJK text, layers, its size), or which file in bench/corpus shows the same problem.
+  - type: dropdown
+    id: upstream
+    attributes:
+      label: Does pdf.js's own viewer show the same problem?
+      description: Open the PDF in [pdf.js's viewer](https://mozilla.github.io/pdf.js/web/viewer.html) in the same browser.
+      options:
+        - Not checked
+        - No, only ParaPDF
+        - Yes, pdf.js's viewer too
+  - type: textarea
+    id: logs
+    attributes:
+      label: Console output
+      description: Errors and warnings from the browser's console.
+      render: text

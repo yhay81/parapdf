@@ -3,7 +3,7 @@
 A PDF viewer for React built for speed: rendering off the main thread, React
 out of the hot path.
 
-> **Status: 0.1, experimental.** [`parapdf`](packages/parapdf) is on npm, and
+> **Status: 0.x, experimental.** [`parapdf`](packages/parapdf) is on npm, and
 > its API may change in any minor release until 1.0. Phase 0, the engine
 > benchmark and the measurements behind the runtime, continues below.
 
@@ -25,7 +25,8 @@ The repository is a pnpm workspace for Node 24 or later: the package in
 [`packages/parapdf`](packages/parapdf), a demo with benchmarks and functional
 checks in [`examples/prototype`](examples/prototype), and the engine
 benchmark in [`bench`](bench). [`AGENTS.md`](AGENTS.md) describes them and
-every command.
+every command, [`CONTRIBUTING.md`](CONTRIBUTING.md) says what a pull request
+needs, and [`SECURITY.md`](SECURITY.md) how to report a vulnerability.
 
 ```bash
 pnpm install
@@ -522,9 +523,11 @@ browser, and treat differences under about 20 ms as noise.
   [`check-features.ts`](examples/prototype/scripts/check-features.ts) and
   [`check-scroll.ts`](examples/prototype/scripts/check-scroll.ts) verify them
   in Chromium, WebKit, and Firefox on the shipped pdf.js.
-- **Not yet built.** Annotation editing, form scripts (pdf.js's sandbox), XFA
-  forms, text for pages outside the mounted window, and a highlight fallback
-  for browsers without the CSS Custom Highlight API.
+- **Not yet built.** Editing the annotations a PDF already holds, comments
+  on created annotations, form scripts (pdf.js's sandbox), XFA forms,
+  right-to-left page order, text layers for pages outside the mounted window
+  (`getText()` reads their text), and a highlight fallback for browsers
+  without the CSS Custom Highlight API.
 
 ## License
 

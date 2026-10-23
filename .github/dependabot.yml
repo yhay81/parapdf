@@ -1,0 +1,40 @@
+version: 2
+updates:
+  # The pnpm workspace: the package, the demo, and the benchmark.
+  #
+  # The engines under test, pdfjs-dist and @embedpdf/pdfium, are pinned
+  # exactly and stay out of the groups, so each update is a pull request of
+  # its own. Moving to another pdfjs-dist also takes `pnpm install`, whose
+  # `prepare` regenerates the committed src/engine/pdfjs-files.ts,
+  # pdfjs-legacy-files.ts, and src/react/editor-icons.ts; the version in
+  # NOTICE.md, packages/parapdf/README.md, and the files ported from pdf.js;
+  # every functional check in Chromium, WebKit, and Firefox; and a CHANGELOG
+  # entry. See AGENTS.md.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    # Versions only a week old or more; security updates are not delayed.
+    cooldown:
+      default-days: 7
+    groups:
+      react:
+        patterns:
+          - react
+          - react-dom
+          - "@types/react"
+          - "@types/react-dom"
+      development:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns:
+          - "*"

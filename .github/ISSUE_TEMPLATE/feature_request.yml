@@ -1,0 +1,25 @@
+name: Feature request
+description: Something ParaPDF should do.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ParaPDF shows PDFs as documents and knows nothing of drawings or any other domain: see [what ParaPDF is for](https://github.com/yhay81/parapdf/blob/main/CONTRIBUTING.md#what-parapdf-is-for).
+  - type: textarea
+    id: problem
+    attributes:
+      label: What do you want to do?
+      description: The task, and what keeps you from doing it with ParaPDF today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like ParaPDF to offer?
+      description: An option, a method, a hook, or a behaviour.
+  - type: textarea
+    id: elsewhere
+    attributes:
+      label: How do other viewers do it?
+      description: pdf.js's own viewer, react-pdf, EmbedPDF, or another viewer, if one has it.

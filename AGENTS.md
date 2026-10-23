@@ -80,6 +80,10 @@ with the API.
   benchmark (`scripts/scroll-bench.ts`, results per browser in `results/`,
   summarized by `scripts/compare.ts` in `results/browsers.md`), and
   functional checks (`scripts/check-*.ts`).
+- `CONTRIBUTING.md` and `SECURITY.md` — what a pull request needs and how
+  to report a vulnerability, for people. They summarize this file: keep them
+  in step with it. `.github/` holds CI, the issue forms, the pull request
+  template, and the Dependabot configuration.
 
 ## Commands
 
@@ -274,6 +278,11 @@ with the API.
    applies `publishConfig` and runs `prepack`, which builds and copies the
    license and notices in. npm asks the maintainer to authenticate.
 5. Create the GitHub release for the tag from its `CHANGELOG.md` entry.
+
+When pdfjs-dist publishes a security fix, release on it soon, and say so in
+the release's `CHANGELOG.md` entry: `SECURITY.md` promises it, because the
+package ships pdf.js's worker and applications cannot move to another pdf.js
+themselves.
 
 ## Runtime prototype
 
