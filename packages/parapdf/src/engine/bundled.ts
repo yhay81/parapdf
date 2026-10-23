@@ -110,6 +110,14 @@ export function documentRequestMode(): "anonymous" | "use-credentials" | null {
 
 const absolute = (url: URL | string): string => new URL(String(url), document.baseURI).href;
 
+/**
+ * A shipped file's URL without the query that keeps bundlers from inlining
+ * it (scripts/pdfjs-files.ts). webpack keeps all of it in the URLs it emits
+ * and Vite's build `?url`, but neither puts it in the names of the files it
+ * writes, so without it the URLs are the ones they emitted before.
+ */
+const shippedUrl = (url: URL): string => absolute(url).replace(/\?(?:no-inline&)?url$/, "");
+
 function loadEngine(): Promise<PdfEngine> {
   loading ??= createEngine(config).then(
     (engine) => {
@@ -182,7 +190,7 @@ async function createEngine(options: PdfjsConfig): Promise<PdfEngine> {
   let started: Promise<Worker | null> = Promise.resolve(null);
   if (shipped) {
     workerLocation = absolute((options.build?.workerUrl ?? pdfjsWorkerUrl)());
-    const urls = Object.entries(fileUrls()).map(([name, url]) => [name, absolute(url)]);
+    const urls = Object.entries(fileUrls()).map(([name, url]) => [name, shippedUrl(url)]);
     workerSrc = `${workerLocation}#${encodeURIComponent(JSON.stringify(Object.fromEntries(urls)))}`;
     started = startWorker(workerSrc);
   } else {
@@ -202,7 +210,7 @@ async function createEngine(options: PdfjsConfig): Promise<PdfEngine> {
     ...(shipped
       ? {
           iconUrls: Object.fromEntries(
-            Object.entries(iconUrls()).map(([name, url]) => [name, absolute(url)]),
+            Object.entries(iconUrls()).map(([name, url]) => [name, shippedUrl(url)]),
           ),
         }
       : {}),

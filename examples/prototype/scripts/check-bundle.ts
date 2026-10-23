@@ -7,17 +7,21 @@
  * embedded fonts, a JBIG2 scan, a page in Symbol and ZapfDingbats, and a
  * CMYK page, from Vite's development server, which pre-bundles dependencies,
  * and from a production build, once as the application that configures
- * nothing and once with pdf.js's legacy build (parapdf/legacy).
+ * nothing and once with pdf.js's legacy build (parapdf/legacy). The build's
+ * JavaScript must hold none of those files as data: URLs, which Vite makes of
+ * files under 4 KB, and the list of their URLs must stay a few KB.
  *
  * Usage: pnpm --filter @parapdf/bench corpus && pnpm --filter @parapdf/prototype check:bundle
  * Environment: BROWSER (chromium, webkit, or firefox).
  */
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   copyFileSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
+  readFileSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -26,6 +30,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { gzipSync } from "node:zlib";
 import type { Browser } from "playwright";
 import { build, createServer, preview } from "vite";
 import { launchBrowser, restoreScaleFactor } from "../../../bench/scripts/browsers.ts";
@@ -61,6 +66,56 @@ function onePagePdf(page: string, content: string, objects: string[] = []): Buff
   for (const offset of offsets) body += `${String(offset).padStart(10, "0")} 00000 n \n`;
   body += `trailer\n<< /Size ${all.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
   return Buffer.from(body, "latin1");
+}
+
+/**
+ * The most the chunk with the list of the shipped files' URLs may weigh with
+ * gzip: 3.1 KB when the files are emitted, 52.6 KB when Vite inlined the 145
+ * under 4 KB.
+ */
+const FILE_LIST_LIMIT = 4096;
+
+/**
+ * A file's content for comparing it with a data: URL's: SVG text without
+ * whitespace and with double quotes for single, since Vite rewrites an SVG
+ * it inlines that way, and any other file's bytes.
+ */
+function fingerprint(bytes: Buffer, svg: boolean): string {
+  const content = svg ? bytes.toString("utf8").replace(/\s+/g, "").replaceAll("'", '"') : bytes;
+  return createHash("sha256").update(content).digest("hex");
+}
+
+/** The pdf.js files under the installed package's `pdfjs/`, by fingerprint. */
+function shippedFiles(pdfjsDir: string): Map<string, string> {
+  const files = new Map<string, string>();
+  for (const dir of ["cmaps", "standard_fonts", "wasm", "iccs", "web/images"]) {
+    for (const name of readdirSync(join(pdfjsDir, dir))) {
+      if (name.startsWith("LICENSE")) continue;
+      files.set(fingerprint(readFileSync(join(pdfjsDir, dir, name)), name.endsWith(".svg")), name);
+    }
+  }
+  return files;
+}
+
+/** The shipped files that a build's JavaScript holds as data: URLs. */
+function inlinedFiles(assetsDir: string, shipped: Map<string, string>): string[] {
+  const inlined: string[] = [];
+  for (const name of readdirSync(assetsDir).filter((file) => file.endsWith(".js"))) {
+    const code = readFileSync(join(assetsDir, name), "utf8");
+    for (const [, , type = "", data = ""] of code.matchAll(/(["'`])data:([^,"'`]*),(.*?)\1/gs)) {
+      let bytes: Buffer;
+      try {
+        bytes = type.endsWith(";base64")
+          ? Buffer.from(data, "base64")
+          : Buffer.from(decodeURIComponent(data), "utf8");
+      } catch {
+        continue;
+      }
+      const file = shipped.get(fingerprint(bytes, type.startsWith("image/svg+xml")));
+      if (file) inlined.push(file);
+    }
+  }
+  return inlined;
 }
 
 const app = mkdtempSync(join(tmpdir(), "parapdf-bundle-"));
@@ -285,12 +340,23 @@ export function start() {
   }
 
   // An application that does not import parapdf/legacy emits no legacy worker.
+  // This build puts the list of the shipped files' URLs, which the bundle
+  // every viewer loads holds, in a chunk of its own to weigh it.
   const modernOnly = join(app, "dist-modern");
   await build({
     root: app,
     configFile: false,
     logLevel: "warn",
-    build: { outDir: modernOnly },
+    build: {
+      outDir: modernOnly,
+      rolldownOptions: {
+        output: {
+          codeSplitting: {
+            groups: [{ name: "pdfjs-files", test: /[\\/]engine[\\/]pdfjs-files\.js$/ }],
+          },
+        },
+      },
+    },
   });
   const emitted = readdirSync(join(modernOnly, "assets"));
   check(
@@ -298,6 +364,16 @@ export function start() {
     emitted.some((name) => /^pdf\.worker-/.test(name)) &&
       !emitted.some((name) => name.startsWith("pdf.worker.legacy")),
     emitted.filter((name) => name.startsWith("pdf.worker")).join(" "),
+  );
+  const fileList = emitted.find((name) => /^pdfjs-files-.*\.js$/.test(name));
+  const fileListCode = fileList ? readFileSync(join(modernOnly, "assets", fileList)) : null;
+  const fileListSize = fileListCode ? gzipSync(fileListCode).length : 0;
+  check(
+    `the list of the shipped files' URLs stays within ${FILE_LIST_LIMIT / 1024} KB with gzip`,
+    fileListCode !== null && fileListSize <= FILE_LIST_LIMIT,
+    fileListCode
+      ? `${fileListCode.length} bytes, ${fileListSize} with gzip`
+      : `no chunk of its own: ${emitted.filter((name) => name.endsWith(".js")).join(" ")}`,
   );
   rmSync(modernOnly, { recursive: true, force: true });
 
@@ -309,6 +385,14 @@ export function start() {
       rollupOptions: { input: { main: join(app, "index.html"), legacy: join(app, "legacy.html") } },
     },
   });
+  // Vite inlines files under 4 KB as data: URLs unless told not to, which
+  // put most CMaps and the annotation icons into the bundle every viewer loads.
+  const inlined = inlinedFiles(join(app, "dist", "assets"), shippedFiles(join(installed, "pdfjs")));
+  check(
+    "the build's JavaScript holds none of the shipped files as data: URLs",
+    inlined.length === 0,
+    `${inlined.length} inlined${inlined.length ? `: ${inlined.slice(0, 5).join(", ")}` : ""}`,
+  );
   const server = await preview({
     root: app,
     configFile: false,
