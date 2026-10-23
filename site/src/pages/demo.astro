@@ -14,6 +14,15 @@ import "../styles/demo.css";
       content="Open a sample or your own PDF in ParaPDF, a fast PDF viewer for React built on pdf.js."
     />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <script is:inline>
+      // The theme chosen in the documentation, which Starlight keeps; otherwise the system's.
+      try {
+        const theme = localStorage.getItem("starlight-theme");
+        if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+      } catch {
+        // Storage may be blocked; the system's theme applies.
+      }
+    </script>
   </head>
   <body>
     <DemoApp client:only="react" />
