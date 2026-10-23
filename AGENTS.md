@@ -88,9 +88,9 @@ API.
   Cloudflare Worker with static assets (`wrangler.jsonc`, which also
   attaches the custom domain) and deployed by `.github/workflows/site.yml`.
   The samples it serves are listed in `src/samples.ts` with their sources
-  and copied from `bench/corpus/` by `astro.config.ts`, which also keeps
-  Vite from inlining pdf.js's files. The docs are written for people: they
-  restate `packages/parapdf/README.md` by topic, with examples that run.
+  and copied from `bench/corpus/` by `astro.config.ts`. The docs are
+  written for people: they restate `packages/parapdf/README.md` by topic,
+  with examples that run.
 - `CONTRIBUTING.md` and `SECURITY.md` — what a pull request needs and how
   to report a vulnerability, for people. They summarize this file: keep them
   in step with it. `.github/` holds CI, the issue forms, the pull request

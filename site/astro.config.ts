@@ -96,12 +96,4 @@ export default defineConfig({
     }),
     react(),
   ],
-  vite: {
-    build: {
-      // Vite inlines files under 4 KB as data: URLs, which put 134 of
-      // pdf.js's CMaps, 94 KB with gzip, into the chunk every viewer loads.
-      // Served as files, the worker fetches one only when a PDF needs it.
-      assetsInlineLimit: (file) => (/[\\/]parapdf[\\/]pdfjs[\\/]/.test(file) ? false : undefined),
-    },
-  },
 });

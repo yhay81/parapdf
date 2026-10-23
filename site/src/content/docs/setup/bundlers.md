@@ -12,7 +12,9 @@ The package holds pdf.js's worker and the files pdf.js loads on demand:
 
 ParaPDF refers to each with `new URL(…, import.meta.url)`, so bundlers copy
 them to the build output, about 5 MB, and the browser fetches one only when a
-PDF needs it. The worker's own URL passes it the others' URLs, so pdf.js
+PDF needs it. ParaPDF also asks bundlers not to inline the small ones as
+`data:` URLs, which Vite does with files under 4 KB, so no `assetsInlineLimit`
+setting is needed. The worker's own URL passes it the others' URLs, so pdf.js
 manages colors as it does with its files served from one directory: a fill in
 CMYK red (0, 1, 1, 0) shows as rgb(236 31 37), where pdf.js without its ICC
 profile shows rgb(255 46 23).
