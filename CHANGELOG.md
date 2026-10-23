@@ -59,6 +59,17 @@ change the API.
 - Preserve the specified coordinate of internal destinations on PDFs whose
   own rotation is 90 or 270 degrees, including `FitH`, `FitV`, and `XYZ`
   destinations with an unspecified coordinate.
+- Keep bundlers from inlining pdf.js's files as `data:` URLs, so
+  applications need no `assetsInlineLimit` setting. Vite inlines files
+  under 4 KB, which put 134 of the 168 CMaps and the 11 annotation icons
+  into the bundle every viewer loads: in a Vite 8.3 build that configures
+  nothing, the list of the files' URLs, split into a chunk of its own,
+  weighed 146,001 bytes, 52,557 with gzip, and now weighs 17,793 and 3,143.
+  Rsbuild 2 inlined the icons,
+  and its main chunk drops from 116,969 to 111,403 bytes with gzip. webpack
+  5 and Next.js 16 inlined nothing, and their URLs stay the same. The cost:
+  a PDF that needs one of those 134 CMaps now waits for one more request,
+  as it already did with webpack and Next.js.
 
 ## 0.4.0 — 2026-10-20
 

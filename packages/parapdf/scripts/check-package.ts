@@ -75,7 +75,7 @@ try {
   const references = ["pdfjs-files.js", "pdfjs-legacy-files.js"].flatMap((module) =>
     [
       ...readFileSync(join(installed, "dist/engine", module), "utf8").matchAll(
-        /new URL\(\s*"\.\.\/\.\.\/(pdfjs\/[^"]+)"/g,
+        /new URL\(\s*"\.\.\/\.\.\/(pdfjs\/[^"?]+)/g,
       ),
     ].map((match) => match[1] ?? ""),
   );

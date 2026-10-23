@@ -211,8 +211,10 @@ with the API.
   embedded fonts, a JBIG2 scan, a page in Symbol and ZapfDingbats, and a CMYK
   page, from Vite's development server and from a build, checking that the
   worker, CMaps, fonts, decoders, and ICC color management load, and that
-  pdf.js takes the preloaded download (run after `pnpm --filter @parapdf/bench
-  corpus`; `BROWSER` applies).
+  pdf.js takes the preloaded download; and that the build's JavaScript holds
+  none of the shipped files as `data:` URLs and the chunk with their URLs,
+  split off in a second build, stays within 4 KB with gzip (run after `pnpm
+  --filter @parapdf/bench corpus`; `BROWSER` applies).
 - `pnpm --filter parapdf build` — JavaScript and declarations in
   `packages/parapdf/dist/`; `pnpm --filter parapdf pack` builds and packs the
   tarball.
@@ -538,8 +540,8 @@ with the API.
   full device resolution. The zoom goes up to 10 CSS pixels per point.
 - `engine/bundled.ts` loads pdf.js when the first `PdfDocument` renders in a
   browser (`preloadPdfjs()`): it imports `pdfjs-dist` and at once starts the
-  shipped worker, whose file list (`pdfjs-files.ts`, 3 KB compressed) is in
-  the bundle, so that the worker's download overlaps pdf.js's module instead
+  shipped worker, whose file list (`pdfjs-files.ts`, 3.1 KB with gzip in a
+  Vite build) is in the bundle, so that the worker's download overlaps pdf.js's module instead
   of following it, and gives the worker to the one pdf.js adapter every viewer
   shares once its script runs. A worker that fails to load leaves pdf.js to
   start its own, or to parse on the page, as before; a cross-origin worker
@@ -569,9 +571,26 @@ with the API.
   "null" plus the font's name, which the prelude also routes. The worker,
   1.2 MB, keeps any bundler from inlining it as a `data:` URL: a separate
   1.6 KB entry was inlined by Vite, and pdf.js started it from a `blob:` URL,
-  which a strict CSP refuses. Vite 8 (development server and build), webpack
-  5, Rsbuild 2, and Next.js 16 (Turbopack development and build, webpack
-  build) emit the files; Parcel 2 wraps the worker in its own module system,
+  which a strict CSP refuses. The other files' and the annotation icons' URLs
+  end in `?no-inline&url`, since bundlers inline small files: Vite any under
+  4 KB unless the query has `no-inline`, and Rsbuild images and fonts unless
+  it has `url`. Without the query, a Vite 8.3 build that configured nothing
+  held 134 of the 168 CMaps and the 11 icons as `data:` URLs in the bundle
+  every viewer loads: the file list, in a chunk of its own, weighed 146,001
+  bytes, 52,557 with gzip, against 17,793 and 3,143 with it; in an Astro 7.4
+  application, the client chunk with the viewer and the list weighed 260,250
+  bytes, 91,958 with gzip, against 132,090 and 41,294; and Rsbuild 2's main
+  chunk weighed 116,969 bytes with gzip, the icons inlined, against 111,403.
+  webpack, which keeps the query in the URLs it emits, and Vite's
+  build, which keeps `?url`, write the files without it, so `shippedUrl()`
+  in `bundled.ts` takes it off. The workers get no query: Vite's
+  development server answers a script requested with `?url` with a module
+  that exports its URL. Vite 8 (development server and build), webpack 5,
+  Rsbuild 2 (development server and build), and Next.js 16 (Turbopack and
+  webpack, development and build) emit the files: on 2026-10-23, Vite 8.3.4,
+  webpack 5.112.1, Rsbuild 2.2.14, and Next.js 16.4.2 served all 186 byte
+  for byte at the URLs the worker got, and a comment's icon at the URL the
+  annotation layer got. Parcel 2 wraps the worker in its own module system,
   which does not start, and esbuild and Bun copy nothing. Those take a copy of
   `pdfjs/` and `configurePdfjs({ assetBase })`, which uses pdf.js's own
   directory URLs.
