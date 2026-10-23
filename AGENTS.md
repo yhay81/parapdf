@@ -290,7 +290,10 @@ with the API.
   page narrower than the content sideways.
 - Zoom gestures preview with a CSS transform of the content around the
   content point where they started, and then commit like `setScale`, that
-  point at the place the preview shows it:
+  point at the place the preview shows it. `ViewerGestures`
+  (`runtime/gestures.ts`) owns them and "page" mode's swipes, through a
+  small host interface of the runtime's; how the scroller moves and where
+  its edges are is in `runtime/scrolling.ts`:
   - Ctrl or meta with the wheel, which trackpad pinches produce in Chromium
     and Firefox, commits 150 ms after the last event.
   - Two touches commit when either lifts. `PdfViewport` sets `touch-action:
@@ -300,7 +303,7 @@ with the API.
     preview pans with their midpoint; their zoom starts once their distance
     changed by 16 CSS pixels, so a two-finger drag or tap only scrolls.
     The touches are read once a frame, before the update in the animation
-    frame callback, and before a lift or another commit (`#readTouches()`).
+    frame callback, and before a lift or another commit (`readTouches()`).
     Browsers deliver the two fingers' moves one after the other, so read at
     each move, the distance measured the moved finger against where the
     other was a frame before, and a two-finger drag zoomed once one frame's
@@ -333,7 +336,7 @@ with the API.
     sideways in Safari in the iPadOS simulator.
   - The mounted window, `currentPage`, and the scheduler follow the part of
     the content the preview shows, the viewport mapped back through the
-    preview's transform (`#shownViewport()`), so the pages a two-finger drag
+    preview's transform (`shownViewport()`), so the pages a two-finger drag
     or a zoom out brings into view mount and draw before the commit. The
     scheduler's `Viewport` keeps the scroller's width, which pages are
     centered in, apart from the width the preview shows. A drag's speed defers

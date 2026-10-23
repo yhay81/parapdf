@@ -340,6 +340,36 @@ export function pageTop(layout: Layout, index: number, viewportHeight: number): 
   return top + Math.max(0, (viewportHeight - (layout.rowHeights[index] ?? 0)) / 2 - layout.gap);
 }
 
+/** The scroller's size, which rows are centered in. */
+export interface ScrollerSize {
+  width: number;
+  height: number;
+}
+
+/**
+ * The scroll position at which the content point `point` of `layout` shows
+ * at `anchor` (viewport coordinates) in `next`, as a share of the same page
+ * along both axes: rows are centered in the viewport and may wrap
+ * differently, so a share of the content's size moved points sideways. The
+ * browser clamps it to the scrollable range.
+ */
+export function zoomTarget(
+  layout: Layout,
+  next: Layout,
+  scroller: ScrollerSize,
+  anchor: { x: number; y: number },
+  point: { x: number; y: number },
+): { left: number; top: number } {
+  const { width, height } = scroller;
+  const page = pageAtPoint(layout, point.x, point.y, width);
+  const withinX = (point.x - pageLeft(layout, page, width)) / (layout.widths[page] || 1);
+  const withinY = (point.y - pageTop(layout, page, height)) / (layout.heights[page] || 1);
+  return {
+    left: pageLeft(next, page, width) + withinX * (next.widths[page] ?? 0) - anchor.x,
+    top: pageTop(next, page, height) + withinY * (next.heights[page] ?? 0) - anchor.y,
+  };
+}
+
 /** The part of a page inside the viewport, or null when none of it is. */
 export function visibleArea(layout: Layout, index: number, viewport: Viewport): PageArea | null {
   const width = layout.widths[index] ?? 0;
