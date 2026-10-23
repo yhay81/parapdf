@@ -5,7 +5,8 @@ A fast PDF viewer for React, built on [pdf.js](https://github.com/mozilla/pdf.js
 > **Status: 0.x, experimental.** The API may change in any minor release
 > until 1.0. See the [changelog](https://github.com/yhay81/parapdf/blob/main/CHANGELOG.md)
 > and the [measurements](https://github.com/yhay81/parapdf#phase-0) behind the
-> design.
+> design. [parapdf.yhay81.com](https://parapdf.yhay81.com) has guides with
+> examples that run, and a [live demo](https://parapdf.yhay81.com/demo/).
 
 - **React stays out of the hot path.** Scrolling and zooming commit no React
   state per frame: React renders only when the set of mounted pages or the

@@ -1,0 +1,42 @@
+---
+title: Encrypted documents
+description: Ask for the password of an encrypted PDF, or pass it with the source.
+---
+
+import { PasswordExample } from "../../../components/examples.tsx";
+
+An encrypted document waits for its password with `status` `"password"`;
+`passwordReason` says whether one is `"required"` or the last one was
+`"incorrect"`. Answer with `viewer.submitPassword(password)`, or
+`submitPassword(null)` to give up, which fails the document:
+
+```tsx
+function PasswordPrompt() {
+  const viewer = usePdfViewer();
+  const reason = usePdfState((state) => state.passwordReason);
+  const [password, setPassword] = useState("");
+  if (!reason) return null;
+  return (
+    <form onSubmit={(event) => { event.preventDefault(); viewer.submitPassword(password); }}>
+      <label>
+        {reason === "incorrect" ? "Wrong password, try again" : "Password"}
+        <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
+      </label>
+      <button type="submit">Open</button>
+    </form>
+  );
+}
+```
+
+<PasswordExample client:visible />
+
+A source can carry the password too (see [Sources](/reference/sources/)); the
+viewer asks only when it is wrong. Changing `source.password` tries the new
+value on the shared document still loading, even before its password request
+arrives. This also works with `passwordPrompt: false`.
+
+An application without such a prompt passes `passwordPrompt: false` in
+`options`: an encrypted document then fails at once with `status` `"error"`
+instead of waiting for a password no one can type.
+
+What an encrypted document permits is in [Permissions](/guides/permissions/).

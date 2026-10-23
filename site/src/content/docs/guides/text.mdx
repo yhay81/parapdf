@@ -1,0 +1,73 @@
+---
+title: Text, selections, and overlays
+description: Read the document's text, follow the reader's selection, and draw your own elements over pages.
+---
+
+import { TextExample } from "../../../components/examples.tsx";
+
+<TextExample client:visible />
+
+## The document's text
+
+`viewer.getText(options)` reads the document's text from every page, mounted
+or not, as search reads it: the text runs in content order, `"\n"` where a
+line ends, and an empty line between pages.
+
+```ts
+const { text, pages } = await viewer.getText();
+// pages: [{ pageIndex: 0, text: "…", offset: 0 }, …], where offset is the page's start in text
+```
+
+- `from` and `to` narrow it to pages (`{ from: 2, to: 4 }` reads pages 3 to
+  5) or to points in the text: a search match's ends,
+  `{ pageIndex: match.pageIndex, ...match.start }` and `...match.end`, or a
+  selection's, `getSelection().start` and `.end`. A point is included as a
+  start and excluded as an end.
+- `lineBreaks: "join"` joins lines as search does: without a space inside a
+  word hyphenated across lines and in Japanese and Chinese text, with one
+  elsewhere.
+- `signal` stops a read, which then rejects with the signal's reason.
+
+Pages are parsed in pdf.js's worker a few at a time, and the text is kept: a
+second read, or a search, parses nothing again. The browser's selection
+covers only mounted pages; to copy a range longer than those, read it with
+`getText()` between the points where it starts and ends.
+
+## Selections
+
+`viewer.getSelection()` returns the text selected in the viewer and the
+rectangles it covers, page by page, in the PDF points `PdfPageRect` takes, so
+you can keep a selection as a highlight. `usePdfSelection()` follows it:
+
+```tsx
+const selection = usePdfSelection();
+// { text: "…", pages: [{ pageIndex: 0, rects: [{ x, y, width, height }] }], start, end } or null
+```
+
+`start` and `end` are where the selection begins and ends in the document's
+text, for `getText()`; null for an end outside the pages' text.
+
+Rectangles are in PDF points of the page unturned by the view, from its
+top-left corner, so they stay right whatever the zoom and rotation.
+
+## Overlays
+
+`renderOverlay` draws your own elements over pages, placed with
+`PdfPageRect` in PDF points from the page's top-left corner. Overlays follow
+zoom and rotation through layout alone, without re-rendering:
+
+```tsx
+<PdfViewport
+  style={{ height: "100vh" }}
+  renderOverlay={(pageIndex) =>
+    pageIndex === 0 ? (
+      <PdfPageRect pageIndex={0} x={72} y={72} width={200} height={24}>
+        <mark style={{ display: "block", height: "100%", opacity: 0.4 }} />
+      </PdfPageRect>
+    ) : null
+  }
+/>
+```
+
+`renderOverlay` is called for mounted pages only, so an overlay of every page
+costs only what the pages near the viewport show.

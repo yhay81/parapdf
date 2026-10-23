@@ -1,0 +1,82 @@
+---
+title: Controls and state
+description: Read the viewer's state and change the view from your own components.
+---
+
+import { ControlsExample } from "../../../components/examples.tsx";
+
+Components inside `<PdfDocument>` reach the viewer with hooks:
+
+```tsx
+import { usePdfState, usePdfViewer } from "parapdf";
+
+function Toolbar() {
+  const viewer = usePdfViewer();
+  const page = usePdfState((state) => state.currentPage);
+  const pageCount = usePdfState((state) => state.pageCount);
+  // CSS pixels per PDF point; 96 / 72 shows a page at its printed size.
+  const scale = usePdfState((state) => state.scale);
+  return (
+    <div role="toolbar" aria-label="PDF controls">
+      <button type="button" onClick={() => viewer.previousPage()}>Previous</button>
+      <span>{page + 1} / {pageCount}</span>
+      <button type="button" onClick={() => viewer.nextPage()}>Next</button>
+      <button type="button" onClick={() => viewer.zoomBy(1 / 1.25)}>Zoom out</button>
+      <span>{Math.round((scale * 72 * 100) / 96)}%</span>
+      <button type="button" onClick={() => viewer.zoomBy(1.25)}>Zoom in</button>
+      <button type="button" onClick={() => viewer.setScale("fit-width")}>Fit width</button>
+      <button type="button" onClick={() => viewer.rotate(90)}>Rotate</button>
+    </div>
+  );
+}
+
+export function App() {
+  return (
+    <PdfDocument source="/manual.pdf">
+      <Toolbar />
+      <PdfViewport style={{ height: "80vh" }} />
+    </PdfDocument>
+  );
+}
+```
+
+<ControlsExample client:visible />
+
+## Reading state
+
+`usePdfState(selector)` re-renders its component only when the selected value
+changes. Return a primitive or an object the state already holds, not a new
+object or array: select each value with a selector of its own instead.
+
+The store publishes when the mounted pages, the current page, or the zoom
+change, not at every scrolled frame, so a toolbar costs nothing while the
+reader scrolls. [The state reference](/reference/state/) lists every field:
+the status and load progress, page count and labels, scale, rotation, scroll
+mode, search, outline, permissions, metadata, layers, attachments, and the
+annotation editor's state.
+
+## Changing the view
+
+`usePdfViewer()` returns the viewer runtime, whose methods change the view:
+
+- `goToPage(index)`, and `nextPage()` and `previousPage()`, which move by a
+  whole spread or row.
+- `zoomBy(factor)`, `setScale(scale | "fit-width" | "fit-page")`, and
+  `resetScale()`, back to `initialScale`.
+- `rotate(degrees)` and `setRotation(rotation)`, clockwise in quarter turns.
+- `setSpread(spread)` and `setScrollMode(mode)`: see [Scroll modes and
+  spreads](/guides/layout/).
+- `setTool("select" | "hand")`: what a mouse drag does, select text or
+  scroll the document.
+
+[The viewer reference](/reference/viewer/) lists the others.
+
+## Keyboard and gestures
+
+The viewport is focusable. The arrow keys, Page Up, Page Down, Home, End, and
+space scroll it, or turn pages in `"page"` mode, and Ctrl or ⌘ with +, -, and
+0 zoom in, out, and back to `initialScale`.
+
+Ctrl or ⌘ with the wheel, trackpad pinches, touch pinches, and Safari's
+gesture events zoom the document around the pointer or the fingers instead of
+zooming the page. One finger still scrolls natively.

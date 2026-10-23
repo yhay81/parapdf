@@ -1,0 +1,16 @@
+// The documentation site as a Worker with static assets, Cloudflare's
+// successor to Pages: `wrangler deploy` after `pnpm build`.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "parapdf",
+  "compatibility_date": "2026-10-12",
+  "assets": {
+    "directory": "./dist",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  },
+  "routes": [{ "pattern": "parapdf.yhay81.com", "custom_domain": true }],
+  // `wrangler versions upload --preview-alias next` shows main before a
+  // release, at next-parapdf.<subdomain>.workers.dev.
+  "preview_urls": true
+}

@@ -2,3 +2,7 @@ packages:
   - bench
   - packages/*
   - examples/*
+  - site
+allowBuilds:
+  esbuild: false
+  workerd: false

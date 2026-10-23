@@ -1,0 +1,56 @@
+---
+title: Scroll modes, spreads, and fitting
+description: Arrange pages in a column, a row, wrapped rows, or one at a time, alone or in pairs.
+---
+
+import { LayoutExample } from "../../../components/examples.tsx";
+
+<LayoutExample client:visible />
+
+## Scroll modes
+
+`viewer.setScrollMode(mode)`, or the `scrollMode` option, arranges pages as
+pdf.js's viewer does:
+
+| Mode | |
+|---|---|
+| `"vertical"` | The default: pages stacked top to bottom. |
+| `"horizontal"` | One row that scrolls sideways, centered in the viewport's height. |
+| `"wrapped"` | Each row filled with as many pages as fit the viewport's width, again when it resizes. |
+| `"page"` | One page, or one spread, at a time. |
+
+In `"page"` mode, `goToPage()`, `nextPage()`, `previousPage()`, links, and
+search turn pages, and so do the keys that would scroll past the edge of the
+page shown: Page Down, space, and ↓ at its bottom and → at its right edge go
+forward, and Page Up, Shift+space, ↑, and ← go back; Home and End go to the
+first and last page.
+
+On touch screens, a one-finger swipe to the left or up turns to the next
+page, and to the right or down back, like turning paper. Short or slanted
+swipes, pinches, and swipes with an annotation tool chosen do not. A zoomed
+page scrolls within itself, and the pages beside it are drawn before they
+show: a swipe from its edge turns it.
+
+The current page stays in view when the mode changes.
+
+## Spreads
+
+`viewer.setSpread("odd")`, or the `spread` option, shows pages side by side
+in pairs, 1–2, 3–4; `"even"` shows page 1 alone and pairs 2–3, 4–5, like a
+book with its cover; `"none"` goes back to one page per row. Pairs stay
+together in every scroll mode: in a wrapped row and when `"page"` mode turns.
+
+## Fitting
+
+`setScale("fit-width")`, the default `initialScale`, fits the current page to
+the viewport's width, and `setScale("fit-page")` fits all of it; both keep
+fitting as the viewport resizes, the view turns, or the page's real size
+arrives. The state's `zoomMode` says which one holds; a numeric scale, a
+zoom step, or a pinch makes it `"custom"`.
+
+In a spread mode, fitting counts two pages, so the zoom stays the same from
+row to row, as in pdf.js. In `"horizontal"` mode, where all pages share one
+row, fitting counts one.
+
+Pages of different sizes are each centered in the viewport, and a page wider
+than the viewport starts at its left edge.

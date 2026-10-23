@@ -1,0 +1,73 @@
+---
+title: ParaPDF
+description: A fast PDF viewer for React, built on pdf.js.
+head:
+  - tag: title
+    content: ParaPDF, a fast PDF viewer for React
+template: splash
+hero:
+  tagline: A fast PDF viewer for React, built on pdf.js. Scrolling and zooming never wait for React, and only the pages near the viewport exist.
+  actions:
+    - text: Get started
+      link: /getting-started/
+      icon: right-arrow
+    - text: Open the demo
+      link: /demo/
+      variant: secondary
+    - text: GitHub
+      link: https://github.com/yhay81/parapdf
+      icon: github
+      variant: minimal
+---
+
+import { Card, CardGrid } from "@astrojs/starlight/components";
+import { HeroViewer } from "../../components/examples.tsx";
+
+<HeroViewer client:visible />
+
+```bash
+npm install parapdf
+```
+
+```tsx
+import { PdfDocument, PdfViewport } from "parapdf";
+
+export function App() {
+  return (
+    <PdfDocument source="/manual.pdf">
+      <PdfViewport style={{ height: "100vh" }} />
+    </PdfDocument>
+  );
+}
+```
+
+That is all the setup: ParaPDF ships pdf.js, its worker, and the files it
+loads on demand, and your bundler serves them from your application's origin.
+
+<CardGrid>
+  <Card title="React stays out of the hot path" icon="rocket">
+    Scrolling and zooming commit no React state per frame. React renders only
+    when the set of mounted pages or the current page changes, and pixels reach
+    canvases through refs.
+  </Card>
+  <Card title="Only what is near the viewport exists" icon="document">
+    Pages outside a small window unmount and give their canvas memory back.
+    Each page draws a quick base first and full resolution once scrolling
+    settles, within pixel budgets you can set.
+  </Card>
+  <Card title="A real document" icon="magnifier">
+    Selectable text that screen readers read, in the structure a tagged PDF
+    gives it; whole-document search, CJK text included; links, the outline,
+    and back and forward.
+  </Card>
+  <Card title="What a document viewer does" icon="pencil">
+    Fillable forms that save into the PDF, annotations, layers, attachments,
+    thumbnails, printing, spreads, scroll modes, encrypted documents, and
+    selections in PDF coordinates.
+  </Card>
+</CardGrid>
+
+ParaPDF is at 0.x: its API may change in any minor release until 1.0. The
+[changelog](https://github.com/yhay81/parapdf/blob/main/CHANGELOG.md) lists
+every release, and [Performance](/about/performance/) the measurements
+behind the design, losses included.

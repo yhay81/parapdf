@@ -22,7 +22,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
       # The benchmark's own typecheck needs its Rust build (pnpm bench:build).
-      - run: pnpm --filter parapdf --filter @parapdf/prototype typecheck
+      - run: pnpm --filter parapdf --filter @parapdf/prototype --filter @parapdf/site typecheck
       - run: pnpm test
       - run: pnpm --filter parapdf check:package
 

@@ -1,0 +1,45 @@
+---
+title: Thumbnails
+description: Show every page as a small picture that costs little.
+---
+
+import { ThumbnailsExample } from "../../../components/examples.tsx";
+
+`PdfThumbnail` draws a page `width` CSS pixels wide; its height follows the
+page's shape as the view turns it. It is a picture only: wrap it in a button
+or a link labelled with the page.
+
+```tsx
+import { PdfThumbnail, usePdfState, usePdfViewer } from "parapdf";
+
+function Thumbnails() {
+  const viewer = usePdfViewer();
+  const pageCount = usePdfState((state) => state.pageCount);
+  const labels = usePdfState((state) => state.pageLabels);
+  return (
+    <nav aria-label="Pages" style={{ overflow: "auto" }}>
+      {Array.from({ length: pageCount }, (_, index) => (
+        <button key={index} type="button" onClick={() => viewer.goToPage(index)}>
+          <PdfThumbnail pageIndex={index} width={120} />
+          {labels?.[index] ?? index + 1}
+        </button>
+      ))}
+    </nav>
+  );
+}
+```
+
+<ThumbnailsExample client:visible />
+
+## What it costs
+
+- Only thumbnails near the visible part of their scroll container hold
+  pixels, so a list of every page stays cheap: one `IntersectionObserver`
+  per container draws those that come near and clears the others.
+- Thumbnails draw at a lower priority than the pages in view, and always
+  leave a render slot for the next page that scrolls in.
+- A thumbnail copies the page's drawing when the viewer already has one at
+  least as large, instead of drawing the page again.
+
+Thumbnails show pages without the annotations the reader created, as
+pdf.js's do, and pages drawn with fillable forms are drawn again for them.

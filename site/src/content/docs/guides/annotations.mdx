@@ -1,0 +1,122 @@
+---
+title: Annotations
+description: Let the reader create highlights, text, drawings, images, and signatures.
+---
+
+import { AnnotationsExample } from "../../../components/examples.tsx";
+
+With `options={{ annotationEditing: true }}`, the reader can create
+highlights, text, drawings, images, and signatures, with pdf.js's editors.
+
+<AnnotationsExample client:visible />
+
+## Tools
+
+`viewer.setAnnotationTool(tool)` chooses what a pointer does on the pages:
+
+| Tool | |
+|---|---|
+| `"highlight"` | Selecting text highlights it; a drag outside text highlights freehand. |
+| `"freetext"` | A click adds text where the reader types. |
+| `"ink"` | A drag draws. |
+| `"stamp"`, `"signature"` | Select and move images and signatures, which `addImage()` and `addSignature()` add. |
+| `"none"` | The default: annotations show, but cannot be selected. |
+
+With any tool, the reader selects, moves, resizes, and deletes the
+annotations created, and a selected one shows pdf.js's small toolbar with its
+color and a delete button. Ctrl or ⌘ with Z undoes, and the arrow keys move
+what is selected.
+
+```tsx
+function AnnotationTools() {
+  const viewer = usePdfViewer();
+  const tool = usePdfState((state) => state.annotationTool);
+  const canUndo = usePdfState((state) => state.annotationState?.canUndo ?? false);
+  const ink = usePdfState((state) => state.annotationStyles?.ink);
+  return (
+    <div role="toolbar" aria-label="Annotations">
+      <button type="button" aria-pressed={tool === "ink"} onClick={() => viewer.setAnnotationTool("ink")}>
+        Draw
+      </button>
+      <input
+        type="color"
+        aria-label="Line color"
+        value={ink?.color.toLowerCase() ?? "#000000"}
+        onChange={(event) => viewer.setAnnotationStyle("ink", { color: event.target.value })}
+      />
+      <button type="button" disabled={!canUndo} onClick={() => viewer.undoAnnotation()}>
+        Undo
+      </button>
+    </div>
+  );
+}
+```
+
+## Styles, undo, and selection
+
+- `setAnnotationStyle(tool, style)` restyles the selected annotations, or,
+  with none selected, the next ones `tool` creates: `color` for each tool,
+  `thickness` for `"ink"` and freehand highlights, `opacity` for `"ink"`, and
+  `fontSize` for `"freetext"`, in PDF points. `annotationStyles` shows each
+  tool's style, or the selected annotation's.
+- `undoAnnotation()`, `redoAnnotation()`, `deleteSelectedAnnotations()`, and
+  `selectAllAnnotations()`; `annotationState` says whether there is
+  something to undo or redo (`canUndo`, `canRedo`), whether annotations are
+  selected (`hasSelection`), and whether there are any (`isEmpty`).
+
+## Images and signatures
+
+- `addImage(image, { pageIndex, altText })` adds an image, a `Blob` or a URL,
+  to the current page or `pageIndex`, in the middle of its visible part, and
+  selects it. `altText` describes it to assistive technology, in the saved
+  PDF too.
+- `addSignature(signature, { pageIndex, description })` adds a signature the
+  same way, from typed text (`{ text, fontFamily }`, italic serif by
+  default), an image (`{ image }`, whose outline is traced), or strokes the
+  application drew (`{ strokes, width, height, thickness }`, each stroke a
+  list of x and y coordinates in a box of `width` by `height`). ParaPDF shows
+  no signature pad or dialog of its own.
+
+Both resolve to `true` once the annotation is ready to save or export, or
+`false` if it cannot be added. Await them before saving: an image's download,
+decoding, or signature tracing may take time. Choosing another annotation
+tool while either is pending cancels that insertion, which resolves to
+`false`. Empty or untraceable signatures also resolve to `false`, without
+adding an annotation or undo step.
+
+## Saving and keeping annotations
+
+Annotations go into the document's bytes that `save()`, `download()`, and
+`print()` use. To keep them apart from the PDF, say on a server,
+`exportAnnotations()` returns them as JSON-compatible data, and
+`importAnnotations(annotations)` adds them again where they were, after the
+same document opens again, without an undo step:
+
+```ts
+localStorage.setItem("annotations", JSON.stringify(viewer.exportAnnotations()));
+// Later, once the document is open (status "ready"):
+await viewer.importAnnotations(JSON.parse(localStorage.getItem("annotations") ?? "[]"));
+```
+
+Each exported annotation has `pageIndex`, `type` (the tool that made it), and
+`data`, pdf.js's own description of it: keep `data` as it is. It is the form
+pdf.js pastes copies in, which may change when ParaPDF moves to another
+pdf.js; the changelog says when. Text being typed counts once it is
+committed, when the reader clicks elsewhere or another tool is chosen.
+Annotations belong to the open document: they are gone once the viewer
+closes it, so export or save them before.
+
+## Costs and limits
+
+The editor's code and styles load when a viewer with `annotationEditing`
+opens a document, so applications that do not edit annotations do not
+download them; `annotationState` is null until then. A viewer that edits
+annotations opens its own copy of the document instead of sharing one with
+other viewers of the same source. Thumbnails show pages without the
+annotations created, as pdf.js's do.
+
+Label the editor's controls in the application's language with
+`annotationLabels`; the defaults are pdf.js's English names.
+
+Annotations the PDF already holds stay as they are drawn: they cannot be
+edited yet, and comments on created annotations are not shown.

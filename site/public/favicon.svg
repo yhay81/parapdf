@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <title>ParaPDF</title>
+  <rect x="10" y="3" width="17" height="22" rx="2.5" fill="#8aa4ff"/>
+  <rect x="5" y="7" width="17" height="22" rx="2.5" fill="#3451d1"/>
+  <path d="M9.5 13.5h8M9.5 17.5h8M9.5 21.5h5" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+</svg>

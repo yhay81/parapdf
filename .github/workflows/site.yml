@@ -1,0 +1,45 @@
+name: Site
+
+# The site documents the released package: a release tag deploys it to
+# https://parapdf.yhay81.com, a Cloudflare Worker with static assets
+# (site/wrangler.jsonc), and main shows at https://next-parapdf.yusuke8h.workers.dev.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  site:
+    name: Build and deploy the site
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The demo's samples include generated documents.
+      - run: pnpm --filter @parapdf/bench corpus
+      - run: pnpm --filter @parapdf/site build
+      # Pull requests only build.
+      - name: Upload main as the preview
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: pnpm --filter @parapdf/site exec wrangler versions upload --preview-alias next --message "main ${GITHUB_SHA}"
+      # A run started by hand deploys its ref as the released site.
+      - name: Deploy the released site
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+        run: pnpm --filter @parapdf/site exec wrangler deploy --message "${GITHUB_REF_NAME} ${GITHUB_SHA}"

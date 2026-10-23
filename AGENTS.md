@@ -13,8 +13,9 @@ Phase 0: engine comparison benchmark and runtime prototype. The runtime is
 published on npm as `parapdf` 0.x, first as 0.1.0 on 2026-10-20, for early
 use: its API is experimental, and any minor release may change it. Record
 every change to the package in `CHANGELOG.md`, and keep
-`packages/parapdf/README.md`, the package's documentation on npm, in step
-with the API.
+`packages/parapdf/README.md`, the package's documentation on npm, and the
+documentation site (`site/`, https://parapdf.yhay81.com) in step with the
+API.
 
 ## Product principles
 
@@ -80,6 +81,16 @@ with the API.
   benchmark (`scripts/scroll-bench.ts`, results per browser in `results/`,
   summarized by `scripts/compare.ts` in `results/browsers.md`), and
   functional checks (`scripts/check-*.ts`).
+- `site/` — the documentation site (`@parapdf/site`, private), Astro with
+  Starlight: guides and reference in `src/content/docs/`, live examples
+  (`src/components/examples.tsx`), and the full demo at `/demo/`
+  (`src/components/demo/`, `src/pages/demo.astro`). It is served by a
+  Cloudflare Worker with static assets (`wrangler.jsonc`, which also
+  attaches the custom domain) and deployed by `.github/workflows/site.yml`.
+  The samples it serves are listed in `src/samples.ts` with their sources
+  and copied from `bench/corpus/` by `astro.config.ts`, which also keeps
+  Vite from inlining pdf.js's files. The docs are written for people: they
+  restate `packages/parapdf/README.md` by topic, with examples that run.
 - `CONTRIBUTING.md` and `SECURITY.md` — what a pull request needs and how
   to report a vulnerability, for people. They summarize this file: keep them
   in step with it. `.github/` holds CI, the issue forms, the pull request
@@ -220,6 +231,17 @@ with the API.
 - `pnpm --filter parapdf build` — JavaScript and declarations in
   `packages/parapdf/dist/`; `pnpm --filter parapdf pack` builds and packs the
   tarball.
+- `pnpm --filter @parapdf/site dev` — the documentation site on Astro's
+  development server; `build` writes it to `site/dist/` and `preview` serves
+  that (both after `pnpm --filter @parapdf/bench corpus`, whose documents the
+  demo shows). Release tags and runs started by hand deploy it to
+  https://parapdf.yhay81.com (`wrangler deploy`), and `main` uploads a
+  version without deploying it, shown at
+  https://next-parapdf.yusuke8h.workers.dev (`wrangler versions upload
+  --preview-alias next`); pull requests only build it. CI needs the
+  `CLOUDFLARE_API_TOKEN` (with the "Edit Cloudflare Workers" template's
+  permissions) and `CLOUDFLARE_ACCOUNT_ID` secrets; locally, `wrangler
+  login` with the account that holds yhay81.com.
 - `pnpm test` — unit tests of the package's layout, search normalization,
   store, and document sharing.
 - `pnpm --filter parapdf check:package` — packs the package and checks the
@@ -272,7 +294,8 @@ with the API.
 2. Run `pnpm check`, `pnpm typecheck`, `pnpm test`, `pnpm --filter parapdf
    check:package`, and every functional check in Chromium, WebKit, and
    Firefox.
-3. Commit, tag `vX.Y.Z`, and push the branch and the tag.
+3. Commit, tag `vX.Y.Z`, and push the branch and the tag; the tag deploys
+   the documentation site.
 4. `pnpm --filter parapdf publish` from `main` in a checkout without
    uncommitted or untracked files, which pnpm's git checks refuse: pnpm
    applies `publishConfig` and runs `prepack`, which builds and copies the

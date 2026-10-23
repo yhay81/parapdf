@@ -1,0 +1,80 @@
+---
+title: Search
+description: Find text in every page of the document, as pdf.js's viewer does.
+---
+
+import { SearchExample } from "../../../components/examples.tsx";
+
+```tsx
+import { usePdfSearch } from "parapdf";
+
+function Find() {
+  const search = usePdfSearch();
+  return (
+    <search>
+      <input
+        type="search"
+        aria-label="Find in document"
+        onChange={(event) => search.search(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") event.shiftKey ? search.previous() : search.next();
+        }}
+      />
+      <output aria-live="polite">
+        {search.matches.length > 0 ? `${search.current + 1} of ${search.matches.length}` : ""}
+      </output>
+    </search>
+  );
+}
+```
+
+<SearchExample client:visible />
+
+Search covers the whole document, not only the mounted pages, and streams
+results page by page: `status` is `"searching"`, then `"done"`, and
+`pagesSearched` counts the pages read so far. The first match at or after
+the current page is selected and scrolled into view. Debounce `search()`
+while the user types.
+
+## Matching
+
+Like pdf.js's viewer, search ignores case, diacritics, and full-width forms,
+and joins words that a line end splits, such as a hyphenated word or Japanese
+text. Marks that make a different letter, such as Japanese voiced sound
+marks, still count.
+
+`search(query, options)` takes the options of pdf.js's find bar, all off by
+default:
+
+| Option | |
+|---|---|
+| `caseSensitive` | Upper and lower case differ. |
+| `entireWord` | A match must not be part of a longer word. |
+| `matchDiacritics` | é no longer matches e. |
+
+`next()`, `previous()`, and `clear()` move between matches and end the
+search. Each match (`SearchMatch`) has its `pageIndex` and its `start` and
+`end` in the page's text, which [`getText()`](/guides/text/) takes.
+
+## Highlights
+
+Matches are painted with the CSS Custom Highlight API, without touching the
+text layer. Style them with:
+
+```css
+::highlight(parapdf-search) {
+  background-color: rgb(255 200 0 / 0.45);
+}
+
+::highlight(parapdf-search-current) {
+  background-color: rgb(255 110 0 / 0.65);
+}
+```
+
+Browsers without the API find and scroll to matches without painting them.
+
+## The browser's own find
+
+Only mounted pages have text layers, so the browser's find sees only those.
+Applications usually take Ctrl or ⌘ with F to focus their own search field,
+as [the demo](/demo/) does.

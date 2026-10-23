@@ -44,7 +44,7 @@ scroll mode, zoom, and more, are listed under "Commands" in `AGENTS.md`.
 
 ```bash
 pnpm check
-pnpm --filter parapdf --filter @parapdf/prototype typecheck
+pnpm --filter parapdf --filter @parapdf/prototype --filter @parapdf/site typecheck
 pnpm test
 pnpm --filter parapdf check:package
 pnpm --filter @parapdf/prototype build
@@ -57,9 +57,10 @@ ENGINE=pdfjs pnpm --filter @parapdf/prototype check:text
   Chromium, WebKit, and Firefox, so for selection, gestures, scrolling, or
   layout, run them with `BROWSER=webkit` and `BROWSER=firefox` too.
 - A change to the package gets an entry under "Unreleased" in
-  [`CHANGELOG.md`](CHANGELOG.md), and
+  [`CHANGELOG.md`](CHANGELOG.md), and both
   [`packages/parapdf/README.md`](packages/parapdf/README.md), the package's
-  documentation on npm, follows the API.
+  documentation on npm, and the documentation site in [`site/`](site)
+  follow the API. `pnpm --filter @parapdf/site dev` shows the site.
 - Measure performance with the benchmarks described under "Benchmark
   methodology" in `AGENTS.md`, on AC power.
 - Write code, comments, documentation, and commit messages in English;

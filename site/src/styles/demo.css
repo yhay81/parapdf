@@ -1,0 +1,400 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f4f5f8;
+  --bar: #ffffff;
+  --panel: #fafbfc;
+  --canvas: #dfe2e8;
+  --line: #d6d9e0;
+  --text: #1b1e27;
+  --muted: #5d6475;
+  --control: #ffffff;
+  --control-line: #c4c9d4;
+  --accent: #3451d1;
+  --accent-low: #e2e7ff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17181c;
+    --bar: #202227;
+    --panel: #1b1d21;
+    --canvas: #34373e;
+    --line: #33363d;
+    --text: #e8e9ed;
+    --muted: #a1a6b3;
+    --control: #2a2d33;
+    --control-line: #464a53;
+    --accent: #7d92ff;
+    --accent-low: #263066;
+  }
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font:
+    14px / 1.4 system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+}
+
+.demo {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
+.demo :is(button, select, input) {
+  min-height: 2rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--control-line);
+  border-radius: 0.375rem;
+  background: var(--control);
+  color: var(--text);
+  font: inherit;
+}
+
+.demo :is(button, select):not(:disabled) {
+  cursor: pointer;
+}
+
+.demo :is(button, select):hover:not(:disabled) {
+  border-color: var(--muted);
+}
+
+.demo button[aria-pressed="true"],
+.demo button[aria-selected="true"] {
+  border-color: var(--accent);
+  background: var(--accent-low);
+}
+
+.demo button:disabled {
+  opacity: 0.45;
+}
+
+.demo :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.demo a {
+  color: var(--accent);
+}
+
+.demo-header,
+.demo-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  align-items: center;
+  padding: 0.375rem 0.625rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--bar);
+}
+
+.demo-header {
+  gap: 0.5rem;
+}
+
+.demo .demo-brand {
+  display: inline-flex;
+  gap: 0.375rem;
+  align-items: center;
+  margin-right: 0.25rem;
+  color: var(--text);
+  font-weight: 650;
+  font-size: 1rem;
+  text-decoration: none;
+}
+
+.demo-document select {
+  max-width: 18rem;
+}
+
+.demo-icon {
+  min-width: 2rem;
+}
+
+.demo-search {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.demo-search input {
+  width: 12rem;
+}
+
+.demo-search output,
+.demo-status {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.demo-docs {
+  padding: 0 0.25rem;
+}
+
+.demo-spacer {
+  flex: 1;
+}
+
+.demo-group {
+  display: inline-flex;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.demo-group output {
+  min-width: 4.5ch;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.demo-page {
+  display: inline-flex;
+  gap: 0.375rem;
+  align-items: center;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.demo-page input {
+  width: 3.5rem;
+  text-align: right;
+}
+
+.demo-annotations {
+  background: var(--panel);
+}
+
+.demo-annotations input[type="color"] {
+  width: 2.5rem;
+  padding: 0.125rem;
+}
+
+.demo-password {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.625rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--accent-low);
+}
+
+.demo-main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.demo-viewport {
+  flex: 1;
+  min-width: 0;
+  background: var(--canvas);
+}
+
+.demo-side {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  width: 15rem;
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.demo-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.demo-tabs button {
+  min-height: 1.75rem;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.8125rem;
+}
+
+.demo-panel {
+  flex: 1;
+  overflow: auto;
+}
+
+.demo-thumbnails,
+.demo-outline,
+.demo-layers {
+  margin: 0;
+  padding: 0.5rem;
+  list-style: none;
+}
+
+.demo-thumbnails button {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  align-items: center;
+  width: 100%;
+  padding: 0.375rem;
+  border: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+}
+
+.demo-thumbnails button[aria-current="page"] {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.demo-outline ul,
+.demo-layers ul {
+  margin: 0;
+  padding-left: 0.75rem;
+  list-style: none;
+}
+
+.demo-outline :is(button, a) {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  padding: 0.25rem 0.375rem;
+  border: 0;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  text-decoration: none;
+}
+
+.demo-outline :is(button, a):hover {
+  background: var(--accent-low);
+}
+
+.demo-layers label {
+  display: flex;
+  gap: 0.375rem;
+  align-items: center;
+  padding: 0.25rem;
+}
+
+.demo-layers input {
+  min-height: 0;
+}
+
+.demo-heading {
+  display: block;
+  padding: 0.25rem;
+  color: var(--muted);
+}
+
+.demo-info {
+  padding: 0.75rem;
+}
+
+.demo-info p {
+  margin: 0 0 0.75rem;
+}
+
+.demo-info dl {
+  margin: 0;
+}
+
+.demo-info dl div {
+  padding: 0.25rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.demo-info dt {
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.demo-info dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.demo-drop {
+  position: fixed;
+  inset: 1rem;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  border: 3px dashed var(--accent);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
+  font-size: 1.25rem;
+  pointer-events: none;
+}
+
+.demo-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 48rem) {
+  .demo-side {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 10;
+    box-shadow: 0 0 1.5rem rgb(0 0 0 / 0.3);
+  }
+
+  .demo-main {
+    position: relative;
+  }
+
+  /* One row each, scrolling sideways, so the pages keep most of a phone's screen. */
+  .demo-toolbar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .demo-toolbar > * {
+    flex: none;
+  }
+
+  .demo-document {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .demo-document select {
+    width: 100%;
+    max-width: none;
+  }
+
+  .demo-search {
+    flex: 1 1 100%;
+    flex-wrap: nowrap;
+  }
+
+  .demo-search input {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+  }
+
+  .demo-search button[aria-pressed],
+  .demo-docs,
+  .demo-spacer {
+    display: none;
+  }
+}

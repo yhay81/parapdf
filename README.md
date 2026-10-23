@@ -16,8 +16,10 @@ parallel rendering on worker threads.
 npm install parapdf
 ```
 
-[`packages/parapdf/README.md`](packages/parapdf/README.md) shows how to set
-it up and what it does; [`CHANGELOG.md`](CHANGELOG.md) lists the releases.
+[parapdf.yhay81.com](https://parapdf.yhay81.com) has the documentation and a
+live demo, and [`packages/parapdf/README.md`](packages/parapdf/README.md)
+the same reference in one page; [`CHANGELOG.md`](CHANGELOG.md) lists the
+releases.
 
 ## Develop it
 
@@ -31,7 +33,7 @@ needs, and [`SECURITY.md`](SECURITY.md) how to report a vulnerability.
 ```bash
 pnpm install
 pnpm check
-pnpm --filter parapdf --filter @parapdf/prototype typecheck
+pnpm --filter parapdf --filter @parapdf/prototype --filter @parapdf/site typecheck
 pnpm test
 pnpm --filter @parapdf/bench exec playwright install chromium webkit firefox
 pnpm --filter @parapdf/bench corpus

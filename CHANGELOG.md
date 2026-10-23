@@ -61,6 +61,9 @@ change the API.
   destinations with an unspecified coordinate.
 - The README's links to the license and notices work on npm: they pointed at
   files the repository keeps only at the root.
+- The documentation moves to https://parapdf.yhay81.com, guides with
+  examples that run and a demo to open your own PDFs in; it is the
+  package's homepage.
 
 ## 0.4.0 — 2026-10-20
 

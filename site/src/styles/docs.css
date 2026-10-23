@@ -1,0 +1,179 @@
+/* ParaPDF's accent, an indigo blue, in both themes. */
+:root {
+  --sl-color-accent-low: #18225a;
+  --sl-color-accent: #5c76ff;
+  --sl-color-accent-high: #c9d2ff;
+}
+
+:root[data-theme="light"] {
+  --sl-color-accent-low: #d9dfff;
+  --sl-color-accent: #3451d1;
+  --sl-color-accent-high: #18245f;
+}
+
+/* Live examples: a toolbar over a viewer, inside the documentation. */
+.example {
+  margin-block: 1.5rem;
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: var(--sl-color-bg-nav);
+  font-size: var(--sl-text-sm);
+}
+
+.example-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  align-items: center;
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--sl-color-hairline);
+}
+
+.example-toolbar :is(button, select, input) {
+  min-height: 2rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.375rem;
+  background: var(--sl-color-gray-6);
+  color: var(--sl-color-white);
+  font: inherit;
+}
+
+.example-toolbar :is(button, select):not(:disabled) {
+  cursor: pointer;
+}
+
+.example-toolbar :is(button, select):hover:not(:disabled) {
+  border-color: var(--sl-color-gray-3);
+}
+
+.example-toolbar button[aria-pressed="true"] {
+  border-color: var(--sl-color-accent);
+  background: var(--sl-color-accent-low);
+}
+
+.example-toolbar button:disabled {
+  opacity: 0.5;
+}
+
+.example-toolbar input[type="search"] {
+  width: 12rem;
+}
+
+.example-toolbar input[type="color"] {
+  width: 2.5rem;
+  padding: 0.125rem;
+}
+
+.example-toolbar output {
+  min-width: 4.5ch;
+  color: var(--sl-color-gray-2);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.example-toolbar .spacer {
+  flex: 1;
+}
+
+.example-viewport {
+  height: 30rem;
+  background: var(--sl-color-gray-6);
+}
+
+.example-body {
+  display: flex;
+}
+
+.example-body > .example-viewport {
+  flex: 1;
+  min-width: 0;
+}
+
+.example-side {
+  flex: none;
+  width: 9.5rem;
+  height: 30rem;
+  overflow: auto;
+  border-right: 1px solid var(--sl-color-hairline);
+}
+
+.example-side ol {
+  margin: 0;
+  padding: 0.5rem;
+  list-style: none;
+}
+
+.example-side button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  width: 100%;
+  padding: 0.375rem;
+  border: 2px solid transparent;
+  border-radius: 0.375rem;
+  background: none;
+  color: var(--sl-color-gray-2);
+  font: inherit;
+  cursor: pointer;
+}
+
+.example-side button[aria-current="page"] {
+  border-color: var(--sl-color-accent);
+  color: var(--sl-color-white);
+}
+
+.example-note {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border-top: 1px solid var(--sl-color-hairline);
+  color: var(--sl-color-gray-3);
+  font-size: var(--sl-text-xs);
+}
+
+.example-note code {
+  font-size: inherit;
+}
+
+.example-note a {
+  color: var(--sl-color-text-accent);
+}
+
+.example-status {
+  color: var(--sl-color-gray-3);
+}
+
+.example-status[data-error] {
+  color: var(--sl-color-red);
+}
+
+.example-password {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--sl-color-hairline);
+}
+
+.example-password :is(input, button) {
+  min-height: 2rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.375rem;
+  background: var(--sl-color-gray-6);
+  color: var(--sl-color-white);
+  font: inherit;
+}
+
+.example-hero .example-viewport {
+  height: min(36rem, 70vh);
+}
+
+@media (max-width: 50rem) {
+  .example-side {
+    display: none;
+  }
+}

@@ -1,0 +1,88 @@
+---
+title: Getting started
+description: Install ParaPDF and show your first PDF.
+---
+
+import { LinkCard, CardGrid, TabItem, Tabs } from "@astrojs/starlight/components";
+import { QuickStartExample } from "../../components/examples.tsx";
+
+:::caution[0.x, experimental]
+The API may change in any minor release until 1.0. The
+[changelog](https://github.com/yhay81/parapdf/blob/main/CHANGELOG.md) says
+what each release changes.
+:::
+
+## Install
+
+<Tabs syncKey="package-manager">
+  <TabItem label="npm">
+    ```bash
+    npm install parapdf
+    ```
+  </TabItem>
+  <TabItem label="pnpm">
+    ```bash
+    pnpm add parapdf
+    ```
+  </TabItem>
+  <TabItem label="yarn">
+    ```bash
+    yarn add parapdf
+    ```
+  </TabItem>
+</Tabs>
+
+ParaPDF needs React 19.2 or later. It depends on pdfjs-dist 6.4.299 exactly,
+because it ships that version's worker and files.
+
+## Show a PDF
+
+```tsx
+import { PdfDocument, PdfViewport } from "parapdf";
+
+export function App() {
+  return (
+    <PdfDocument source="/manual.pdf">
+      <PdfViewport style={{ height: "100vh" }} />
+    </PdfDocument>
+  );
+}
+```
+
+<QuickStartExample client:visible />
+
+- `PdfViewport` is the scroll container. Give it a definite height, as above
+  or through a flex or grid layout: it contains its own layout and does not
+  grow with the document.
+- The first `PdfDocument` to render loads pdf.js and starts its worker, and
+  each one starts downloading its PDF while it renders, from the page's head
+  when the page is rendered on the server. pdf.js takes the preloaded
+  response, so the PDF downloads once (Safari is [not verified
+  yet](/about/limitations/)).
+- This works as it is with bundlers that emit files referenced with
+  `new URL(…, import.meta.url)`, such as Vite, webpack, Rsbuild, and Next.js:
+  see [Bundlers](/setup/bundlers/) for the others.
+
+A source can also be `{ url, httpHeaders, withCredentials }` or `{ data }`
+with the PDF's bytes: see [Sources](/reference/sources/).
+
+## Next
+
+<CardGrid>
+  <LinkCard
+    title="Controls and state"
+    description="Build a toolbar with the viewer's hooks."
+    href="/guides/controls/"
+  />
+  <LinkCard
+    title="Scroll modes and spreads"
+    description="Arrange pages in rows, side by side, or one at a time."
+    href="/guides/layout/"
+  />
+  <LinkCard title="Search" description="Find text in the whole document." href="/guides/search/" />
+  <LinkCard
+    title="Options"
+    description="Everything PdfDocument takes."
+    href="/reference/options/"
+  />
+</CardGrid>

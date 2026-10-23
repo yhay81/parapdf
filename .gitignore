@@ -22,3 +22,10 @@ packages/parapdf/LICENSES/
 
 # Copied from pdfjs-dist on install (packages/parapdf/scripts/pdfjs-files.ts)
 packages/parapdf/pdfjs/
+
+# The site's samples, copied from bench/corpus by site/astro.config.ts, and Astro's generated types
+site/public/samples/
+site/.astro/
+
+# Wrangler's local state
+site/.wrangler/

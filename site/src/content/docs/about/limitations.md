@@ -1,0 +1,40 @@
+---
+title: Limitations
+description: What ParaPDF does not do yet, and what has not been verified.
+---
+
+## Not supported yet
+
+- Editing the annotations a PDF already holds. Annotations the reader
+  creates can be moved, restyled, and deleted; those in the file stay as
+  they are drawn.
+- Comments on created annotations, and pdf.js's alt text dialog: images take
+  their alternative text from `addImage()`.
+- Form scripts (calculations, validation, and button actions), and XFA forms.
+- Right-to-left page order (`/ViewerPreferences /Direction`).
+- Text layers for pages outside the mounted window, so the browser's own find
+  and selection see only mounted pages; use `usePdfSearch` and `getText()`.
+- A highlight fallback for browsers without the CSS Custom Highlight API,
+  which find and scroll to matches without painting them.
+- More than one `PdfViewport` per `PdfDocument`.
+
+## Drawing on the main thread
+
+Released pdfjs-dist draws pages on the main thread; its worker parses.
+Drawing in a worker needs pdf.js's renderer worker
+(`configurePdfjs({ rendererSrc })`), which is only in unreleased pdf.js
+builds so far.
+
+## Not verified yet
+
+- ParaPDF is tested in Playwright's builds of Chromium, WebKit, and Firefox,
+  and by hand in Safari in the iPadOS simulator. Safari on macOS and real iOS
+  and iPadOS devices are not verified yet.
+- Chromium and Firefox give pdf.js the PDF's preloaded download. Whether
+  Safari does is not verified; where a browser does not, the PDF downloads
+  twice.
+- In Safari on iPadOS, a pinch that starts while a fling still scrolls does
+  not reach the page; the next pinch zooms.
+
+Found something else? [Open an
+issue](https://github.com/yhay81/parapdf/issues/new/choose).

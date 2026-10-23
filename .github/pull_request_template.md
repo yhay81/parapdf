@@ -5,7 +5,7 @@
 <!-- The commands you ran, and in which browsers. -->
 
 - [ ] An entry under "Unreleased" in `CHANGELOG.md`, for a change to the package
-- [ ] `packages/parapdf/README.md` follows the API
+- [ ] `packages/parapdf/README.md` and the documentation site in `site/` follow the API
 - [ ] Attribution in `NOTICE.md`, for code ported from pdf.js's viewer
 - [ ] Measurements, including what got worse, for a performance claim
 
