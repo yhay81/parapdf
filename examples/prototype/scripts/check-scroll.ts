@@ -3,9 +3,13 @@
  * "horizontal", "wrapped", and "page" mode, alone and in spreads; the current
  * page; zooming around a point; "fit-width" and "fit-page"; scrolling to a
  * search match; switching modes on the current page; filling rows again
- * after a resize; and flipping pages in "page" mode with keys, buttons, and
- * goToPage(), while scrolling stays within a zoomed page. They run on the
- * synthetic document of mixed page sizes.
+ * after a resize; and flipping pages in "page" mode with keys, buttons,
+ * goToPage(), and one-finger swipes, while scrolling stays within a zoomed
+ * page and pinches, short or slanted swipes, and annotation tools do not
+ * flip. They run on the synthetic document of mixed page sizes.
+ *
+ * Chromium gets real touches through the DevTools protocol, which scroll a
+ * zoomed page natively; WebKit and Firefox get dispatched touch events.
  *
  * Usage: pnpm --filter @parapdf/bench corpus && pnpm --filter @parapdf/prototype build &&
  *   pnpm --filter @parapdf/prototype check:scroll
@@ -46,9 +50,11 @@ interface Viewer {
         totalHeight: number;
       } | null;
       search: { status: string; matches: unknown[] };
+      annotationState: unknown;
     };
   };
   hasPixels(index: number): boolean;
+  setAnnotationTool(tool: string): Promise<void>;
   goToPage(index: number): void;
   setScale(scale: number | string, anchor?: { x: number; y: number }): void;
   setScrollMode(mode: string): void;
@@ -202,6 +208,7 @@ const server = await preview({
   root: exampleDir,
   configFile: join(exampleDir, "vite.config.ts"),
   logLevel: "warn",
+  ...(process.env.DIST ? { build: { outDir: process.env.DIST } } : {}),
   preview: { port: 4185, host: "127.0.0.1", strictPort: false, open: false },
 });
 const baseUrl = server.resolvedUrls?.local[0] ?? "http://127.0.0.1:4185/";
@@ -654,6 +661,189 @@ try {
     );
     check("page, zoomed: no errors", errors.length === 0, errors.slice(0, 3).join(" | "));
     await page.context().close();
+  }
+  // --- One-finger swipes flip pages in "page" mode ---
+  {
+    const real = launched.browser.browserType().name() === "chromium";
+    const openTouch = async (query: string) => {
+      const context = await launched.browser.newContext({
+        viewport: { width: 600, height: 800 },
+        deviceScaleFactor: 2,
+        hasTouch: true,
+      });
+      const page = await context.newPage();
+      await restoreScaleFactor(page, `${baseUrl}calibrate.html`);
+      const errors: string[] = [];
+      page.on("pageerror", (error) => errors.push(error.message));
+      await page.goto(demo(query));
+      await page.waitForFunction(
+        () => (window as unknown as Demo).__viewer?.hasPixels(0) === true,
+        undefined,
+        { timeout: 30_000 },
+      );
+      await page.waitForTimeout(300);
+      await frames(page);
+      const cdp = real ? await context.newCDPSession(page) : null;
+      const box = await page.locator(".parapdf-viewport").boundingBox();
+      const cx = (box?.x ?? 0) + (box?.width ?? 0) / 2;
+      const cy = (box?.y ?? 0) + (box?.height ?? 0) / 2;
+      /** Move `fingers` (offsets from the center) by dx, dy in ten frames and lift them. */
+      const swipe = async (dx: number, dy: number, fingers = [{ x: 0, y: 0 }]) => {
+        const at = (step: number) =>
+          fingers.map((finger, id) => ({
+            id,
+            x: cx + finger.x + (dx * step) / 10,
+            y: cy + finger.y + (dy * step) / 10,
+          }));
+        if (cdp) {
+          const points = (step: number) => at(step).map(({ id, x, y }) => ({ id, x, y }));
+          await cdp.send("Input.dispatchTouchEvent", {
+            type: "touchStart",
+            touchPoints: points(0),
+          });
+          for (let step = 1; step <= 10; step++) {
+            await cdp.send("Input.dispatchTouchEvent", {
+              type: "touchMove",
+              touchPoints: points(step),
+            });
+            await page.waitForTimeout(16);
+          }
+          await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+        } else {
+          await page.evaluate(
+            async ({ start, end }) => {
+              const target = document.elementFromPoint(start[0]?.x ?? 0, start[0]?.y ?? 0);
+              if (!target) return;
+              // Playwright's WebKit constructs neither Touch nor TouchEvent:
+              // there, plain events carry lists of touch-like objects.
+              const constructible = (() => {
+                try {
+                  new Touch({ identifier: 0, target, clientX: 0, clientY: 0 });
+                  return true;
+                } catch {
+                  return false;
+                }
+              })();
+              type Point = { id: number; x: number; y: number };
+              const touches = (points: Point[]) =>
+                points.map(({ id, x, y }) =>
+                  constructible
+                    ? new Touch({ identifier: id, target, clientX: x, clientY: y })
+                    : ({ identifier: id, target, clientX: x, clientY: y } as unknown as Touch),
+                );
+              const send = (type: string, current: Touch[], changed: Touch[]) => {
+                const init = { bubbles: true, cancelable: true };
+                const event = constructible
+                  ? new TouchEvent(type, {
+                      ...init,
+                      touches: current,
+                      targetTouches: current,
+                      changedTouches: changed,
+                    })
+                  : Object.assign(new Event(type, init), {
+                      touches: current,
+                      targetTouches: current,
+                      changedTouches: changed,
+                    });
+                target.dispatchEvent(event);
+              };
+              send("touchstart", touches(start), touches(start));
+              send("touchmove", touches(end), touches(end));
+              await new Promise((resolve) => requestAnimationFrame(resolve));
+              send("touchend", [], touches(end));
+            },
+            { start: at(0), end: at(10) },
+          );
+        }
+        // A fling the swipe left behind ends first.
+        await page.waitForTimeout(400);
+        await still(page);
+        await frames(page);
+        return geometry(page);
+      };
+      return { page, errors, swipe };
+    };
+
+    const { page, errors, swipe } = await openTouch("scroll=page&scale=fit-page");
+    const start = (await geometry(page)).shown?.first ?? -1;
+    const left = await swipe(-200, 0);
+    const right = await swipe(200, 0);
+    const up = await swipe(0, -200);
+    const down = await swipe(0, 200);
+    check(
+      "page, swipe: left and up flip to the next page, right and down back",
+      start === 0 &&
+        left.shown?.first === 1 &&
+        right.shown?.first === 0 &&
+        up.shown?.first === 1 &&
+        down.shown?.first === 0,
+      [left, right, up, down].map((g) => g.shown?.first).join(", "),
+    );
+    const short = await swipe(-30, 0);
+    const slanted = await swipe(-150, -150);
+    const pinch = await swipe(-200, 0, [
+      { x: -60, y: 0 },
+      { x: 60, y: 0 },
+    ]);
+    check(
+      "page, swipe: short and slanted swipes and two fingers do not flip",
+      short.shown?.first === 0 && slanted.shown?.first === 0 && pinch.shown?.first === 0,
+      [short, slanted, pinch].map((g) => g.shown?.first).join(", "),
+    );
+    check("page, swipe: no errors", errors.length === 0, errors.slice(0, 3).join(" | "));
+    await page.context().close();
+
+    // A zoomed page: a swipe from inside it does not flip; from its edge it does.
+    const zoomed = await openTouch("scroll=page&scale=2&page=2");
+    const first = (await geometry(zoomed.page)).shown?.first ?? -1;
+    await zoomed.page.evaluate(() => {
+      const scroller = document.querySelector(".parapdf-viewport") as HTMLElement;
+      scroller.scrollTop = (scroller.scrollHeight - scroller.clientHeight) / 2;
+    });
+    await frames(zoomed.page);
+    const inside = await zoomed.swipe(0, -200);
+    check(
+      "page, swipe: inside a zoomed page, a swipe does not flip",
+      first === 1 && inside.shown?.first === first,
+      `page ${inside.shown?.first} at ${inside.scrollTop}`,
+    );
+    await zoomed.page.evaluate(() => {
+      const scroller = document.querySelector(".parapdf-viewport") as HTMLElement;
+      scroller.scrollTop = scroller.scrollHeight;
+    });
+    await frames(zoomed.page);
+    const edge = await zoomed.swipe(0, -200);
+    check(
+      "page, swipe: from a zoomed page's bottom, a swipe up flips to the next page's top",
+      edge.shown?.first === first + 1 && edge.scrollTop === 0,
+      `page ${edge.shown?.first} at ${edge.scrollTop}`,
+    );
+    const back = await zoomed.swipe(0, 200);
+    check(
+      "page, swipe: from its top, a swipe down flips back to the previous page's bottom",
+      back.shown?.first === first && near(back.scrollTop, back.scrollHeight - back.clientHeight),
+      `page ${back.shown?.first} at ${back.scrollTop} of ${back.scrollHeight - back.clientHeight}`,
+    );
+    check("page, swipe zoomed: no errors", zoomed.errors.length === 0, zoomed.errors.join(" | "));
+    await zoomed.page.context().close();
+
+    // An annotation tool keeps the touches for itself.
+    const editing = await openTouch("scroll=page&scale=fit-page&annotations=1");
+    await editing.page.waitForFunction(
+      () => (window as unknown as Demo).__viewer?.store.get().annotationState != null,
+      undefined,
+      { timeout: 10_000 },
+    );
+    await editing.page.evaluate(() =>
+      (window as unknown as Demo).__viewer?.setAnnotationTool("ink"),
+    );
+    const drawn = await editing.swipe(-200, 0);
+    check(
+      "page, swipe: with an annotation tool chosen, a swipe does not flip",
+      drawn.shown?.first === 0,
+      String(drawn.shown?.first),
+    );
+    await editing.page.context().close();
   }
 } finally {
   await launched.close();

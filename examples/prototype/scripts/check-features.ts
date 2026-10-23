@@ -205,6 +205,7 @@ const server = await preview({
   root: exampleDir,
   configFile: join(exampleDir, "vite.config.ts"),
   logLevel: "warn",
+  ...(process.env.DIST ? { build: { outDir: process.env.DIST } } : {}),
   preview: { port: 4186, host: "127.0.0.1", strictPort: false, open: false },
 });
 const baseUrl = server.resolvedUrls?.local[0] ?? "http://127.0.0.1:4186/";
@@ -522,6 +523,40 @@ try {
       JSON.stringify(printed),
     );
     check("the printed pages are removed after printing", printed.left === 0);
+
+    const replacedPrint = await page.evaluate(async () => {
+      let calls = 0;
+      let pages = 0;
+      let replacement: Promise<void> | undefined;
+      window.print = () => {
+        calls++;
+        pages = document.querySelectorAll(".parapdf-print img").length;
+      };
+      await window.__viewer?.print({
+        resolution: 36,
+        onProgress(done: number) {
+          if (done === 1) replacement = window.__viewer?.print({ resolution: 36 });
+        },
+      });
+      await replacement;
+      window.dispatchEvent(new Event("afterprint"));
+      return {
+        calls,
+        pages,
+        left: document.querySelectorAll(".parapdf-print").length,
+        styles: [...document.querySelectorAll("style")].filter((style) =>
+          style.textContent?.includes("body > :not(.parapdf-print)"),
+        ).length,
+      };
+    });
+    check(
+      "a replacement print stops the old job and releases both jobs' resources",
+      replacedPrint.calls === 1 &&
+        replacedPrint.pages === 6 &&
+        replacedPrint.left === 0 &&
+        replacedPrint.styles === 0,
+      JSON.stringify(replacedPrint),
+    );
 
     const [documentDownload] = await Promise.all([
       page.waitForEvent("download", { timeout: 10_000 }),

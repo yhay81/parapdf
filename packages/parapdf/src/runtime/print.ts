@@ -66,14 +66,20 @@ export async function printDocument(
   signal?.throwIfAborted();
   const scale = resolution / 72;
   const urls: string[] = [];
+  const images: HTMLImageElement[] = [];
   const container = document.createElement("div");
   container.className = CONTAINER_CLASS;
   const style = document.createElement("style");
   let cleaned = false;
+  let cancelRender: (() => void) | null = null;
+  let drawing: HTMLCanvasElement | null = null;
   const job = {
     cleanUp() {
       if (cleaned) return;
       cleaned = true;
+      cancelRender?.();
+      // Cancel image requests before revoking URLs they may not have read yet.
+      for (const image of images) image.removeAttribute("src");
       container.remove();
       style.remove();
       for (const url of urls) URL.revokeObjectURL(url);
@@ -84,11 +90,13 @@ export async function printDocument(
   current = job;
   try {
     const first = await doc.pageSize(0);
+    if (cleaned) return;
     style.textContent = printCss(first);
-    const images: HTMLImageElement[] = [];
     for (let pageIndex = 0; pageIndex < doc.pageCount; pageIndex++) {
+      if (cleaned) return;
       signal?.throwIfAborted();
       const canvas = document.createElement("canvas");
+      drawing = canvas;
       const task = doc.render({
         pageIndex,
         scale,
@@ -97,17 +105,23 @@ export async function printDocument(
         ...(layers ? { layers } : {}),
       });
       const abort = () => task.cancel();
+      cancelRender = abort;
       signal?.addEventListener("abort", abort, { once: true });
       try {
         await task.promise;
       } finally {
+        cancelRender = null;
         signal?.removeEventListener("abort", abort);
       }
-      const url = URL.createObjectURL(await toBlob(canvas));
+      if (cleaned) return;
+      const blob = await toBlob(canvas);
+      if (cleaned) return;
+      const url = URL.createObjectURL(blob);
       urls.push(url);
       // The image keeps the pixels; the canvas gives its memory back.
       canvas.width = 0;
       canvas.height = 0;
+      drawing = null;
       const sheet = document.createElement("div");
       const image = document.createElement("img");
       image.src = url;
@@ -117,17 +131,29 @@ export async function printDocument(
       images.push(image);
       onProgress?.(pageIndex + 1, doc.pageCount);
     }
+    if (cleaned) return;
     signal?.throwIfAborted();
     document.head.append(style);
     document.body.append(container);
     await Promise.all(images.map((image) => image.decode().catch(() => {})));
+    if (cleaned) return;
     signal?.throwIfAborted();
     // Some browsers return from print() before the dialog closes: the pages
     // stay until it does.
     window.addEventListener("afterprint", job.cleanUp, { once: true });
     window.print();
   } catch (error) {
+    // A replacement cancels the old render; only the active job reports
+    // errors. Its cleanup has already released the old job's resources.
+    if (cleaned) return;
     job.cleanUp();
     throw error;
+  } finally {
+    // A cancelled render or encoding also gives its canvas memory back,
+    // once the renderer has stopped using it.
+    if (drawing) {
+      drawing.width = 0;
+      drawing.height = 0;
+    }
   }
 }

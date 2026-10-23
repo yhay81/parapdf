@@ -145,6 +145,118 @@ export interface ResolvedDestination {
   pageIndex: number;
   x: number | null;
   y: number | null;
+  /** The view the destination asks for; absent when it asks for none. */
+  view?: DestinationView;
+}
+
+/**
+ * The zoom a destination asks for (PDF 32000-1, 12.3.2.2): a zoom factor
+ * (`XYZ`, 1 for the page's printed size; null keeps the zoom), the whole
+ * page (`Fit`, `FitB`), its width (`FitH`, `FitBH`) or height (`FitV`,
+ * `FitBV`), or a rectangle (`FitR`) whose top-left corner is the
+ * destination's point, in PDF points with the page's own rotation applied.
+ */
+export type DestinationView =
+  | { fit: "zoom"; zoom: number | null }
+  | { fit: "page" }
+  | { fit: "width" }
+  | { fit: "height" }
+  | { fit: "rect"; width: number; height: number };
+
+/**
+ * What the document's encryption dictionary permits (PDF 32000-1, Table 22).
+ * Documents that are not encrypted permit everything.
+ */
+export interface PdfPermissions {
+  /** Whether the document restricts anything at all. */
+  restricted: boolean;
+  print: boolean;
+  /** Printing at full resolution; without it, printing may be degraded. */
+  printHighQuality: boolean;
+  /** Changing the document's content other than annotations and forms. */
+  modify: boolean;
+  /** Copying text and graphics. */
+  copy: boolean;
+  /** Extracting text for accessibility. */
+  copyForAccessibility: boolean;
+  /** Adding and changing annotations, and filling in forms. */
+  annotate: boolean;
+  /** Filling in existing form fields, even without `annotate`. */
+  fillForms: boolean;
+  /** Inserting, deleting, and turning pages. */
+  assemble: boolean;
+}
+
+/** How the document's catalog asks a viewer to arrange pages (/PageLayout). */
+export type PdfPageLayout =
+  | "SinglePage"
+  | "OneColumn"
+  | "TwoColumnLeft"
+  | "TwoColumnRight"
+  | "TwoPageLeft"
+  | "TwoPageRight";
+
+/** What the document's catalog asks a viewer to show beside the pages (/PageMode). */
+export type PdfPageMode =
+  | "UseNone"
+  | "UseOutlines"
+  | "UseThumbs"
+  | "FullScreen"
+  | "UseOC"
+  | "UseAttachments";
+
+/** How the document asks to be shown when it opens; null where it asks nothing. */
+export interface PdfInitialView {
+  /** Where to open: the destination of the catalog's /OpenAction. */
+  destination: ResolvedDestination | null;
+  pageLayout: PdfPageLayout | null;
+  pageMode: PdfPageMode | null;
+}
+
+export type FormFieldType =
+  | "text"
+  | "checkbox"
+  | "radio"
+  | "combobox"
+  | "listbox"
+  | "button"
+  | "signature";
+
+/**
+ * A form field's value: text, the export value of the checked box or radio
+ * button ("Off" when none is), or the selected options' export values.
+ */
+export type FormValue = string | readonly string[];
+
+/** A form field of the document, with the widgets that show it on pages. */
+export interface FormField {
+  /** The fully qualified name, such as "address.city". */
+  name: string;
+  type: FormFieldType;
+  /** The value now, with what the reader typed and `setFormValues()` set. */
+  value: FormValue;
+  /** The value the document starts with. */
+  defaultValue: FormValue;
+  readOnly: boolean;
+  required: boolean;
+  /** Whether a list box takes several options. */
+  multiple: boolean;
+  /** The options of a combo or list box. */
+  options: readonly { value: string; label: string }[];
+  /** The values that check one of its boxes or radio buttons. */
+  exportValues: readonly string[];
+  /** Where the field shows: a page and a rectangle in unturned PDF points from its top-left corner. */
+  widgets: readonly {
+    id: string;
+    pageIndex: number;
+    rect: { x: number; y: number; width: number; height: number };
+  }[];
+}
+
+/** A value the reader entered into a form field. */
+export interface FormChange {
+  name: string;
+  value: FormValue;
 }
 
 export interface OutlineNode {
@@ -471,6 +583,22 @@ export interface PdfEngineDocument {
    */
   createAnnotationEditor(options: AnnotationEditorOptions): Promise<AnnotationEditor>;
   resolveDestination(dest: DestinationRef): Promise<ResolvedDestination | null>;
+  /** What the document permits; everything when it is not encrypted. */
+  getPermissions(): Promise<PdfPermissions>;
+  /** How the document asks to be shown when it opens. */
+  getInitialView(): Promise<PdfInitialView>;
+  /** The document's form fields, with their current values; empty when it has none. */
+  getFormFields(): Promise<readonly FormField[]>;
+  /**
+   * Set form fields by name; returns the names it set. Form layers built
+   * afterwards show the values, and `save()` writes them.
+   */
+  setFormValues(values: Readonly<Record<string, FormValue | boolean>>): Promise<string[]>;
+  /**
+   * The field and its value after the reader changed the form element of
+   * the widget with id `widgetId` (its `data-element-id`); null for another element.
+   */
+  formChange(widgetId: string): Promise<FormChange | null>;
   /** Drop cached parsing results for a page that left the mounted window. */
   releasePage(pageIndex: number): void;
   destroy(): Promise<void>;

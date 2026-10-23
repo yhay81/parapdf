@@ -110,7 +110,9 @@ state (`ViewerState`) has:
 | `rotation`, `spread`, `scrollMode` | The view's clockwise rotation (0, 90, 180, or 270); `"none"`, `"odd"`, or `"even"`; and `"vertical"`, `"horizontal"`, `"wrapped"`, or `"page"` (see [Scroll modes](#scroll-modes-spreads-and-fitting)). |
 | `tool` | What a mouse drag does: `"select"` text, or scroll the document with the `"hand"`. |
 | `search` | The search in progress or done (see below). |
-| `outline`, `canGoBack` | The document outline (`null` while it loads), and whether `back()` has a position to return to. |
+| `outline`, `canGoBack`, `canGoForward` | The document outline (`null` while it loads), and whether `back()` and `forward()` have a position to return to. |
+| `permissions` | What the document permits (see [Permissions](#permissions)); null while it loads. |
+| `documentView` | How the document asks to be shown (see [The document's initial view](#the-documents-initial-view)); null while it loads. |
 | `metadata` | Title, author, subject, keywords, creator, producer, creation and modification dates, PDF version, and language; null while it loads. |
 | `attachments`, `layers` | The document's embedded files and its layers (see [Layers and attachments](#layers-and-attachments)); null while they load. |
 | `annotationTool`, `annotationState`, `annotationStyles` | The annotation tool, undo, redo, and selection, and each tool's style, with `annotationEditing` on (see [Annotations](#annotations)); the last two null while it is off. |
@@ -120,7 +122,9 @@ state (`ViewerState`) has:
 row), `zoomBy(factor)`, `setScale(scale | "fit-width" | "fit-page")`,
 `resetScale()`, `rotate(degrees)`, `setRotation(rotation)`,
 `setSpread(spread)`, `setScrollMode(mode)`, `setTool("select" | "hand")`,
-`goToDestination(dest)`, `back()`, and the methods of the sections below.
+`goToDestination(dest)`, `back()`, `forward()`, `getViewState()` and
+`setViewState(view)` (see [Keeping the view](#keeping-the-view)), and the
+methods of the sections below.
 The viewport is focusable: the arrow, Page Up, Page Down, Home, End, and
 space keys scroll it, or flip pages in `"page"` mode, and Ctrl or ⌘ with +,
 -, and 0 zoom in, out, and back to `initialScale`.
@@ -216,9 +220,94 @@ function Outline() {
 }
 ```
 
-`navigation.back()` returns to the position before the last link or outline
-jump, and `navigation.canGoBack` says whether there is one. Links to other
-documents open in a new tab; `externalLinks: "disabled"` leaves them inert.
+A destination shows its point at the viewport's top-left corner, with the
+zoom it asks for, as in pdf.js: `XYZ` with a zoom factor (1 is the printed
+size), `Fit` the whole page, `FitH` the page's width, `FitV` its height, and
+`FitR` its rectangle filling the viewport; `fit-width` and `fit-page` keep
+fitting as the viewport resizes. `destinationZoom: false` keeps the zoom and
+only scrolls.
+
+`navigation.back()` returns to the position and zoom before the last link
+or outline jump, and `navigation.forward()` to where `back()` left; a new
+jump forgets the positions `forward()` had. `navigation.canGoBack` and
+`navigation.canGoForward` say whether there is one, and the `GoBack` and
+`GoForward` actions of a PDF's links call them. Links to other documents
+open in a new tab; `externalLinks: "disabled"` leaves them inert.
+
+## Keeping the view
+
+`viewer.getViewState()` returns where and how the viewer shows its
+document, as a plain object to store or put in a URL: the `page` at the
+viewport's top-left corner, the point of that page there (`x`, `y`, in PDF
+points from its top-left corner), `scale` (a number, `"fit-width"`, or
+`"fit-page"`), `rotation`, `spread`, and `scrollMode`. The point keeps its
+place on the page whatever the zoom or the viewport's size, so the view
+moves between a phone and a desktop.
+
+`viewer.setViewState(view)` shows such a view again, and the
+`initialViewState` option opens the document with it, before anything is
+drawn elsewhere; it wins over `initialPage`, `initialScale`, `spread`,
+`scrollMode`, and `initialView`, and the fields it leaves out still follow
+them. Neither adds a back entry, and values out of range are clamped or
+ignored, so a view read from a URL needs no checking:
+
+```tsx
+// Reopen where the reader left off.
+const saved = localStorage.getItem(`view:${url}`);
+<PdfDocument
+  source={url}
+  options={saved ? { initialViewState: JSON.parse(saved) } : {}}
+>
+  <SaveView url={url} />
+  <PdfViewport />
+</PdfDocument>;
+
+function SaveView({ url }: { url: string }) {
+  const viewer = usePdfViewer();
+  useEffect(() => {
+    const save = () => {
+      const view = viewer.getViewState();
+      if (view) localStorage.setItem(`view:${url}`, JSON.stringify(view));
+    };
+    // When the page is left, and as the reader moves through the document.
+    const unsubscribe = viewer.store.subscribe(save);
+    window.addEventListener("pagehide", save);
+    return () => {
+      unsubscribe();
+      window.removeEventListener("pagehide", save);
+    };
+  }, [viewer, url]);
+  return null;
+}
+```
+
+The store publishes as the current page and the zoom change, not at every
+scrolled frame, so saving there costs little.
+
+## The document's initial view
+
+A PDF may ask where it opens (`/OpenAction`), how its pages are arranged
+(`/PageLayout`), and which panel shows beside them (`/PageMode`). The state's
+`documentView` reports them: `destination`, `pageLayout` (`"SinglePage"`,
+`"OneColumn"`, `"TwoColumnLeft"`, `"TwoColumnRight"`, `"TwoPageLeft"`, or
+`"TwoPageRight"`), and `pageMode` (`"UseNone"`, `"UseOutlines"`,
+`"UseThumbs"`, `"FullScreen"`, `"UseOC"`, or `"UseAttachments"`), each null
+when the document asks nothing.
+
+With `initialView: "document"`, the viewer opens at the destination, with
+its zoom, and arranges the pages as pdf.js's viewer does: two columns are
+`"odd"` or `"even"` spreads, and the `TwoPage` and `SinglePage` layouts show
+one row at a time (`"page"` mode). Options you set win: `initialPage` over
+the destination, `initialScale` over its zoom, and `spread` and `scrollMode`
+over the layout. The panel is the application's to open:
+
+```tsx
+const pageMode = usePdfState((state) => state.documentView?.pageMode ?? null);
+useEffect(() => {
+  if (pageMode === "UseOutlines") setPanel("outline");
+  if (pageMode === "UseThumbs") setPanel("thumbnails");
+}, [pageMode]);
+```
 
 ## Thumbnails
 
@@ -258,9 +347,60 @@ the PDF draws them. What the reader types belongs to the document:
   named after the document's URL by default.
 - `viewer.print({ resolution, onProgress, signal })` draws every page for
   printing, the typed values included, at 150 dpi by default, and opens the
-  browser's print dialog with only those pages.
+  browser's print dialog with only those pages. A new print request stops
+  the previous job; that job resolves without opening another dialog.
+
+Applications read and fill the form themselves:
+
+```tsx
+import { usePdfFormChange, usePdfViewer } from "parapdf";
+
+function FormSync({ onChange }: { onChange: (name: string, value: unknown) => void }) {
+  const viewer = usePdfViewer();
+  // Each value the reader enters, as they type.
+  usePdfFormChange(({ name, value }) => onChange(name, value));
+  const fill = async () => {
+    const fields = await viewer.getFormFields();
+    console.log(fields.map(({ name, type, value }) => [name, type, value]));
+    await viewer.setFormValues({ name: "Ada Lovelace", agree: true, size: "large" });
+  };
+  return <button type="button" onClick={fill}>Fill in</button>;
+}
+```
+
+- `viewer.getFormFields()` resolves to every field (`FormField`): its
+  qualified `name`, `type` (`"text"`, `"checkbox"`, `"radio"`,
+  `"combobox"`, `"listbox"`, `"button"`, or `"signature"`), current `value`,
+  `defaultValue`, `readOnly`, `required`, `multiple`, the `options` of a
+  list, the `exportValues` that check its boxes, and its `widgets`, each a
+  page and a rectangle in PDF points. A value is text, the export value of
+  the checked box or radio button (`"Off"` for none), or the selected
+  options' export values, an array for a list that takes several.
+- `viewer.setFormValues(values)` sets fields by name, `true` and `false`
+  checking the first box or none, and resolves to the names it set. The
+  fields shown show the values, and `save()` and `print()` include them; it
+  is not heard as the reader's input.
+- `usePdfFormChange(listener)`, or `viewer.onFormChange(listener)`, which
+  returns the function that stops it, hears `{ name, value }` for each value
+  the reader enters, with `forms` on.
 
 Form scripts (JavaScript actions) do not run.
+
+## Permissions
+
+An encrypted PDF may refuse printing, copying, changing, or annotating it.
+The state's `permissions` reports what it permits: `print`,
+`printHighQuality`, `modify`, `copy`, `copyForAccessibility`, `annotate`,
+`fillForms`, and `assemble`, and `restricted`, true when any of them is
+false. Documents that are not encrypted permit everything.
+
+The viewer only reports them unless `enforcePermissions: true`, as in
+pdf.js. Then, without `copy`, the text cannot be selected or copied, though
+assistive technology still reads it; without `print`, `print()` fails;
+without `annotate`, `annotationEditing` stays off; and form fields can be
+filled in with `fillForms` or `annotate`. Permissions are advisory: a
+document that opens can be read whole by any program that ignores them, so
+they protect nothing an application must keep secret.
 
 ## Annotations
 
@@ -326,6 +466,13 @@ function AnnotationTools() {
   list of x and y coordinates in a box of `width` by `height`). ParaPDF
   shows no signature pad or dialog of its own.
 
+Both addition methods resolve to `true` once the annotation is ready to
+save or export, or `false` if it cannot be added. Await them before saving;
+an image's download, decoding, or signature tracing may take time.
+Choosing another annotation tool while either addition is pending cancels
+that insertion, which resolves to `false`. Empty or untraceable signatures
+also resolve to `false`, without adding an annotation or undo step.
+
 Annotations go into the document's bytes that `save()`, `download()`, and
 `print()` use. To keep them apart from the PDF, say on a server,
 `exportAnnotations()` returns them as JSON-compatible data, and
@@ -381,7 +528,9 @@ function PasswordPrompt() {
 ```
 
 A source can carry the password too (see [Sources](#sources)); the viewer
-asks only when it is wrong.
+asks only when it is wrong. Changing `source.password` tries the new value
+on the shared document still loading, even before its password request
+arrives. This also works with `passwordPrompt: false`.
 
 An application without such a prompt passes `passwordPrompt: false` in
 `options`: an encrypted document then fails at once with `status`
@@ -414,8 +563,11 @@ row with as many pages as fit the viewport's width, again when it resizes;
 and so do the keys that would scroll past the edge of the page shown: Page
 Down, space, and ↓ at its bottom and → at its right edge go forward, and
 Page Up, Shift+space, ↑, and ← go back; Home and End go to the first and
-last page. A zoomed page scrolls within itself, and the pages beside it are
-drawn before they show. The current page stays in view when the mode
+last page. On touch screens, a one-finger swipe to the left or up turns to
+the next page, and to the right or down back, like turning paper; short or
+slanted swipes, pinches, and swipes with an annotation tool chosen do not.
+A zoomed page scrolls within itself, and the pages beside it are drawn
+before they show: a swipe from its edge turns it. The current page stays in view when the mode
 changes.
 
 `setSpread("odd")` shows pages side by side in pairs, 1–2, 3–4; `"even"`
@@ -470,6 +622,10 @@ component mounts; give it a new `key` to change them.
 |---|---|---|
 | `initialScale` | `"fit-width"` | A scale in CSS pixels per point, `"fit-width"`, which keeps fitting the page width as the viewport resizes, or `"fit-page"`, which keeps fitting all of it. |
 | `initialPage` | `0` | The zero-based page shown first. |
+| `initialViewState` | none | A view kept from `getViewState()` to open with (see [Keeping the view](#keeping-the-view)). |
+| `initialView` | `"options"` | `"document"` opens where and as the document asks (see [The document's initial view](#the-documents-initial-view)). |
+| `destinationZoom` | `true` | `false` keeps the zoom when following links and the outline. |
+| `enforcePermissions` | `false` | Follow what the document permits (see [Permissions](#permissions)). |
 | `spread` | `"none"` | `"odd"` or `"even"` shows pages in pairs (see [Spreads](#scroll-modes-spreads-and-fitting)). |
 | `scrollMode` | `"vertical"` | `"horizontal"`, `"wrapped"`, or `"page"` arranges pages otherwise (see [Scroll modes](#scroll-modes-spreads-and-fitting)). |
 | `initialTool` | `"select"` | `"hand"` makes a mouse drag scroll the document from the start. |
@@ -621,7 +777,7 @@ application's language with `label` and `pageLabel`.
   needs pdf.js's renderer worker (`configurePdfjs({ rendererSrc })`), which
   is only in unreleased pdf.js builds so far.
 - Not yet supported: editing annotations the PDF already holds, form
-  scripts, and XFA forms. Annotations the reader creates can be moved,
+  scripts (calculations, validation, and button actions), and XFA forms. Annotations the reader creates can be moved,
   restyled, and deleted; those in the file stay as they are drawn.
 - Comments on created annotations and pdf.js's alt text dialog are not
   shown; images take their alternative text from `addImage()`.

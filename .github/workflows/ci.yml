@@ -53,4 +53,5 @@ jobs:
       - run: pnpm --filter @parapdf/prototype check:features
       - run: pnpm --filter @parapdf/prototype check:scroll
       - run: pnpm --filter @parapdf/prototype check:annotations
+      - run: pnpm --filter @parapdf/prototype check:document
       - run: pnpm --filter @parapdf/prototype check:bundle

@@ -67,6 +67,26 @@ interface Viewer {
 /** The demo's window: other checks declare `__viewer` with their own `Viewer`. */
 type Demo = { __viewer?: Viewer };
 
+interface ImageResult {
+  added: boolean;
+  exported: number;
+  saved: number;
+  altText?: unknown;
+}
+
+type ImageDemo = Demo & {
+  __imageSettled?: boolean;
+  __imageResult?: Promise<ImageResult>;
+  __pendingImage?: Promise<boolean | undefined>;
+  __lifecycle?: { unmount(): void };
+};
+
+type SignatureDemo = Demo & {
+  __signatureDecodeStarted?: boolean;
+  __releaseSignatureDecode?: () => void;
+  __pendingSignature?: Promise<boolean | undefined>;
+};
+
 declare global {
   interface Window {
     pdfjsLib?: {
@@ -145,6 +165,7 @@ const server = await preview({
   root: exampleDir,
   configFile: join(exampleDir, "vite.config.ts"),
   logLevel: "warn",
+  ...(process.env.DIST ? { build: { outDir: process.env.DIST } } : {}),
   preview: { port: 4187, host: "127.0.0.1", strictPort: false, open: false },
 });
 const baseUrl = server.resolvedUrls?.local[0] ?? "http://127.0.0.1:4187/";
@@ -463,6 +484,370 @@ try {
       drawn === true && (await signatures()) === signaturesBefore + 1,
     );
     check("no errors while importing", errors.length === 0, errors.slice(0, 3).join(" | "));
+    await page.context().close();
+  }
+
+  // --- Awaiting image insertion means export and save are ready ---
+  {
+    const { page, errors } = await open(launched.browser, demo("file=usrguide.pdf"));
+    const png = await page.evaluate(async () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 400;
+      canvas.height = 160;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("no image context");
+      context.fillStyle = "white";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = "black";
+      context.font = "italic 80px serif";
+      context.fillText("Ada Lovelace", 10, 110);
+      return canvas.toDataURL("image/png").split(",")[1];
+    });
+    let releaseImage = () => {};
+    const response = new Promise<void>((resolve) => {
+      releaseImage = resolve;
+    });
+    await page.route("**/delayed-annotation.png", async (route) => {
+      await response;
+      await route.fulfill({ contentType: "image/png", body: Buffer.from(png ?? "", "base64") });
+    });
+    const requested = page.waitForRequest("**/delayed-annotation.png");
+    await page.evaluate((url) => {
+      const demo = window as unknown as ImageDemo;
+      demo.__imageSettled = false;
+      demo.__imageResult = (async () => {
+        const added = (await demo.__viewer?.addImage(url, { altText: "Ready image" })) === true;
+        demo.__imageSettled = true;
+        // Deliberately no canvas, timeout, or frame wait after addImage().
+        const exported = demo.__viewer?.exportAnnotations() ?? [];
+        const bytes = await demo.__viewer?.save();
+        const doc = bytes && (await window.pdfjsLib?.getDocument({ data: bytes }).promise);
+        const annotations = doc ? await (await doc.getPage(1)).getAnnotations() : [];
+        return {
+          added,
+          exported: exported.filter((annotation) => annotation.type === "stamp").length,
+          saved: annotations.filter((annotation) => annotation.subtype === "Stamp").length,
+          altText: (exported[0]?.data.accessibilityData as { altText?: string })?.altText,
+        };
+      })();
+    }, new URL("delayed-annotation.png", baseUrl).href);
+    await requested;
+    await page.waitForTimeout(100);
+    check(
+      "addImage() stays pending while the image response is delayed",
+      (await page.evaluate(() => (window as unknown as ImageDemo).__imageSettled)) === false,
+    );
+    check(
+      "a loading image leaves no unfinished annotation to export",
+      (await exported(page)).length === 0,
+    );
+    releaseImage();
+    const image = await page.evaluate(() => (window as unknown as ImageDemo).__imageResult);
+    check(
+      "await addImage() allows immediate export and save with the image and alt text",
+      image?.added === true &&
+        image.exported === 1 &&
+        image.saved === 1 &&
+        image.altText === "Ready image",
+      JSON.stringify(image),
+    );
+    const failed = await page.evaluate(async () => {
+      const viewer = (window as unknown as Demo).__viewer;
+      await viewer?.setAnnotationTool("freetext");
+      const before = viewer?.exportAnnotations().length;
+      const added = await viewer?.addImage(new Blob(["invalid image"], { type: "image/png" }));
+      const after = viewer?.exportAnnotations().length;
+      return {
+        added,
+        before,
+        after,
+        saved: (await viewer?.save())?.byteLength ?? 0,
+        tool: viewer?.store.get().annotationTool,
+        stampEditing: document
+          .querySelector(".parapdf-editor-layer")
+          ?.classList.contains("stampEditing"),
+      };
+    });
+    check(
+      "an undecodable image resolves false and leaves export and save usable",
+      failed.added === false && failed.before === failed.after && failed.saved > 0,
+      JSON.stringify(failed),
+    );
+    check(
+      "an undecodable image leaves the published and active stamp tool in step",
+      failed.tool === "stamp" && failed.stampEditing === true,
+      JSON.stringify(failed),
+    );
+    const signature = await page.evaluate(async (png) => {
+      const viewer = (window as unknown as Demo).__viewer;
+      const blob = await (await fetch(`data:image/png;base64,${png}`)).blob();
+      const added = await viewer?.addSignature({ image: blob }, { description: "Image signature" });
+      const exported = viewer?.exportAnnotations() ?? [];
+      const bytes = await viewer?.save();
+      const doc = bytes && (await window.pdfjsLib?.getDocument({ data: bytes }).promise);
+      const annotations = doc ? await (await doc.getPage(1)).getAnnotations() : [];
+      return {
+        added,
+        exported: exported.filter((annotation) => annotation.type === "signature").length,
+        saved: annotations.filter((annotation) => annotation.subtype === "Stamp").length,
+      };
+    }, png);
+    check(
+      "await addSignature() allows immediate export and save of an image signature",
+      signature.added === true && signature.exported === 1 && signature.saved === 2,
+      JSON.stringify(signature),
+    );
+    const bitmapSignature = await page.evaluate(async (png) => {
+      const viewer = (window as unknown as Demo).__viewer;
+      const blob = await (await fetch(`data:image/png;base64,${png}`)).blob();
+      const bitmap = await createImageBitmap(blob);
+      try {
+        const added = await viewer?.addSignature(
+          { image: bitmap },
+          { description: "Bitmap signature" },
+        );
+        const exported = viewer?.exportAnnotations() ?? [];
+        const bytes = await viewer?.save();
+        const doc = bytes && (await window.pdfjsLib?.getDocument({ data: bytes }).promise);
+        const annotations = doc ? await (await doc.getPage(1)).getAnnotations() : [];
+        return {
+          added,
+          exported: exported.filter((annotation) => annotation.type === "signature").length,
+          saved: annotations.filter((annotation) => annotation.subtype === "Stamp").length,
+          bitmapIntact: bitmap.width > 0 && bitmap.height > 0,
+        };
+      } finally {
+        bitmap.close();
+      }
+    }, png);
+    check(
+      "an ImageBitmap signature is immediately exported and saved, retaining the caller's bitmap",
+      bitmapSignature.added === true &&
+        bitmapSignature.exported === 2 &&
+        bitmapSignature.saved === 3 &&
+        bitmapSignature.bitmapIntact,
+      JSON.stringify(bitmapSignature),
+    );
+    const failedSignature = await page.evaluate(async () => {
+      const viewer = (window as unknown as Demo).__viewer;
+      const added = await viewer?.addSignature({
+        image: new Blob(["invalid image"], { type: "image/png" }),
+      });
+      return { added, count: viewer?.exportAnnotations().length };
+    });
+    check(
+      "an undecodable image signature resolves false without an annotation",
+      failedSignature.added === false && failedSignature.count === 3,
+      JSON.stringify(failedSignature),
+    );
+
+    for (const tool of ["freetext", "stamp"]) {
+      const path = `cancelled-${tool}-annotation.png`;
+      let releaseCancelledImage = () => {};
+      const cancelledResponse = new Promise<void>((resolve) => {
+        releaseCancelledImage = resolve;
+      });
+      await page.route(`**/${path}`, async (route) => {
+        await cancelledResponse;
+        await route.fulfill({ contentType: "image/png", body: Buffer.from(png ?? "", "base64") });
+      });
+      const before = (await exported(page)).length;
+      const cancelledRequest = page.waitForRequest(`**/${path}`);
+      await page.evaluate((url) => {
+        const demo = window as unknown as ImageDemo;
+        demo.__pendingImage = demo.__viewer?.addImage(url);
+      }, new URL(path, baseUrl).href);
+      await cancelledRequest;
+      await page.evaluate(async (tool) => {
+        const viewer = (window as unknown as Demo).__viewer;
+        await viewer?.setAnnotationTool("freetext");
+        // Choosing stamp again must not revive an earlier insertion.
+        if (tool === "stamp") await viewer?.setAnnotationTool(tool);
+      }, tool);
+      releaseCancelledImage();
+      const cancelled = await page.evaluate(() => (window as unknown as ImageDemo).__pendingImage);
+      const active = await page.evaluate((tool) => {
+        const viewer = (window as unknown as Demo).__viewer;
+        return {
+          tool: viewer?.store.get().annotationTool,
+          editing: document
+            .querySelector(".parapdf-editor-layer")
+            ?.classList.contains(`${tool}Editing`),
+        };
+      }, tool);
+      check(
+        `choosing ${tool} while an image loads cancels it and keeps that tool active`,
+        cancelled === false &&
+          (await exported(page)).length === before &&
+          active.tool === tool &&
+          active.editing === true,
+        JSON.stringify({ cancelled, ...active }),
+      );
+    }
+
+    let releaseClosedImage = () => {};
+    const closedResponse = new Promise<void>((resolve) => {
+      releaseClosedImage = resolve;
+    });
+    await page.route("**/closed-annotation.png", async (route) => {
+      await closedResponse;
+      await route.fulfill({ contentType: "image/png", body: Buffer.from(png ?? "", "base64") });
+    });
+    const closedRequest = page.waitForRequest("**/closed-annotation.png");
+    await page.evaluate((url) => {
+      const demo = window as unknown as ImageDemo;
+      demo.__imageSettled = false;
+      demo.__pendingImage = demo.__viewer?.addImage(url).then((added) => {
+        demo.__imageSettled = true;
+        return added;
+      });
+    }, new URL("closed-annotation.png", baseUrl).href);
+    await closedRequest;
+    await page.evaluate(() => (window as unknown as ImageDemo).__lifecycle?.unmount());
+    await page.waitForFunction(() => (window as unknown as ImageDemo).__imageSettled, undefined, {
+      timeout: 3000,
+    });
+    check(
+      "closing a viewer resolves addImage() false before its delayed response arrives",
+      (await page.evaluate(() => (window as unknown as ImageDemo).__pendingImage)) === false,
+    );
+    const closedDownloaded = page.waitForResponse("**/closed-annotation.png");
+    releaseClosedImage();
+    await closedDownloaded;
+    await page.waitForTimeout(100);
+    check("no errors while adding images", errors.length === 0, errors.slice(0, 3).join(" | "));
+    await page.context().close();
+  }
+
+  // --- Failed signatures leave neither editors nor undo steps ---
+  {
+    const { page, errors } = await open(launched.browser, demo("file=usrguide.pdf"));
+    const emptySignatures = [
+      { text: "" },
+      { text: "   " },
+      { strokes: [], width: 100, height: 100 },
+    ];
+    for (const signature of emptySignatures) {
+      const failed = await page.evaluate(async (signature) => {
+        const viewer = (window as unknown as Demo).__viewer;
+        const added = await viewer?.addSignature(signature);
+        return {
+          added,
+          exported: viewer?.exportAnnotations().length,
+          editors: document.querySelectorAll(".signatureEditor").length,
+          state: viewer?.store.get().annotationState,
+        };
+      }, signature);
+      check(
+        `an empty signature resolves false without an editor or undo step: ${JSON.stringify(signature)}`,
+        failed.added === false &&
+          failed.exported === 0 &&
+          failed.editors === 0 &&
+          failed.state?.canUndo === false &&
+          failed.state.isEmpty,
+        JSON.stringify(failed),
+      );
+    }
+    const history = await page.evaluate(async (emptySignatures) => {
+      const viewer = (window as unknown as Demo).__viewer;
+      const added = await viewer?.addSignature({ text: "Ada Lovelace" });
+      viewer?.undoAnnotation();
+      const afterUndo = viewer?.exportAnnotations().length;
+      for (const signature of emptySignatures) await viewer?.addSignature(signature);
+      const canRedo = viewer?.store.get().annotationState?.canRedo;
+      viewer?.redoAnnotation();
+      const afterRedo = viewer?.exportAnnotations().length;
+      viewer?.undoAnnotation();
+      return {
+        added,
+        afterUndo,
+        canRedo,
+        afterRedo,
+        afterSecondUndo: viewer?.exportAnnotations().length,
+      };
+    }, emptySignatures);
+    check(
+      "failed signatures preserve redo and a successful signature takes exactly one undo step",
+      history.added === true &&
+        history.afterUndo === 0 &&
+        history.canRedo === true &&
+        history.afterRedo === 1 &&
+        history.afterSecondUndo === 0,
+      JSON.stringify(history),
+    );
+    await page.evaluate(async () => {
+      const demo = window as unknown as SignatureDemo;
+      const canvas = document.createElement("canvas");
+      canvas.width = 200;
+      canvas.height = 80;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("no signature context");
+      context.fillStyle = "white";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = "black";
+      context.font = "italic 40px serif";
+      context.fillText("Ada", 10, 50);
+      const blob = await (await fetch(canvas.toDataURL("image/png"))).blob();
+      const original = window.createImageBitmap;
+      const decoding = new Promise<void>((resolve) => {
+        demo.__releaseSignatureDecode = resolve;
+      });
+      demo.__signatureDecodeStarted = false;
+      window.createImageBitmap = ((...args: Parameters<typeof createImageBitmap>) => {
+        if (args[0] !== blob) return original(...args);
+        window.createImageBitmap = original;
+        demo.__signatureDecodeStarted = true;
+        return decoding.then(() => original(...args));
+      }) as typeof createImageBitmap;
+      demo.__pendingSignature = demo.__viewer?.addSignature({ image: blob });
+    });
+    await page.waitForFunction(
+      () => (window as unknown as SignatureDemo).__signatureDecodeStarted === true,
+    );
+    const textTool = page
+      .getByRole("toolbar", { name: "Annotations" })
+      .getByRole("button", { name: "Text", exact: true });
+    await textTool.click();
+    await page.waitForFunction(
+      () =>
+        (window as unknown as Demo).__viewer?.store.get().annotationTool === "freetext" &&
+        document.querySelector(".parapdf-editor-layer")?.classList.contains("freetextEditing"),
+    );
+    await textTool.focus();
+    const cancelledSignature = await page.evaluate(async () => {
+      const demo = window as unknown as SignatureDemo;
+      demo.__releaseSignatureDecode?.();
+      const added = await demo.__pendingSignature;
+      return {
+        added,
+        tool: demo.__viewer?.store.get().annotationTool,
+        editing: document
+          .querySelector(".parapdf-editor-layer")
+          ?.classList.contains("freetextEditing"),
+        exported: demo.__viewer?.exportAnnotations().length,
+        editors: document.querySelectorAll(".signatureEditor").length,
+        state: demo.__viewer?.store.get().annotationState,
+        focused: document.activeElement?.textContent === "Text",
+      };
+    });
+    check(
+      "choosing another tool while a signature decodes cancels it without taking focus or changing history",
+      cancelledSignature.added === false &&
+        cancelledSignature.tool === "freetext" &&
+        cancelledSignature.editing === true &&
+        cancelledSignature.exported === 0 &&
+        cancelledSignature.editors === 0 &&
+        cancelledSignature.state?.canUndo === false &&
+        cancelledSignature.state.canRedo === true &&
+        cancelledSignature.focused,
+      JSON.stringify(cancelledSignature),
+    );
+    await page.waitForTimeout(100);
+    check(
+      "no errors while rejecting empty signatures",
+      errors.length === 0,
+      errors.slice(0, 3).join(" | "),
+    );
     await page.context().close();
   }
 } finally {

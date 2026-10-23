@@ -28,6 +28,7 @@ import {
 /** The parts of pdf.js's editors this module calls, which pdf.js types loosely. */
 interface PdfjsEditor {
   readonly id: string;
+  readonly div: HTMLElement | null;
   /** pdf.js's name of the kind, the same as ParaPDF's. */
   readonly editorType: AnnotationType;
   pageIndex: number;
@@ -42,6 +43,7 @@ interface PdfjsEditor {
   getFromText(text: string, font: object): unknown;
   getFromImage(bitmap: ImageBitmap): unknown;
   getDrawnSignature(curves: object): unknown;
+  onceAdded(focus: boolean): void;
   remove(): void;
 }
 
@@ -59,6 +61,8 @@ interface PdfjsEditorLayer {
 interface PdfjsUIManager {
   readonly imageManager: {
     getFromUrl(url: string): Promise<{ bitmap: unknown; id: string; isSvg: boolean } | null>;
+    getFromFile(file: File): Promise<{ bitmap: unknown; id: string; isSvg: boolean } | null>;
+    deleteId(id: string): void;
   };
   viewParameters: { realScale: number; rotation: number };
   updateMode(
@@ -360,6 +364,7 @@ export function createPdfjsAnnotationEditor(
     )?.[0] ?? "none";
   /** Switches the application asked for, which the editors' own requests do not undo. */
   let switching = 0;
+  let toolRevision = 0;
   // Selecting an annotation of another kind switches to its tool, which
   // pdf.js asks its viewer's toolbar to do.
   eventBus.on("switchannotationeditormode", (event) => {
@@ -373,6 +378,7 @@ export function createPdfjsAnnotationEditor(
       mustEnterInEditMode?: boolean;
       editComment?: boolean;
     };
+    toolRevision++;
     options.onToolChange(toolOf(mode));
     void manager.updateMode(
       mode,
@@ -384,6 +390,7 @@ export function createPdfjsAnnotationEditor(
     );
   });
   eventBus.on("showannotationeditorui", ({ mode }) => {
+    toolRevision++;
     options.onToolChange(toolOf(mode));
     void manager.updateMode(mode as number).then(() => {
       eventBus.dispatch("annotationeditormodechanged", { source: null, mode });
@@ -391,7 +398,12 @@ export function createPdfjsAnnotationEditor(
   });
 
   /** A signature waiting for the editor that `addSignature` asked pdf.js to create. */
-  let pendingSignature: { input: SignatureInput; description: string } | null = null;
+  let pendingSignature: {
+    input: SignatureInput;
+    description: string;
+    revision: number;
+    complete(added: boolean): void;
+  } | null = null;
   /**
    * What pdf.js's signature editor asks for when it is created without a
    * signature: ParaPDF hands it the one `addSignature` was given. pdf.js's
@@ -405,36 +417,74 @@ export function createPdfjsAnnotationEditor(
     getSignature({ editor }: { editor: PdfjsEditor }) {
       const pending = pendingSignature;
       pendingSignature = null;
-      if (!pending) {
-        editor.remove();
-        return;
-      }
-      const { input, description } = pending;
+      // pdf.js selects the editor and records an undo step in onceAdded(),
+      // before its signature can be ready. Do that only after it succeeds.
+      const onceAdded = editor.onceAdded;
+      editor.onceAdded = () => {};
       void (async () => {
-        let outline: unknown;
-        if ("text" in input) {
-          outline = editor.getFromText(input.text, {
-            fontFamily: input.fontFamily ?? "serif",
-            fontStyle: input.fontStyle ?? "italic",
-            fontWeight: input.fontWeight ?? "normal",
-          });
-        } else if ("image" in input) {
-          const bitmap =
-            input.image instanceof Blob ? await createImageBitmap(input.image) : input.image;
-          outline = editor.getFromImage(bitmap);
-        } else {
-          outline = editor.getDrawnSignature({
-            curves: input.strokes.map((points) => ({ points: [...points] })),
-            width: input.width,
-            height: input.height,
-            thickness: input.thickness ?? 1,
-          });
+        let ownedBitmap: ImageBitmap | undefined;
+        try {
+          // pdf.js requests the signature from render(), before its layer
+          // appends the editor and calls onceAdded(). Finish that setup first:
+          // removing a failed signature during render() clears the parent
+          // that onceAdded() still needs.
+          await Promise.resolve();
+          if (
+            !pending ||
+            destroyed ||
+            pending.revision !== toolRevision ||
+            !editor.div?.isConnected
+          ) {
+            if (!destroyed) editor.remove();
+            pending?.complete(false);
+            return;
+          }
+          const { input, description } = pending;
+          let outline: unknown;
+          if ("text" in input) {
+            outline = editor.getFromText(input.text, {
+              fontFamily: input.fontFamily ?? "serif",
+              fontStyle: input.fontStyle ?? "italic",
+              fontWeight: input.fontWeight ?? "normal",
+            });
+          } else if ("image" in input) {
+            let bitmap = input.image;
+            if (bitmap instanceof Blob) {
+              bitmap = ownedBitmap = await createImageBitmap(bitmap);
+              // A newer tool choice cancels insertion before it can select
+              // the signature and take focus from the reader's next action.
+              if (destroyed || pending.revision !== toolRevision || !editor.div?.isConnected) {
+                if (!destroyed) editor.remove();
+                pending.complete(false);
+                return;
+              }
+            }
+            outline = editor.getFromImage(bitmap);
+          } else {
+            outline = editor.getDrawnSignature({
+              curves: input.strokes.map((points) => ({ points: [...points] })),
+              width: input.width,
+              height: input.height,
+              thickness: input.thickness ?? 1,
+            });
+          }
+          if (!outline || pending.revision !== toolRevision) {
+            editor.remove();
+            pending.complete(false);
+            return;
+          }
+          editor.addSignature(outline, SIGNATURE_HEIGHT, description, null);
+          delete (editor as Partial<PdfjsEditor>).onceAdded;
+          onceAdded.call(editor, true);
+          pending.complete(true);
+        } catch {
+          if (!destroyed) editor.remove();
+          pending?.complete(false);
+        } finally {
+          delete (editor as Partial<PdfjsEditor>).onceAdded;
+          ownedBitmap?.close();
         }
-        editor.addSignature(outline, SIGNATURE_HEIGHT, description, null);
-      })().catch((error: unknown) => {
-        console.error("adding a signature failed", error);
-        editor.remove();
-      });
+      })();
     },
     destroy() {},
   };
@@ -564,7 +614,8 @@ export function createPdfjsAnnotationEditor(
   }
 
   /** Switch to `mode` for the application: the annotation being typed or drawn is finished first. */
-  async function switchTo(mode: number): Promise<void> {
+  async function switchTo(mode: number): Promise<number> {
+    const revision = ++toolRevision;
     switching++;
     try {
       manager.endCurrentEditing();
@@ -572,13 +623,33 @@ export function createPdfjsAnnotationEditor(
     } finally {
       switching--;
     }
+    return revision;
   }
 
-  const live = (pageIndex: number): PdfjsEditorLayer => {
-    const layer = layers.get(pageIndex)?.layer;
-    if (!layer) throw new Error(`Page ${pageIndex + 1} has no annotation layer yet`);
-    return layer;
-  };
+  /**
+   * pdf.js exposes no completion promise for a new image editor. Its canvas
+   * is added only after the bitmap, dimensions, and save data are ready.
+   * Mutation callbacks run after that synchronous setup has finished.
+   */
+  function imageReady(layer: PdfjsEditorLayer, editor: PdfjsEditor): Promise<boolean> {
+    return new Promise((resolve) => {
+      const signal = manager._signal;
+      const finish = (ready: boolean) => {
+        observer.disconnect();
+        signal?.removeEventListener("abort", aborted);
+        resolve(ready);
+      };
+      const aborted = () => finish(false);
+      const check = () => {
+        if (destroyed || !editor.div || !layer.div?.contains(editor.div)) finish(false);
+        else if (editor.div.querySelector("canvas")) finish(true);
+      };
+      const observer = new MutationObserver(check);
+      if (layer.div) observer.observe(layer.div, { childList: true, subtree: true });
+      signal?.addEventListener("abort", aborted, { once: true });
+      check();
+    });
+  }
 
   return {
     get state() {
@@ -609,27 +680,78 @@ export function createPdfjsAnnotationEditor(
     selectAll: () => manager.selectAll(),
     commit: () => manager.endCurrentEditing(),
     async addImage(pageIndex, image, altText) {
-      await switchTo(Mode.STAMP);
-      const layer = live(pageIndex);
-      const editor = created(layer, () =>
-        layer.addNewEditor(
-          typeof image === "string" ? { bitmapUrl: image } : { bitmapFile: asFile(image) },
-        ),
-      );
-      if (!editor) return false;
-      if (altText) {
-        editor.createAltText();
-        editor.altTextData = { altText, decorative: false };
+      if (destroyed) return false;
+      // The runtime has already published the stamp tool. Choose it before
+      // loading, even if decoding fails. A newer tool choice cancels this
+      // insertion rather than taking focus from the reader's next action.
+      const revision = await switchTo(Mode.STAMP);
+      if (destroyed || revision !== toolRevision) return false;
+      const source = typeof image === "string" ? image : asFile(image);
+      // Decode before creating the editor: a loading image is already in
+      // annotationStorage, but pdf.js cannot serialize it until it has pixels.
+      const loading =
+        typeof source === "string"
+          ? manager.imageManager.getFromUrl(source)
+          : manager.imageManager.getFromFile(source);
+      const signal = manager._signal;
+      let aborted = () => {};
+      const cancelled = new Promise<null>((resolve) => {
+        aborted = () => resolve(null);
+      });
+      signal?.addEventListener("abort", aborted, { once: true });
+      const decoded = await Promise.race([loading, cancelled]);
+      signal?.removeEventListener("abort", aborted);
+      if (!decoded) {
+        // A download may finish after the viewer closed; release the cache
+        // reference then, without keeping addImage() pending for its response.
+        if (destroyed)
+          void loading.then((image) => image && manager.imageManager.deleteId(image.id));
+        return false;
       }
-      return true;
+      try {
+        if (destroyed || revision !== toolRevision) return false;
+        const layer = layers.get(pageIndex)?.layer;
+        if (destroyed || !layer) return false;
+        // The image cache now supplies this editor without another fetch or
+        // decode, retaining pdf.js's normal placement, selection, and undo.
+        const editor = created(layer, () =>
+          layer.addNewEditor(
+            typeof source === "string" ? { bitmapUrl: source } : { bitmapFile: source },
+          ),
+        );
+        if (!editor || !(await imageReady(layer, editor))) return false;
+        if (altText) {
+          editor.createAltText();
+          editor.altTextData = { altText, decorative: false };
+        }
+        return true;
+      } finally {
+        // The editor owns its own cache reference after creation.
+        manager.imageManager.deleteId(decoded.id);
+      }
     },
     async addSignature(pageIndex, signature, description = "") {
-      await switchTo(Mode.SIGNATURE);
-      const layer = live(pageIndex);
-      pendingSignature = { input: signature, description };
+      if (destroyed) return false;
+      const revision = await switchTo(Mode.SIGNATURE);
+      if (destroyed || revision !== toolRevision) return false;
+      const layer = layers.get(pageIndex)?.layer;
+      if (!layer) return false;
+      let complete = (_added: boolean) => {};
+      const promise = new Promise<boolean>((resolve) => {
+        complete = resolve;
+      });
+      const signal = manager._signal;
+      const aborted = () => complete(false);
+      signal?.addEventListener("abort", aborted, { once: true });
+      pendingSignature = { input: signature, description, revision, complete };
       const editor = created(layer, () => layer.addNewEditor());
+      if (pendingSignature) complete(false);
       pendingSignature = null;
-      return editor !== null;
+      try {
+        return editor ? await promise : false;
+      } finally {
+        signal?.removeEventListener("abort", aborted);
+      }
     },
     export() {
       const annotations: SavedAnnotation[] = [];

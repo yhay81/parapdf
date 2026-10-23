@@ -40,3 +40,11 @@ Generated stress documents live in `generated/`, are recreated with
   for search options.
 - `synthetic-encrypted.pdf` — three pages encrypted with the user password
   `parapdf` (standard security handler, revision 2), for password prompts.
+- `synthetic-restricted.pdf` — two pages with text and a text field,
+  encrypted without a user password and with permissions (/P -64) that
+  refuse printing, changing, copying, and annotating, for viewers that
+  follow permissions.
+- `synthetic-navigation.pdf` — four pages that ask how they are shown
+  (/OpenAction to page 3 at 200%, /PageLayout /TwoColumnLeft, /PageMode
+  /UseOutlines), with links on page 1 to a destination of every kind (XYZ
+  with and without a zoom, Fit, FitH, FitV, FitR) and an outline.

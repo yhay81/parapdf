@@ -103,9 +103,14 @@ with the API.
   `check:lifecycle`), `forms` (`1` for fillable fields), `spread` (`odd` or
   `even`), `scroll` (`horizontal`, `wrapped`, or `page`), `page` (the
   one-based page shown first), `scale` (a number, `fit-width`, or
-  `fit-page`), `password` (the source's password), and `annotations` (`1`
+  `fit-page`), `password` (the source's password), `annotations` (`1`
   for annotation editing, with a second toolbar that keeps exported
-  annotations in localStorage and copies the document's text).
+  annotations in localStorage and copies the document's text), `view`
+  (`document` opens where and as the document asks, and its sidebar panel;
+  `spread`, `scroll`, `page`, and `scale` still win when given),
+  `destinationZoom` (`0` keeps the zoom at link jumps), `permissions`
+  (`1` follows what the document permits), and `viewState` (a view state
+  as JSON, to open with).
 - `pnpm --filter @parapdf/prototype build && pnpm --filter @parapdf/prototype bench`
   — scripted scroll benchmark; `BROWSER` picks the browser, and `VARIANTS`,
   `TEXT`, `LINKS`, `SCROLL` (scroll modes: `vertical`, `horizontal`,
@@ -132,6 +137,16 @@ with the API.
   zooms, and turns; `save()` writing them into the PDF, read back by
   pdf.js; and exporting and importing them, on an unmounted page too (run
   after `build`; `BROWSER` and `ENGINE` apply).
+- `pnpm --filter @parapdf/prototype check:document` — functional checks for
+  what the document asks of the viewer and what an application reads and
+  sets in it: the view of every kind of destination (XYZ with and without a
+  zoom, Fit, FitH, FitV, FitR), clicked or followed, back and forward with
+  their zoom, `destinationZoom: false`, the initial view (/OpenAction,
+  /PageLayout, /PageMode) and the options that win over it, permissions
+  reported and followed, form fields listed, entered, heard, set, shown,
+  and saved, and view states kept and shown again, at open in a narrower
+  viewport and later, with values out of range ignored (run after `pnpm --filter @parapdf/bench corpus` and `build`;
+  `BROWSER` and `ENGINE` apply).
 - `pnpm --filter @parapdf/prototype check:links` — functional checks for
   internal and external links, keyboard activation, the back stack, and the
   outline on `usrguide.pdf` (run after `build`; `BROWSER` applies here too).
@@ -157,8 +172,10 @@ with the API.
   spreads; the current page; zooming around a point; "fit-width" and
   "fit-page"; scrolling to a search match; switching modes on the current
   page; filling rows again after a resize; and flipping pages in "page" mode
-  with keys, the demo's buttons, and `goToPage()`, while a zoomed page
-  scrolls within itself (run after `pnpm --filter @parapdf/bench corpus` and
+  with keys, the demo's buttons, `goToPage()`, and one-finger swipes (real
+  touches in Chromium, dispatched touch events in WebKit and Firefox), while
+  a zoomed page scrolls within itself and short, slanted, and two-finger
+  swipes and annotation tools do not flip (run after `pnpm --filter @parapdf/bench corpus` and
   `build`; `BROWSER` and `ENGINE` apply).
 - `pnpm --filter @parapdf/prototype check:rotation` — functional checks for
   view rotation (page boxes, canvases, text, overlays, search, link jumps)
@@ -239,6 +256,10 @@ with the API.
 - The functional checks default to `ENGINE=pdfjs-next`, which needs
   `bench/scripts/build-pdfjs-next.sh`; `ENGINE=pdfjs` runs them on released
   pdfjs-dist, as CI does (`.github/workflows/ci.yml`, Chromium only).
+- The checks that run after `build` serve `examples/prototype/dist/`, or,
+  with `DIST`, a build of the demo in a directory of its own (`pnpm --filter
+  @parapdf/prototype exec vite build --outDir <dir>`), so that they do not
+  replace the build a benchmark of another session is measuring.
 
 ## Releasing
 
@@ -359,8 +380,24 @@ with the API.
   show the row they need, and keys that would scroll past an edge of the row
   shown flip it (Page Down, space, and ↓ at its bottom, → at its right edge,
   and back the other way), showing the next row from the edge they crossed
-  at the same place along the other axis; the wheel and touches only scroll
-  within a zoomed row. "fit-width" and "fit-page" fit one page, not a
+  at the same place along the other axis; the wheel only scrolls within a
+  zoomed row. A one-finger swipe of 50 CSS pixels within 30° of an axis
+  flips too (left or up forward, right or down back), only past an edge
+  the row was scrolled to both when the finger went down and when it
+  lifted, so a swipe within a zoomed row scrolls it and the next one from
+  its edge flips; two fingers, a selection made during the touch, a touch
+  on a form control, and a chosen annotation tool do not flip. It listens
+  to touch events: Chromium cancels the touch's pointer at its first move
+  even with nothing to scroll (a pointercancel after one pointermove, then
+  touchmoves to the touchend). The fling a swipe leaves goes on into the
+  flipped row, 102 CSS pixels down in Chromium: the scroller loses its
+  overflow until the reader touches, presses, wheels, or types, or for a
+  second, since one frame or 300 ms left 5 pixels of it once the overflow
+  was back; the hold restores the overflow `PdfViewport` sets inline.
+  Before, a swipe never flipped: at "fit-page", and at "fit-width" on a
+  phone, a row shown whole had nothing to scroll, so only the
+  application's buttons turned pages; pdf.js's viewer component has no
+  swipe either. "fit-width" and "fit-page" fit one page, not a
   spread, in "horizontal" mode, as pdf.js does. The mounted window is
   rounded out to whole rows except in "horizontal" mode, and scrolling's
   speed is measured along the axis pages follow each other on.
@@ -676,10 +713,74 @@ with the API.
   followable while internal links keep working. pdf.js puts the linked text in
   each internal link's `title`, its accessible name.
 - `goToDestination` resolves named and explicit destinations through the
-  engine and places an explicit top at the viewport's top edge. Link and
-  outline jumps push the previous position (a page plus a fraction, so zoom
-  does not invalidate it) onto a 50-entry back stack exposed as `canGoBack`
-  and `back()`. The outline loads in the background after the first layout.
+  engine and places an explicit top at the viewport's top edge; an explicit
+  left scrolls sideways only when it is out of view, except in "horizontal"
+  mode and for FitR. With `destinationZoom` (default true), it also takes
+  the zoom the destination asks for (`ResolvedDestination.view`), as
+  pdf.js's viewer does: XYZ's factor times 96/72 (0 and null keep the
+  zoom), Fit as "fit-page", FitH as "fit-width", FitV the page's height
+  within the gaps, and FitR the rectangle filling the scroller, from its
+  top-left corner as the page shows it (on a page whose /Rotate turns it,
+  the corner of the turned rectangle, not FitR's left and top). FitB* fit
+  like Fit*. Link and outline jumps push the previous position (a page
+  plus a fraction, so zoom does not invalidate it, the current page, and
+  the zoom) onto a 50-entry back stack exposed as `canGoBack` and `back()`;
+  `back()` moves it onto a forward stack (`canGoForward`, `forward()`), and
+  a new jump clears that, as browsers do. Both restore the zoom, fitted
+  zooms fitted to the viewport as it is now, since a destination may have
+  changed it. The `GoBack` and `GoForward` named actions call them. The
+  outline loads in the background after the first layout.
+- View states (`getViewState()`, `setViewState()`, `initialViewState`) are
+  plain objects: the page at the viewport's top-left corner, the point of
+  it there in PDF points of the page unturned by the view (with its own
+  /Rotate, as `ResolvedDestination`, so a view kept at one zoom, rotation,
+  or viewport size lands on the same text in another), the zoom or the fit
+  that keeps it, rotation, spread, and scroll mode. The gap above a row
+  belongs to it, so a page shown from its top by `goToPage()` is that page
+  with a small negative `y`, not the page above. Showing one sets the
+  arrangement and zoom, lays out once, and places the point with `#jump()`
+  scrolling sideways too (`exact`); it pushes no back entry. At open,
+  `initialViewState` replaces `initialPage` and the /OpenAction jump, so
+  nothing is drawn at another place first; with `initialView: "document"`,
+  the fields it leaves out take the document's. A "fit-width" view fits
+  again around the viewport's center when the viewport resizes later, as
+  any fitted zoom does.
+- The document's initial view (`getInitialView()`: /OpenAction's
+  destination, /PageLayout, /PageMode) is published as `documentView` in
+  the background. With `initialView: "document"`, the viewer fetches it
+  beside the first page's size and applies it before the first layout:
+  /PageLayout maps to spreads and scroll modes as pdf.js's
+  `apiPageLayoutToViewerModes()` does (TwoColumn* to "odd" and "even"
+  spreads, TwoPage* and SinglePage to "page" mode), and the destination is
+  shown like a link's, without a back entry. Options the application set
+  win: `initialPage` over the destination, `initialScale` over its zoom,
+  `spread` and `scrollMode` over the layout. /PageMode only reaches the
+  application, whose panels the runtime does not own; the demo opens its
+  sidebar for it.
+- Permissions (`getPermissions()`, pdf.js's `PermissionFlag`s; everything
+  for documents that are not encrypted) are fetched beside the first page's
+  size and published as `permissions`. With `enforcePermissions` (default
+  false, as pdf.js's `enablePermissions`), the viewer follows them: without
+  `copy`, the pages element has `parapdf-no-copy`, which makes text runs
+  unselectable as pdf.js's viewer CSS does, and copy and cut events there
+  are prevented; without `print`, `print()` throws; the annotation editor
+  needs `annotate` (PDF 32000-1, Table 22; pdf.js asks for
+  `MODIFY_CONTENTS`), and form fields render as HTML with `fillForms` or
+  `annotate`, as in pdf.js. Text layers stay, so assistive technology and
+  `getText()` still read the text.
+- Form data (`engine/pdfjs-forms.ts`): `getFormFields()` lists fields from
+  the display annotations of the pages `getFieldObjects()` names, since
+  field objects lack `required` and all of a list's selections, with each
+  value read from pdf.js's `annotationStorage` (a `{ value }` per widget:
+  text, whether a box or radio button is checked, or the selected options)
+  and the document's own value where nothing was stored. `setFormValues()`
+  writes the same storage, clears a text field's `formattedValue`, and
+  invalidates the content so form layers are built again from it.
+  `onFormChange()` listens on the pages element: text fields and lists
+  store at `input`, boxes and radio buttons at `change` (their `input`
+  comes first, before pdf.js stores anything, and reported "Off" for a box
+  just checked), and the field is found by the element's
+  `data-element-id`.
 - `acquireDocument` (`runtime/documents.ts`) shares one loaded document per
   engine and source (the URL, or the identity of the data) among viewers, so
   StrictMode's double mount and quick remounts load it once. A document is
@@ -863,7 +964,7 @@ with the API.
     points, and `pageColors`.
 - Browsers: `check:text`, `check:links`, `check:lifecycle`,
   `check:rotation`, `check:options`, `check:pinch`, `check:bundle`,
-  `check:features`, `check:scroll`, and `check:annotations` pass in Playwright's Chromium,
+  `check:features`, `check:scroll`, `check:annotations`, and `check:document` pass in Playwright's Chromium,
   WebKit, and Firefox. Playwright's WebKit keeps no
   HTTP cache, so it downloads a preloaded PDF again (it fetched a response
   with `max-age=3600` twice as well); `check:bundle` reports that as a note.
@@ -881,7 +982,9 @@ with the API.
   `requestIdleCallback` nor `scheduler.yield`, so idle text and annotation
   layers fall back to a 16 ms timer and search yields through `setTimeout(0)`.
 - Not yet implemented: editing the annotations a PDF already holds, comments
-  on created annotations, form scripts (pdf.js's sandbox), XFA forms, text
+  on created annotations, form scripts (pdf.js's sandbox: calculations,
+  validation, and button actions), XFA forms, right-to-left page order
+  (/ViewerPreferences /Direction), text
   layers for pages outside the mounted window (`getText()` reads their
   text), and a highlight fallback for browsers without the CSS Custom
   Highlight API.

@@ -82,6 +82,8 @@ interface Slot {
   detailVersion: number;
   /** The part of the page the detail layer covers; null for the whole page. */
   detailRegion: PageArea | null;
+  /** Failed renders stay blocked until their conditions change or the page mounts again. */
+  readonly failures: Partial<Record<Layer, FailedRender>>;
   job: Job | undefined;
   textTask: TextLayerTask | undefined;
   textHandle: TextLayerHandle | undefined;
@@ -220,6 +222,13 @@ interface DetailPlan {
   scale: number;
   /** The part of the page to draw; null for the whole page. */
   region: PageArea | null;
+}
+
+interface FailedRender extends DetailPlan {
+  version: number;
+  rotation: Rotation;
+  width: number;
+  height: number;
 }
 
 /**
@@ -395,6 +404,7 @@ export class RenderScheduler {
       baseVersion: 0,
       detailVersion: 0,
       detailRegion: null,
+      failures: {},
       job: undefined,
       textTask: undefined,
       textHandle: undefined,
@@ -709,6 +719,32 @@ export class RenderScheduler {
     return visible !== null && shouldRedrawRegion(slot.detailRegion, visible);
   }
 
+  #failed(slot: Slot, layer: Layer, plan: DetailPlan, input: ScheduleInput): boolean {
+    const failure = slot.failures[layer];
+    const size = input.layout.sizes[slot.index];
+    if (
+      !failure ||
+      failure.version !== this.#version ||
+      failure.rotation !== input.layout.rotation ||
+      failure.width !== size?.width ||
+      failure.height !== size?.height ||
+      failure.scale !== plan.scale
+    ) {
+      return false;
+    }
+    const a = failure.region;
+    const b = plan.region;
+    return (
+      a === b ||
+      (a !== null &&
+        b !== null &&
+        a.minX === b.minX &&
+        a.minY === b.minY &&
+        a.maxX === b.maxX &&
+        a.maxY === b.maxY)
+    );
+  }
+
   /** Pixels of page `index` drawn at `scale` device pixels per point, over `region` or all of it. */
   #pixels(index: number, scale: number, region: PageArea | null, input: ScheduleInput): number {
     const size = input.layout.sizes[index];
@@ -837,15 +873,22 @@ export class RenderScheduler {
       return (
         plan !== null &&
         plan.region === null &&
+        !this.#failed(slot, "detail", plan, input) &&
         this.#keepsDetail(slot, this.#pixels(slot.index, plan.scale, null, input), total)
       );
     };
     // A base of an older content version shows wherever the detail does not.
     const needsBase = (slot: Slot) =>
-      (slot.baseScale === 0 ||
-        (slot.baseVersion !== this.#version && slot.detailRegion !== null)) &&
-      !coveredByDetail(slot);
-    const detailFirst = (slot: Slot) => input.settled && planOf(slot)?.region === null;
+      (slot.baseScale === 0 || slot.baseVersion !== this.#version) && !coveredByDetail(slot);
+    const detailFirst = (slot: Slot) => {
+      const plan = planOf(slot);
+      return (
+        input.settled &&
+        plan !== null &&
+        plan.region === null &&
+        !this.#failed(slot, "detail", plan, input)
+      );
+    };
     // See QUICK_DETAIL_BASES.
     const quickDetail = (slot: Slot) => {
       if (!input.settled || slot.baseScale > 0 || slot.detailScale > 0) return false;
@@ -853,6 +896,7 @@ export class RenderScheduler {
       return (
         plan !== null &&
         plan.region === null &&
+        !this.#failed(slot, "detail", plan, input) &&
         this.#pixels(slot.index, plan.scale, null, input) <=
           this.#maxBasePixels * QUICK_DETAIL_BASES
       );
@@ -882,13 +926,15 @@ export class RenderScheduler {
       [(slot) => input.settled && staleBase(slot) && (visible(slot) || fits(slot, "base")), "base"],
     ];
     for (const [matches, layer] of phases) {
-      const slot = idle.find(matches);
-      if (slot) {
-        if (layer === "base") {
-          return { slot, layer, scale: this.#baseScale(slot.index, input), region: null };
+      for (const slot of idle) {
+        if (!matches(slot)) continue;
+        const plan =
+          layer === "base"
+            ? { scale: this.#baseScale(slot.index, input), region: null }
+            : planOf(slot);
+        if (plan && !this.#failed(slot, layer, plan, input)) {
+          return { slot, layer, ...plan };
         }
-        const plan = planOf(slot);
-        if (plan) return { slot, layer, scale: plan.scale, region: plan.region };
       }
     }
     return undefined;
@@ -1008,10 +1054,16 @@ export class RenderScheduler {
       .then(
         () => {
           if (!current()) return;
+          delete slot.failures[layer];
           canvas.style.visibility = "";
           if (layer === "base") {
             slot.baseScale = scale;
             slot.baseVersion = version;
+            // A failed replacement may leave an older content version on
+            // top. Keep those pixels until this fallback is ready to show.
+            if (version === this.#version && slot.detailVersion !== version) {
+              this.#clearDetail(slot);
+            }
             this.stats.base++;
           } else {
             if (spare) {
@@ -1033,6 +1085,18 @@ export class RenderScheduler {
           else {
             this.stats.failed++;
             console.error(`page ${slot.index + 1}: ${layer} render failed`, error);
+            if (current() && layout && unturned) {
+              // A permanent failure must not pump the same render forever.
+              // Keep the planned region: the rendered one was snapped to pixels.
+              slot.failures[layer] = {
+                scale,
+                region: plannedRegion,
+                version,
+                rotation: layout.rotation,
+                width: unturned.width,
+                height: unturned.height,
+              };
+            }
           }
           if (layer !== "detail" || !current()) return;
           if (spare) {

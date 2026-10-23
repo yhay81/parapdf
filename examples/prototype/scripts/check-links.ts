@@ -50,10 +50,33 @@ const pageLinks = (page: Page, pageNumber: number) =>
 
 const SECTION = "2 Creating document commands and environments";
 
+/** Four blank pages with the PDF's own rotation, independent of view rotation. */
+function rotatedPages(): string {
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Count 4 /Kids [3 0 R 4 0 R 5 0 R 6 0 R] >>",
+    ...[0, 90, 180, 270].map(
+      (rotation) =>
+        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Rotate ${rotation} /Resources << >> >>`,
+    ),
+  ];
+  let pdf = "%PDF-1.7\n";
+  const offsets = [0];
+  objects.forEach((object, index) => {
+    offsets.push(pdf.length);
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+  const xref = pdf.length;
+  pdf += `xref\n0 ${offsets.length}\n0000000000 65535 f \n`;
+  for (const offset of offsets.slice(1)) pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
+  return `${pdf}trailer\n<< /Size ${offsets.length} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+}
+
 const server = await preview({
   root: exampleDir,
   configFile: join(exampleDir, "vite.config.ts"),
   logLevel: "warn",
+  ...(process.env.DIST ? { build: { outDir: process.env.DIST } } : {}),
   preview: { port: 4186, host: "127.0.0.1", strictPort: false, open: false },
 });
 const baseUrl = server.resolvedUrls?.local[0] ?? "http://127.0.0.1:4186/";
@@ -164,6 +187,108 @@ try {
       (attributes.rel ?? "").includes("noopener"),
     JSON.stringify(attributes),
   );
+
+  const rotatedContext = await launched.browser.newContext();
+  const rotated = await rotatedContext.newPage();
+  await rotated.route("**/corpus/rotated-destinations.pdf", (route) =>
+    route.fulfill({ contentType: "application/pdf", body: rotatedPages() }),
+  );
+  await rotated.goto(`${baseUrl}?engine=${engine}&file=rotated-destinations.pdf`);
+  await rotated.waitForFunction(
+    () =>
+      (window as { __viewer?: { store: { get(): { status: string } } } }).__viewer?.store.get()
+        .status === "ready",
+  );
+  const destinations = await rotated.evaluate(async () => {
+    const doc = (
+      window as {
+        __viewer?: {
+          store: {
+            get(): {
+              document: {
+                resolveDestination(dest: unknown): Promise<unknown>;
+              };
+            };
+          };
+        };
+      }
+    ).__viewer?.store.get().document;
+    // A FitR rectangle, 120–400 by 100–300, gives its top-left corner as the page shows.
+    const expected = [
+      {
+        point: { x: 120, y: 492 },
+        horizontal: { x: null, y: 492 },
+        vertical: { x: 120, y: null },
+        rect: { x: 120, y: 492 },
+      },
+      {
+        point: { x: 300, y: 120 },
+        horizontal: { x: 300, y: null },
+        vertical: { x: null, y: 120 },
+        rect: { x: 100, y: 120 },
+      },
+      {
+        point: { x: 492, y: 300 },
+        horizontal: { x: null, y: 300 },
+        vertical: { x: 492, y: null },
+        rect: { x: 212, y: 100 },
+      },
+      {
+        point: { x: 492, y: 492 },
+        horizontal: { x: 492, y: null },
+        vertical: { x: null, y: 492 },
+        rect: { x: 492, y: 212 },
+      },
+    ];
+    const views = {
+      FitH: "width",
+      FitBH: "width",
+      FitV: "height",
+      FitBV: "height",
+      XYZ: "zoom",
+      FitR: "rect",
+      Fit: "page",
+    };
+    const results: { rotation: number; mode: string; actual: unknown; expected: unknown }[] = [];
+    for (const [pageIndex, points] of expected.entries()) {
+      for (const [mode, args, target] of [
+        ["FitH", [300], points.horizontal],
+        ["FitBH", [300], points.horizontal],
+        ["FitV", [120], points.vertical],
+        ["FitBV", [120], points.vertical],
+        ["XYZ", [null, 300, null], points.horizontal],
+        ["XYZ", [120, null, null], points.vertical],
+        ["XYZ", [120, 300, null], points.point],
+        ["FitR", [120, 100, 400, 300], points.rect],
+        ["Fit", [], { x: null, y: null }],
+      ] as const) {
+        const resolved = (await doc?.resolveDestination([pageIndex, { name: mode }, ...args])) as {
+          view?: { fit: string };
+        } | null;
+        const { view, ...actual } = resolved ?? {};
+        results.push({
+          rotation: pageIndex * 90,
+          mode,
+          actual: { ...actual, fit: view?.fit },
+          expected: { pageIndex, ...target, fit: views[mode] },
+        });
+      }
+    }
+    return results;
+  });
+  for (const rotation of [0, 90, 180, 270]) {
+    const wrong = destinations.filter(
+      (result) =>
+        result.rotation === rotation &&
+        JSON.stringify(result.actual) !== JSON.stringify(result.expected),
+    );
+    check(
+      `destinations preserve specified coordinates with the PDF rotated ${rotation} degrees`,
+      wrong.length === 0,
+      wrong.length ? JSON.stringify(wrong) : "9 destinations",
+    );
+  }
+  await rotatedContext.close();
 
   check("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));
 } finally {

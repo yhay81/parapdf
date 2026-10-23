@@ -28,6 +28,10 @@ interface Entry {
   progress: { loaded: number; total: number | null } | null;
   /** The engine's request for a password, until a viewer answers it. */
   passwordRequest: { reason: PasswordReason; answer(password: string | null): void } | null;
+  /** Passwords already tried, so remounting never resubmits the same failed value. */
+  readonly passwords: Set<string>;
+  /** A new source password supplied before the engine asks for one. */
+  nextPassword: string | undefined;
 }
 
 export interface DocumentLease {
@@ -77,6 +81,8 @@ function openEntry(engine: PdfEngine, source: PdfSource): Entry {
     releaseTimer: undefined,
     progress: null,
     passwordRequest: null,
+    passwords: new Set(source.password === undefined ? [] : [source.password]),
+    nextPassword: undefined,
   };
   entry.document = engine.open(source, {
     signal: entry.abort.signal,
@@ -90,15 +96,29 @@ function openEntry(engine: PdfEngine, source: PdfSource): Entry {
           resolve(null);
           return;
         }
+        if (entry.nextPassword !== undefined) {
+          const password = entry.nextPassword;
+          entry.nextPassword = undefined;
+          entry.passwords.add(password);
+          resolve(password);
+          return;
+        }
         const request = {
           reason,
           answer(password: string | null) {
-            if (entry.passwordRequest === request) entry.passwordRequest = null;
+            if (entry.passwordRequest !== request) return;
+            entry.passwordRequest = null;
+            entry.nextPassword = undefined;
+            if (password !== null) entry.passwords.add(password);
             resolve(password);
           },
         };
         entry.passwordRequest = request;
-        for (const listener of entry.listeners) listener.onPassword?.(reason);
+        for (const listener of [...entry.listeners]) {
+          // A listener may answer, or add another viewer that answers, at once.
+          if (entry.passwordRequest !== request) break;
+          listener.onPassword?.(reason);
+        }
       });
     },
   });
@@ -135,6 +155,12 @@ export function acquireDocument(
   const held = entry;
   held.users++;
   held.listeners.add(listener);
+  // A changed password retries the shared load, including while its worker
+  // has not asked yet. Answer a pending request before replaying its old error.
+  if (source.password !== undefined && !held.passwords.has(source.password)) {
+    held.nextPassword = source.password;
+    held.passwordRequest?.answer(source.password);
+  }
   // A viewer that joins late hears what the others already heard.
   if (held.progress) listener.onProgress?.(held.progress.loaded, held.progress.total);
   if (held.passwordRequest) listener.onPassword?.(held.passwordRequest.reason);

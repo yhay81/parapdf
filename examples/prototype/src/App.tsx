@@ -1,6 +1,7 @@
 import {
   PdfDocument,
   type PdfjsDocumentOptions,
+  type PdfPageMode,
   PdfPageRect,
   type PdfSource,
   PdfViewport,
@@ -58,6 +59,21 @@ const settings = {
   scrollMode: (["horizontal", "wrapped", "page"].includes(params.get("scroll") ?? "")
     ? params.get("scroll")
     : "vertical") as ScrollMode,
+  /**
+   * "document" opens the document where and as it asks, and its sidebar
+   * panel; `spread`, `scroll`, `page`, and `scale` still win when given.
+   */
+  initialView: (params.get("view") === "document"
+    ? "document"
+    : "options") as ViewerOptions["initialView"],
+  /** "0" keeps the zoom when following links and the outline. */
+  destinationZoom: params.get("destinationZoom") !== "0",
+  /** "1" follows what the document permits. */
+  enforcePermissions: params.get("permissions") === "1",
+  /** A view kept from `getViewState()`, as JSON, to open with. */
+  viewState: params.has("viewState")
+    ? (JSON.parse(params.get("viewState") ?? "{}") as ViewerOptions["initialViewState"])
+    : undefined,
   /** The one-based page shown first. */
   initialPage: Number(params.get("page") ?? "1") - 1,
   /** A scale in CSS pixels per point, "fit-width", or "fit-page". */
@@ -155,8 +171,17 @@ const viewerOptions: ViewerOptions = {
   forms: settings.forms,
   annotationEditing: settings.annotations,
   passwordPrompt: settings.passwordPrompt,
-  spread: settings.spread,
-  scrollMode: settings.scrollMode,
+  // With the document's initial view, only the arrangement asked for wins over it.
+  ...(settings.initialView === "options" || params.has("spread")
+    ? { spread: settings.spread }
+    : {}),
+  ...(settings.initialView === "options" || params.has("scroll")
+    ? { scrollMode: settings.scrollMode }
+    : {}),
+  initialView: settings.initialView,
+  destinationZoom: settings.destinationZoom,
+  enforcePermissions: settings.enforcePermissions,
+  ...(settings.viewState ? { initialViewState: settings.viewState } : {}),
   ...(settings.initialPage > 0 ? { initialPage: settings.initialPage } : {}),
   ...(settings.initialScale !== undefined ? { initialScale: settings.initialScale } : {}),
   ...(settings.maxScale ? { maxScale: settings.maxScale } : {}),
@@ -227,6 +252,7 @@ function Viewer(_props: { renders: number }) {
         <Toolbar
           sidebar={sidebar}
           onToggleSidebar={(view) => setSidebar((open) => (open === view ? null : view))}
+          onOpenSidebar={setSidebar}
         />
         {settings.annotations ? <AnnotationToolbar file={settings.file} /> : null}
         <PasswordPrompt />
@@ -256,12 +282,22 @@ function Viewer(_props: { renders: number }) {
   );
 }
 
+/** The sidebar panel that shows what each /PageMode asks to show beside the pages. */
+const PAGE_MODE_PANELS: Partial<Record<PdfPageMode, SidebarView>> = {
+  UseOutlines: "outline",
+  UseThumbs: "thumbnails",
+  UseOC: "layers",
+  UseAttachments: "attachments",
+};
+
 function Toolbar({
   sidebar,
   onToggleSidebar,
+  onOpenSidebar,
 }: {
   sidebar: SidebarView | null;
   onToggleSidebar: (view: SidebarView) => void;
+  onOpenSidebar: (view: SidebarView) => void;
 }) {
   const viewer = usePdfViewer();
   const navigation = usePdfNavigation();
@@ -269,19 +305,28 @@ function Toolbar({
   const hasOutline = outline !== null && outline.length > 0;
   const hasLayers = usePdfState((state) => (state.layers?.length ?? 0) > 0);
   const hasAttachments = usePdfState((state) => (state.attachments?.length ?? 0) > 0);
-  const { back } = navigation;
+  const { back, forward } = navigation;
 
-  // Alt+Left returns from a link jump, as browsers do for pages.
+  // Alt+Left returns from a link jump and Alt+Right goes forward again, as
+  // browsers do for pages.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.altKey && event.key === "ArrowLeft") {
+      if (event.altKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
         event.preventDefault();
-        back();
+        if (event.key === "ArrowLeft") back();
+        else forward();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [back]);
+  }, [back, forward]);
+  // The panel the document asks for, once, as it opens.
+  const pageMode = usePdfState((state) => state.documentView?.pageMode ?? null);
+  const askedPanel =
+    settings.initialView === "document" && pageMode ? PAGE_MODE_PANELS[pageMode] : undefined;
+  useEffect(() => {
+    if (askedPanel) onOpenSidebar(askedPanel);
+  }, [askedPanel, onOpenSidebar]);
   // Exposed for the Playwright probes; not part of the library surface.
   (window as { __viewer?: unknown }).__viewer = viewer;
   // The escape hatch: pdf.js's own PDFDocumentProxy, for check-rotation.ts.
@@ -298,6 +343,7 @@ function Toolbar({
   const spread = usePdfState((state) => state.spread);
   const scrollMode = usePdfState((state) => state.scrollMode);
   const tool = usePdfState((state) => state.tool);
+  const canPrint = usePdfState((state) => state.permissions?.print ?? true);
   const sidebarButton = (view: SidebarView, text: string) => (
     <button
       type="button"
@@ -322,6 +368,9 @@ function Toolbar({
       {hasAttachments ? sidebarButton("attachments", "Attachments") : null}
       <button type="button" onClick={back} disabled={!navigation.canGoBack}>
         Back
+      </button>
+      <button type="button" onClick={forward} disabled={!navigation.canGoForward}>
+        Forward
       </button>
       <strong title={title ?? undefined}>ParaPDF prototype</strong>
       <span className="engine">{viewer.engineName}</span>
@@ -386,7 +435,11 @@ function Toolbar({
       <button type="button" onClick={() => viewer.rotate(90)} aria-label="Rotate clockwise">
         ↻
       </button>
-      <button type="button" onClick={() => void viewer.print()} disabled={status !== "ready"}>
+      <button
+        type="button"
+        onClick={() => void viewer.print()}
+        disabled={status !== "ready" || (settings.enforcePermissions && !canPrint)}
+      >
         Print
       </button>
       <button type="button" onClick={() => void viewer.download()} disabled={status !== "ready"}>

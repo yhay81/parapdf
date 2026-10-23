@@ -323,6 +323,11 @@ export const VIEWER_CSS = `
   z-index: -1;
 }
 .parapdf-pages.selecting { -webkit-user-select: none; user-select: none; }
+.parapdf-pages.parapdf-no-copy .parapdf-text-layer :is(span, br, .endOfContent) {
+  cursor: not-allowed;
+  -webkit-user-select: none !important;
+  user-select: none !important;
+}
 .parapdf-pages.selecting .parapdf-text-layer { -webkit-user-select: text; user-select: text; }
 ::highlight(parapdf-search) { background-color: rgb(255 200 0 / 0.45); }
 ::highlight(parapdf-search-current) { background-color: rgb(255 110 0 / 0.65); }

@@ -1,7 +1,9 @@
 import type * as Pdfjs from "pdfjs-dist";
+import { createFormAccess } from "./pdfjs-forms.ts";
 import { type RawDims, StructTreeBuilder } from "./struct-tree.ts";
 import {
   type AnnotationLayerHandle,
+  type DestinationView,
   type LayerState,
   type LinkHandlers,
   type OpenOptions,
@@ -10,8 +12,12 @@ import {
   type PageText,
   type PdfEngine,
   type PdfEngineDocument,
+  type PdfInitialView,
   type PdfLayer,
   type PdfMetadata,
+  type PdfPageLayout,
+  type PdfPageMode,
+  type PdfPermissions,
   type PdfSource,
   RenderCancelledError,
   type ResolvedDestination,
@@ -242,6 +248,23 @@ const createDownloadManager = (links: LinkHandlers) => ({
 });
 
 /** The first of `values` that is a non-empty string, trimmed. */
+const PAGE_LAYOUTS = new Set<string>([
+  "SinglePage",
+  "OneColumn",
+  "TwoColumnLeft",
+  "TwoColumnRight",
+  "TwoPageLeft",
+  "TwoPageRight",
+]);
+const PAGE_MODES = new Set<string>([
+  "UseNone",
+  "UseOutlines",
+  "UseThumbs",
+  "FullScreen",
+  "UseOC",
+  "UseAttachments",
+]);
+
 function text(...values: unknown[]): string | null {
   for (const value of values) {
     if (typeof value === "string" && value.trim()) return value.trim();
@@ -424,6 +447,70 @@ export function createPdfjsEngine(options: PdfjsEngineOptions): PdfEngine {
           pages.set(pageIndex, page);
         }
         return page;
+      };
+
+      const forms = createFormAccess(doc, getPage);
+      /** An explicit destination's page, point, and view (PDF 32000-1, 12.3.2.2). */
+      const resolveExplicit = async (explicit: unknown): Promise<ResolvedDestination | null> => {
+        if (!Array.isArray(explicit)) return null;
+        const [target, mode, ...args] = explicit as [unknown, { name?: string }?, ...unknown[]];
+        let pageIndex: number;
+        if (Number.isInteger(target)) pageIndex = target as number;
+        else if (target && typeof target === "object") {
+          pageIndex = await doc.getPageIndex(target as Parameters<typeof doc.getPageIndex>[0]);
+        } else return null;
+        const num = (value: unknown) => (typeof value === "number" ? value : null);
+        // [left, top] in PDF user space, and the view asked for.
+        let left: number | null = null;
+        let top: number | null = null;
+        let view: DestinationView | undefined;
+        let corner: [number, number] | null = null;
+        switch (mode?.name) {
+          case "XYZ":
+            left = num(args[0]);
+            top = num(args[1]);
+            // 0 and null keep the zoom.
+            view = { fit: "zoom", zoom: num(args[2]) || null };
+            break;
+          case "Fit":
+          case "FitB":
+            view = { fit: "page" };
+            break;
+          case "FitH":
+          case "FitBH":
+            top = num(args[0]);
+            view = { fit: "width" };
+            break;
+          case "FitV":
+          case "FitBV":
+            left = num(args[0]);
+            view = { fit: "height" };
+            break;
+          case "FitR": {
+            const [x1 = null, y1 = null, x2 = null, y2 = null] = args.map(num);
+            if (x1 === null || y1 === null || x2 === null || y2 === null) break;
+            left = Math.min(x1, x2);
+            top = Math.max(y1, y2);
+            corner = [Math.max(x1, x2), Math.min(y1, y2)];
+            break;
+          }
+        }
+        const resolved = (x: number | null, y: number | null): ResolvedDestination =>
+          view ? { pageIndex, x, y, view } : { pageIndex, x, y };
+        if (left === null && top === null) return resolved(null, null);
+        const viewport = (await getPage(pageIndex)).getViewport({ scale: 1 });
+        const [x = 0, y = 0] = viewport.convertToViewportPoint(left ?? 0, top ?? 0);
+        if (corner) {
+          // The rectangle's corners on the page as it shows, whichever way it turns.
+          const [cx = 0, cy = 0] = viewport.convertToViewportPoint(...corner);
+          view = { fit: "rect", width: Math.abs(cx - x), height: Math.abs(cy - y) };
+          return resolved(Math.min(x, cx), Math.min(y, cy));
+        }
+        const quarter = viewport.rotation % 180 !== 0;
+        return resolved(
+          (quarter ? top : left) === null ? null : x,
+          (quarter ? left : top) === null ? null : y,
+        );
       };
 
       return {
@@ -678,40 +765,38 @@ export function createPdfjsEngine(options: PdfjsEngineOptions): PdfEngine {
         },
         async resolveDestination(dest): Promise<ResolvedDestination | null> {
           const explicit = typeof dest === "string" ? await doc.getDestination(dest) : dest;
-          if (!Array.isArray(explicit)) return null;
-          const [target, mode, ...args] = explicit as [unknown, { name?: string }?, ...unknown[]];
-          let pageIndex: number;
-          if (Number.isInteger(target)) pageIndex = target as number;
-          else if (target && typeof target === "object") {
-            pageIndex = await doc.getPageIndex(target as Parameters<typeof doc.getPageIndex>[0]);
-          } else return null;
-          const num = (value: unknown) => (typeof value === "number" ? value : null);
-          // [left, top] in PDF user space, per the destination syntax (PDF 32000 12.3.2.2).
-          let left: number | null = null;
-          let top: number | null = null;
-          switch (mode?.name) {
-            case "XYZ":
-              left = num(args[0]);
-              top = num(args[1]);
-              break;
-            case "FitH":
-            case "FitBH":
-              top = num(args[0]);
-              break;
-            case "FitV":
-            case "FitBV":
-              left = num(args[0]);
-              break;
-            case "FitR":
-              left = num(args[0]);
-              top = num(args[3]);
-              break;
-          }
-          if (left === null && top === null) return { pageIndex, x: null, y: null };
-          const viewport = (await getPage(pageIndex)).getViewport({ scale: 1 });
-          const [x = 0, y = 0] = viewport.convertToViewportPoint(left ?? 0, top ?? 0);
-          return { pageIndex, x: left === null ? null : x, y: top === null ? null : y };
+          return resolveExplicit(explicit);
         },
+        async getPermissions(): Promise<PdfPermissions> {
+          const flags = await doc.getPermissions();
+          const flag = pdfjs.PermissionFlag;
+          const has = (value: number) => !flags || flags.has(value);
+          const permissions = {
+            print: has(flag.PRINT),
+            printHighQuality: has(flag.PRINT_HIGH_QUALITY),
+            modify: has(flag.MODIFY_CONTENTS),
+            copy: has(flag.COPY),
+            copyForAccessibility: has(flag.COPY_FOR_ACCESSIBILITY),
+            annotate: has(flag.MODIFY_ANNOTATIONS),
+            fillForms: has(flag.FILL_INTERACTIVE_FORMS),
+            assemble: has(flag.ASSEMBLE),
+          };
+          return { restricted: Object.values(permissions).includes(false), ...permissions };
+        },
+        async getInitialView(): Promise<PdfInitialView> {
+          const [openAction, pageLayout, pageMode] = await Promise.all([
+            doc.getOpenAction() as Promise<Map<string, unknown> | null>,
+            doc.getPageLayout(),
+            doc.getPageMode(),
+          ]);
+          const dest = openAction?.get("dest");
+          return {
+            destination: dest ? await resolveExplicit(dest).catch(() => null) : null,
+            pageLayout: PAGE_LAYOUTS.has(pageLayout) ? (pageLayout as PdfPageLayout) : null,
+            pageMode: PAGE_MODES.has(pageMode) ? (pageMode as PdfPageMode) : null,
+          };
+        },
+        ...forms,
         releasePage(pageIndex) {
           structTrees.delete(pageIndex);
           // The page may never have loaded, or the document may be gone by now.

@@ -13,6 +13,8 @@ import { fileURLToPath } from "node:url";
 import type { Page } from "playwright";
 import { preview } from "vite";
 import { launchBrowser, restoreScaleFactor } from "../../../bench/scripts/browsers.ts";
+import type { PdfEngineDocument } from "../../../packages/parapdf/src/engine/types.ts";
+import type { PdfViewerRuntime } from "../../../packages/parapdf/src/runtime/viewer.ts";
 
 const exampleDir = fileURLToPath(new URL("..", import.meta.url));
 const engine = process.env.ENGINE ?? "pdfjs-next";
@@ -177,6 +179,7 @@ const server = await preview({
   root: exampleDir,
   configFile: join(exampleDir, "vite.config.ts"),
   logLevel: "warn",
+  ...(process.env.DIST ? { build: { outDir: process.env.DIST } } : {}),
   preview: { port: 4188, host: "127.0.0.1", strictPort: false, open: false },
 });
 const baseUrl = server.resolvedUrls?.local[0] ?? "http://127.0.0.1:4188/";
@@ -207,6 +210,94 @@ const newPage = async (query: string, width = 1000): Promise<Page> => {
 try {
   // Pages of mixed sizes: each centered in the viewport, wider ones at the gap.
   const mixed = await newPage("file=synthetic-mixed-sizes.pdf");
+  // Hold the size pass until the reader has moved far down an overestimated
+  // document. The real browser must clamp the scroll when its size shrinks.
+  const refined = await mixed.evaluate(async () => {
+    const Runtime = (window as unknown as { __viewer: PdfViewerRuntime }).__viewer
+      .constructor as typeof PdfViewerRuntime;
+    const results = [];
+    for (const scrollMode of ["vertical", "horizontal"] as const) {
+      let finishSizes = () => {};
+      const sizesReady = new Promise<void>((resolve) => {
+        finishSizes = resolve;
+      });
+      const doc = {
+        pageCount: 20,
+        async pageSize(index: number) {
+          if (index === 0) return { width: 4000, height: 4000 };
+          await sizesReady;
+          return { width: 1000, height: 1000 };
+        },
+        getOutline: async () => [],
+        getPageLabels: async () => null,
+        getMetadata: async () => null,
+        getAttachments: async () => [],
+        createLayerState: async () => ({ layers: () => [] }),
+        getPermissions: async () => ({ restricted: false }),
+        getInitialView: async () => ({ destination: null, pageLayout: null, pageMode: null }),
+        destroy: async () => {},
+      } as unknown as PdfEngineDocument;
+      const viewer = new Runtime(
+        { name: "delayed-sizes", open: async () => doc },
+        { initialScale: 1, scrollMode },
+      );
+      const scroller = document.createElement("div");
+      scroller.style.cssText =
+        "position:fixed;inset:0;width:600px;height:600px;overflow:auto;contain:strict";
+      const content = document.createElement("div");
+      scroller.append(content);
+      document.body.append(scroller);
+      const detach = viewer.attachViewport(scroller, content);
+      let finishOpen = () => {};
+      const ready = new Promise<void>((resolve) => {
+        finishOpen = resolve;
+      });
+      const unsubscribe = viewer.store.subscribe(() => {
+        if (viewer.store.get().status === "ready") finishOpen();
+      });
+      const close = viewer.open({ url: `/delayed-sizes-${scrollMode}.pdf` });
+      await ready;
+      unsubscribe();
+      try {
+        const old = viewer.store.get().layout;
+        if (!old) throw new Error("No initial layout");
+        const axis = scrollMode === "vertical" ? "scrollTop" : "scrollLeft";
+        const positions = scrollMode === "vertical" ? "tops" : "offsets";
+        const inset = scrollMode === "horizontal" ? old.gap : 0;
+        // A quarter of the way through page 10, beyond the shorter
+        // document's eventual end: resizing must clamp this old position.
+        scroller[axis] = (old[positions][9] ?? 0) + inset + 1000;
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        const before = viewer.store.get().currentPage;
+        finishSizes();
+        const deadline = performance.now() + 5000;
+        while (viewer.store.get().layout === old && performance.now() < deadline) {
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        }
+        const state = viewer.store.get();
+        const expected = (state.layout?.[positions][9] ?? 0) + inset + 250;
+        results.push({
+          mode: scrollMode,
+          before,
+          after: state.currentPage,
+          position: scroller[axis],
+          expected,
+        });
+      } finally {
+        close();
+        detach();
+        scroller.remove();
+      }
+    }
+    return results;
+  });
+  for (const result of refined) {
+    check(
+      `the size pass keeps the reading position when ${result.mode} content shrinks`,
+      result.before === 9 && result.after === 9 && Math.abs(result.position - result.expected) <= 1,
+      JSON.stringify(result),
+    );
+  }
   // The background pass learns the landscape page's size and widens the content.
   await mixed.waitForFunction(
     () => {

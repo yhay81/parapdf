@@ -5,6 +5,9 @@ import type {
   AnnotationStyles,
   AnnotationTool,
   DestinationRef,
+  FormChange,
+  FormField,
+  FormValue,
   LayerState,
   LinkHandlers,
   OutlineNode,
@@ -15,9 +18,13 @@ import type {
   PdfAttachment,
   PdfEngine,
   PdfEngineDocument,
+  PdfInitialView,
   PdfLayer,
   PdfMetadata,
+  PdfPageLayout,
+  PdfPermissions,
   PdfSource,
+  ResolvedDestination,
   Rotation,
   SavedAnnotation,
   SignatureInput,
@@ -137,6 +144,19 @@ export interface ViewerState {
   outline: readonly OutlineNode[] | null;
   /** Whether `back()` can return to a position before a link or outline jump. */
   canGoBack: boolean;
+  /** Whether `forward()` can return to a position `back()` left. */
+  canGoForward: boolean;
+  /**
+   * What the document permits, everything when it is not encrypted; null
+   * until it loads. With `enforcePermissions`, the viewer follows it.
+   */
+  permissions: PdfPermissions | null;
+  /**
+   * How the document asks to be shown when it opens: where, how its pages
+   * are arranged, and which panel shows beside them (`pageMode`), which the
+   * application may open; null until it loads.
+   */
+  documentView: PdfInitialView | null;
   /** Each page's label, such as "iv"; null while loading and when the PDF defines none. */
   pageLabels: readonly string[] | null;
   /** The document's title, author, dates, and so on; null until loaded. */
@@ -157,6 +177,27 @@ export interface ViewerState {
 }
 
 export type ZoomMode = "fit-width" | "fit-page" | "custom";
+
+/**
+ * Where and how a viewer shows its document, to keep and show again: a
+ * plain, JSON-compatible object (see `getViewState()`).
+ */
+export interface ViewState {
+  /** The zero-based page at the viewport's top-left corner. */
+  page: number;
+  /**
+   * The point of that page at the viewport's top-left corner, in PDF points
+   * from the page's top-left corner, unturned by the view: negative in the
+   * space before the page.
+   */
+  x: number;
+  y: number;
+  /** CSS pixels per PDF point, or the fit that keeps the zoom. */
+  scale: number | "fit-width" | "fit-page";
+  rotation: Rotation;
+  spread: SpreadMode;
+  scrollMode: ScrollMode;
+}
 
 /** A rectangle in PDF points from the top-left corner of a page, unturned by the view. */
 export interface PdfRect {
@@ -206,6 +247,37 @@ export interface ViewerOptions {
   initialPage?: number;
   /** What a mouse drag does at first (default "select"); see `setTool()`. */
   initialTool?: PointerTool;
+  /**
+   * The view to open with, kept from `getViewState()`, such as the reader's
+   * last position or one shared in a URL. Its fields win over `initialPage`,
+   * `initialScale`, `spread`, `scrollMode`, and `initialView`; those it
+   * leaves out still apply.
+   */
+  initialViewState?: Partial<ViewState>;
+  /**
+   * "document" opens the document as it asks to be opened: at its
+   * /OpenAction destination, with its zoom, and with its pages arranged
+   * as its /PageLayout says, in spreads or one page at a time. Options the
+   * application sets (`initialPage`, `initialScale`, `spread`,
+   * `scrollMode`) win. The default, "options", follows the options alone.
+   */
+  initialView?: "options" | "document";
+  /**
+   * Whether links and the outline take the zoom their destination asks for
+   * (default true), as in pdf.js: a factor, the page's width or height, the
+   * whole page, or a rectangle that fills the viewport. With false, they
+   * keep the zoom and only scroll.
+   */
+  destinationZoom?: boolean;
+  /**
+   * Follow what the document permits (default false, as in pdf.js): without
+   * permission to copy, its text cannot be selected or copied, though it
+   * stays readable by assistive technology and `getText()`; without
+   * permission to print, `print()` fails; without permission to annotate,
+   * annotations cannot be created, and form fields can be filled in only
+   * with permission to fill forms. `permissions` tells the application.
+   */
+  enforcePermissions?: boolean;
   minScale?: number;
   maxScale?: number;
   /** Build selectable, searchable text layers (default true). */
@@ -219,6 +291,7 @@ export interface ViewerOptions {
    * Show form fields as HTML that the reader can fill in (default false: the
    * drawing shows them as they are). Typed values belong to the document,
    * which `save()` writes them into. Needs `annotationLayer`.
+   * `onFormChange()` hears what the reader enters.
    */
   forms?: boolean;
   /**
@@ -319,6 +392,41 @@ const ANNOTATION_LABELS: AnnotationLabels = {
 /** Jumps kept for `back()`. */
 const HISTORY_LIMIT = 50;
 
+/** Which edges of its scroll range the scroller is at. */
+interface Edges {
+  atTop: boolean;
+  atBottom: boolean;
+  atLeft: boolean;
+  atRight: boolean;
+}
+
+/**
+ * A position kept for `back()` and `forward()`: the page at the viewport's
+ * top-left corner, where that corner is as a share of the page, the current
+ * page, and the zoom, which a destination may change.
+ */
+interface Position {
+  pageIndex: number;
+  x: number;
+  y: number;
+  current: number;
+  scale: number;
+  zoomMode: ZoomMode;
+}
+
+const SPREADS = new Set<string>(["none", "odd", "even"]);
+const SCROLL_MODES = new Set<string>(["vertical", "horizontal", "wrapped", "page"]);
+
+/** How pdf.js's viewer arranges pages for each /PageLayout. */
+const PAGE_LAYOUTS: Record<PdfPageLayout, { spread: SpreadMode; scrollMode: ScrollMode }> = {
+  SinglePage: { spread: "none", scrollMode: "page" },
+  OneColumn: { spread: "none", scrollMode: "vertical" },
+  TwoColumnLeft: { spread: "odd", scrollMode: "vertical" },
+  TwoColumnRight: { spread: "even", scrollMode: "vertical" },
+  TwoPageLeft: { spread: "odd", scrollMode: "page" },
+  TwoPageRight: { spread: "even", scrollMode: "page" },
+};
+
 /** Scrolling faster than this (CSS px/ms) defers full-resolution renders. */
 const SETTLE_VELOCITY = 2;
 /** Scrolling is considered stopped after this many milliseconds without events. */
@@ -333,6 +441,16 @@ const ZOOM_COMMIT_DELAY = 150;
 const PINCH_SLOP = 16;
 /** Safari's events for trackpad pinches, which iPadOS also sends for touch pinches. */
 const GESTURE_EVENTS = ["gesturestart", "gesturechange", "gestureend"] as const;
+/** A one-finger swipe flips pages in "page" mode once it moved this many CSS pixels. */
+const SWIPE_DISTANCE = 50;
+/** …and stayed within this angle of an axis. */
+const SWIPE_ANGLE = Math.PI / 6;
+/** How long a flip by swipe holds the fling the swipe left behind (see `#stopFling()`). */
+const FLING_STOP = 1000;
+/** What the reader does that ends that hold at once. */
+const FLING_ENDS = ["touchstart", "pointerdown", "wheel", "keydown"] as const;
+/** Elements whose keys and touches belong to them rather than to page flipping. */
+const CONTROLS = "input, select, textarea, button, [contenteditable], .parapdf-editor-layer";
 /** What Ctrl or ⌘ with + and - zooms by. */
 const ZOOM_STEP = 1.25;
 /** Pages `getText()` asks the engine for ahead of the one it reads. */
@@ -596,6 +714,9 @@ export class PdfViewerRuntime {
     search: IDLE_SEARCH,
     outline: null,
     canGoBack: false,
+    canGoForward: false,
+    permissions: null,
+    documentView: null,
     rotation: 0,
     spread: "none",
     scrollMode: "vertical",
@@ -614,6 +735,15 @@ export class PdfViewerRuntime {
   readonly #maxConcurrentRenders: number;
   readonly #initialScale: number | "fit-width" | "fit-page";
   readonly #initialPage: number;
+  /** The options the application set, which the document's initial view does not override. */
+  readonly #explicit: Pick<ViewerOptions, "initialPage" | "initialScale" | "spread" | "scrollMode">;
+  readonly #documentView: boolean;
+  readonly #initialViewState: Partial<ViewState> | null;
+  readonly #destinationZoom: boolean;
+  readonly #enforcePermissions: boolean;
+  /** What the open document permits, once known. */
+  #permissions: PdfPermissions | null = null;
+  readonly #formListeners = new Set<(change: FormChange) => void>();
   readonly #minScale: number;
   readonly #maxScale: number;
   readonly #textLayer: boolean;
@@ -640,7 +770,9 @@ export class PdfViewerRuntime {
    * Positions before link and outline jumps: the page at the viewport's
    * top-left corner and where that corner is, as a share of the page.
    */
-  #history: { pageIndex: number; x: number; y: number; current: number }[] = [];
+  #history: Position[] = [];
+  /** Positions `back()` left, latest last, for `forward()`. */
+  #future: Position[] = [];
   readonly #highlights = new SearchHighlights();
   readonly #selection = new TextSelectionTracker();
   readonly #thumbnails = new ThumbnailRenderer({
@@ -677,6 +809,14 @@ export class PdfViewerRuntime {
   /** Touch pointers down on the viewport, in client coordinates. */
   readonly #touches = new Map<number, { x: number; y: number }>();
   #pinch: Pinch | null = null;
+  /**
+   * A one-finger touch in "page" mode that may flip pages: where it went
+   * down, which edges the page shown was scrolled to then, and the text
+   * selected then.
+   */
+  #swipe: { id: number; x: number; y: number; edges: Edges; selection: string } | null = null;
+  /** Gives the scroller its overflow back after a flip stopped a fling; null without one. */
+  #flingStop: (() => void) | null = null;
   /** Removes the window listeners that follow the touches down on the viewport. */
   #touchListeners: AbortController | null = null;
   /** The scale of Safari's gesture in progress at its latest event; null without one. */
@@ -697,6 +837,16 @@ export class PdfViewerRuntime {
     this.#maxConcurrentRenders = options.maxConcurrentRenders ?? 2;
     this.#initialScale = options.initialScale ?? "fit-width";
     this.#initialPage = options.initialPage ?? 0;
+    this.#explicit = {
+      initialPage: options.initialPage,
+      initialScale: options.initialScale,
+      spread: options.spread,
+      scrollMode: options.scrollMode,
+    };
+    this.#documentView = options.initialView === "document";
+    this.#initialViewState = options.initialViewState ?? null;
+    this.#destinationZoom = options.destinationZoom ?? true;
+    this.#enforcePermissions = options.enforcePermissions ?? false;
     this.#minScale = options.minScale ?? 0.25;
     this.#maxScale = options.maxScale ?? 10;
     this.#textLayer = options.textLayer ?? true;
@@ -768,6 +918,33 @@ export class PdfViewerRuntime {
   open(source: PdfSource): () => void {
     const generation = ++this.#generation;
     let closed = false;
+    this.#sourceName = "url" in source ? filenameFromUrl(source.url) : null;
+    this.#firstPaintAt = null;
+    this.#history = [];
+    this.#future = [];
+    this.#permissions = null;
+    this.store.set({
+      status: "loading",
+      error: null,
+      passwordReason: null,
+      progress: null,
+      search: IDLE_SEARCH,
+      outline: null,
+      canGoBack: false,
+      canGoForward: false,
+      permissions: null,
+      documentView: null,
+      currentPage: 0,
+      rotation: 0,
+      zoomMode: this.#initialZoomMode(),
+      document: null,
+      pageLabels: null,
+      metadata: null,
+      attachments: null,
+      layers: null,
+    });
+    // Acquisition replays a shared document's pending password request
+    // synchronously; initialize first so that request remains visible.
     const lease = acquireDocument(
       this.#engine,
       source,
@@ -799,41 +976,37 @@ export class PdfViewerRuntime {
       this.#annotationEditing ? this : undefined,
     );
     this.#lease = lease;
-    this.#sourceName = "url" in source ? filenameFromUrl(source.url) : null;
-    this.#firstPaintAt = null;
-    this.#history = [];
-    this.store.set({
-      status: "loading",
-      error: null,
-      passwordReason: null,
-      progress: null,
-      search: IDLE_SEARCH,
-      outline: null,
-      canGoBack: false,
-      currentPage: 0,
-      rotation: 0,
-      zoomMode: this.#initialZoomMode(),
-      document: null,
-      pageLabels: null,
-      metadata: null,
-      attachments: null,
-      layers: null,
-    });
 
     void (async () => {
       try {
         const doc = await lease.document;
         if (closed) return;
-        const firstSize = await doc.pageSize(0);
+        // Fetched beside the first page's size: the scheduler follows the
+        // permissions, and the first layout the document's initial view.
+        const [firstSize, permissions, documentView] = await Promise.all([
+          doc.pageSize(0),
+          doc.getPermissions().catch((error: unknown) => {
+            console.error("reading permissions failed", error);
+            return null;
+          }),
+          this.#documentView
+            ? doc.getInitialView().catch((error: unknown) => {
+                console.error("reading the initial view failed", error);
+                return null;
+              })
+            : null,
+        ]);
         if (closed) return;
         this.#doc = doc;
+        this.#permissions = permissions;
+        this.#applyPermissions();
         // Assume every page matches the first until the background pass knows better.
         this.#sizes = Array.from({ length: doc.pageCount }, () => firstSize);
         this.#scheduler = new RenderScheduler(doc, {
           maxConcurrent: this.#maxConcurrentRenders,
           ...this.#canvasLimits,
           links: this.#links,
-          forms: this.#forms,
+          forms: this.#forms && this.#permits("fillForms"),
           ...(this.#pageColors ? { pageColors: this.#pageColors } : {}),
           selection: this.#selection,
           onPainted: (pageIndex) => {
@@ -855,6 +1028,7 @@ export class PdfViewerRuntime {
         }
         this.#pendingPages.clear();
         this.#thumbnails.refresh();
+        const destination = this.#arrangeAsDocument(documentView);
         const scale = this.#resolveInitialScale();
         this.#applyLayout(scale);
         this.store.set({
@@ -863,8 +1037,15 @@ export class PdfViewerRuntime {
           pageCount: doc.pageCount,
           scale,
           document: doc,
+          permissions,
+          documentView: this.#documentView ? documentView : null,
         });
-        if (this.#initialPage > 0) this.goToPage(this.#initialPage);
+        if (this.#initialViewState) this.#showView(this.#initialViewState, destination);
+        else if (this.#initialPage > 0) this.goToPage(this.#initialPage);
+        else if (destination) this.#jump(destination, this.#destinationZoom);
+        if (!this.#documentView) {
+          this.#publishLater(generation, doc.getInitialView(), "documentView", null);
+        }
         this.#update();
         this.#startEditor();
         this.#background(this.#refineSizes(doc, generation), "measuring page sizes", generation);
@@ -912,6 +1093,9 @@ export class PdfViewerRuntime {
         this.#textPages.clear();
         this.#indexes.clear();
         this.#history = [];
+        this.#future = [];
+        this.#permissions = null;
+        this.#applyPermissions();
         this.#doc = null;
         this.#layers = null;
         this.#scheduler = null;
@@ -926,6 +1110,9 @@ export class PdfViewerRuntime {
           search: IDLE_SEARCH,
           outline: null,
           canGoBack: false,
+          canGoForward: false,
+          permissions: null,
+          documentView: null,
           document: null,
           pageLabels: null,
           metadata: null,
@@ -998,13 +1185,102 @@ export class PdfViewerRuntime {
   /**
    * Print the document through the browser's print dialog: every page is
    * drawn for printing, with what was typed into its form fields, and only
-   * those pages print. Resolves once the browser returns from printing.
+   * those pages print. Resolves once the browser returns from printing,
+   * and fails with `enforcePermissions` when the document does not permit
+   * printing.
    */
   async print(options?: PrintOptions): Promise<void> {
     const doc = this.#doc;
+    if (doc && !this.#permits("print")) {
+      throw new Error("The document does not permit printing");
+    }
     this.#editor?.commit();
     if (doc) await printDocument(doc, { ...options, layers: this.#layers });
   }
+
+  /**
+   * Whether the open document permits `what`, or the viewer does not
+   * follow permissions. Form fields can also be filled in with permission
+   * to annotate (PDF 32000-1, Table 22).
+   */
+  #permits(what: "print" | "copy" | "annotate" | "fillForms"): boolean {
+    const permissions = this.#permissions;
+    if (!this.#enforcePermissions || !permissions) return true;
+    return what === "fillForms" ? permissions.fillForms || permissions.annotate : permissions[what];
+  }
+
+  /** Keep the text from being selected and copied when the document does not permit copying. */
+  #applyPermissions(): void {
+    this.#content?.classList.toggle("parapdf-no-copy", !this.#permits("copy"));
+  }
+
+  #onCopy = (event: ClipboardEvent): void => {
+    if (!this.#permits("copy")) event.preventDefault();
+  };
+
+  /**
+   * The document's form fields with their values, those the reader entered
+   * and those `setFormValues()` set included; empty when it has none or
+   * no document is open.
+   */
+  async getFormFields(): Promise<readonly FormField[]> {
+    return (await this.#doc?.getFormFields()) ?? [];
+  }
+
+  /**
+   * Set form fields by name: text for text fields, the export value of the
+   * box or radio button to check ("Off" for none, or true for the first
+   * box and false for none), and an option's export value, or several for a
+   * list box that takes several. Returns the names it set; other names are
+   * ignored. Form fields shown (`forms`) show the values, and `save()` and
+   * `print()` include them.
+   */
+  async setFormValues(values: Readonly<Record<string, FormValue | boolean>>): Promise<string[]> {
+    const doc = this.#doc;
+    if (!doc) return [];
+    const set = await doc.setFormValues(values);
+    // Form layers read the values as they are built.
+    if (set.length > 0 && this.#doc === doc) this.#scheduler?.invalidateContent();
+    return set;
+  }
+
+  /**
+   * Call `listener` with each value the reader enters into a form field
+   * (`forms`), as they type; returns the function that stops it.
+   * `setFormValues()` does not call it.
+   */
+  onFormChange(listener: (change: FormChange) => void): () => void {
+    this.#formListeners.add(listener);
+    return () => {
+      this.#formListeners.delete(listener);
+    };
+  }
+
+  /**
+   * Form elements in annotation layers change the document's storage, then
+   * bubble here: text fields and lists at each input, boxes and radio
+   * buttons at their change, which comes after an input that changed nothing yet.
+   */
+  #onFormInput = (event: Event): void => {
+    const doc = this.#doc;
+    const target = event.target;
+    if (!doc || this.#formListeners.size === 0 || !(target instanceof Element)) return;
+    const toggle =
+      target instanceof HTMLInputElement && (target.type === "checkbox" || target.type === "radio");
+    if (toggle !== (event.type === "change")) return;
+    const id = target
+      .closest(".parapdf-annotation-layer [data-element-id]")
+      ?.getAttribute("data-element-id");
+    if (!id) return;
+    const generation = this.#generation;
+    doc.formChange(id).then(
+      (change) => {
+        if (!change || this.#generation !== generation) return;
+        for (const listener of this.#formListeners) listener(change);
+      },
+      (error: unknown) => console.error("reading a form change failed", error),
+    );
+  };
 
   /**
    * Start editing annotations if `ViewerOptions.annotationEditing` is on,
@@ -1017,7 +1293,7 @@ export class PdfViewerRuntime {
     const scroller = this.#scroller;
     const content = this.#content;
     if (!this.#annotationEditing || this.#editor || this.#editorStarting) return;
-    if (!doc || !scheduler || !scroller || !content) return;
+    if (!doc || !scheduler || !scroller || !content || !this.#permits("annotate")) return;
     const { layout, rotation, scale } = this.store.get();
     let editor: AnnotationEditor | null = null;
     const starting = doc.createAnnotationEditor({
@@ -1159,7 +1435,8 @@ export class PdfViewerRuntime {
    * `pageIndex` (default: the current page), in the middle of its visible
    * part, selected so that the reader can move and resize it. `altText`
    * describes it to assistive technology, in the PDF too. Switches to the
-   * "stamp" tool. Resolves false when the image cannot be added.
+   * "stamp" tool. Resolves false when the image cannot be added or a newer
+   * annotation tool choice cancels it while its image loads.
    */
   async addImage(
     image: Blob | string,
@@ -1177,7 +1454,8 @@ export class PdfViewerRuntime {
    * Add a signature to page `pageIndex` (default: the current page) as
    * `addImage()` adds an image: typed text, an image, or drawn strokes, as
    * outlines. `description` names it for assistive technology. Switches to
-   * the "signature" tool.
+   * the "signature" tool. Resolves false for empty or untraceable signatures,
+   * or when a newer annotation tool choice cancels it while it loads.
    */
   async addSignature(
     signature: SignatureInput,
@@ -1258,11 +1536,21 @@ export class PdfViewerRuntime {
     scroller.addEventListener("pointerup", this.#onGrabEnd, { passive: true });
     scroller.addEventListener("pointercancel", this.#onGrabEnd, { passive: true });
     scroller.addEventListener("keydown", this.#onKeyDown);
+    // Touch events, not pointer events: browsers cancel a touch's pointer
+    // once they pan, even with nothing to scroll, but go on reporting its touches.
+    scroller.addEventListener("touchstart", this.#onSwipeStart, { passive: true });
+    scroller.addEventListener("touchend", this.#onSwipeEnd, { passive: true });
+    scroller.addEventListener("touchcancel", this.#onSwipeEnd, { passive: true });
     scroller.classList.toggle("parapdf-hand", this.store.get().tool === "hand");
     // Not passive: Safari zooms the whole page unless they are prevented.
     for (const type of GESTURE_EVENTS) {
       scroller.addEventListener(type, this.#onGesture, { passive: false });
     }
+    content.addEventListener("copy", this.#onCopy);
+    content.addEventListener("cut", this.#onCopy);
+    content.addEventListener("input", this.#onFormInput);
+    content.addEventListener("change", this.#onFormInput);
+    this.#applyPermissions();
     const resize = new ResizeObserver(this.#onResize);
     resize.observe(scroller);
     const detachSelection = this.#selection.attachPages(content);
@@ -1279,11 +1567,21 @@ export class PdfViewerRuntime {
       scroller.removeEventListener("pointerup", this.#onGrabEnd);
       scroller.removeEventListener("pointercancel", this.#onGrabEnd);
       scroller.removeEventListener("keydown", this.#onKeyDown);
+      scroller.removeEventListener("touchstart", this.#onSwipeStart);
+      scroller.removeEventListener("touchend", this.#onSwipeEnd);
+      scroller.removeEventListener("touchcancel", this.#onSwipeEnd);
+      this.#swipe = null;
+      this.#flingStop?.();
       scroller.classList.remove("parapdf-hand", "parapdf-grabbing");
       this.#grab = null;
       for (const type of GESTURE_EVENTS) scroller.removeEventListener(type, this.#onGesture);
       resize.disconnect();
       detachSelection();
+      content.removeEventListener("copy", this.#onCopy);
+      content.removeEventListener("cut", this.#onCopy);
+      content.removeEventListener("input", this.#onFormInput);
+      content.removeEventListener("change", this.#onFormInput);
+      content.classList.remove("parapdf-no-copy");
       if (this.#frame) cancelAnimationFrame(this.#frame);
       this.#frame = 0;
       if (this.#scroller === scroller) {
@@ -1590,25 +1888,53 @@ export class PdfViewerRuntime {
   }
 
   /**
-   * Follow an internal link or outline entry. The position before the jump
-   * is remembered for `back()`. Resolves to false when the target is invalid.
+   * Follow an internal link or outline entry, with the zoom its destination
+   * asks for unless `destinationZoom` is false. The position before the
+   * jump is remembered for `back()`. Resolves to false when the target is
+   * invalid.
    */
   async goToDestination(dest: DestinationRef): Promise<boolean> {
     const doc = this.#doc;
     if (!doc) return false;
     const target = await doc.resolveDestination(dest).catch(() => null);
     const current = this.store.get().layout;
-    const scroller = this.#scroller;
-    if (!target || !current || !scroller || this.#doc !== doc) return false;
-    const { pageIndex } = target;
-    if (pageIndex < 0 || pageIndex >= current.tops.length) return false;
+    if (!target || !current || !this.#scroller || this.#doc !== doc) return false;
+    if (target.pageIndex < 0 || target.pageIndex >= current.tops.length) return false;
     this.#remember();
+    this.#jump(target, this.#destinationZoom);
+    return true;
+  }
+
+  /**
+   * Show a destination's point at the viewport's top-left corner, with the
+   * zoom it asks for when `zoom` is true. An explicit left scrolls sideways
+   * only when it is out of view, unless `exact`.
+   */
+  #jump(target: ResolvedDestination, zoom: boolean, exact = false): void {
+    this.#finishZoom();
+    let current = this.store.get().layout;
+    const scroller = this.#scroller;
+    if (!current || !scroller) return;
+    const { pageIndex } = target;
+    const fitted = zoom ? this.#destinationScale(target) : null;
+    if (fitted) {
+      this.store.set({ zoomMode: fitted.mode, currentPage: pageIndex });
+      if (fitted.mode !== "custom") {
+        this.#fittedWidth = scroller.clientWidth;
+        this.#fittedHeight = scroller.clientHeight;
+      }
+      if (Math.abs(fitted.scale - current.scale) > 1e-4) {
+        current = this.#applyLayout(fitted.scale, pageIndex);
+        this.store.set({ scale: fitted.scale });
+      }
+    }
     const layout = this.#show(current, pageIndex);
+    const rect = target.view?.fit === "rect" ? target.view : null;
     // The engine reports the point on the unturned page; a quarter turn makes
     // its left coordinate the vertical one.
     const size = layout.sizes[pageIndex] ?? { width: 0, height: 0 };
     const point = turnBox(
-      { x: target.x ?? 0, y: target.y ?? 0, width: 0, height: 0 },
+      { x: target.x ?? 0, y: target.y ?? 0, width: rect?.width ?? 0, height: rect?.height ?? 0 },
       size,
       layout.rotation,
     );
@@ -1624,23 +1950,222 @@ export class PdfViewerRuntime {
     scroller.scrollTop = top;
     if (
       layout.scrollMode === "horizontal" ||
+      // A rectangle fills the viewport from its left edge, and a view
+      // state shows the same part of the page again.
+      ((rect || exact) && hasLeft) ||
       (hasLeft && (left < scroller.scrollLeft || left > scroller.scrollLeft + scroller.clientWidth))
     ) {
       scroller.scrollLeft = left;
     }
     this.store.set({ currentPage: pageIndex });
     this.#update();
-    return true;
   }
 
-  /** Return to the position before the most recent link or outline jump. */
+  /**
+   * The zoom a destination asks for on page `target.pageIndex`, and the
+   * zoom mode that keeps it; null to keep the zoom.
+   */
+  #destinationScale(target: ResolvedDestination): { scale: number; mode: ZoomMode } | null {
+    const view = target.view;
+    const scroller = this.#scroller;
+    const size = this.#sizes[target.pageIndex];
+    if (!view || !scroller || !size) return null;
+    const scaled = (scale: number) =>
+      Number.isFinite(scale) && scale > 0
+        ? { scale: clamp(scale, this.#minScale, this.#maxScale), mode: "custom" as const }
+        : null;
+    const quarter = this.store.get().rotation % 180 !== 0;
+    switch (view.fit) {
+      case "zoom":
+        // A zoom of 1 shows the page at its printed size, 96 CSS pixels an inch.
+        return view.zoom === null ? null : scaled((view.zoom * 96) / 72);
+      case "page":
+      case "width": {
+        const mode = view.fit === "page" ? "fit-page" : "fit-width";
+        const scale = this.#fitScale(target.pageIndex, mode);
+        return scale === null ? null : { scale, mode };
+      }
+      case "height":
+        return scaled(
+          (scroller.clientHeight - 2 * this.#gap) / (quarter ? size.width : size.height),
+        );
+      case "rect":
+        return scaled(
+          Math.min(
+            scroller.clientWidth / (quarter ? view.height : view.width),
+            scroller.clientHeight / (quarter ? view.width : view.height),
+          ),
+        );
+    }
+  }
+
+  /**
+   * With `initialView: "document"`, arrange the pages as the document's
+   * /PageLayout asks, unless the application chose the arrangement, and
+   * return where to open: the /OpenAction destination, unless the
+   * application chose the page.
+   */
+  #arrangeAsDocument(view: PdfInitialView | null): ResolvedDestination | null {
+    if (!this.#documentView || !view) return null;
+    // A document that asks for no layout gets the default one, not the
+    // layout of the document this viewer showed before.
+    const arrangement =
+      (view.pageLayout ? PAGE_LAYOUTS[view.pageLayout] : null) ?? PAGE_LAYOUTS.OneColumn;
+    if (this.#explicit.spread === undefined) this.store.set({ spread: arrangement.spread });
+    if (this.#explicit.scrollMode === undefined) {
+      this.store.set({ scrollMode: arrangement.scrollMode });
+    }
+    const destination = view.destination;
+    if (this.#explicit.initialPage !== undefined || !destination) return null;
+    if (destination.pageIndex < 0 || destination.pageIndex >= this.#sizes.length) return null;
+    // The application's zoom wins over the destination's.
+    if (this.#explicit.initialScale !== undefined) {
+      const { view: _, ...point } = destination;
+      return point;
+    }
+    return destination;
+  }
+
+  /**
+   * Where and how the viewer shows its document now, to show again with
+   * `setViewState()` or `initialViewState`, in this viewer or another, such
+   * as when the reader opens the document again or follows a shared link.
+   * Null until the document is ready.
+   */
+  getViewState(): ViewState | null {
+    const state = this.store.get();
+    const layout = state.layout;
+    const scroller = this.#scroller;
+    if (state.status !== "ready" || !layout || !scroller) return null;
+    const { scrollLeft, scrollTop, clientWidth, clientHeight } = scroller;
+    // The gap above a row belongs to it: a page shown from its top, as
+    // `goToPage()` shows it, is the page of the view, not the one above.
+    const page = pageAtPoint(layout, scrollLeft, scrollTop + layout.gap, clientWidth);
+    const size = layout.sizes[page] ?? { width: 0, height: 0 };
+    // The point on the page as it shows, turned back by the view's rotation.
+    const point = turnBox(
+      {
+        x: (scrollLeft - pageLeft(layout, page, clientWidth)) / layout.scale,
+        y: (scrollTop - pageTop(layout, page, clientHeight)) / layout.scale,
+        width: 0,
+        height: 0,
+      },
+      turnedSize(size, layout.rotation),
+      ((360 - layout.rotation) % 360) as Rotation,
+    );
+    const round = (value: number) => Math.round(value * 100) / 100;
+    return {
+      page,
+      x: round(point.x),
+      y: round(point.y),
+      scale: state.zoomMode === "custom" ? layout.scale : state.zoomMode,
+      rotation: layout.rotation,
+      spread: state.spread,
+      scrollMode: state.scrollMode,
+    };
+  }
+
+  /**
+   * Show a view kept from `getViewState()`: its arrangement, rotation, and
+   * zoom, and the same point of the same page at the viewport's top-left
+   * corner. Fields left out keep the view's; without `x` and `y`, the page
+   * shows from its top. Values out of range are clamped or ignored, so a
+   * view read from a URL needs no checking.
+   */
+  setViewState(view: Partial<ViewState>): void {
+    this.#showView(view, null);
+  }
+
+  /** Show `view`; without a page of its own, at `fallback`, the document's destination. */
+  #showView(view: Partial<ViewState>, fallback: ResolvedDestination | null): void {
+    this.#finishZoom();
+    const before = this.store.get();
+    const scroller = this.#scroller;
+    if (!before.layout || !scroller || before.layout.tops.length === 0) return;
+    const count = before.layout.tops.length;
+    const number = (value: unknown): value is number =>
+      typeof value === "number" && Number.isFinite(value);
+    const rotation = number(view.rotation)
+      ? (((((Math.round(view.rotation / 90) * 90) % 360) + 360) % 360) as Rotation)
+      : before.rotation;
+    const spread = SPREADS.has(view.spread as string) ? (view.spread as SpreadMode) : before.spread;
+    const scrollMode = SCROLL_MODES.has(view.scrollMode as string)
+      ? (view.scrollMode as ScrollMode)
+      : before.scrollMode;
+    const target: ResolvedDestination = number(view.page)
+      ? {
+          pageIndex: clamp(Math.trunc(view.page), 0, count - 1),
+          x: number(view.x) ? view.x : null,
+          y: number(view.y) ? view.y : null,
+        }
+      : (fallback ?? { pageIndex: before.currentPage, x: null, y: null });
+    const page = target.pageIndex;
+    this.store.set({ rotation, spread, scrollMode, currentPage: page });
+    const requested = view.scale;
+    let mode: ZoomMode = before.zoomMode;
+    let scale = before.scale;
+    if (requested === "fit-width" || requested === "fit-page") mode = requested;
+    else if (number(requested) && requested > 0) {
+      mode = "custom";
+      scale = clamp(requested, this.#minScale, this.#maxScale);
+    }
+    if (mode !== "custom") {
+      scale = this.#fitScale(page, mode) ?? scale;
+      this.#fittedWidth = scroller.clientWidth;
+      this.#fittedHeight = scroller.clientHeight;
+    }
+    this.store.set({ zoomMode: mode, scale });
+    this.#applyLayout(scale, page);
+    if (rotation !== before.rotation) this.#scheduler?.rotate(rotation);
+    // The destination's zoom applies only when the view leaves the zoom unsaid.
+    if (target.x === null && target.y === null && !target.view) this.goToPage(page);
+    else this.#jump(target, requested === undefined && this.#destinationZoom, true);
+  }
+
+  /** Return to the position, and the zoom, before the most recent link or outline jump. */
   back(): void {
     const entry = this.#history.pop();
-    this.store.set({ canGoBack: this.#history.length > 0 });
-    const current = this.store.get().layout;
+    const position = entry ? this.#position() : null;
+    if (position) this.#future.push(position);
+    this.store.set({
+      canGoBack: this.#history.length > 0,
+      canGoForward: this.#future.length > 0,
+    });
+    if (entry) this.#restore(entry);
+  }
+
+  /** Return to the position the most recent `back()` left. */
+  forward(): void {
+    const entry = this.#future.pop();
+    const position = entry ? this.#position() : null;
+    if (position) this.#history.push(position);
+    this.store.set({
+      canGoBack: this.#history.length > 0,
+      canGoForward: this.#future.length > 0,
+    });
+    if (entry) this.#restore(entry);
+  }
+
+  #restore(entry: Position): void {
+    this.#finishZoom();
+    let current = this.store.get().layout;
     const scroller = this.#scroller;
-    if (!entry || !current || !scroller) return;
-    const { pageIndex } = entry;
+    if (!current || !scroller) return;
+    const { pageIndex, zoomMode } = entry;
+    // A fitted zoom fits the viewport as it is now.
+    const scale =
+      zoomMode === "custom"
+        ? entry.scale
+        : (this.#fitScale(entry.current, zoomMode) ?? entry.scale);
+    this.store.set({ zoomMode, currentPage: entry.current });
+    if (Math.abs(scale - current.scale) > 1e-4) {
+      if (zoomMode !== "custom") {
+        this.#fittedWidth = scroller.clientWidth;
+        this.#fittedHeight = scroller.clientHeight;
+      }
+      current = this.#applyLayout(scale, pageIndex);
+      this.store.set({ scale });
+    }
     const layout = this.#show(current, pageIndex);
     scroller.scrollTop =
       pageTop(layout, pageIndex, scroller.clientHeight) +
@@ -1652,23 +2177,33 @@ export class PdfViewerRuntime {
   }
 
   /**
-   * Save the viewport's top-left corner as a page and a share of it, which
+   * The viewport's top-left corner as a page and a share of it, which
    * survive zoom changes, and the current page.
    */
-  #remember(): void {
+  #position(): Position | null {
     const layout = this.store.get().layout;
     const scroller = this.#scroller;
-    if (!layout || !scroller) return;
+    if (!layout || !scroller) return null;
     const { scrollLeft: x, scrollTop: y, clientWidth, clientHeight } = scroller;
     const pageIndex = pageAtPoint(layout, x, y, clientWidth);
-    this.#history.push({
+    return {
       pageIndex,
       x: (x - pageLeft(layout, pageIndex, clientWidth)) / (layout.widths[pageIndex] || 1),
       y: (y - pageTop(layout, pageIndex, clientHeight)) / (layout.heights[pageIndex] || 1),
       current: this.store.get().currentPage,
-    });
+      scale: layout.scale,
+      zoomMode: this.store.get().zoomMode,
+    };
+  }
+
+  /** Save the position before a jump for `back()`; a new jump forgets what `forward()` had. */
+  #remember(): void {
+    const position = this.#position();
+    if (!position) return;
+    this.#history.push(position);
     if (this.#history.length > HISTORY_LIMIT) this.#history.shift();
-    this.store.set({ canGoBack: true });
+    this.#future = [];
+    this.store.set({ canGoBack: true, canGoForward: false });
   }
 
   #namedAction(action: string): void {
@@ -1690,6 +2225,9 @@ export class PdfViewerRuntime {
         break;
       case "GoBack":
         this.back();
+        break;
+      case "GoForward":
+        this.forward();
         break;
     }
   }
@@ -2152,11 +2690,12 @@ export class PdfViewerRuntime {
     this.#finishZoom();
     const scroller = this.#scroller;
     const layout = this.store.get().layout;
+    // Shrinking the content can clamp its scroll position immediately.
+    const point = scroller ? { x: scroller.scrollLeft, y: scroller.scrollTop } : null;
     this.#sizes = sizes;
     const next = this.#applyLayout(this.store.get().scale);
-    if (scroller && layout) {
+    if (scroller && layout && point) {
       // Keep the point at the viewport's top-left corner where it is.
-      const point = { x: scroller.scrollLeft, y: scroller.scrollTop };
       const target = zoomTarget(layout, next, sizeOf(scroller), { x: 0, y: 0 }, point);
       scroller.scrollTop = target.top;
       scroller.scrollLeft = target.left;
@@ -2219,24 +2758,11 @@ export class PdfViewerRuntime {
    * and last page. Keys meant for a form field or a button stay theirs.
    */
   #pageKey(event: KeyboardEvent): void {
-    const scroller = this.#scroller;
     const target = event.target instanceof Element ? event.target : null;
     // Arrow keys move a selected annotation.
-    const control = "input, select, textarea, button, [contenteditable], .parapdf-editor-layer";
-    if (!scroller || target?.closest(control)) return;
-    // Within a pixel: zooming leaves fractional scroll positions. The far
-    // edges are where the browser stops scrolling, which a stable scrollbar
-    // gutter puts short of the scroll size less the client size: by 15 px in
-    // Chromium on Linux, where → never flipped a row wider than the viewport.
-    const { scrollLeft, scrollTop } = scroller;
-    scroller.scrollTo(Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER);
-    const maxLeft = scroller.scrollLeft;
-    const maxTop = scroller.scrollTop;
-    scroller.scrollTo(scrollLeft, scrollTop);
-    const atTop = scrollTop <= 1;
-    const atBottom = scrollTop >= maxTop - 1;
-    const atLeft = scrollLeft <= 1;
-    const atRight = scrollLeft >= maxLeft - 1;
+    const edges = target?.closest(CONTROLS) ? null : this.#edges();
+    if (!edges) return;
+    const { atTop, atBottom, atLeft, atRight } = edges;
     let flipped = false;
     switch (event.key) {
       case "PageDown":
@@ -2266,6 +2792,111 @@ export class PdfViewerRuntime {
         break;
     }
     if (flipped) event.preventDefault();
+  }
+
+  /**
+   * Which edges of its scroll range the scroller is at. Within a pixel:
+   * zooming leaves fractional scroll positions. The far edges are where the
+   * browser stops scrolling, which a stable scrollbar gutter puts short of
+   * the scroll size less the client size: by 15 px in Chromium on Linux,
+   * where → never flipped a row wider than the viewport.
+   */
+  #edges(): Edges | null {
+    const scroller = this.#scroller;
+    if (!scroller) return null;
+    const { scrollLeft, scrollTop } = scroller;
+    scroller.scrollTo(Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER);
+    const maxLeft = scroller.scrollLeft;
+    const maxTop = scroller.scrollTop;
+    scroller.scrollTo(scrollLeft, scrollTop);
+    return {
+      atTop: scrollTop <= 1,
+      atBottom: scrollTop >= maxTop - 1,
+      atLeft: scrollLeft <= 1,
+      atRight: scrollLeft >= maxLeft - 1,
+    };
+  }
+
+  /**
+   * A finger down in "page" mode may swipe to the next or previous page.
+   * A second finger, a tool that draws, and form fields keep their touches.
+   */
+  #onSwipeStart = (event: TouchEvent): void => {
+    this.#swipe = null;
+    const touch = event.changedTouches[0];
+    const { scrollMode, annotationTool } = this.store.get();
+    if (event.touches.length !== 1 || !touch || scrollMode !== "page") return;
+    if (annotationTool !== "none") return;
+    const target = event.target instanceof Element ? event.target : null;
+    const edges = target?.closest(CONTROLS) ? null : this.#edges();
+    if (!edges) return;
+    this.#swipe = {
+      id: touch.identifier,
+      x: touch.clientX,
+      y: touch.clientY,
+      edges,
+      selection: document.getSelection()?.toString() ?? "",
+    };
+  };
+
+  /**
+   * A swipe of SWIPE_DISTANCE along an axis flips pages in "page" mode,
+   * like turning paper: to the left or up for the next row, the other way
+   * for the previous one, which shows from the edge the swipe crossed. It
+   * flips only past an edge the page shown was already scrolled to when the
+   * finger went down and still is: within a zoomed page, a swipe scrolls,
+   * and the next swipe from the edge flips. Pinches and selections by long
+   * press do not flip.
+   */
+  #onSwipeEnd = (event: TouchEvent): void => {
+    const swipe = this.#swipe;
+    if (!swipe || event.touches.length > 0) return;
+    this.#swipe = null;
+    const touch = [...event.changedTouches].find(({ identifier }) => identifier === swipe.id);
+    if (!touch || event.type === "touchcancel" || this.#zoom) return;
+    if ((document.getSelection()?.toString() ?? "") !== swipe.selection) return;
+    const dx = touch.clientX - swipe.x;
+    const dy = touch.clientY - swipe.y;
+    const horizontal = Math.abs(dx) >= Math.abs(dy);
+    const along = horizontal ? dx : dy;
+    const across = horizontal ? dy : dx;
+    if (Math.abs(along) < SWIPE_DISTANCE) return;
+    if (Math.abs(across) > Math.abs(along) * Math.tan(SWIPE_ANGLE)) return;
+    const edges = this.#edges();
+    if (!edges) return;
+    const next = along < 0;
+    const edge = horizontal ? (next ? "atRight" : "atLeft") : next ? "atBottom" : "atTop";
+    if (!swipe.edges[edge] || !edges[edge]) return;
+    if (this.#flip(next ? 1 : -1, horizontal ? "x" : "y")) this.#stopFling();
+  };
+
+  /**
+   * Stop the fling a swipe left behind, which would otherwise scroll the
+   * page a flip showed: Chromium scrolled a zoomed page flipped to its top
+   * 102 CSS pixels down. Taking the scroller's overflow away stops it, for
+   * FLING_STOP ms or until the reader touches, presses, turns the wheel, or
+   * presses a key, which then scroll as before: Chromium's fling went on
+   * once the overflow was back, after a frame and still after 300 ms, by 5
+   * pixels. The stable scrollbar gutter keeps the layout as it is.
+   */
+  #stopFling(): void {
+    const scroller = this.#scroller;
+    if (!scroller || this.#flingStop) return;
+    const { scrollLeft, scrollTop } = scroller;
+    const overflow = scroller.style.overflow;
+    scroller.style.overflow = "hidden";
+    const restore = () => {
+      if (this.#flingStop !== restore) return;
+      this.#flingStop = null;
+      clearTimeout(timer);
+      for (const type of FLING_ENDS) scroller.removeEventListener(type, restore, { capture: true });
+      scroller.style.overflow = overflow;
+      scroller.scrollTo(scrollLeft, scrollTop);
+    };
+    const timer = setTimeout(restore, FLING_STOP);
+    for (const type of FLING_ENDS)
+      scroller.addEventListener(type, restore, { capture: true, passive: true });
+    this.#flingStop = restore;
   }
 
   /**

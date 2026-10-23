@@ -4,6 +4,62 @@ Changes to the `parapdf` package. It follows
 [Semantic Versioning](https://semver.org/); until 1.0, a minor release may
 change the API.
 
+## Unreleased
+
+- In `"page"` mode, a one-finger swipe turns the page on touch screens:
+  to the left or up for the next page, to the right or down back. A zoomed
+  page scrolls first and turns from its edge; short or slanted swipes,
+  pinches, and annotation tools do not turn pages.
+- `getViewState()` returns the view as a plain object (the page and point
+  at the viewport's top-left corner, zoom, rotation, spread, and scroll
+  mode), and `setViewState()` and the `initialViewState` option show it
+  again, for reopening where the reader left off and for shared links.
+- Links and the outline take the zoom their destination asks for, as in
+  pdf.js: `XYZ` with a zoom factor, `Fit`, `FitH`, `FitV`, and `FitR`, whose
+  rectangle fills the viewport. `destinationZoom: false` keeps the zoom, as
+  before.
+- `forward()` and `canGoForward` return to where `back()` left, and the
+  `GoForward` action of a PDF's links calls it; `usePdfNavigation()` has
+  both. `back()` and `forward()` also restore the zoom of the position they
+  return to.
+- `initialView: "document"` opens a document at its /OpenAction
+  destination, with its zoom, and arranges its pages as its /PageLayout
+  asks; options the application sets win. The state's `documentView`
+  reports the destination, the layout, and the panel its /PageMode asks
+  for.
+- The state's `permissions` reports what an encrypted document permits.
+  With `enforcePermissions: true`, the viewer follows it: without copying,
+  text cannot be selected or copied; without printing, `print()` fails;
+  without annotating, annotations cannot be created, and form fields need
+  permission to fill forms.
+- `getFormFields()` lists the document's form fields with their values,
+  `setFormValues()` sets them by name, and `onFormChange()` and
+  `usePdfFormChange()` hear each value the reader enters.
+- Stop retrying a failed page render with the same parameters; another zoom,
+  content change, or page remount can try again. A failed sharp render can
+  still fall back to the page's base drawing, including after a layer
+  change: the old detail stays until the new base is ready to replace it.
+- Wait for image annotations and signatures to finish loading before
+  `addImage()` and `addSignature()` report success, so they can be saved or
+  exported immediately; an unreadable image returns `false`.
+- Keep annotation tools in sync when an image fails to load, and cancel a
+  pending image or signature insertion if the reader chooses another tool
+  while it loads.
+- Return `false` for empty or untraceable signatures without leaving an
+  editor or undo step behind.
+- Keep the reading position when the background page-size pass shrinks the
+  layout, before the browser clamps the old scroll position.
+- Preserve a pending password prompt when another viewer opens the same
+  document or the viewer remounts before its document is released.
+- Retry a shared document with a changed source password, including when
+  its first password request has not arrived yet and with
+  `passwordPrompt: false`.
+- Stop an earlier print job when a new one replaces it, cancelling its
+  active render and releasing its images and print styles.
+- Preserve the specified coordinate of internal destinations on PDFs whose
+  own rotation is 90 or 270 degrees, including `FitH`, `FitV`, and `XYZ`
+  destinations with an unspecified coordinate.
+
 ## 0.4.0 — 2026-10-20
 
 - Annotation editing, with `annotationEditing: true`, through pdf.js's

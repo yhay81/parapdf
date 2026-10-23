@@ -13,18 +13,27 @@ export type {
   AnnotationTool,
   AnnotationType,
   DestinationRef,
+  FormChange,
+  FormField,
+  FormFieldType,
+  FormValue,
   OutlineNode,
   PageColors,
   PasswordReason,
   PdfAttachment,
+  PdfInitialView,
   PdfLayer,
   PdfMetadata,
+  PdfPageLayout,
+  PdfPageMode,
+  PdfPermissions,
   PdfSource,
   Rotation,
   SavedAnnotation,
   SignatureInput,
 } from "./engine/types.ts";
 export { usePdfDocument, usePdfState, usePdfViewer } from "./react/context.ts";
+export { usePdfFormChange } from "./react/forms.ts";
 export { type PdfNavigation, usePdfNavigation, usePdfOutline } from "./react/navigation.ts";
 export { PdfDocument, type PdfDocumentProps } from "./react/PdfDocument.tsx";
 export { PdfPageRect, type PdfPageRectProps } from "./react/PdfPageRect.tsx";
@@ -52,5 +61,6 @@ export type {
   SearchState,
   ViewerOptions,
   ViewerState,
+  ViewState,
   ZoomMode,
 } from "./runtime/viewer.ts";

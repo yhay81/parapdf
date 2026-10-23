@@ -15,6 +15,7 @@
     "check:pinch": "node scripts/check-pinch.ts",
     "check:scroll": "node scripts/check-scroll.ts",
     "check:annotations": "node scripts/check-annotations.ts",
+    "check:document": "node scripts/check-document.ts",
     "typecheck": "tsc -p .",
     "check:bundle": "node scripts/check-bundle.ts"
   },

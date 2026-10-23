@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it, mock } from "node:test";
 import type { OpenOptions, PdfEngine, PdfEngineDocument, PdfSource } from "../src/engine/types.ts";
-import { acquireDocument, sourceKey } from "../src/runtime/documents.ts";
+import { acquireDocument, type DocumentLease, sourceKey } from "../src/runtime/documents.ts";
 
 /** An engine that counts opened and destroyed documents; `fail` rejects every open. */
 function countingEngine(fail = false) {
@@ -104,21 +104,23 @@ describe("acquireDocument", () => {
  * An engine whose documents need the password "secret": it reports progress,
  * then asks until it gets the password, and fails when it gets null.
  */
-function lockedEngine() {
+function lockedEngine(beforePassword: Promise<void> = Promise.resolve()) {
   const calls = { opens: 0, asked: [] as string[], aborted: 0 };
   const engine: PdfEngine = {
     name: "locked",
-    async open(_source, options: OpenOptions = {}) {
+    async open(source, options: OpenOptions = {}) {
       calls.opens++;
       options.signal?.addEventListener("abort", () => calls.aborted++);
       options.onProgress?.(10, 100);
-      let reason: "required" | "incorrect" = "required";
+      await beforePassword;
+      let password = source.password;
       for (;;) {
-        calls.asked.push(reason);
-        const password = (await options.password?.(reason)) ?? null;
-        if (password === null) throw new Error("PasswordException");
         if (password === "secret") break;
-        reason = "incorrect";
+        const reason = password === undefined ? "required" : "incorrect";
+        calls.asked.push(reason);
+        const answer = (await options.password?.(reason)) ?? null;
+        if (answer === null) throw new Error("PasswordException");
+        password = answer;
       }
       options.onProgress?.(100, 100);
       return { pageCount: 1, destroy: async () => {} } as unknown as PdfEngineDocument;
@@ -166,6 +168,98 @@ describe("acquireDocument with passwords and progress", () => {
     await settle();
     lease.submitPassword(null);
     await assert.rejects(lease.document, /PasswordException/);
+  });
+
+  it("tries a changed source password on a pending shared document before replaying its prompt", async () => {
+    const { engine, calls } = lockedEngine();
+    const first = acquireDocument(engine, { url: "/locked.pdf", password: "wrong" });
+    await settle();
+    first.release();
+    const heard: string[] = [];
+    const second = acquireDocument(
+      engine,
+      { url: "/locked.pdf", password: "secret" },
+      { onPassword: (reason) => heard.push(reason) },
+    );
+    await settle();
+    assert.deepEqual(heard, []);
+    assert.equal(await first.document, await second.document);
+    assert.equal(calls.opens, 1);
+    assert.deepEqual(calls.asked, ["incorrect"]);
+  });
+
+  it("keeps a changed source password until the engine asks for it", async () => {
+    let start = () => {};
+    const { engine, calls } = lockedEngine(new Promise((resolve) => (start = resolve)));
+    const first = acquireDocument(engine, { url: "/locked.pdf", password: "wrong" });
+    first.release();
+    const heard: string[] = [];
+    const second = acquireDocument(
+      engine,
+      { url: "/locked.pdf", password: "secret" },
+      { onPassword: (reason) => heard.push(reason) },
+    );
+    start();
+    await settle();
+    assert.deepEqual(heard, []);
+    assert.equal(await first.document, await second.document);
+    assert.equal(calls.opens, 1);
+  });
+
+  it("tries each new source password once, including an empty one, without retrying failed values on remount", async () => {
+    const { engine, calls } = lockedEngine();
+    const first = acquireDocument(engine, { url: "/locked.pdf", password: "wrong" });
+    await settle();
+    first.release();
+    const same = acquireDocument(engine, { url: "/locked.pdf", password: "wrong" });
+    await settle();
+    assert.deepEqual(calls.asked, ["incorrect"]);
+    same.release();
+    const empty = acquireDocument(engine, { url: "/locked.pdf", password: "" });
+    await settle();
+    assert.deepEqual(calls.asked, ["incorrect", "incorrect"]);
+    empty.release();
+    const again = acquireDocument(engine, { url: "/locked.pdf", password: "" });
+    await settle();
+    assert.deepEqual(calls.asked, ["incorrect", "incorrect"]);
+    again.submitPassword("secret");
+    await again.document;
+    assert.equal(calls.opens, 1);
+  });
+
+  it("lets a second viewer's source password unlock the document for both viewers", async () => {
+    const { engine, calls } = lockedEngine();
+    const first = acquireDocument(engine, { url: "/locked.pdf" });
+    await settle();
+    const second = acquireDocument(engine, { url: "/locked.pdf", password: "secret" });
+    await settle();
+    assert.equal(await first.document, await second.document);
+    assert.equal(calls.opens, 1);
+  });
+
+  it("does not send an answered password request to a viewer acquired during notification", async () => {
+    const { engine, calls } = lockedEngine();
+    const heard: string[] = [];
+    let second: DocumentLease | undefined;
+    const first = acquireDocument(
+      engine,
+      { url: "/locked.pdf", password: "wrong" },
+      {
+        onPassword(reason) {
+          heard.push(`first:${reason}`);
+          second = acquireDocument(
+            engine,
+            { url: "/locked.pdf", password: "secret" },
+            { onPassword: (retryReason) => heard.push(`second:${retryReason}`) },
+          );
+        },
+      },
+    );
+    await settle();
+    assert.deepEqual(heard, ["first:incorrect"]);
+    assert.ok(second);
+    assert.equal(await first.document, await second.document);
+    assert.equal(calls.opens, 1);
   });
 
   it("reports progress, also to viewers that join late", async () => {

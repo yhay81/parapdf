@@ -13,6 +13,7 @@ import {
   PDFDocument,
   PDFHexString,
   PDFName,
+  PDFNull,
   PDFNumber,
   PDFRawStream,
   type PDFRef,
@@ -349,16 +350,45 @@ async function encrypted(): Promise<Uint8Array> {
     page.drawText(`Encrypted page ${index + 1}`, { x: 72, y: 720, size: 20, font });
   }
   plain.setTitle("Encrypted sampler");
-  const doc = await PDFDocument.load(await plain.save({ useObjectStreams: false }), {
-    updateMetadata: false,
+  return encrypt(await plain.save({ useObjectStreams: false }), "parapdf", -44, "encrypted");
+}
+
+/**
+ * Two pages with text and a text field, encrypted without a user password
+ * and with permissions (-64) that refuse printing, changing, copying, and
+ * annotating, but, read past revision 2's bits, allow filling forms and
+ * copying for accessibility: it opens without a prompt, for viewers that
+ * follow permissions.
+ */
+async function restricted(): Promise<Uint8Array> {
+  const plain = await PDFDocument.create({ updateMetadata: false });
+  const font = await plain.embedFont(StandardFonts.Helvetica);
+  const pages = Array.from({ length: 2 }, (_, index) => {
+    const page = plain.addPage([612, 792]);
+    page.drawText(`Restricted page ${index + 1}`, { x: 72, y: 720, size: 20, font });
+    page.drawText("This text may not be copied.", { x: 72, y: 680, size: 14, font });
+    return page;
   });
+  const field = plain.getForm().createTextField("comment");
+  field.addToPage(pages[0] as (typeof pages)[0], { x: 72, y: 600, width: 240, height: 24, font });
+  plain.getForm().updateFieldAppearances(font);
+  plain.setTitle("Restricted sampler");
+  return encrypt(await plain.save({ useObjectStreams: false }), "", -64, "restricted");
+}
+
+/**
+ * `bytes` encrypted with the user password `password` and the
+ * permissions `permissions` (/P) by the standard security handler, revision
+ * 2, with a file identifier made from `name`.
+ */
+async function encrypt(bytes: Uint8Array, password: string, permissions: number, name: string) {
+  const doc = await PDFDocument.load(bytes, { updateMetadata: false });
   const context = doc.context;
-  const id = md5(new TextEncoder().encode("parapdf encrypted sampler"));
-  const permissions = -44;
-  const owner = rc4(md5(padPassword("parapdf-owner")).subarray(0, 5), padPassword("parapdf"));
+  const id = md5(new TextEncoder().encode(`parapdf ${name} sampler`));
+  const owner = rc4(md5(padPassword("parapdf-owner")).subarray(0, 5), padPassword(password));
   const permissionBytes = new Uint8Array(4);
   new DataView(permissionBytes.buffer).setInt32(0, permissions, true);
-  const key = md5(padPassword("parapdf"), owner, permissionBytes, id).subarray(0, 5);
+  const key = md5(padPassword(password), owner, permissionBytes, id).subarray(0, 5);
   const user = rc4(key, PASSWORD_PADDING);
   const objectKey = (ref: PDFRef) =>
     md5(
@@ -415,6 +445,81 @@ async function encrypted(): Promise<Uint8Array> {
   });
 }
 
+/**
+ * Four Letter pages that ask how they are shown: the catalog opens page 3
+ * at 200% (/OpenAction), two pages side by side (/PageLayout
+ * /TwoColumnLeft), with the outline (/PageMode /UseOutlines); page 1 links
+ * to a destination of every kind, and the outline lists two of them.
+ */
+async function navigation(): Promise<Uint8Array> {
+  const doc = await PDFDocument.create({ updateMetadata: false });
+  doc.setTitle("Navigation sampler");
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const context = doc.context;
+  const pages = Array.from({ length: 4 }, (_, index) => {
+    const page = doc.addPage([612, 792]);
+    page.drawText(`Navigation page ${index + 1}`, { x: 72, y: 720, size: 20, font });
+    return page;
+  });
+  const ref = (index: number) => (pages[index] as (typeof pages)[0]).ref;
+  const destinations: [string, unknown[]][] = [
+    ["XYZ 300%", [ref(1), "XYZ", 100, 500, 3]],
+    ["XYZ keep zoom", [ref(1), "XYZ", null, 400, 0]],
+    ["Fit", [ref(1), "Fit"]],
+    ["FitH", [ref(2), "FitH", 300]],
+    ["FitV", [ref(2), "FitV", 200]],
+    ["FitR", [ref(3), "FitR", 100, 100, 300, 200]],
+  ];
+  const first = pages[0] as (typeof pages)[0];
+  const links = destinations.map(([label, dest], index) => {
+    const y = 640 - index * 40;
+    first.drawText(label, { x: 72, y, size: 14, font });
+    return context.register(
+      context.obj({
+        Type: "Annot",
+        Subtype: "Link",
+        Rect: [70, y - 6, 300, y + 18],
+        Border: [0, 0, 0],
+        Dest: context.obj(dest.map((part) => (part === null ? PDFNull : part)) as never),
+      }),
+    );
+  });
+  first.node.set(PDFName.of("Annots"), context.obj(links));
+  // The FitR rectangle, outlined on page 4.
+  (pages[3] as (typeof pages)[0]).drawRectangle({
+    x: 100,
+    y: 100,
+    width: 200,
+    height: 100,
+    borderWidth: 2,
+    borderColor: rgb(0, 0, 1),
+  });
+  const outline = context.nextRef();
+  const items = [destinations[0], destinations[5]].map(() => context.nextRef());
+  items.forEach((item, index) => {
+    const [title, dest] = [destinations[0], destinations[5]][index] as [string, unknown[]];
+    context.assign(
+      item,
+      context.obj({
+        Title: PDFString.of(title),
+        Parent: outline,
+        Dest: context.obj(dest as never),
+        ...(index > 0 ? { Prev: items[index - 1] } : {}),
+        ...(index < items.length - 1 ? { Next: items[index + 1] } : {}),
+      }),
+    );
+  });
+  context.assign(
+    outline,
+    context.obj({ Type: "Outlines", First: items[0], Last: items.at(-1), Count: items.length }),
+  );
+  doc.catalog.set(PDFName.of("Outlines"), outline);
+  doc.catalog.set(PDFName.of("OpenAction"), context.obj([ref(2), "XYZ", 72, 400, 2]));
+  doc.catalog.set(PDFName.of("PageLayout"), PDFName.of("TwoColumnLeft"));
+  doc.catalog.set(PDFName.of("PageMode"), PDFName.of("UseOutlines"));
+  return doc.save({ useObjectStreams: false });
+}
+
 mkdirSync(outDir, { recursive: true });
 for (const [name, build] of [
   ["synthetic-text-1000.pdf", longText],
@@ -423,6 +528,8 @@ for (const [name, build] of [
   ["synthetic-mixed-sizes.pdf", mixedSizes],
   ["synthetic-features.pdf", features],
   ["synthetic-encrypted.pdf", encrypted],
+  ["synthetic-restricted.pdf", restricted],
+  ["synthetic-navigation.pdf", navigation],
 ] as const) {
   const bytes = await build();
   writeFileSync(join(outDir, name), bytes);
