@@ -1,13 +1,27 @@
-import { PdfDocument, type PdfSource, PdfViewport } from "parapdf";
+import { PdfDocument, type PdfSource, PdfViewport, type ViewState } from "parapdf";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { type Sample, samples, sampleUrl } from "../../samples.ts";
-import { DocumentStatus, PasswordPrompt, SearchField } from "../controls.tsx";
 import { AnnotationBar } from "./AnnotationBar.tsx";
+import { DropHint, ErrorNotice, LoadingBar, PasswordDialog } from "./Overlays.tsx";
 import { type Panel, SidePanel } from "./SidePanel.tsx";
-import { ViewBar } from "./ViewBar.tsx";
+import { Toolbar } from "./Toolbar.tsx";
 
 /** A sample from the site, or a file the reader opened, which stays in the browser. */
 export type Opened = { sample: Sample } | { name: string; data: Uint8Array };
+
+/**
+ * The document shown, and whether its viewer edits annotations. Options
+ * apply when a viewer is created, so either change makes a new viewer: one
+ * for another document opens it at its start, and one that starts editing
+ * opens at `view`, where the reader was. Editing then stays on, with the
+ * tools shown or not, so that what the reader drew stays too.
+ */
+interface Session {
+  id: number;
+  opened: Opened;
+  editing: boolean;
+  view?: ViewState | null;
+}
 
 const fallback = samples[0] as Sample;
 
@@ -25,13 +39,29 @@ async function readPdf(file: File | undefined): Promise<Opened | null> {
 
 /** The full viewer: every sample or your own PDF, with the controls ParaPDF offers. */
 export default function DemoApp() {
-  const [opened, setOpened] = useState<Opened>(() => ({ sample: sampleFromUrl() }));
+  const [session, setSession] = useState<Session>(() => ({
+    id: 0,
+    opened: { sample: sampleFromUrl() },
+    editing: false,
+  }));
+  const { opened } = session;
   const [annotating, setAnnotating] = useState(false);
-  const [panel, setPanel] = useState<Panel | null>(() =>
-    matchMedia("(min-width: 60rem)").matches ? "thumbnails" : null,
-  );
+  const [sidebar, setSidebar] = useState(() => matchMedia("(min-width: 60rem)").matches);
+  const [panel, setPanel] = useState<Panel>("thumbnails");
+  const [finding, setFinding] = useState(false);
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+
+  const open = (next: Opened | null) => {
+    if (next)
+      setSession((current) => ({ id: current.id + 1, opened: next, editing: current.editing }));
+  };
+  const showAnnotationTools = (next: boolean, view: ViewState | null) => {
+    setAnnotating(next);
+    if (next && !session.editing) {
+      setSession((current) => ({ ...current, id: current.id + 1, editing: true, view }));
+    }
+  };
 
   const source = useMemo<PdfSource>(
     () => ("sample" in opened ? { url: sampleUrl(opened.sample.file) } : { data: opened.data }),
@@ -51,11 +81,11 @@ export default function DemoApp() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
-        const input = document.getElementById("demo-search") as HTMLInputElement | null;
-        if (!input) return;
         event.preventDefault();
-        input.focus();
-        input.select();
+        const input = document.getElementById("demo-search") as HTMLInputElement | null;
+        if (!input) setFinding(true);
+        input?.focus();
+        input?.select();
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -78,7 +108,11 @@ export default function DemoApp() {
       if (!hasFiles(event)) return;
       event.preventDefault();
       setDragging(false);
-      void readPdf(event.dataTransfer?.files[0]).then((file) => file && setOpened(file));
+      void readPdf(event.dataTransfer?.files[0]).then((file) =>
+        setSession((current) =>
+          file ? { id: current.id + 1, opened: file, editing: current.editing } : current,
+        ),
+      );
     };
     window.addEventListener("dragover", onDragOver);
     window.addEventListener("dragleave", onDragLeave);
@@ -92,86 +126,80 @@ export default function DemoApp() {
 
   return (
     <div className="demo">
-      {/* Options apply when the viewer is created, so editing annotations makes a new one. */}
       <PdfDocument
-        key={annotating ? "annotating" : "viewing"}
+        key={session.id}
         source={source}
-        options={{ forms: true, annotationEditing: annotating }}
+        options={{
+          forms: true,
+          annotationEditing: session.editing,
+          initialViewState: session.view ?? undefined,
+        }}
       >
-        <header className="demo-header">
-          <a className="demo-brand" href="/">
-            <img src="/favicon.svg" alt="" width="22" height="22" />
-            ParaPDF
-          </a>
-          <button
-            type="button"
-            className="demo-icon"
-            aria-label="Sidebar"
-            aria-expanded={panel !== null}
-            aria-controls="demo-side"
-            onClick={() => setPanel(panel ? null : "thumbnails")}
-          >
-            ☰
-          </button>
-          <label className="demo-document">
-            <span className="demo-visually-hidden">Document</span>
-            <select
-              value={"sample" in opened ? opened.sample.file : ""}
-              onChange={(event) => {
-                const sample = samples.find((candidate) => candidate.file === event.target.value);
-                if (sample) setOpened({ sample });
-              }}
-            >
-              {"sample" in opened ? null : <option value="">{opened.name}</option>}
-              {samples.map((sample) => (
-                <option key={sample.file} value={sample.file}>
-                  {sample.title}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button type="button" onClick={() => fileInput.current?.click()}>
-            Open a PDF…
-          </button>
-          <input
-            ref={fileInput}
-            type="file"
-            accept="application/pdf,.pdf"
-            hidden
-            onChange={(event) => {
-              void readPdf(event.target.files?.[0]).then((file) => file && setOpened(file));
-              event.target.value = "";
-            }}
-          />
-          <DocumentStatus className="demo-status" />
-          <span className="demo-spacer" />
-          <span className="demo-search">
-            <SearchField id="demo-search" withOptions />
-          </span>
-          <a className="demo-docs" href="/getting-started/">
-            Docs
-          </a>
-        </header>
-        <ViewBar annotating={annotating} onAnnotatingChange={setAnnotating} />
-        {annotating ? <AnnotationBar /> : null}
-        <PasswordPrompt
-          className="demo-password"
-          hint={
-            "sample" in opened && opened.sample.file === "synthetic-encrypted.pdf"
-              ? "parapdf"
-              : undefined
-          }
+        <Toolbar
+          opened={opened}
+          onOpen={open}
+          onOpenFile={() => fileInput.current?.click()}
+          sidebar={sidebar}
+          onSidebarChange={setSidebar}
+          onShowInfo={() => {
+            setPanel("info");
+            setSidebar(true);
+          }}
+          finding={finding}
+          onFindingChange={setFinding}
+          annotating={annotating}
+          onAnnotatingChange={showAnnotationTools}
         />
         <div className="demo-main">
-          {panel ? <SidePanel panel={panel} onPanelChange={setPanel} opened={opened} /> : null}
-          <PdfViewport className="demo-viewport" label={title} />
+          {sidebar ? (
+            <>
+              <SidePanel
+                panel={panel}
+                onPanelChange={setPanel}
+                onClose={() => setSidebar(false)}
+                opened={opened}
+              />
+              {/* Phones show the sidebar over the pages; a tap beside it closes it. */}
+              <button
+                type="button"
+                className="demo-scrim"
+                aria-label="Close the sidebar"
+                tabIndex={-1}
+                onClick={() => setSidebar(false)}
+              />
+            </>
+          ) : null}
+          <div className="demo-stage">
+            <PdfViewport className="demo-viewport" label={title} />
+            <LoadingBar />
+            <ErrorNotice
+              onRetry={() => setSession((current) => ({ ...current, id: current.id + 1 }))}
+            />
+            <PasswordDialog
+              title={title}
+              hint={
+                "sample" in opened && opened.sample.file === "synthetic-encrypted.pdf"
+                  ? "parapdf"
+                  : undefined
+              }
+            />
+            {annotating ? (
+              <AnnotationBar onDone={(view) => showAnnotationTools(false, view)} />
+            ) : null}
+          </div>
         </div>
       </PdfDocument>
-      {dragging ? (
-        <div className="demo-drop" aria-hidden="true">
-          Drop a PDF to open it here. It stays in your browser.
-        </div>
-      ) : null}
+      <input
+        ref={fileInput}
+        type="file"
+        accept="application/pdf,.pdf"
+        hidden
+        onChange={(event) => {
+          void readPdf(event.target.files?.[0]).then(open);
+          event.target.value = "";
+        }}
+      />
+      {dragging ? <DropHint /> : null}
     </div>
   );
 }
