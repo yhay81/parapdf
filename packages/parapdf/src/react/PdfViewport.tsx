@@ -9,7 +9,7 @@ import {
   useLayoutEffect,
   useRef,
 } from "react";
-import type { Rotation } from "../engine/types.ts";
+import type { Rotation } from "../pdfjs/draw.ts";
 import { usePdfState, usePdfViewer } from "./context.ts";
 import { VIEWER_CSS } from "./styles.ts";
 

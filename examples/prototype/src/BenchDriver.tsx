@@ -123,7 +123,6 @@ export function BenchDriver({ speed, durationMs, idle, commits, label }: BenchDr
       const after = viewer.stats ?? before;
       publish({
         ...label,
-        engine: viewer.engineName,
         scrollMode,
         scale,
         firstPaintMs,

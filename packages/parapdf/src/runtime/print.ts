@@ -1,4 +1,6 @@
-import type { LayerState, PageSize, PdfEngineDocument } from "../engine/types.ts";
+import type { DocumentSession, PageSize } from "../document/session.ts";
+import { drawPage } from "../pdfjs/draw.ts";
+import type { LayerState } from "../pdfjs/layers.ts";
 
 export interface PrintOptions {
   /** Dots per inch the pages are drawn at (default 150, as pdf.js's viewer prints). */
@@ -53,13 +55,14 @@ const toBlob = (canvas: HTMLCanvasElement): Promise<Blob> =>
   );
 
 /**
- * Print every page of `doc` through the browser's print dialog. The pages
- * are drawn one at a time for printing, with the values typed into form
- * fields, into images that a print-only container holds until the dialog
- * closes. Resolves once the browser returns from its print call.
+ * Print every page of `session`'s document through the browser's print
+ * dialog. The pages are drawn one at a time for printing, with the values
+ * typed into form fields, into images that a print-only container holds
+ * until the dialog closes. Resolves once the browser returns from its print
+ * call.
  */
 export async function printDocument(
-  doc: PdfEngineDocument,
+  session: DocumentSession,
   { resolution = 150, onProgress, signal, layers }: PrintJobOptions = {},
 ): Promise<void> {
   current?.cleanUp();
@@ -89,20 +92,25 @@ export async function printDocument(
   };
   current = job;
   try {
-    const first = await doc.pageSize(0);
+    const [first, printLayers] = await Promise.all([
+      session.pageSize(0),
+      // The layers as the viewer shows them, on pdf.js's configuration for printing.
+      layers?.forPrint(),
+    ]);
     if (cleaned) return;
     style.textContent = printCss(first);
-    for (let pageIndex = 0; pageIndex < doc.pageCount; pageIndex++) {
+    // What was typed into form fields, as the pages print it.
+    const print = session.proxy.annotationStorage.print;
+    for (let pageIndex = 0; pageIndex < session.pageCount; pageIndex++) {
       if (cleaned) return;
       signal?.throwIfAborted();
       const canvas = document.createElement("canvas");
       drawing = canvas;
-      const task = doc.render({
-        pageIndex,
+      const task = drawPage(session.pdfjs, session.page(pageIndex), {
         scale,
         canvas,
-        intent: "print",
-        ...(layers ? { layers } : {}),
+        print,
+        ...(printLayers ? { layers: printLayers } : {}),
       });
       const abort = () => task.cancel();
       cancelRender = abort;
@@ -129,7 +137,7 @@ export async function printDocument(
       sheet.append(image);
       container.append(sheet);
       images.push(image);
-      onProgress?.(pageIndex + 1, doc.pageCount);
+      onProgress?.(pageIndex + 1, session.pageCount);
     }
     if (cleaned) return;
     signal?.throwIfAborted();

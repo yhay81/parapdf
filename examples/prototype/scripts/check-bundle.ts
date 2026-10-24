@@ -352,7 +352,7 @@ export function start() {
       rolldownOptions: {
         output: {
           codeSplitting: {
-            groups: [{ name: "pdfjs-files", test: /[\\/]engine[\\/]pdfjs-files\.js$/ }],
+            groups: [{ name: "pdfjs-files", test: /[\\/]pdfjs[\\/]files\.js$/ }],
           },
         },
       },

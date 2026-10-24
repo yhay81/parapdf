@@ -1,7 +1,24 @@
 import type * as Pdfjs from "pdfjs-dist";
-import { createPdfjsEngine, type PdfjsDocumentOptions } from "./pdfjs.ts";
-import { fileUrls, iconUrls, pdfjsWorkerUrl } from "./pdfjs-files.ts";
-import type { PdfEngine } from "./types.ts";
+import { fileUrls, iconUrls, pdfjsWorkerUrl } from "./files.ts";
+
+/**
+ * pdf.js getDocument parameters that ParaPDF does not set from the source,
+ * such as canvasMaxAreaInBytes, maxImageSize, or disableAutoFetch.
+ */
+export type PdfjsDocumentOptions = Omit<
+  Exclude<
+    Parameters<(typeof Pdfjs)["getDocument"]>[0],
+    string | URL | ArrayBuffer | ArrayBufferView | undefined
+  >,
+  "url" | "data" | "range" | "worker"
+>;
+
+/** A build of the pdf.js version the package ships, with its worker from the package. */
+export interface PdfjsBuild {
+  readonly name: string;
+  readonly pdfjs: () => Promise<typeof Pdfjs>;
+  readonly workerUrl: () => URL;
+}
 
 /**
  * How ParaPDF loads pdf.js. Everything is optional: by default it loads the
@@ -10,13 +27,6 @@ import type { PdfEngine } from "./types.ts";
  * the copies in the package, which bundlers emit with the application's
  * assets.
  */
-/** A build of the pdf.js version the package ships, with its worker from the package. */
-export interface PdfjsBuild {
-  readonly name: string;
-  readonly pdfjs: () => Promise<typeof Pdfjs>;
-  readonly workerUrl: () => URL;
-}
-
 export interface PdfjsConfig {
   /**
    * The pdf.js build to load: `legacyBuild` from `parapdf/legacy` for older
@@ -59,11 +69,47 @@ export interface PdfjsConfig {
   documentOptions?: PdfjsDocumentOptions;
 }
 
+/**
+ * pdf.js as ParaPDF loaded it, which every document opens and draws with:
+ * the module, the worker that parses every document, and the parameters
+ * ParaPDF configured for it.
+ */
+export interface LoadedPdfjs {
+  /**
+   * The pdf.js module: the pdfjs-dist ParaPDF depends on, unless
+   * configurePdfjs() loads another build, such as the legacy build older
+   * Safari needs.
+   */
+  readonly pdfjs: typeof Pdfjs;
+  /** One worker parses every document. */
+  readonly worker: Pdfjs.PDFWorker;
+  /**
+   * getDocument parameters for every document: the files pdf.js loads on
+   * demand, enableHWA, and `documentOptions`, which override the others. The
+   * source and the worker come from ParaPDF.
+   */
+  readonly documentParameters: PdfjsDocumentOptions;
+  /**
+   * The 2D context pdf.js draws pages with, which kept drawings are drawn
+   * back with too, so that later drawings into the same canvas get it.
+   */
+  readonly contextOptions: CanvasRenderingContext2DSettings;
+  /**
+   * Base URL of pdf.js's annotation icons, ending with a slash or, without
+   * one, a transparent image that `iconUrls` replaces.
+   */
+  readonly imageResourcesPath: string;
+  /**
+   * The annotation icons' own URLs, by file name, as bundlers emit them;
+   * null when the icons come from `imageResourcesPath`.
+   */
+  readonly iconUrls: Readonly<Record<string, string>> | null;
+  /** Where the worker loads from, for the error when it does not. */
+  readonly workerLocation: string;
+}
+
 let config: PdfjsConfig = {};
-let loading: Promise<PdfEngine> | null = null;
-let loaded: PdfEngine | null = null;
-/** Where the worker loads from, for error messages. */
-let workerLocation = "";
+let loading: Promise<LoadedPdfjs> | null = null;
 
 /** Whether two configurations load pdf.js alike; loaders compare by presence. */
 const sameConfig = (a: PdfjsConfig, b: PdfjsConfig): boolean =>
@@ -94,7 +140,7 @@ export function configurePdfjs(next: PdfjsConfig): void {
 export function preloadPdfjs(): void {
   if (typeof window === "undefined" || loading) return;
   // A failed load is forgotten and surfaces when a document opens.
-  loadEngine().catch(() => {});
+  loadPdfjs().catch(() => {});
 }
 
 /**
@@ -118,17 +164,12 @@ const absolute = (url: URL | string): string => new URL(String(url), document.ba
  */
 const shippedUrl = (url: URL): string => absolute(url).replace(/\?(?:no-inline&)?url$/, "");
 
-function loadEngine(): Promise<PdfEngine> {
-  loading ??= createEngine(config).then(
-    (engine) => {
-      loaded = engine;
-      return engine;
-    },
-    (error: unknown) => {
-      loading = null;
-      throw error;
-    },
-  );
+/** pdf.js loaded on first use and shared by every viewer: one worker parses every document. */
+export function loadPdfjs(): Promise<LoadedPdfjs> {
+  loading ??= load(config).catch((error: unknown) => {
+    loading = null;
+    throw error;
+  });
   return loading;
 }
 
@@ -155,6 +196,13 @@ const SHIPPED_FILE_OPTIONS: PdfjsDocumentOptions = {
 };
 
 /**
+ * pdf.js appends the icon's file name to its image path: after a data URL's
+ * fragment mark, the name changes nothing, and the icon is a transparent
+ * image instead of a request for a file the application may not serve.
+ */
+const TRANSPARENT_ICONS = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E#";
+
+/**
  * Starts pdf.js's worker from `url`, resolving to it once its script runs,
  * or to null when it fails to load. pdf.js would start it only once its own
  * module has loaded; started earlier, the worker's 1.2 MB download overlaps
@@ -178,7 +226,7 @@ function startWorker(url: string): Promise<Worker | null> {
   });
 }
 
-async function createEngine(options: PdfjsConfig): Promise<PdfEngine> {
+async function load(options: PdfjsConfig): Promise<LoadedPdfjs> {
   const { assetBase } = options;
   const shipped = assetBase === undefined && options.workerSrc === undefined;
   const pdfjsLoading = options.pdfjs?.() ?? options.build?.pdfjs() ?? import("pdfjs-dist");
@@ -187,6 +235,7 @@ async function createEngine(options: PdfjsConfig): Promise<PdfEngine> {
   // The list is in this bundle, 3 KB compressed, so the worker starts at
   // once; in a chunk of its own, it waited for a round trip.
   let workerSrc: string;
+  let workerLocation: string;
   let started: Promise<Worker | null> = Promise.resolve(null);
   if (shipped) {
     workerLocation = absolute((options.build?.workerUrl ?? pdfjsWorkerUrl)());
@@ -200,52 +249,48 @@ async function createEngine(options: PdfjsConfig): Promise<PdfEngine> {
   // Without a started worker, pdf.js starts its own from workerSrc, and
   // parses on the page when that fails too.
   const [pdfjs, port] = await Promise.all([pdfjsLoading, started]);
-  return createPdfjsEngine({
+  pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
+  if (options.rendererSrc) {
+    (pdfjs.GlobalWorkerOptions as { rendererSrc?: string }).rendererSrc = options.rendererSrc;
+  }
+  const documentOptions: PdfjsDocumentOptions = {
+    ...(shipped ? SHIPPED_FILE_OPTIONS : {}),
+    ...options.documentOptions,
+  };
+  const imageResourcesPath =
+    options.imageResourcesPath ?? (assetBase ? `${assetBase}web/images/` : TRANSPARENT_ICONS);
+  return {
     pdfjs,
-    workerSrc,
-    ...(port ? { port } : {}),
-    rendererSrc: options.rendererSrc,
-    assetBase,
-    imageResourcesPath: options.imageResourcesPath,
-    ...(shipped
-      ? {
-          iconUrls: Object.fromEntries(
-            Object.entries(iconUrls()).map(([name, url]) => [name, shippedUrl(url)]),
-          ),
-        }
-      : {}),
-    enableHWA: options.enableHWA,
-    documentOptions: {
-      ...(shipped ? SHIPPED_FILE_OPTIONS : {}),
-      ...options.documentOptions,
+    // Started now, while React mounts, instead of when the first document
+    // opens. pdf.js takes any Worker as its port; its typings infer the
+    // type from the default, null.
+    worker: new pdfjs.PDFWorker(
+      (port ? { port } : {}) as ConstructorParameters<typeof pdfjs.PDFWorker>[0],
+    ),
+    documentParameters: {
+      enableHWA: options.enableHWA ?? true,
+      ...(assetBase
+        ? {
+            cMapUrl: `${assetBase}cmaps/`,
+            cMapPacked: true,
+            standardFontDataUrl: `${assetBase}standard_fonts/`,
+            wasmUrl: `${assetBase}wasm/`,
+            iccUrl: `${assetBase}iccs/`,
+          }
+        : {}),
+      ...documentOptions,
     },
-  });
+    contextOptions: {
+      alpha: false,
+      willReadFrequently: !(documentOptions.enableHWA ?? options.enableHWA ?? true),
+    },
+    imageResourcesPath,
+    iconUrls:
+      shipped && imageResourcesPath === TRANSPARENT_ICONS
+        ? Object.fromEntries(
+            Object.entries(iconUrls()).map(([name, url]) => [name, shippedUrl(url)]),
+          )
+        : null,
+    workerLocation,
+  };
 }
-
-/**
- * pdf.js loaded on first use and shared by every viewer: one worker parses
- * every document.
- */
-export const pdfjsEngine: PdfEngine = {
-  get name() {
-    return loaded?.name ?? "pdf.js";
-  },
-  async open(...args: Parameters<PdfEngine["open"]>) {
-    const engine = await loadEngine();
-    try {
-      return await engine.open(...args);
-    } catch (error) {
-      // pdf.js tries to parse on the main thread when its worker does not
-      // start, and that fails too when the script is missing.
-      if (error instanceof Error && error.message.includes("fake worker")) {
-        throw new Error(
-          `pdf.js's worker did not load from ${workerLocation}. Bundlers that do not emit files ` +
-            "referenced with new URL(…, import.meta.url), such as esbuild, Bun, and Parcel, " +
-            "need configurePdfjs({ assetBase }) and a copy of parapdf/pdfjs/: see the README.",
-          { cause: error },
-        );
-      }
-      throw error;
-    }
-  },
-};

@@ -1,13 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it, type TestContext } from "node:test";
-import {
-  type PdfEngineDocument,
-  RenderCancelledError,
-  type RenderRequest,
-} from "../src/engine/types.ts";
+import { RenderCancelledError } from "../src/pdfjs/draw.ts";
 import { printDocument } from "../src/runtime/print.ts";
-
-const settle = () => new Promise((resolve) => setImmediate(resolve));
+import { openSession, settle } from "./fake-pdfjs.ts";
 
 /** Only the element operations printDocument uses; rendering is controlled separately. */
 class PrintElement {
@@ -73,36 +68,16 @@ function environment(t: TestContext, holdEncoding = false) {
   return { head, body, listeners, encodings, revoked, afterPrint, prints: () => prints };
 }
 
-function controlledDocument() {
-  const renders: { canvas: HTMLCanvasElement; resolve(): void; cancellations: number }[] = [];
-  const doc = {
-    pageCount: 1,
-    pageSize: async () => ({ width: 612, height: 792 }),
-    render({ canvas }: RenderRequest) {
-      let resolve = () => {};
-      let reject = (_error: Error) => {};
-      const promise = new Promise<void>((done, fail) => {
-        resolve = done;
-        reject = fail;
-      });
-      const render = { canvas, resolve, cancellations: 0 };
-      renders.push(render);
-      return {
-        promise,
-        cancel() {
-          render.cancellations++;
-          reject(new RenderCancelledError());
-        },
-      };
-    },
-  } as unknown as PdfEngineDocument;
-  return { doc, renders };
+/** A session of one page, whose drawings stay pending until the test settles them. */
+async function controlledDocument() {
+  const { session, drawings } = await openSession();
+  return { doc: session, renders: drawings };
 }
 
 describe("print job replacement", () => {
   it("cancels an active render and prints only its replacement, with no cleanup left behind", async (t) => {
     const env = environment(t);
-    const { doc, renders } = controlledDocument();
+    const { doc, renders } = await controlledDocument();
     const old = printDocument(doc);
     await settle();
     const replacement = printDocument(doc);
@@ -112,8 +87,8 @@ describe("print job replacement", () => {
     renders[1]?.resolve();
     await Promise.all([old, replacement]);
     assert.equal(env.prints(), 1);
-    assert.equal(renders[0]?.canvas.width, 0);
-    assert.equal(renders[0]?.canvas.height, 0);
+    assert.equal(renders[0]?.request.canvas.width, 0);
+    assert.equal(renders[0]?.request.canvas.height, 0);
     assert.equal(env.head.children.length, 1);
     assert.equal(env.body.children.length, 1);
     assert.equal(env.listeners.size, 1);
@@ -126,7 +101,7 @@ describe("print job replacement", () => {
 
   it("does not revive an old job when its pending image encoding finishes", async (t) => {
     const env = environment(t, true);
-    const { doc, renders } = controlledDocument();
+    const { doc, renders } = await controlledDocument();
     const old = printDocument(doc);
     await settle();
     renders[0]?.resolve();
@@ -141,7 +116,7 @@ describe("print job replacement", () => {
     env.encodings[0]?.(new Blob(["old"]));
     await old;
     assert.equal(env.prints(), 1);
-    assert.equal(renders[0]?.canvas.width, 0);
+    assert.equal(renders[0]?.request.canvas.width, 0);
     env.afterPrint();
     assert.equal(env.head.children.length + env.body.children.length + env.listeners.size, 0);
     assert.deepEqual(env.revoked, ["blob:print-1"]);
@@ -149,15 +124,15 @@ describe("print job replacement", () => {
 
   it("still rejects when the user aborts an active render", async (t) => {
     const env = environment(t);
-    const { doc, renders } = controlledDocument();
+    const { doc, renders } = await controlledDocument();
     const abort = new AbortController();
     const printing = printDocument(doc, { signal: abort.signal });
     await settle();
     abort.abort();
     await assert.rejects(printing, RenderCancelledError);
     assert.equal(renders[0]?.cancellations, 1);
-    assert.equal(renders[0]?.canvas.width, 0);
-    assert.equal(renders[0]?.canvas.height, 0);
+    assert.equal(renders[0]?.request.canvas.width, 0);
+    assert.equal(renders[0]?.request.canvas.height, 0);
     assert.equal(env.prints(), 0);
     assert.equal(env.head.children.length + env.body.children.length + env.listeners.size, 0);
   });

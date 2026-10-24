@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { isRenderCancelled, RenderCancelledError } from "../src/engine/types.ts";
+import { isRenderCancelled, RenderCancelledError } from "../src/pdfjs/draw.ts";
 import { Store } from "../src/runtime/store.ts";
 
 describe("Store", () => {

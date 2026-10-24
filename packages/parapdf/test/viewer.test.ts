@@ -1,23 +1,19 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it, mock } from "node:test";
-import type { PdfEngine, PdfEngineDocument } from "../src/engine/types.ts";
 import { PdfViewerRuntime } from "../src/runtime/viewer.ts";
+import { askPassword, fakeDocument, fakePdfjs, PasswordException, settle } from "./fake-pdfjs.ts";
 
-const settle = () => new Promise((resolve) => setImmediate(resolve));
-
-/** Keeps asking until the viewers close it, without needing a DOM or a PDF parser. */
-function lockedEngine(): PdfEngine {
-  return {
-    name: "locked",
-    async open(_source, options) {
-      await Promise.resolve();
-      let reason: "required" | "incorrect" = "required";
-      for (;;) {
-        if ((await options?.password?.(reason)) === null) throw new Error("PasswordException");
-        reason = "incorrect";
+/** pdf.js that keeps asking for a password until the viewers close the document. */
+function lockedPdfjs() {
+  return fakePdfjs(async (task) => {
+    let reason: "required" | "incorrect" = "required";
+    for (;;) {
+      if ((await askPassword(task, reason)) === null) {
+        throw new PasswordException("No password given", 1);
       }
-    },
-  };
+      reason = "incorrect";
+    }
+  }).loader;
 }
 
 describe("the viewer's pending password request", () => {
@@ -42,15 +38,15 @@ describe("the viewer's pending password request", () => {
   });
 
   it("preserves a password request replayed to a second viewer", async () => {
-    const engine = lockedEngine();
-    const first = new PdfViewerRuntime(engine);
+    const pdfjs = lockedPdfjs();
+    const first = new PdfViewerRuntime({}, pdfjs);
     close.push(first.open({ url: "/locked.pdf" }));
     await settle();
     assert.equal(first.store.get().status, "password");
     first.submitPassword("wrong");
     await settle();
 
-    const second = new PdfViewerRuntime(engine);
+    const second = new PdfViewerRuntime({}, pdfjs);
     close.push(second.open({ url: "/locked.pdf" }));
     assert.equal(second.store.get().status, "password");
     assert.equal(second.store.get().passwordReason, "incorrect");
@@ -62,7 +58,7 @@ describe("the viewer's pending password request", () => {
   });
 
   it("preserves the prompt when a waiting viewer remounts within the release delay", async () => {
-    const viewer = new PdfViewerRuntime(lockedEngine());
+    const viewer = new PdfViewerRuntime({}, lockedPdfjs());
     const release = viewer.open({ url: "/locked.pdf" });
     await settle();
     release();
@@ -72,45 +68,27 @@ describe("the viewer's pending password request", () => {
   });
 
   it("preserves the replayed error when the second viewer has no password prompt", async () => {
-    const engine = lockedEngine();
-    const first = new PdfViewerRuntime(engine);
+    const pdfjs = lockedPdfjs();
+    const first = new PdfViewerRuntime({}, pdfjs);
     close.push(first.open({ url: "/locked.pdf" }));
     await settle();
-    const second = new PdfViewerRuntime(engine, { passwordPrompt: false });
+    const second = new PdfViewerRuntime({ passwordPrompt: false }, pdfjs);
     close.push(second.open({ url: "/locked.pdf" }));
     assert.equal(second.store.get().status, "error");
     assert.equal(second.store.get().error, "PasswordException: No password given");
   });
 
   it("opens with a changed source password without replaying the old error when prompting is disabled", async () => {
-    let opens = 0;
-    const engine: PdfEngine = {
-      name: "unlockable",
-      async open(source, options) {
-        opens++;
-        let password = source.password;
-        while (password !== "secret") {
-          const answer = await options?.password?.(
-            password === undefined ? "required" : "incorrect",
-          );
-          if (answer == null) throw new Error("PasswordException");
-          password = answer;
-        }
-        return {
-          pageCount: 1,
-          pageSize: async () => ({ width: 612, height: 792 }),
-          getOutline: async () => [],
-          getPageLabels: async () => null,
-          getMetadata: async () => null,
-          getAttachments: async () => [],
-          createLayerState: async () => ({ layers: () => [] }),
-          getPermissions: async () => ({ restricted: false }),
-          getInitialView: async () => ({ destination: null, pageLayout: null, pageMode: null }),
-          destroy: async () => {},
-        } as unknown as PdfEngineDocument;
-      },
-    };
-    const viewer = new PdfViewerRuntime(engine, { passwordPrompt: false });
+    const { loader, calls } = fakePdfjs(async (task, { password: given }) => {
+      let password = given;
+      while (password !== "secret") {
+        const answer = await askPassword(task, password === undefined ? "required" : "incorrect");
+        if (answer === null) throw new PasswordException("No password given", 1);
+        password = answer;
+      }
+      return fakeDocument().proxy;
+    });
+    const viewer = new PdfViewerRuntime({ passwordPrompt: false }, loader);
     const release = viewer.open({ url: "/locked.pdf", password: "wrong" });
     await settle();
     assert.equal(viewer.store.get().status, "error");
@@ -122,7 +100,7 @@ describe("the viewer's pending password request", () => {
     unsubscribe();
     assert.equal(viewer.store.get().status, "ready");
     assert.equal(viewer.store.get().error, null);
-    assert.equal(opens, 1);
+    assert.equal(calls.opens, 1);
     assert.equal(statuses.includes("error"), false);
   });
 });

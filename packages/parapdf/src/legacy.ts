@@ -1,5 +1,5 @@
-import type { PdfjsBuild } from "./engine/bundled.ts";
-import { pdfjsLegacyWorkerUrl } from "./engine/pdfjs-legacy-files.ts";
+import { pdfjsLegacyWorkerUrl } from "./pdfjs/legacy-files.ts";
+import type { PdfjsBuild } from "./pdfjs/loader.ts";
 
 /**
  * pdf.js's legacy build, for older browsers the modern one does not

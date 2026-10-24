@@ -72,9 +72,9 @@ try {
   check("the tarball holds no tests, scripts, or tarballs", stray.length === 0, stray.join(", "));
 
   // Every file the code references with new URL(…, import.meta.url) ships.
-  const references = ["pdfjs-files.js", "pdfjs-legacy-files.js"].flatMap((module) =>
+  const references = ["files.js", "legacy-files.js"].flatMap((module) =>
     [
-      ...readFileSync(join(installed, "dist/engine", module), "utf8").matchAll(
+      ...readFileSync(join(installed, "dist/pdfjs", module), "utf8").matchAll(
         /new URL\(\s*"\.\.\/\.\.\/(pdfjs\/[^"?]+)/g,
       ),
     ].map((match) => match[1] ?? ""),
@@ -99,7 +99,7 @@ try {
 
   // The shipped worker and decoders must be the pdf.js the code imports.
   const shippedVersion = /from pdfjs-dist (\S+);/.exec(
-    readFileSync(join(installed, "src/engine/pdfjs-files.ts"), "utf8"),
+    readFileSync(join(installed, "src/pdfjs/files.ts"), "utf8"),
   )?.[1];
   check(
     "the manifest depends on exactly the pdf.js whose files ship",

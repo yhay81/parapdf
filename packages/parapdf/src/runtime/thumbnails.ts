@@ -1,4 +1,6 @@
-import type { LayerState, PageSize, Rotation } from "../engine/types.ts";
+import type { PageSize } from "../document/session.ts";
+import type { Rotation } from "../pdfjs/draw.ts";
+import type { LayerState } from "../pdfjs/layers.ts";
 import { turnedSize } from "./layout.ts";
 import type { RenderScheduler } from "./scheduler.ts";
 
@@ -113,7 +115,7 @@ export class ThumbnailRenderer {
     if (thumbnail.drawn === key || thumbnail.cancel) return;
     const { canvas } = thumbnail;
     canvas.width = width;
-    // Rounded down as the engine sizes a render, so a thumbnail keeps its
+    // Rounded down as pdf.js's drawings are sized, so a thumbnail keeps its
     // size whether it is copied from the page or drawn: in CI's Chromium a
     // drawn one came out 1 px shorter than a copied one.
     canvas.height = Math.max(1, Math.floor((width * turned.height) / turned.width + 1e-6));
@@ -123,12 +125,12 @@ export class ThumbnailRenderer {
     }
     const layers = this.#host.layers();
     thumbnail.cancel = scheduler.enqueue(
+      thumbnail.pageIndex,
       {
-        pageIndex: thumbnail.pageIndex,
         scale: width / turned.width,
         rotation,
         canvas,
-        ...(layers ? { layers } : {}),
+        ...(layers ? { layers: layers.config } : {}),
       },
       (error) => {
         thumbnail.cancel = null;

@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import type { DestinationRef, OutlineNode } from "../engine/types.ts";
+import type { OutlineNode } from "../document/session.ts";
+import type { Destination } from "../pdfjs/destinations.ts";
 import { usePdfState, usePdfViewer } from "./context.ts";
 
 export interface PdfNavigation {
@@ -10,7 +11,7 @@ export interface PdfNavigation {
   canGoForward: boolean;
   forward(): void;
   goToPage(pageIndex: number): void;
-  goToDestination(dest: DestinationRef): Promise<boolean>;
+  goToDestination(dest: Destination | null): Promise<boolean>;
 }
 
 /** Page and destination navigation with back and forward stacks for link jumps. */
@@ -25,7 +26,7 @@ export function usePdfNavigation(): PdfNavigation {
       canGoForward,
       forward: () => viewer.forward(),
       goToPage: (pageIndex: number) => viewer.goToPage(pageIndex),
-      goToDestination: (dest: DestinationRef) => viewer.goToDestination(dest),
+      goToDestination: (dest: Destination | null) => viewer.goToDestination(dest),
     }),
     [viewer, canGoBack, canGoForward],
   );

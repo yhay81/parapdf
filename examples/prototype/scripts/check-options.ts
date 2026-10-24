@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import type { Page } from "playwright";
 import { preview } from "vite";
 import { launchBrowser, restoreScaleFactor } from "../../../bench/scripts/browsers.ts";
-import type { PdfEngineDocument } from "../../../packages/parapdf/src/engine/types.ts";
+import type { LoadedPdfjs } from "../../../packages/parapdf/src/pdfjs/loader.ts";
 import type { PdfViewerRuntime } from "../../../packages/parapdf/src/runtime/viewer.ts";
 
 const exampleDir = fileURLToPath(new URL("..", import.meta.url));
@@ -221,26 +221,50 @@ try {
       const sizesReady = new Promise<void>((resolve) => {
         finishSizes = resolve;
       });
+      // pdf.js standing in, with a document whose pages after the first
+      // are larger in the first page's size than they are.
+      const page = (width: number, height: number) => ({
+        rotate: 0,
+        getViewport: ({ scale = 1 }: { scale?: number }) => ({
+          width: width * scale,
+          height: height * scale,
+        }),
+      });
       const doc = {
-        pageCount: 20,
-        async pageSize(index: number) {
-          if (index === 0) return { width: 4000, height: 4000 };
+        numPages: 20,
+        async getPage(pageNumber: number) {
+          if (pageNumber === 1) return page(4000, 4000);
           await sizesReady;
-          return { width: 1000, height: 1000 };
+          return page(1000, 1000);
         },
-        getOutline: async () => [],
+        getPermissions: async () => null,
+        getOutline: async () => null,
         getPageLabels: async () => null,
-        getMetadata: async () => null,
-        getAttachments: async () => [],
-        createLayerState: async () => ({ layers: () => [] }),
-        getPermissions: async () => ({ restricted: false }),
-        getInitialView: async () => ({ destination: null, pageLayout: null, pageMode: null }),
-        destroy: async () => {},
-      } as unknown as PdfEngineDocument;
-      const viewer = new Runtime(
-        { name: "delayed-sizes", open: async () => doc },
-        { initialScale: 1, scrollMode },
-      );
+        getMetadata: async () => ({ info: {}, metadata: null }),
+        getAttachments: async () => null,
+        getOptionalContentConfig: async () => ({ getOrder: () => null, *[Symbol.iterator]() {} }),
+        getOpenAction: async () => null,
+        getPageLayout: async () => "",
+        getPageMode: async () => "",
+      };
+      const pdfjs = {
+        pdfjs: {
+          getDocument: () => ({
+            promise: Promise.resolve(doc),
+            onProgress: null,
+            onPassword: null,
+            destroy: async () => {},
+          }),
+          PermissionFlag: {},
+        },
+        worker: {},
+        documentParameters: {},
+        contextOptions: {},
+        imageResourcesPath: "",
+        iconUrls: null,
+        workerLocation: "",
+      } as unknown as LoadedPdfjs;
+      const viewer = new Runtime({ initialScale: 1, scrollMode }, async () => pdfjs);
       const scroller = document.createElement("div");
       scroller.style.cssText =
         "position:fixed;inset:0;width:600px;height:600px;overflow:auto;contain:strict";
