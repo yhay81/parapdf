@@ -92,15 +92,9 @@ export async function printDocument(
   };
   current = job;
   try {
-    const [first, printLayers] = await Promise.all([
-      session.pageSize(0),
-      // The layers as the viewer shows them, on pdf.js's configuration for printing.
-      layers?.forPrint(),
-    ]);
+    const first = await session.pageSize(0);
     if (cleaned) return;
     style.textContent = printCss(first);
-    // What was typed into form fields, as the pages print it.
-    const print = session.proxy.annotationStorage.print;
     for (let pageIndex = 0; pageIndex < session.pageCount; pageIndex++) {
       if (cleaned) return;
       signal?.throwIfAborted();
@@ -109,8 +103,10 @@ export async function printDocument(
       const task = drawPage(session.pdfjs, session.page(pageIndex), {
         scale,
         canvas,
-        print,
-        ...(printLayers ? { layers: printLayers } : {}),
+        // What was typed into form fields, and the layers as the viewer
+        // shows them, on pdf.js's configuration for printing.
+        print: session.proxy.annotationStorage.print,
+        ...(layers ? { layers: layers.forPrint() } : {}),
       });
       const abort = () => task.cancel();
       cancelRender = abort;

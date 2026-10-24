@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it, mock } from "node:test";
-import { DocumentSession } from "../src/document/session.ts";
+import { closeSession, DocumentSession } from "../src/document/session.ts";
 import { fakeDocument, fakeLayers, fakePdfjs, LETTER, openSession, settle } from "./fake-pdfjs.ts";
 
 const A4 = { width: 595, height: 842 };
@@ -34,7 +34,7 @@ describe("DocumentSession", () => {
     // The first page and the first batch of 64, which then waits for a timer.
     await settle();
     assert.equal(requested.length, 65);
-    void session.close();
+    void closeSession(session);
     mock.timers.tick(0);
     await assert.rejects(measuring, { name: "AbortError" });
     assert.equal(requested.length, 65, "no other batch is asked for");
@@ -51,6 +51,37 @@ describe("DocumentSession", () => {
     assert.deepEqual(endsLine, [true, false]);
     // From the page's top-left corner: the baseline at 792 - 700 = 92, the box above it.
     assert.deepEqual([...boxes.slice(0, 4)], [72, 80, 30, 12]);
+  });
+
+  it("keeps a page's parsing results while another viewer shows it", async () => {
+    const { session, cleaned } = await openSession();
+    await session.page(0);
+    // Two viewers of the session mount the page; one unmounts it.
+    session.holdPage(0);
+    session.holdPage(0);
+    session.releasePage(0);
+    await settle();
+    assert.deepEqual(cleaned, []);
+    session.releasePage(0);
+    await settle();
+    assert.deepEqual(cleaned, [0]);
+  });
+
+  it("reads again what failed to read, and keeps what it read", async () => {
+    let outlines = 0;
+    const { session } = await openSession({
+      proxy: {
+        async getOutline() {
+          outlines++;
+          if (outlines === 1) throw new Error("the outline did not load");
+          return [];
+        },
+      },
+    });
+    await assert.rejects(session.outline(), /did not load/);
+    assert.deepEqual(await session.outline(), []);
+    assert.deepEqual(await session.outline(), []);
+    assert.equal(outlines, 2);
   });
 
   it("releases pdf.js's parsing results of the pages it loaded, and asks for no other", async () => {
@@ -186,7 +217,7 @@ describe("DocumentSession", () => {
     const { session, calls } = await openSession();
     const stopped: string[] = [];
     session.signal.addEventListener("abort", () => stopped.push("work"));
-    await session.close();
+    await closeSession(session);
     assert.equal(session.signal.aborted, true);
     assert.deepEqual(stopped, ["work"]);
     assert.equal(calls.destroys, 1);
@@ -203,7 +234,7 @@ describe("DocumentSession", () => {
     controller.abort();
     assert.equal(calls.destroys, 1, "pdf.js's loading task is destroyed");
     finish(fakeDocument().proxy);
-    await assert.rejects(opening, { name: "AbortError" });
+    await assert.rejects(opening, /destroyed/);
     // Already aborted: pdf.js is never asked.
     const aborted = new AbortController();
     aborted.abort();

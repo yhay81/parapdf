@@ -324,7 +324,7 @@ describe("acquireSession with passwords and progress", () => {
     mock.timers.tick(1000);
     await settle();
     assert.equal(calls.destroys, 1, "pdf.js's loading task is destroyed");
-    await assert.rejects(lease.session, PasswordException);
+    await assert.rejects(lease.session, /destroyed/);
     // The next viewer opens it again.
     acquireSession(loader, { url: "/locked.pdf" });
     await settle();

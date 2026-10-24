@@ -507,6 +507,8 @@ export class RenderScheduler {
       editorHandle: undefined,
     };
     this.#slots.set(index, slot);
+    // pdf.js keeps the page's parsing results while a viewer of the session shows it.
+    this.#session.holdPage(index);
     this.#restore(slot);
     this.#pump();
   }

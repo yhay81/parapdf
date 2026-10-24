@@ -6,7 +6,6 @@
  */
 import type * as Pdfjs from "pdfjs-dist";
 import { DocumentSession, type PageSize } from "../src/document/session.ts";
-import { RenderCancelledError } from "../src/pdfjs/draw.ts";
 import type { LoadedPdfjs } from "../src/pdfjs/loader.ts";
 
 /** A US Letter page. */
@@ -92,13 +91,22 @@ function viewport(size: PageSize, scale: number, rotation: number) {
   };
 }
 
-/** A page as pdf.js gives it, whose drawings go to `drawings` and whose cleanups to `cleaned`. */
+/** pdf.js's exception for a render that was cancelled. */
+class RenderingCancelledException extends Error {
+  override readonly name = "RenderingCancelledException";
+}
+
+/**
+ * A page as pdf.js gives it, whose drawings go to `drawings` and whose
+ * cleanups to `cleaned`; its text is read once `textsReady` resolves.
+ */
 function fakePage(
   pageIndex: number,
   size: PageSize,
   drawings: Drawing[],
   cleaned: number[],
   items: readonly FakeTextItem[],
+  textsReady: Promise<unknown>,
 ): Pdfjs.PDFPageProxy {
   return {
     pageNumber: pageIndex + 1,
@@ -142,7 +150,7 @@ function fakePage(
           promise,
           cancel() {
             drawing.cancellations++;
-            reject(new RenderCancelledError());
+            reject(new RenderingCancelledException(`Rendering cancelled, page ${pageIndex + 1}`));
           },
         },
         cancellations: 0,
@@ -151,6 +159,7 @@ function fakePage(
       return drawing.task;
     },
     async getTextContent() {
+      await textsReady;
       return {
         items: items.map(({ str, hasEOL = false, x = 0, y = 0, width = 0, height = 10 }) => ({
           str,
@@ -201,6 +210,8 @@ export interface FakeDocumentOptions {
   pages?: readonly PageSize[];
   /** Each page's text items. */
   texts?: readonly (readonly FakeTextItem[])[];
+  /** Pages' texts are read once it resolves; at once by default. */
+  textsReady?: Promise<unknown>;
   /** Overrides of the document's own methods and fields. */
   proxy?: Record<string, unknown>;
 }
@@ -209,6 +220,7 @@ export interface FakeDocumentOptions {
 export function fakeDocument({
   pages = [LETTER],
   texts = [],
+  textsReady = Promise.resolve(),
   proxy = {},
 }: FakeDocumentOptions = {}) {
   const drawings: Drawing[] = [];
@@ -216,7 +228,7 @@ export function fakeDocument({
   /** Zero-based page indexes, in the order pages were asked for. */
   const requested: number[] = [];
   const pageProxies = pages.map((size, index) =>
-    fakePage(index, size, drawings, cleaned, texts[index] ?? []),
+    fakePage(index, size, drawings, cleaned, texts[index] ?? [], textsReady),
   );
   const document = {
     numPages: pages.length,
@@ -303,16 +315,24 @@ export function fakePdfjs(
     getDocument(parameters: { password?: string } & Record<string, unknown>) {
       calls.opens++;
       calls.parameters.push(parameters);
+      let stop: (error: Error) => void = () => {};
       const task: FakeLoadingTask = {
         promise: Promise.resolve() as unknown as Promise<Pdfjs.PDFDocumentProxy>,
         onProgress: null,
         onPassword: null,
         async destroy() {
           calls.destroys++;
+          // Destroying the task stops a load still in progress.
+          stop(new Error("Worker was destroyed"));
         },
       };
       // Like pdf.js's worker, `open` reports and asks once getDocument() has returned.
-      task.promise = Promise.resolve().then(() => open(task, parameters));
+      task.promise = new Promise((resolve, reject) => {
+        stop = reject;
+        Promise.resolve()
+          .then(() => open(task, parameters))
+          .then(resolve, reject);
+      });
       return task;
     },
     PasswordResponses,

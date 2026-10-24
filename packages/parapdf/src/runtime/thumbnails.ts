@@ -11,7 +11,7 @@ export interface ThumbnailHost {
   /** A page's size in PDF points, unturned by the view. */
   pageSize(pageIndex: number): PageSize | undefined;
   rotation(): Rotation;
-  /** Which layers show in the viewer. */
+  /** Which layers show in the document's viewers. */
   layers(): LayerState | null;
 }
 

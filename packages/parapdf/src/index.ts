@@ -9,6 +9,7 @@ export type {
   PdfPermissions,
   PdfSource,
 } from "./document/session.ts";
+export type { Destination } from "./pdfjs/destinations.ts";
 export type { PageColors, Rotation } from "./pdfjs/draw.ts";
 export type {
   AnnotationEditingState,

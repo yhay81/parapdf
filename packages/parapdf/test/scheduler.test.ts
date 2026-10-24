@@ -248,3 +248,24 @@ describe("RenderScheduler failures", () => {
     assert.equal(scheduler.stats.cancelled, 1);
   });
 });
+
+describe("RenderScheduler lifecycle", () => {
+  it("disposes itself when its signal aborts: drawings stop, and pages are given back", async () => {
+    const { session, drawings, cleaned } = await openSession({ pages: [LETTER, LETTER] });
+    const controller = new AbortController();
+    const scheduler = new RenderScheduler(session, { signal: controller.signal });
+    const base = canvas();
+    scheduler.attach(0, base, canvas(), null, null);
+    scheduler.update(input());
+    await settle();
+    assert.equal(drawings.length, 1);
+    controller.abort();
+    await settle();
+    assert.equal(drawings[0]?.cancellations, 1, "the drawing in progress is cancelled");
+    assert.equal(base.width, 0, "the page's canvases are given back");
+    assert.deepEqual(cleaned, [0], "and pdf.js's parsing results of it");
+    scheduler.update(input());
+    await settle();
+    assert.equal(drawings.length, 1, "nothing is drawn after");
+  });
+});

@@ -547,15 +547,17 @@ const yieldToMain = (): Promise<void> => {
   return scheduler?.yield ? scheduler.yield() : new Promise((resolve) => setTimeout(resolve, 0));
 };
 
-/** A controller that `parent` aborts too, for work that may also stop before it. */
-function linked(parent: AbortSignal): AbortController {
+/** A controller that each of `parents` aborts too, for work that may also stop before them. */
+function linked(...parents: readonly (AbortSignal | undefined)[]): AbortController {
   const controller = new AbortController();
-  if (parent.aborted) controller.abort();
-  else {
-    parent.addEventListener("abort", () => controller.abort(), {
-      once: true,
-      signal: controller.signal,
-    });
+  for (const parent of parents) {
+    if (parent?.aborted) controller.abort();
+    else {
+      parent?.addEventListener("abort", () => controller.abort(), {
+        once: true,
+        signal: controller.signal,
+      });
+    }
   }
   return controller;
 }
@@ -1090,15 +1092,24 @@ export class PdfViewerRuntime {
    * drawn for printing, with what was typed into its form fields, and only
    * those pages print. Resolves once the browser returns from printing,
    * and fails with `enforcePermissions` when the document does not permit
-   * printing.
+   * printing, and when the document closes first.
    */
   async print(options?: PrintOptions): Promise<void> {
     const session = this.#session;
+    const lease = this.#lease;
     if (session && !this.#permits("print")) {
       throw new Error("The document does not permit printing");
     }
     this.#editor?.commit();
-    if (session) await printDocument(session, { ...options, layers: this.#layers });
+    if (!session || !lease) return;
+    // Closing the document stops printing it, as the application's signal does.
+    const control = linked(lease.signal, options?.signal);
+    try {
+      await printDocument(session, { ...options, signal: control.signal, layers: this.#layers });
+    } finally {
+      // Printed or stopped: the lease's and the application's signals no longer follow it.
+      control.abort();
+    }
   }
 
   /**

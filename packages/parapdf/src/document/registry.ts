@@ -1,5 +1,5 @@
 import type { LoadedPdfjs } from "../pdfjs/loader.ts";
-import { DocumentSession, type PasswordReason, type PdfSource } from "./session.ts";
+import { closeSession, DocumentSession, type PasswordReason, type PdfSource } from "./session.ts";
 
 /**
  * Sessions shared by every viewer of the same source. React StrictMode
@@ -199,7 +199,7 @@ export function acquireSession(
         held.controller.abort();
         held.passwordRequest?.answer(null);
         held.session
-          .then((session) => session.close())
+          .then((session) => closeSession(session))
           .catch(() => {
             // The document failed to open, or destroying it failed: nothing is left to free.
           });

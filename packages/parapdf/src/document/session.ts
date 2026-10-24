@@ -173,14 +173,17 @@ const toOutline = (items: readonly PdfjsOutlineItem[] | null): OutlineNode[] =>
 /** Pages whose sizes the background pass asks pdf.js's worker for at a time. */
 const MEASURED_PAGES = 64;
 
+/** How each session closes, which only the registry asks for (`closeSession()`). */
+const closers = new WeakMap<DocumentSession, () => Promise<void>>();
+
 /**
  * One open document, shared by every viewer of its source (see
  * registry.ts): pdf.js's document and its pages, and what the viewers read
  * from them, each read once: the pages' sizes, their text, permissions, the
  * initial view, the outline, page labels, metadata, attachments, and which
- * layers show. The session owns an AbortController: closing it aborts its
- * `signal`, which everything started for the session takes, and destroys
- * the document.
+ * layers show. The session owns an AbortController: closing it
+ * (`closeSession()`, which the registry does) aborts its `signal`, which
+ * everything started for the session takes, and destroys the document.
  */
 export class DocumentSession {
   /** pdf.js, as the document was opened with it. */
@@ -190,20 +193,17 @@ export class DocumentSession {
   readonly pageCount: number;
   /** Aborted once the session closes. */
   readonly signal: AbortSignal;
-  readonly #controller: AbortController;
-  readonly #loadingTask: Pdfjs.PDFDocumentLoadingTask;
   readonly #pages = new Map<number, Promise<Pdfjs.PDFPageProxy>>();
+  /** How many viewers show each page now (see `holdPage()`). */
+  readonly #holds = new Map<number, number>();
   readonly #texts = new Map<number, Promise<PageText>>();
+  /**
+   * What the session read from the document, by what it is, for every
+   * viewer: kept while the read succeeds, and asked for again after it fails.
+   */
+  readonly #reads = new Map<string, Promise<unknown>>();
   /** Every page's size, once the background pass has learned them. */
   #sizes: readonly PageSize[] | null = null;
-  #measuring: Promise<readonly PageSize[]> | null = null;
-  #permissions: Promise<PdfPermissions> | null = null;
-  #initialView: Promise<PdfInitialView> | null = null;
-  #outline: Promise<readonly OutlineNode[]> | null = null;
-  #pageLabels: Promise<readonly string[] | null> | null = null;
-  #metadata: Promise<PdfMetadata> | null = null;
-  #attachments: Promise<readonly PdfAttachment[]> | null = null;
-  #layers: Promise<LayerState> | null = null;
   #forms: ReturnType<typeof createFormAccess> | null = null;
 
   private constructor(
@@ -213,11 +213,15 @@ export class DocumentSession {
     controller: AbortController,
   ) {
     this.pdfjs = pdfjs;
-    this.#loadingTask = loadingTask;
     this.proxy = proxy;
     this.pageCount = proxy.numPages;
-    this.#controller = controller;
     this.signal = controller.signal;
+    closers.set(this, () => {
+      controller.abort();
+      this.#pages.clear();
+      this.#texts.clear();
+      return loadingTask.destroy();
+    });
   }
 
   /**
@@ -272,7 +276,7 @@ export class DocumentSession {
         );
       };
     }
-    // Aborting stops a load in progress; a loaded document is destroyed by close().
+    // Aborting stops a load in progress; a loaded document is destroyed by closeSession().
     const abort = () => void loadingTask.destroy();
     signal.addEventListener("abort", abort, { once: true });
     try {
@@ -328,7 +332,7 @@ export class DocumentSession {
    * a batch at a time, and resolves with them. Stops when the session closes.
    */
   measurePages(): Promise<readonly PageSize[]> {
-    this.#measuring ??= (async () => {
+    return this.#once("sizes", async () => {
       const sizes = [...(await this.pageSizes())];
       for (let index = 1; index < this.pageCount; index += MEASURED_PAGES) {
         this.signal.throwIfAborted();
@@ -345,8 +349,7 @@ export class DocumentSession {
       this.signal.throwIfAborted();
       this.#sizes = sizes;
       return sizes;
-    })();
-    return this.#measuring;
+    });
   }
 
   /**
@@ -362,8 +365,22 @@ export class DocumentSession {
     return text;
   }
 
-  /** Drop pdf.js's parsing results for a page that left a viewer's mounted window. */
+  /** A viewer mounted page `pageIndex`: its parsing results stay until no viewer shows it. */
+  holdPage(pageIndex: number): void {
+    this.#holds.set(pageIndex, (this.#holds.get(pageIndex) ?? 0) + 1);
+  }
+
+  /**
+   * A viewer's page `pageIndex` left its mounted window: once no viewer shows
+   * it, pdf.js's parsing results of the page are dropped.
+   */
   releasePage(pageIndex: number): void {
+    const holds = (this.#holds.get(pageIndex) ?? 0) - 1;
+    if (holds > 0) {
+      this.#holds.set(pageIndex, holds);
+      return;
+    }
+    this.#holds.delete(pageIndex);
     // The page may never have loaded, or the document may be gone by now.
     this.#pages.get(pageIndex)?.then(
       (page) => page.cleanup(),
@@ -373,7 +390,8 @@ export class DocumentSession {
 
   /** What the document permits; everything when it is not encrypted. */
   permissions(): Promise<PdfPermissions> {
-    this.#permissions ??= this.proxy.getPermissions().then((flags) => {
+    return this.#once("permissions", async () => {
+      const flags = await this.proxy.getPermissions();
       const flag = this.pdfjs.pdfjs.PermissionFlag;
       const has = (value: number) => !flags || flags.has(value);
       const permissions = {
@@ -388,12 +406,11 @@ export class DocumentSession {
       };
       return { restricted: Object.values(permissions).includes(false), ...permissions };
     });
-    return this.#permissions;
   }
 
   /** How the document asks to be shown when it opens. */
   initialView(): Promise<PdfInitialView> {
-    this.#initialView ??= (async () => {
+    return this.#once("initialView", async () => {
       const [openAction, pageLayout, pageMode] = await Promise.all([
         this.proxy.getOpenAction() as Promise<Map<string, unknown> | null>,
         this.proxy.getPageLayout(),
@@ -407,28 +424,27 @@ export class DocumentSession {
         pageLayout: PAGE_LAYOUTS.has(pageLayout) ? (pageLayout as PdfPageLayout) : null,
         pageMode: PAGE_MODES.has(pageMode) ? (pageMode as PdfPageMode) : null,
       };
-    })();
-    return this.#initialView;
+    });
   }
 
   /** The document outline (bookmarks); empty when the PDF has none. */
   outline(): Promise<readonly OutlineNode[]> {
-    this.#outline ??= this.proxy.getOutline().then(toOutline);
-    return this.#outline;
+    return this.#once("outline", async () => toOutline(await this.proxy.getOutline()));
   }
 
   /** Each page's label, such as "iv" or "A-3"; null when the PDF defines none. */
   pageLabels(): Promise<readonly string[] | null> {
-    this.#pageLabels ??= this.proxy
-      .getPageLabels()
+    return this.#once("pageLabels", async () => {
+      const labels = await this.proxy.getPageLabels();
       // pdf.js returns labels only for documents that define them.
-      .then((labels) => (labels && labels.length === this.pageCount ? labels : null));
-    return this.#pageLabels;
+      return labels && labels.length === this.pageCount ? labels : null;
+    });
   }
 
   /** The document's information dictionary and XMP metadata. */
   metadata(): Promise<PdfMetadata> {
-    this.#metadata ??= this.proxy.getMetadata().then(({ info, metadata }) => {
+    return this.#once("metadata", async () => {
+      const { info, metadata } = await this.proxy.getMetadata();
       const fields = info as Record<string, unknown>;
       const { PDFDateString } = this.pdfjs.pdfjs;
       const date = (value: unknown) =>
@@ -447,13 +463,12 @@ export class DocumentSession {
         language: text(fields.Language),
       };
     });
-    return this.#metadata;
   }
 
   /** The document's embedded files; empty when it has none. */
   attachments(): Promise<readonly PdfAttachment[]> {
-    this.#attachments ??= this.proxy.getAttachments().then((attachments) =>
-      [...(attachments ?? [])].map(([id, attachment]) => {
+    return this.#once("attachments", async () =>
+      [...((await this.proxy.getAttachments()) ?? [])].map(([id, attachment]) => {
         const { filename, description } = attachment as {
           filename?: string;
           description?: string;
@@ -461,7 +476,6 @@ export class DocumentSession {
         return { id, filename: filename || "unnamed", description: text(description) };
       }),
     );
-    return this.#attachments;
   }
 
   /**
@@ -470,8 +484,7 @@ export class DocumentSession {
    * viewer (`LayerState.subscribe`).
    */
   layers(): Promise<LayerState> {
-    this.#layers ??= LayerState.load(this.proxy);
-    return this.#layers;
+    return this.#once("layers", () => LayerState.load(this.proxy));
   }
 
   /** Where a named or explicit destination points; null when it points nowhere. */
@@ -495,11 +508,25 @@ export class DocumentSession {
     return this.proxy.annotationStorage.size > 0 ? this.proxy.saveDocument() : this.proxy.getData();
   }
 
-  /** Abort everything started for the session, and destroy the document. */
-  close(): Promise<void> {
-    this.#controller.abort();
-    this.#pages.clear();
-    this.#texts.clear();
-    return this.#loadingTask.destroy();
+  /** `read()`'s promise, shared until it fails: the next caller then reads again. */
+  #once<T>(what: string, read: () => Promise<T>): Promise<T> {
+    let reading = this.#reads.get(what) as Promise<T> | undefined;
+    if (!reading) {
+      const started = read();
+      reading = started;
+      this.#reads.set(what, started);
+      started.catch(() => {
+        if (this.#reads.get(what) === started) this.#reads.delete(what);
+      });
+    }
+    return reading;
   }
+}
+
+/**
+ * Abort everything started for `session`, and destroy its document: the
+ * registry's to do, once no viewer uses the session.
+ */
+export function closeSession(session: DocumentSession): Promise<void> {
+  return closers.get(session)?.() ?? Promise.resolve();
 }

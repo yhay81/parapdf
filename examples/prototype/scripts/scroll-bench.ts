@@ -4,7 +4,8 @@
  * page at devicePixelRatio 2, waits for the first page, scrolls at a constant
  * speed along the direction pages follow each other, and records blank area,
  * main-thread lag, dropped frames, React commits, the store's window and
- * current-page changes, and render counts.
+ * current-page changes, and render counts. Within each file and speed, the
+ * variants follow each other run by run, so that they meet the same machine.
  *
  * Usage: pnpm --filter @parapdf/prototype build && pnpm --filter @parapdf/prototype bench
  * Environment: BROWSER (chromium, webkit, or firefox), VARIANTS, TEXT and LINKS (1, 0, or 1,0),

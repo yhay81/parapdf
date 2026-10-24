@@ -639,7 +639,7 @@ try {
   );
   await inert.context().close();
 
-  // getDocument parameters pass through the engine to pdf.js.
+  // getDocument parameters from configurePdfjs() reach pdf.js.
   const passed = await newPage(
     `file=usrguide.pdf&documentOptions=${encodeURIComponent(JSON.stringify({ disableAutoFetch: true }))}`,
   );

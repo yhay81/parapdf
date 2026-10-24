@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { describe, it, type TestContext } from "node:test";
-import { RenderCancelledError } from "../src/pdfjs/draw.ts";
 import { printDocument } from "../src/runtime/print.ts";
 import { openSession, settle } from "./fake-pdfjs.ts";
 
@@ -129,7 +128,8 @@ describe("print job replacement", () => {
     const printing = printDocument(doc, { signal: abort.signal });
     await settle();
     abort.abort();
-    await assert.rejects(printing, RenderCancelledError);
+    // pdf.js's own exception for the cancelled render.
+    await assert.rejects(printing, { name: "RenderingCancelledException" });
     assert.equal(renders[0]?.cancellations, 1);
     assert.equal(renders[0]?.request.canvas.width, 0);
     assert.equal(renders[0]?.request.canvas.height, 0);

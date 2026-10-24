@@ -48,7 +48,7 @@ export interface DrawRequest {
    * Which layers to draw, for the intent drawn: a configuration for
    * printing with `print`. The document's default when absent.
    */
-  layers?: OptionalContentConfig;
+  layers?: OptionalContentConfig | Promise<OptionalContentConfig>;
 }
 
 export interface DrawTask {
