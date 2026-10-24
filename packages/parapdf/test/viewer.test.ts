@@ -10,6 +10,8 @@ import {
   settle,
 } from "./fake-pdfjs.ts";
 
+const A4 = { width: 595, height: 842 };
+
 /** pdf.js that keeps asking for a password until the viewers close the document. */
 function lockedPdfjs() {
   return fakePdfjs(async (task) => {
@@ -133,19 +135,20 @@ describe("closing a viewer's document", () => {
     else Reflect.deleteProperty(globalThis, "cancelAnimationFrame");
   });
 
-  /** pdf.js whose documents' texts, "hello" on every page, are read once `read()` is called. */
+  /**
+   * pdf.js whose documents' texts, "hello" on every page, are read once
+   * `read()` is called; `textsRead` lists the pages whose text was asked for.
+   */
   function slowTexts(pages = 2) {
     let read = () => {};
     const textsReady = new Promise<void>((resolve) => (read = resolve));
-    const fake = fakePdfjs(
-      async () =>
-        fakeDocument({
-          pages: Array.from({ length: pages }, () => LETTER),
-          texts: Array.from({ length: pages }, () => [{ str: "hello" }]),
-          textsReady,
-        }).proxy,
-    );
-    return { ...fake, read };
+    const document = fakeDocument({
+      pages: Array.from({ length: pages }, () => LETTER),
+      texts: Array.from({ length: pages }, () => [{ str: "hello" }]),
+      textsReady,
+    });
+    const fake = fakePdfjs(async () => document.proxy);
+    return { ...fake, read, textsRead: document.textsRead };
   }
 
   it("stops what the viewer started for the document", async () => {
@@ -172,6 +175,48 @@ describe("closing a viewer's document", () => {
     mock.timers.tick(1000);
     await settle();
     assert.equal(session?.signal.aborted, true);
+  });
+
+  it("stops a search, which reads no more pages once its document closes", async () => {
+    const { loader, read, textsRead } = slowTexts(3);
+    const viewer = new PdfViewerRuntime({}, loader);
+    const closeDocument = viewer.open({ url: "/a.pdf" });
+    await settle();
+    viewer.search("hello");
+    await settle();
+    assert.deepEqual(textsRead, [0], "the search reads a page at a time");
+    closeDocument();
+    read();
+    for (let step = 0; step < 3; step++) {
+      await settle();
+      mock.timers.tick(0);
+    }
+    await settle();
+    assert.deepEqual(textsRead, [0], "and stopped after the page it was reading");
+  });
+
+  it("lays the pages out again once their sizes are known, unless the document closed", async () => {
+    const pages = [LETTER, A4, LETTER];
+    const open = fakePdfjs(async () => fakeDocument({ pages }).proxy);
+    const viewer = new PdfViewerRuntime({}, open.loader);
+    close.push(viewer.open({ url: "/a.pdf" }));
+    await settle();
+    // Every page has the first one's size until the background pass knows better.
+    assert.deepEqual(viewer.store.get().layout?.sizes, [LETTER, LETTER, LETTER]);
+    mock.timers.tick(0);
+    await settle();
+    assert.deepEqual(viewer.store.get().layout?.sizes, pages);
+
+    const closed = fakePdfjs(async () => fakeDocument({ pages }).proxy);
+    const other = new PdfViewerRuntime({}, closed.loader);
+    const closeOther = other.open({ url: "/a.pdf" });
+    await settle();
+    closeOther();
+    let published = 0;
+    other.store.subscribe(() => published++);
+    mock.timers.tick(0);
+    await settle();
+    assert.equal(published, 0, "a closed viewer publishes nothing when the pass ends");
   });
 
   it("leaves the work of another viewer of the same document running", async () => {

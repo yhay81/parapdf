@@ -67,6 +67,20 @@ describe("DocumentSession", () => {
     assert.deepEqual(cleaned, [0]);
   });
 
+  it("keeps a page parsed when a viewer shows it again before its cleanup", async () => {
+    const { session, cleaned } = await openSession();
+    await session.page(0);
+    // React mounts a page again in the same commit, as StrictMode does.
+    session.holdPage(0);
+    session.releasePage(0);
+    session.holdPage(0);
+    await settle();
+    assert.deepEqual(cleaned, []);
+    session.releasePage(0);
+    await settle();
+    assert.deepEqual(cleaned, [0]);
+  });
+
   it("reads again what failed to read, and keeps what it read", async () => {
     let outlines = 0;
     const { session } = await openSession({

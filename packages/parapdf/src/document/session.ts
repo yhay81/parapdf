@@ -381,9 +381,12 @@ export class DocumentSession {
       return;
     }
     this.#holds.delete(pageIndex);
-    // The page may never have loaded, or the document may be gone by now.
+    // The page may never have loaded, or the document may be gone by now,
+    // and a viewer may show the page again first.
     this.#pages.get(pageIndex)?.then(
-      (page) => page.cleanup(),
+      (page) => {
+        if (!this.#holds.has(pageIndex)) page.cleanup();
+      },
       () => {},
     );
   }

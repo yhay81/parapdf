@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it, type TestContext } from "node:test";
 import { printDocument } from "../src/runtime/print.ts";
-import { openSession, settle } from "./fake-pdfjs.ts";
+import { PdfViewerRuntime } from "../src/runtime/viewer.ts";
+import { fakeDocument, fakePdfjs, openSession, settle } from "./fake-pdfjs.ts";
 
 /** Only the element operations printDocument uses; rendering is controlled separately. */
 class PrintElement {
@@ -133,6 +134,31 @@ describe("print job replacement", () => {
     assert.equal(renders[0]?.cancellations, 1);
     assert.equal(renders[0]?.request.canvas.width, 0);
     assert.equal(renders[0]?.request.canvas.height, 0);
+    assert.equal(env.prints(), 0);
+    assert.equal(env.head.children.length + env.body.children.length + env.listeners.size, 0);
+  });
+
+  it("stops when the viewer's document closes", async (t) => {
+    const env = environment(t);
+    const cancelFrame = Object.getOwnPropertyDescriptor(globalThis, "cancelAnimationFrame");
+    Object.defineProperty(globalThis, "cancelAnimationFrame", {
+      configurable: true,
+      value: () => {},
+    });
+    t.after(() => {
+      if (cancelFrame) Object.defineProperty(globalThis, "cancelAnimationFrame", cancelFrame);
+      else Reflect.deleteProperty(globalThis, "cancelAnimationFrame");
+    });
+    const document = fakeDocument();
+    const viewer = new PdfViewerRuntime({}, fakePdfjs(async () => document.proxy).loader);
+    const closeDocument = viewer.open({ url: "/a.pdf" });
+    await settle();
+    const printing = viewer.print();
+    await settle();
+    assert.equal(document.drawings.length, 1);
+    closeDocument();
+    await assert.rejects(printing, { name: "RenderingCancelledException" });
+    assert.equal(document.drawings[0]?.cancellations, 1);
     assert.equal(env.prints(), 0);
     assert.equal(env.head.children.length + env.body.children.length + env.listeners.size, 0);
   });

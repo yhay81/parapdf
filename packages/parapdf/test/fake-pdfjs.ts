@@ -97,14 +97,14 @@ class RenderingCancelledException extends Error {
 }
 
 /**
- * A page as pdf.js gives it, whose drawings go to `drawings` and whose
- * cleanups to `cleaned`; its text is read once `textsReady` resolves.
+ * A page as pdf.js gives it, whose drawings go to `drawings`, whose
+ * cleanups to `cleaned`, and whose text reads to `textsRead`; its text is
+ * read once `textsReady` resolves.
  */
 function fakePage(
   pageIndex: number,
   size: PageSize,
-  drawings: Drawing[],
-  cleaned: number[],
+  { drawings, cleaned, textsRead }: { drawings: Drawing[]; cleaned: number[]; textsRead: number[] },
   items: readonly FakeTextItem[],
   textsReady: Promise<unknown>,
 ): Pdfjs.PDFPageProxy {
@@ -159,6 +159,7 @@ function fakePage(
       return drawing.task;
     },
     async getTextContent() {
+      textsRead.push(pageIndex);
       await textsReady;
       return {
         items: items.map(({ str, hasEOL = false, x = 0, y = 0, width = 0, height = 10 }) => ({
@@ -225,10 +226,12 @@ export function fakeDocument({
 }: FakeDocumentOptions = {}) {
   const drawings: Drawing[] = [];
   const cleaned: number[] = [];
+  /** Zero-based page indexes, in the order their text was asked for. */
+  const textsRead: number[] = [];
   /** Zero-based page indexes, in the order pages were asked for. */
   const requested: number[] = [];
   const pageProxies = pages.map((size, index) =>
-    fakePage(index, size, drawings, cleaned, texts[index] ?? [], textsReady),
+    fakePage(index, size, { drawings, cleaned, textsRead }, texts[index] ?? [], textsReady),
   );
   const document = {
     numPages: pages.length,
@@ -255,7 +258,13 @@ export function fakeDocument({
     getData: async () => new Uint8Array([1]),
     ...proxy,
   };
-  return { proxy: document as unknown as Pdfjs.PDFDocumentProxy, drawings, cleaned, requested };
+  return {
+    proxy: document as unknown as Pdfjs.PDFDocumentProxy,
+    drawings,
+    cleaned,
+    textsRead,
+    requested,
+  };
 }
 
 /** pdf.js's exception for a document whose password is missing or wrong. */
