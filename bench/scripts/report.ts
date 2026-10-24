@@ -2,7 +2,8 @@
  * Renders bench/results/<browser>.md from bench/results/<browser>.json and the
  * cross-browser summary bench/results/browsers.md from every browser's JSON.
  * run.ts calls this after measuring; run it directly to regenerate the reports
- * without measuring again: node bench/scripts/report.ts
+ * without measuring again: node bench/scripts/report.ts, with OUTPUT for the
+ * results a run wrote under that prefix.
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -20,6 +21,9 @@ export interface Summary {
   firstPresentMs: number;
   pagePresentP50Ms: number;
   pagePresentP95Ms: number;
+  /** Frame handover (OffscreenCanvas to the displayed canvas), for `-frame` variants. */
+  frameP50Ms?: number;
+  frameMaxMs?: number;
   blockedMs: number;
   lagP95Ms: number;
   lagMaxMs: number;
@@ -43,7 +47,7 @@ export interface BrowserResults {
     crossOriginIsolated: boolean;
     idle: { timerLagP50Ms: number; timerLagP95Ms: number; frameIntervalMs: number };
     versions: Record<string, string | undefined>;
-    settings: { runs: number; pages: number; scale: number };
+    settings: { runs: number; pages: number; scale: number; engines?: string[]; output?: string };
   };
   payload: Record<string, { files: string[]; raw: number; gzip: number; brotli: number }>;
   summaries: Summary[];
@@ -62,8 +66,18 @@ const median = (values: number[]): number => {
     : ((sorted[mid - 1] as number) + (sorted[mid] as number)) / 2;
 };
 
-const engineLine = (versions: Record<string, string | undefined>): string =>
-  `pdfjs-dist ${versions["pdfjs-dist"]} (main-thread drawing)${versions["pdf.js master"] ? `, pdf.js master ${versions["pdf.js master"]} (renderer worker)` : ""}, @embedpdf/pdfium ${versions["@embedpdf/pdfium"]} (worker), hayro ${versions.hayro} (worker, wasm simd128). \`-hwa\` variants set \`enableHWA\` for a GPU-backed canvas.`;
+const engineLine = (versions: Record<string, string | undefined>, engines: string[]): string =>
+  `pdfjs-dist ${versions["pdfjs-dist"]} (main-thread drawing)${versions["pdf.js master"] ? `, pdf.js master ${versions["pdf.js master"]} (renderer worker)` : ""}, @embedpdf/pdfium ${versions["@embedpdf/pdfium"]} (worker), hayro ${versions.hayro} (worker, wasm simd128). \`-hwa\` variants set \`enableHWA\` for a GPU-backed canvas.${engines.some((engine) => engine.endsWith("-frame")) ? " `-frame` variants draw into an OffscreenCanvas instead of the displayed canvas and show the finished page as an ImageBitmap through a `bitmaprenderer` context." : ""}`;
+
+/** The command that measures the same engines, files, and settings again. */
+const reproduceLine = ({ browserName, settings }: BrowserResults["environment"]): string => {
+  const variables = [
+    `BROWSER=${browserName}`,
+    ...(settings.engines ? [`ENGINES=${settings.engines.join(",")}`] : []),
+    ...(settings.output ? [`OUTPUT=${settings.output}`] : []),
+  ];
+  return `\`pnpm bench:build && ${variables.join(" ")} pnpm bench\``;
+};
 
 const powerLine = ({ power }: BrowserResults["environment"]): string =>
   power?.source === "ac" && !power.lowPowerMode
@@ -106,9 +120,9 @@ export function renderReport({ environment, payload, summaries }: BrowserResults
     `- Machine: ${environment.os}, ${environment.cpu}, ${environment.memoryGiB} GiB`,
     `- Browser: ${environment.browser} (Playwright build, ${environment.headless ? "headless" : "headed"}), WebGL renderer: ${environment.gpu}, crossOriginIsolated: ${environment.crossOriginIsolated}`,
     `- Power: ${powerLine(environment)}. Idle baseline: ${idleLine(environment)}.${environment.turnTaking ? ` The run ${environment.turnTaking}.` : ""}`,
-    `- Engines: ${engineLine(environment.versions)}`,
+    `- Engines: ${engineLine(environment.versions, engines)}`,
     `- Method: scale ${settings.scale} (100% zoom at devicePixelRatio 2), first ${settings.pages} pages rendered one after another, fresh page per job, median of ${settings.runs} runs. "Visible" waits two animation frames after the pixels are committed to the canvas.`,
-    `- Reproduce: \`pnpm bench:build && BROWSER=${environment.browserName} pnpm bench\``,
+    `- Reproduce: ${reproduceLine(environment)}`,
     "",
     ...(errors.length || fallbacks.length
       ? [
@@ -144,6 +158,16 @@ export function renderReport({ environment, payload, summaries }: BrowserResults
       "",
       (summary) => `${fmt(summary.pagePresentP50Ms)} / ${fmt(summary.pagePresentP95Ms)}`,
     ),
+    ...(summaries.some((summary) => summary.frameP50Ms !== undefined)
+      ? table(
+          "Frame handover p50 / max (ms)",
+          "From the end of pdf.js's drawing to the frame on the displayed canvas: `transferToImageBitmap()` and `transferFromImageBitmap()`; `-frame` variants only.",
+          (summary) =>
+            summary.frameP50Ms === undefined
+              ? "—"
+              : `${fmt(summary.frameP50Ms, 2)} / ${fmt(summary.frameMaxMs, 2)}`,
+        )
+      : []),
     ...table(
       "Main thread blocked while rendering (ms)",
       "Sum of event-loop lag measured by a 4 ms timer during the whole render phase, counting only lateness beyond 2 ms or the idle page's 95th percentile, whichever is larger. Lower means input and scrolling stay responsive while pages render.",
@@ -173,7 +197,7 @@ const spotlightFiles = [
   "synthetic-vector-200k.pdf",
 ];
 
-export function renderComparison(all: BrowserResults[]): string {
+export function renderComparison(all: BrowserResults[], prefix = ""): string {
   const engines = [
     ...new Set(all.flatMap((results) => results.summaries.map((summary) => summary.engine))),
   ];
@@ -223,13 +247,13 @@ export function renderComparison(all: BrowserResults[]): string {
       all
         .map(
           (results) =>
-            `[${results.environment.browser}](${results.environment.browserName}.md) (${results.environment.runAt})`,
+            `[${results.environment.browser}](${prefix}${results.environment.browserName}.md) (${results.environment.runAt})`,
         )
         .join(", ") +
       ".",
     "",
     `- Machine: ${all[0]?.environment.os}, ${all[0]?.environment.cpu}`,
-    `- Engines: ${all[0] ? engineLine(all[0].environment.versions) : ""}`,
+    `- Engines: ${all[0] ? engineLine(all[0].environment.versions, engines) : ""}`,
     "- Browsers are Playwright's builds, headless. WebKit is not Safari and its results do not stand for Safari's.",
     ...all.map(
       (results) =>
@@ -255,6 +279,21 @@ export function renderComparison(all: BrowserResults[]): string {
     rule,
     ...across((summary) => summary.pagePresentP50Ms, 1),
     "",
+    ...(all.some((results) => results.summaries.some((summary) => summary.frameP50Ms !== undefined))
+      ? [
+          "## Frame handover p50 (ms): median across files",
+          "",
+          "`transferToImageBitmap()` and `transferFromImageBitmap()` after pdf.js's drawing; `-frame` variants only.",
+          "",
+          header,
+          rule,
+          // Only the "-frame" variants hand frames over.
+          ...across((summary) => summary.frameP50Ms ?? Number.NaN, 2).filter((row) =>
+            row.includes("-frame |"),
+          ),
+          "",
+        ]
+      : []),
     "## Main thread blocked while rendering 10 pages (ms): median across files",
     "",
     header,
@@ -276,30 +315,38 @@ export function renderComparison(all: BrowserResults[]): string {
   ].join("\n");
 }
 
-const readResults = (resultsDir: string, browser: BrowserName): BrowserResults | undefined => {
-  const path = join(resultsDir, `${browser}.json`);
+/** A browser's results written under `prefix` (run.ts's OUTPUT). */
+const readResults = (
+  resultsDir: string,
+  browser: BrowserName,
+  prefix = "",
+): BrowserResults | undefined => {
+  const path = join(resultsDir, `${prefix}${browser}.json`);
   return existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as BrowserResults) : undefined;
 };
 
-export function writeReport(resultsDir: string, browser: BrowserName): string {
-  const results = readResults(resultsDir, browser);
-  if (!results) throw new Error(`${browser}.json is missing in ${resultsDir}`);
-  const target = join(resultsDir, `${browser}.md`);
+export function writeReport(resultsDir: string, browser: BrowserName, prefix = ""): string {
+  const results = readResults(resultsDir, browser, prefix);
+  if (!results) throw new Error(`${prefix}${browser}.json is missing in ${resultsDir}`);
+  const target = join(resultsDir, `${prefix}${browser}.md`);
   writeFileSync(target, `${renderReport(results)}\n`);
   return target;
 }
 
-export function writeComparison(resultsDir: string): string {
-  const all = browserNames.flatMap((browser) => readResults(resultsDir, browser) ?? []);
-  const target = join(resultsDir, "browsers.md");
-  writeFileSync(target, `${renderComparison(all)}\n`);
+export function writeComparison(resultsDir: string, prefix = ""): string {
+  const all = browserNames.flatMap((browser) => readResults(resultsDir, browser, prefix) ?? []);
+  const target = join(resultsDir, `${prefix}browsers.md`);
+  writeFileSync(target, `${renderComparison(all, prefix)}\n`);
   return target;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const resultsDir = fileURLToPath(new URL("../results/", import.meta.url));
+  const prefix = process.env.OUTPUT ?? "";
   for (const browser of browserNames) {
-    if (readResults(resultsDir, browser)) console.log(`Wrote ${writeReport(resultsDir, browser)}`);
+    if (readResults(resultsDir, browser, prefix)) {
+      console.log(`Wrote ${writeReport(resultsDir, browser, prefix)}`);
+    }
   }
-  console.log(`Wrote ${writeComparison(resultsDir)}`);
+  console.log(`Wrote ${writeComparison(resultsDir, prefix)}`);
 }

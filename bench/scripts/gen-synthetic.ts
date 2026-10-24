@@ -82,6 +82,40 @@ async function vectorHeavy(): Promise<Uint8Array> {
   return doc.save();
 }
 
+/**
+ * Pages each as costly to draw as a detailed drawing or map, 24 of them, so
+ * that leaving pages and coming back to them shows what drawing them again
+ * costs: 50,000 stroked segments a page, each page its own.
+ */
+async function vectorPages(): Promise<Uint8Array> {
+  const doc = await PDFDocument.create();
+  const [width, height] = [612, 792];
+  for (let pageIndex = 0; pageIndex < 24; pageIndex++) {
+    const page = doc.addPage([width, height]);
+    const next = seeded(100 + pageIndex);
+    const ops: string[] = ["0.3 w 1 J 1 j"];
+    for (let segments = 0; segments < 50_000; segments += 100) {
+      ops.push(
+        `${(next() * 0.6).toFixed(3)} ${(next() * 0.6).toFixed(3)} ${(next() * 0.6).toFixed(3)} RG`,
+      );
+      let x = next() * width;
+      let y = next() * height;
+      ops.push(`${x.toFixed(2)} ${y.toFixed(2)} m`);
+      for (let step = 0; step < 100; step++) {
+        x = clamp(x + (next() - 0.5) * 12, 0, width);
+        y = clamp(y + (next() - 0.5) * 12, 0, height);
+        ops.push(`${x.toFixed(2)} ${y.toFixed(2)} l`);
+      }
+      ops.push("S");
+    }
+    ops.push(`0 g BT /F1 18 Tf 36 750 Td (Page ${pageIndex + 1}) Tj ET`);
+    page.node.addContentStream(doc.context.register(doc.context.flateStream(ops.join("\n"))));
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    page.node.setFontDictionary(PDFName.of("F1"), font.ref);
+  }
+  return doc.save();
+}
+
 /** UCS-2 big-endian hex for UniJIS-UCS2 encodings (BMP text only). */
 function ucs2Hex(text: string): string {
   return Array.from(text, (char) => (char.codePointAt(0) ?? 0).toString(16).padStart(4, "0")).join(
@@ -524,6 +558,7 @@ mkdirSync(outDir, { recursive: true });
 for (const [name, build] of [
   ["synthetic-text-1000.pdf", longText],
   ["synthetic-vector-200k.pdf", vectorHeavy],
+  ["synthetic-vector-pages.pdf", vectorPages],
   ["synthetic-cjk-nonembedded.pdf", cjkNonEmbedded],
   ["synthetic-mixed-sizes.pdf", mixedSizes],
   ["synthetic-features.pdf", features],

@@ -27,6 +27,9 @@ const maxPages = Number(params.get("pages") ?? "10");
 // Synthetic application work per animation frame (ms), standing in for the
 // layout and React commits a viewer performs while the user scrolls.
 const frameWorkMs = Number(params.get("frameWork") ?? "0");
+// Fidelity runs (scripts/fidelity.ts) read every page's pixels back after it
+// renders, which costs time, so their timings are not results.
+const digestPages = params.get("digest") === "1";
 const status = document.getElementById("status");
 const stage = document.getElementById("stage");
 
@@ -46,15 +49,24 @@ for (const [type, sink] of [
 }
 
 async function loadEngine(id: string): Promise<EngineAdapter> {
-  switch (id) {
+  // "-frame" variants of the pdf.js engines draw off screen and show frames,
+  // and "-record" variants record each operation's box as pdf.js draws.
+  const record = id.endsWith("-record");
+  const variantOf = record ? id.slice(0, -"-record".length) : id;
+  const frame = variantOf.endsWith("-frame");
+  // Only released pdf.js drawing in place records; a label claiming more would mislead.
+  if (record && (frame || variantOf.startsWith("pdfjs-next"))) {
+    throw new Error(`${id}: -record applies to pdfjs and pdfjs-hwa drawing in place only`);
+  }
+  switch (frame ? variantOf.slice(0, -"-frame".length) : variantOf) {
     case "pdfjs":
-      return (await import("./engines/pdfjs.ts")).createPdfjsEngine({ hwa: false });
+      return (await import("./engines/pdfjs.ts")).createPdfjsEngine({ hwa: false, frame, record });
     case "pdfjs-hwa":
-      return (await import("./engines/pdfjs.ts")).createPdfjsEngine({ hwa: true });
+      return (await import("./engines/pdfjs.ts")).createPdfjsEngine({ hwa: true, frame, record });
     case "pdfjs-next":
-      return (await import("./engines/pdfjs-next.ts")).createPdfjsNextEngine({ hwa: false });
+      return (await import("./engines/pdfjs-next.ts")).createPdfjsNextEngine({ hwa: false, frame });
     case "pdfjs-next-hwa":
-      return (await import("./engines/pdfjs-next.ts")).createPdfjsNextEngine({ hwa: true });
+      return (await import("./engines/pdfjs-next.ts")).createPdfjsNextEngine({ hwa: true, frame });
     case "pdfium":
       return (await import("./engines/pdfium.ts")).createPdfiumEngine();
     case "hayro":
@@ -84,6 +96,42 @@ function thumbnail(source: HTMLCanvasElement, width = 480): string {
   target.height = Math.round((source.height * width) / source.width);
   target.getContext("2d")?.drawImage(source, 0, 0, target.width, target.height);
   return target.toDataURL("image/png");
+}
+
+/** Width of the pixel sample fidelity runs return for comparing drawings that differ. */
+const SAMPLE_WIDTH = 256;
+
+/**
+ * The displayed canvas's pixels, read through a 2D canvas so that canvases
+ * with any context, `bitmaprenderer` included, read alike: a SHA-256 digest
+ * of all of them, and RGBA at SAMPLE_WIDTH pixels wide.
+ */
+async function pagePixels(source: HTMLCanvasElement) {
+  const full = document.createElement("canvas");
+  full.width = source.width;
+  full.height = source.height;
+  const context = full.getContext("2d", { willReadFrequently: true });
+  if (!context) throw new Error("no 2D context to read pixels back");
+  context.drawImage(source, 0, 0);
+  const pixels = context.getImageData(0, 0, full.width, full.height).data;
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", pixels));
+  const sample = document.createElement("canvas");
+  sample.width = SAMPLE_WIDTH;
+  sample.height = Math.round((source.height * SAMPLE_WIDTH) / source.width);
+  const sampled = sample.getContext("2d", { willReadFrequently: true });
+  sampled?.drawImage(source, 0, 0, sample.width, sample.height);
+  const rgba =
+    sampled?.getImageData(0, 0, sample.width, sample.height).data ?? new Uint8ClampedArray();
+  let binary = "";
+  for (let at = 0; at < rgba.length; at += 0x8000) {
+    binary += String.fromCharCode(...rgba.subarray(at, at + 0x8000));
+  }
+  return {
+    width: source.width,
+    height: source.height,
+    digest: Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join(""),
+    sample: { width: sample.width, height: sample.height, rgba: btoa(binary) },
+  };
 }
 
 function gpuRenderer(): string | undefined {
@@ -231,6 +279,8 @@ async function run() {
   const renderMs: number[] = [];
   const presentMs: number[] = [];
   const rasterMs: number[] = [];
+  const frameMs: number[] = [];
+  const pixels: Awaited<ReturnType<typeof pagePixels>>[] = [];
   await nextFrame();
   const stopFrames = startFrameMonitor(frameWorkMs, idle.frameIntervalMs);
   const stopLag = startLagMonitor(blockedThreshold(idle));
@@ -243,6 +293,8 @@ async function run() {
     await nextFrame();
     presentMs.push(performance.now() - renderStart);
     if (stats.rasterMs !== undefined) rasterMs.push(stats.rasterMs);
+    if (stats.frameMs !== undefined) frameMs.push(stats.frameMs);
+    if (digestPages) pixels.push(await pagePixels(engine.canvas));
   }
   const warmStart = performance.now();
   await engine.render(0, scale);
@@ -270,6 +322,7 @@ async function run() {
     renderMs,
     presentMs,
     rasterMs,
+    frameMs,
     renderPhaseMs: phaseEnd - phaseStart,
     idle,
     frames,
@@ -291,6 +344,7 @@ async function run() {
       hardwareConcurrency: navigator.hardwareConcurrency,
     },
     thumbnail: thumbnail(engine.canvas),
+    ...(digestPages ? { pixels } : {}),
   };
   await engine.close();
   return result;
