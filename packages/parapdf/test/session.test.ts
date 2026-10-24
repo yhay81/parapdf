@@ -16,6 +16,28 @@ describe("DocumentSession", () => {
     assert.deepEqual(requested, [1]);
   });
 
+  it("retries failed text reads and shares the recovered text", async () => {
+    const document = fakeDocument({ texts: [[{ str: "Recovered" }]] });
+    const page = await document.proxy.getPage(1);
+    let attempts = 0;
+    const { session } = await openSession({
+      proxy: {
+        getPage: async () => ({
+          ...page,
+          async getTextContent() {
+            if (++attempts === 1) throw new Error("text unavailable");
+            return page.getTextContent();
+          },
+        }),
+      },
+    });
+    await assert.rejects(session.text(0), /text unavailable/);
+    const recovered = session.text(0);
+    assert.equal(session.text(0), recovered);
+    assert.deepEqual((await recovered).items, ["Recovered"]);
+    assert.equal(attempts, 2);
+  });
+
   it("gives every page the first one's size until the background pass learns the others", async () => {
     const { session, requested } = await openSession({ pages: [LETTER, A4, LETTER] });
     assert.deepEqual(await session.pageSizes(), [LETTER, LETTER, LETTER]);

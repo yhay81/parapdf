@@ -2465,7 +2465,13 @@ export class PdfViewerRuntime {
     }
     let index = indexes.get(pageIndex);
     if (!index) {
-      index = session.text(pageIndex).then((text) => buildPageIndex(text, options));
+      index = session
+        .text(pageIndex)
+        .then((text) => buildPageIndex(text, options))
+        .catch((error: unknown) => {
+          indexes.delete(pageIndex);
+          throw error;
+        });
       indexes.set(pageIndex, index);
     }
     return index;

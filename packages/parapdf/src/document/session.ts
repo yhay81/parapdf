@@ -359,7 +359,12 @@ export class DocumentSession {
   text(pageIndex: number): Promise<PageText> {
     let text = this.#texts.get(pageIndex);
     if (!text) {
-      text = this.page(pageIndex).then(readPageText);
+      text = this.page(pageIndex)
+        .then(readPageText)
+        .catch((error: unknown) => {
+          this.#texts.delete(pageIndex);
+          throw error;
+        });
       this.#texts.set(pageIndex, text);
     }
     return text;

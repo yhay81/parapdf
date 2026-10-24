@@ -239,6 +239,36 @@ describe("closing a viewer's document", () => {
     assert.equal(calls.opens, 1);
   });
 
+  it("retries a search after a transient text read failure", async (context) => {
+    const document = fakeDocument({ texts: [[{ str: "hello" }]] });
+    const page = await document.proxy.getPage(1);
+    let attempts = 0;
+    context.mock.method(page, "getTextContent", async () => {
+      if (++attempts === 1) throw new Error("text unavailable");
+      return {
+        items: [
+          { str: "hello", hasEOL: false, transform: [10, 0, 0, 10, 0, 0], width: 20, height: 10 },
+        ],
+      };
+    });
+    context.mock.method(console, "error", () => {});
+    const { loader } = fakePdfjs(async () => document.proxy);
+    const viewer = new PdfViewerRuntime({}, loader);
+    close.push(viewer.open({ url: "/a.pdf" }));
+    await settle();
+    viewer.search("hello");
+    await settle();
+    assert.equal(viewer.store.get().search.status, "done");
+    assert.equal(viewer.store.get().search.matches.length, 0);
+    viewer.search("hello");
+    await settle();
+    mock.timers.tick(0);
+    await settle();
+    assert.equal(viewer.store.get().search.status, "done");
+    assert.equal(viewer.store.get().search.matches.length, 1);
+    assert.equal(attempts, 2);
+  });
+
   it("closes the open document when it opens another", async () => {
     const { loader, calls } = fakePdfjs();
     const viewer = new PdfViewerRuntime({}, loader);

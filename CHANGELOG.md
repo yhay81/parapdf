@@ -21,9 +21,11 @@ milestone gets an entry here, and the release lists every break from 0.x.
 - A document is a session, shared by every viewer of its source as
   before, which reads the pages' sizes, their text, the permissions, the
   initial view, the outline, page labels, metadata, attachments, and the
-  layers once for all of them; a read that fails is read again for the
-  next viewer. The state's `document` is the session; its `proxy` is
+  layers once for all of them; failed secondary-data and text reads are
+  retried by the next caller. The state's `document` is the session; its `proxy` is
   pdf.js's document, which `usePdfDocument()` returns.
+  Failed search-index reads are also forgotten, so retrying a search can
+  recover without closing the session.
 - Viewers of one document share which of its layers show: showing or
   hiding one in a viewer draws it so in all of them. A page stays parsed
   while any viewer of its document shows it.
