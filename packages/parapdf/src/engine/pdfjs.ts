@@ -793,14 +793,14 @@ export function createPdfjsEngine(options: PdfjsEngineOptions): PdfEngine {
             () => {},
           );
         },
-        drawKept(canvas, source) {
-          canvas.width = source.width;
-          canvas.height = source.height;
+        drawKept(canvas, source, size = source) {
+          canvas.width = size.width;
+          canvas.height = size.height;
           const context = canvas.getContext(
             "2d",
             contextOptions,
           ) as CanvasRenderingContext2D | null;
-          context?.drawImage(source, 0, 0);
+          context?.drawImage(source, 0, 0, size.width, size.height);
         },
         async destroy() {
           pages.clear();

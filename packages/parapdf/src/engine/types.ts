@@ -602,10 +602,15 @@ export interface PdfEngineDocument {
   releasePage(pageIndex: number): void;
   /**
    * Draw `source`, a drawing kept from another canvas of a page of this
-   * document, into `canvas`, sized to it, with the context renders draw
-   * with, so that the page shows it at once and later renders draw over it.
+   * document, into `canvas`, sized to it or, scaled, to `size`, with the
+   * context renders draw with, so that the page shows it at once and later
+   * renders draw over it.
    */
-  drawKept(canvas: HTMLCanvasElement, source: HTMLCanvasElement): void;
+  drawKept(
+    canvas: HTMLCanvasElement,
+    source: HTMLCanvasElement,
+    size?: { width: number; height: number },
+  ): void;
   destroy(): Promise<void>;
 }
 

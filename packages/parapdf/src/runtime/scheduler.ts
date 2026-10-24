@@ -796,7 +796,9 @@ export class RenderScheduler {
       }
       if (!plan && slot.detailScale > 0) {
         // Pages that left the viewport at a region-rendering zoom give their
-        // detail memory back; their base layer still shows.
+        // detail memory back; their base layer still shows, a whole-page
+        // detail drawn into it first if that is sharper.
+        this.#demote(slot);
         this.#clearDetail(slot);
       }
     }
@@ -1035,6 +1037,43 @@ export class RenderScheduler {
     }
   }
 
+  /**
+   * Draws a page's current whole-page detail into its base canvas, scaled
+   * down to the base's resolution, when the base is missing, older, or less
+   * sharp: zoomed in past the whole-page detail's budget, a page then shows
+   * it under its partial detail, or alone outside the viewport, instead of a
+   * base drawn again from scratch, which drew all of the page at the new
+   * zoom, five times for fit-width to 5, on the main thread beside the
+   * visible detail. A copy costs no more than 4 ms.
+   */
+  #demote(slot: Slot): void {
+    const input = this.#input;
+    const size = input?.layout.sizes[slot.index];
+    if (
+      !input ||
+      !size ||
+      slot.detailRegion !== null ||
+      slot.detailVersion !== this.#version ||
+      slot.job?.canvas === slot.detail ||
+      slot.detail.width * slot.detail.height === 0
+    ) {
+      return;
+    }
+    const scale = Math.min(slot.detailScale, this.#baseScale(slot.index, input));
+    if (slot.baseVersion === this.#version && slot.baseScale >= scale) return;
+    // A base being drawn would draw over the copy.
+    if (slot.job?.layer === "base") slot.job.task.cancel();
+    const turned = turnedSize(size, input.layout.rotation);
+    // Whole pixels, as the engine sizes a base drawn at this scale.
+    this.#doc.drawKept(slot.base, slot.detail, {
+      width: Math.floor(turned.width * scale + 1e-6),
+      height: Math.floor(turned.height * scale + 1e-6),
+    });
+    slot.base.style.visibility = "";
+    slot.baseScale = scale;
+    slot.baseVersion = slot.detailVersion;
+  }
+
   /** Drops the page's detail pixels, the spare's included; any detail render is cancelled first. */
   #clearDetail(slot: Slot): void {
     slot.detailScale = 0;
@@ -1086,15 +1125,17 @@ export class RenderScheduler {
     // base first: the detail has time to arrive before the page scrolls in,
     // and drawing both doubled the work for every page that slow scrolling
     // brought in.
+    // A partial detail drawn into the spare also replaces a whole-page one
+    // that stays until then: the whole-page one then becomes the base (see
+    // #demote), so no base needs drawing meanwhile.
     const coveredByDetail = (slot: Slot) => {
       if (slot.detailScale === 0 || slot.detailRegion !== null) return false;
       if (!needsDetail(slot)) return true;
       const plan = planOf(slot);
       return (
         plan !== null &&
-        plan.region === null &&
         !this.#failed(slot, "detail", plan, input) &&
-        this.#keepsDetail(slot, this.#pixels(slot.index, plan.scale, null, input), total)
+        this.#keepsDetail(slot, this.#pixels(slot.index, plan.scale, plan.region, input), total)
       );
     };
     // A base of an older content version shows wherever the detail does not.
@@ -1289,7 +1330,10 @@ export class RenderScheduler {
             this.stats.base++;
           } else {
             if (spare) {
-              // The new detail takes the shown one's place in the same frame.
+              // The new detail takes the shown one's place in the same frame,
+              // and a whole-page one it replaces with part of the page shows
+              // under it as the base.
+              if (region !== null) this.#demote(slot);
               const shown = slot.detail;
               slot.detail = spare;
               slot.spare = shown;
