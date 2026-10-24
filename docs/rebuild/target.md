@@ -71,6 +71,15 @@ read for search and `getText()`.
   document" checks.
 - Encrypted documents ask any of their viewers for a password, as 0.x does.
 
+During the migration, M2 retains a separate session for each viewer that
+edits annotations: the current editor managers would otherwise collide in
+pdf.js's annotation storage. This is temporary, not an exception to the
+shared-session target. M4 moves editing to the feature modules and removes
+this isolation, verifying edits and saving across viewers of one session.
+M6 moves document state out of the viewer stores into the session's store
+and settles the public session surface; M2's exposed lifecycle methods are
+not the final React API.
+
 ### view/
 
 A `Viewer` is one viewport onto a session. Several viewers may show one
