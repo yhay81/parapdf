@@ -1,16 +1,54 @@
-import { type AnnotationTool, usePdfState, usePdfViewer } from "parapdf";
-import { useRef } from "react";
+import {
+  type AnnotationStyles,
+  type AnnotationTool,
+  usePdfState,
+  usePdfViewer,
+  type ViewState,
+} from "parapdf";
+import { type CSSProperties, useRef, useState } from "react";
+import { IconButton, type IconName, modifier } from "./icons.tsx";
+import { Popover } from "./popover.tsx";
 
-const TOOLS: readonly [AnnotationTool, string][] = [
-  ["none", "View"],
-  ["highlight", "Highlight"],
-  ["freetext", "Text"],
-  ["ink", "Draw"],
-  ["stamp", "Images"],
+const TOOLS: readonly [AnnotationTool, string, IconName][] = [
+  ["none", "Select annotations", "pointer"],
+  ["highlight", "Highlight", "highlight"],
+  ["freetext", "Text", "text"],
+  ["ink", "Draw", "draw"],
 ];
 
-/** The annotation tools, the style of the one chosen, undo, redo, and images. */
-export function AnnotationBar() {
+/** The colors offered for each tool: pdf.js's highlight colors, and inks. */
+const INKS: readonly [string, string][] = [
+  ["#000000", "Black"],
+  ["#e5484d", "Red"],
+  ["#3451d1", "Blue"],
+  ["#30a46c", "Green"],
+  ["#f76b15", "Orange"],
+];
+const COLORS: Record<keyof AnnotationStyles, readonly [string, string][]> = {
+  highlight: [
+    ["#ffff98", "Yellow"],
+    ["#53ffbc", "Green"],
+    ["#80ebff", "Blue"],
+    ["#ffcbe6", "Pink"],
+    ["#ff4f5f", "Red"],
+  ],
+  freetext: INKS,
+  ink: INKS,
+};
+
+/** What each tool's slider sets, in PDF points: a thickness, or the font size of text. */
+const SIZES: Record<keyof AnnotationStyles, { label: string; min: number; max: number }> = {
+  highlight: { label: "Thickness of freehand highlights", min: 8, max: 24 },
+  freetext: { label: "Font size", min: 6, max: 72 },
+  ink: { label: "Thickness", min: 1, max: 20 },
+};
+
+/**
+ * The annotation tools, floating over the pages: the tool, the style of the
+ * one chosen, images and signatures, undo, redo, and deleting. Done hides
+ * them and puts the pointer back to its default.
+ */
+export function AnnotationBar({ onDone }: { onDone: (view: ViewState | null) => void }) {
   const viewer = usePdfViewer();
   const tool = usePdfState((state) => state.annotationTool);
   const editing = usePdfState((state) => state.annotationState);
@@ -18,55 +56,181 @@ export function AnnotationBar() {
   const imageInput = useRef<HTMLInputElement>(null);
   const styled = tool === "highlight" || tool === "freetext" || tool === "ink" ? tool : null;
   return (
-    <div className="demo-toolbar demo-annotations" role="toolbar" aria-label="Annotations">
-      {TOOLS.map(([value, label]) => (
-        <button
-          key={value}
-          type="button"
-          aria-pressed={tool === value}
+    <div className="demo-annotations" role="toolbar" aria-label="Annotations">
+      <div className="demo-group">
+        {TOOLS.map(([value, label, icon]) => (
+          <IconButton
+            key={value}
+            icon={icon}
+            label={label}
+            aria-pressed={tool === value}
+            disabled={!editing}
+            onClick={() => void viewer.setAnnotationTool(value)}
+          />
+        ))}
+        <IconButton
+          icon="image"
+          label="Add an image"
+          aria-pressed={tool === "stamp"}
           disabled={!editing}
-          onClick={() => void viewer.setAnnotationTool(value)}
-        >
-          {label}
-        </button>
-      ))}
-      {styled && styles ? (
-        <input
-          type="color"
-          aria-label="Color"
-          value={styles[styled].color.toLowerCase()}
-          onChange={(event) => viewer.setAnnotationStyle(styled, { color: event.target.value })}
+          onClick={() => imageInput.current?.click()}
         />
-      ) : null}
-      <button type="button" disabled={!editing} onClick={() => imageInput.current?.click()}>
-        Add image…
-      </button>
-      <input
-        ref={imageInput}
-        type="file"
-        accept="image/*"
-        hidden
-        onChange={(event) => {
-          const image = event.target.files?.[0];
-          event.target.value = "";
-          if (image) void viewer.addImage(image, { altText: image.name });
-        }}
-      />
-      <span className="demo-group">
-        <button type="button" disabled={!editing?.canUndo} onClick={() => viewer.undoAnnotation()}>
-          Undo
-        </button>
-        <button type="button" disabled={!editing?.canRedo} onClick={() => viewer.redoAnnotation()}>
-          Redo
-        </button>
-        <button
-          type="button"
+        <Signature disabled={!editing} pressed={tool === "signature"} />
+        <input
+          ref={imageInput}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={(event) => {
+            const image = event.target.files?.[0];
+            event.target.value = "";
+            if (image) void viewer.addImage(image, { altText: image.name });
+          }}
+        />
+      </div>
+      {styled && styles ? <Style tool={styled} styles={styles} /> : null}
+      <span className="demo-divider" />
+      <div className="demo-group">
+        <IconButton
+          icon="undo"
+          label="Undo"
+          shortcut={`${modifier}Z`}
+          disabled={!editing?.canUndo}
+          onClick={() => viewer.undoAnnotation()}
+        />
+        <IconButton
+          icon="redo"
+          label="Redo"
+          shortcut={modifier === "⌘" ? "⌘⇧Z" : "Ctrl+Y"}
+          disabled={!editing?.canRedo}
+          onClick={() => viewer.redoAnnotation()}
+        />
+        <IconButton
+          icon="trash"
+          label="Delete the selected annotations"
+          shortcut="Delete"
           disabled={!editing?.hasSelection}
           onClick={() => viewer.deleteSelectedAnnotations()}
-        >
-          Delete
-        </button>
-      </span>
+        />
+      </div>
+      <span className="demo-divider" />
+      <button
+        type="button"
+        className="demo-done"
+        onClick={() => {
+          void viewer.setAnnotationTool("none");
+          onDone(viewer.getViewState());
+        }}
+      >
+        Done
+      </button>
     </div>
+  );
+}
+
+/** The color and size of what a tool creates, or of the annotations selected. */
+function Style({ tool, styles }: { tool: keyof AnnotationStyles; styles: AnnotationStyles }) {
+  const viewer = usePdfViewer();
+  const color = styles[tool].color.toLowerCase();
+  const size = SIZES[tool];
+  const value = tool === "freetext" ? styles.freetext.fontSize : styles[tool].thickness;
+  const custom = !COLORS[tool].some(([hex]) => hex === color);
+  return (
+    <>
+      <span className="demo-divider" />
+      <fieldset className="demo-swatches">
+        <legend className="demo-visually-hidden">Color</legend>
+        {COLORS[tool].map(([hex, name]) => (
+          <button
+            key={hex}
+            type="button"
+            className="demo-swatch"
+            aria-label={name}
+            title={name}
+            aria-pressed={color === hex}
+            style={{ "--swatch": hex } as CSSProperties}
+            onClick={() => viewer.setAnnotationStyle(tool, { color: hex })}
+          />
+        ))}
+        <label
+          className="demo-swatch demo-swatch-custom"
+          title="Another color"
+          data-custom={custom || undefined}
+          style={{ "--swatch": color } as CSSProperties}
+        >
+          <input
+            type="color"
+            aria-label="Another color"
+            value={color}
+            onChange={(event) => viewer.setAnnotationStyle(tool, { color: event.target.value })}
+          />
+        </label>
+      </fieldset>
+      <label className="demo-size" title={size.label}>
+        <span className="demo-visually-hidden">{size.label}</span>
+        <input
+          type="range"
+          min={size.min}
+          max={size.max}
+          value={Math.round(value)}
+          onChange={(event) => {
+            const points = Number(event.target.value);
+            if (tool === "freetext") viewer.setAnnotationStyle(tool, { fontSize: points });
+            else viewer.setAnnotationStyle(tool, { thickness: points });
+          }}
+        />
+        <output>{Math.round(value)}</output>
+      </label>
+    </>
+  );
+}
+
+/** A typed signature, which pdf.js draws in an italic serif and places on the current page. */
+function Signature({ disabled, pressed }: { disabled: boolean; pressed: boolean }) {
+  const viewer = usePdfViewer();
+  const [name, setName] = useState("");
+  return (
+    <Popover
+      id="demo-signature"
+      label="Add a signature"
+      kind="dialog"
+      side="top"
+      align="center"
+      className="demo-signature"
+      button={(props) => (
+        <IconButton
+          icon="signature"
+          label="Add a signature"
+          aria-pressed={pressed}
+          disabled={disabled}
+          {...props}
+        />
+      )}
+    >
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          const text = name.trim();
+          if (!text) return;
+          event.currentTarget.closest<HTMLElement>("[popover]")?.hidePopover();
+          void viewer.addSignature({ text }, { description: text });
+          setName("");
+        }}
+      >
+        <label>
+          Type your name to sign with it
+          <input
+            type="text"
+            value={name}
+            placeholder="Your name"
+            autoComplete="name"
+            onChange={(event) => setName(event.target.value)}
+          />
+        </label>
+        <button type="submit" className="demo-primary" disabled={!name.trim()}>
+          Sign
+        </button>
+      </form>
+    </Popover>
   );
 }

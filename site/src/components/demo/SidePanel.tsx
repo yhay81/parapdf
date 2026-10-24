@@ -7,70 +7,123 @@ import {
   usePdfState,
   usePdfViewer,
 } from "parapdf";
+import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { corpusReadme } from "../../samples.ts";
 import type { Opened } from "./DemoApp.tsx";
+import { Icon, IconButton, type IconName } from "./icons.tsx";
 
 export type Panel = "thumbnails" | "outline" | "layers" | "attachments" | "info";
+
+/** CSS pixels across a thumbnail. */
+const THUMBNAIL_WIDTH = 132;
+
+/** How far each arrow key moves between the tabs. */
+const TAB_STEPS: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1 };
 
 /** The panel beside the pages, with a tab for each list the document has. */
 export function SidePanel({
   panel,
   onPanelChange,
+  onClose,
   opened,
 }: {
   panel: Panel;
   onPanelChange: (panel: Panel) => void;
+  onClose: () => void;
   opened: Opened;
 }) {
   const outline = usePdfOutline();
+  const pageCount = usePdfState((state) => state.pageCount);
   const hasLayers = usePdfState((state) => (state.layers?.length ?? 0) > 0);
-  const hasAttachments = usePdfState((state) => (state.attachments?.length ?? 0) > 0);
-  const tabs: [Panel, string, boolean][] = [
-    ["thumbnails", "Pages", true],
-    ["outline", "Outline", (outline?.length ?? 0) > 0],
-    ["layers", "Layers", hasLayers],
-    ["attachments", "Files", hasAttachments],
-    ["info", "Info", true],
+  const attachments = usePdfState((state) => state.attachments?.length ?? 0);
+  const tabs: [Panel, string, IconName, boolean][] = [
+    ["thumbnails", "Pages", "pages", true],
+    ["outline", "Outline", "outline", (outline?.length ?? 0) > 0],
+    ["layers", "Layers", "layers", hasLayers],
+    ["attachments", "Attachments", "attachment", attachments > 0],
+    ["info", "Document properties", "info", true],
   ];
-  const shown = tabs.find(([value, , available]) => value === panel && available)
-    ? panel
-    : "thumbnails";
+  const available = tabs.filter(([, , , shown]) => shown);
+  const shown = available.find(([value]) => value === panel) ?? (available[0] as (typeof tabs)[0]);
+  const [value, title] = shown;
+  const count = value === "thumbnails" ? pageCount : value === "attachments" ? attachments : 0;
+
+  // The arrow keys move between the tabs, which take one stop of the Tab key together.
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const step = TAB_STEPS[event.key];
+    if (step === undefined) return;
+    event.preventDefault();
+    const index = available.indexOf(shown);
+    const next = available[(index + step + available.length) % available.length];
+    if (!next) return;
+    onPanelChange(next[0]);
+    event.currentTarget.querySelector<HTMLElement>(`#demo-tab-${next[0]}`)?.focus();
+  };
+
   return (
     <aside id="demo-side" className="demo-side" aria-label="Sidebar">
-      <div className="demo-tabs" role="tablist" aria-label="Sidebar panels">
-        {tabs
-          .filter(([, , available]) => available)
-          .map(([value, label]) => (
+      <div className="demo-side-head">
+        <div className="demo-tabs" role="tablist" aria-label="Sidebar panels" onKeyDown={onKeyDown}>
+          {available.map(([tab, label, icon]) => (
             <button
-              key={value}
+              key={tab}
+              id={`demo-tab-${tab}`}
               type="button"
               role="tab"
-              aria-selected={shown === value}
-              onClick={() => onPanelChange(value)}
+              className="demo-button"
+              aria-label={label}
+              title={label}
+              aria-selected={tab === value}
+              aria-controls="demo-panel"
+              tabIndex={tab === value ? 0 : -1}
+              onClick={() => onPanelChange(tab)}
             >
-              {label}
+              <Icon name={icon} />
             </button>
           ))}
+        </div>
+        <IconButton
+          className="demo-side-close"
+          icon="close"
+          label="Close the sidebar"
+          onClick={onClose}
+        />
       </div>
-      <div className="demo-panel" role="tabpanel">
-        {shown === "thumbnails" ? <Thumbnails /> : null}
-        {shown === "outline" && outline ? <OutlineList items={outline} /> : null}
-        {shown === "layers" ? <Layers /> : null}
-        {shown === "attachments" ? <Attachments /> : null}
-        {shown === "info" ? <Info opened={opened} /> : null}
+      <div
+        id="demo-panel"
+        className="demo-panel"
+        role="tabpanel"
+        aria-labelledby={`demo-tab-${value}`}
+      >
+        <h2 className="demo-panel-title">
+          {title}
+          {count > 0 ? <span>{count.toLocaleString("en")}</span> : null}
+        </h2>
+        {value === "thumbnails" ? <Thumbnails /> : null}
+        {value === "outline" && outline ? <OutlineList items={outline} depth={0} /> : null}
+        {value === "layers" ? <Layers /> : null}
+        {value === "attachments" ? <Attachments /> : null}
+        {value === "info" ? <Info opened={opened} /> : null}
       </div>
     </aside>
   );
 }
 
-/** Every page as a thumbnail; each one is drawn only near the panel's visible part. */
+/**
+ * Every page as a thumbnail; each one is drawn only near the panel's
+ * visible part, and the current page's scrolls into view, as in pdf.js.
+ */
 function Thumbnails() {
   const viewer = usePdfViewer();
   const pageCount = usePdfState((state) => state.pageCount);
   const currentPage = usePdfState((state) => state.currentPage);
   const labels = usePdfState((state) => state.pageLabels);
+  const list = useRef<HTMLOListElement>(null);
+  useEffect(() => {
+    list.current?.children[currentPage]?.scrollIntoView({ block: "nearest" });
+  }, [currentPage]);
   return (
-    <ol className="demo-thumbnails">
+    <ol ref={list} className="demo-thumbnails">
       {Array.from({ length: pageCount }, (_, pageIndex) => {
         const label = labels?.[pageIndex] ?? String(pageIndex + 1);
         return (
@@ -82,7 +135,7 @@ function Thumbnails() {
               aria-current={pageIndex === currentPage ? "page" : undefined}
               onClick={() => viewer.goToPage(pageIndex)}
             >
-              <PdfThumbnail pageIndex={pageIndex} width={128} />
+              <PdfThumbnail pageIndex={pageIndex} width={THUMBNAIL_WIDTH} />
               <span aria-hidden="true">{label}</span>
             </button>
           </li>
@@ -92,34 +145,58 @@ function Thumbnails() {
   );
 }
 
-function OutlineList({ items }: { items: readonly OutlineNode[] }) {
-  const navigation = usePdfNavigation();
+/** The outline as a tree whose entries with children open and close; all start closed. */
+function OutlineList({ items, depth }: { items: readonly OutlineNode[]; depth: number }) {
   return (
-    <ul className="demo-outline">
+    <ul className={depth === 0 ? "demo-outline" : undefined}>
       {items.map((item, index) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: the outline is fixed for a document.
-        <li key={index}>
-          {item.url ? (
-            <a href={item.url} target="_blank" rel="noopener noreferrer">
-              {item.title}
-            </a>
-          ) : (
-            <button
-              type="button"
-              disabled={item.dest === null}
-              onClick={() => void navigation.goToDestination(item.dest)}
-              style={{
-                fontWeight: item.bold ? 600 : undefined,
-                fontStyle: item.italic ? "italic" : undefined,
-              }}
-            >
-              {item.title}
-            </button>
-          )}
-          {item.items.length > 0 ? <OutlineList items={item.items} /> : null}
-        </li>
+        <OutlineEntry key={index} item={item} depth={depth} />
       ))}
     </ul>
+  );
+}
+
+function OutlineEntry({ item, depth }: { item: OutlineNode; depth: number }) {
+  const navigation = usePdfNavigation();
+  const [open, setOpen] = useState(false);
+  const style = {
+    paddingLeft: `${depth * 0.875}rem`,
+    fontWeight: item.bold ? 600 : undefined,
+    fontStyle: item.italic ? "italic" : undefined,
+  };
+  return (
+    <li>
+      <div className="demo-outline-row" style={style}>
+        {item.items.length > 0 ? (
+          <button
+            type="button"
+            className="demo-outline-toggle"
+            aria-label={open ? `Collapse ${item.title}` : `Expand ${item.title}`}
+            aria-expanded={open}
+            onClick={() => setOpen(!open)}
+          >
+            <Icon name="chevronRight" size={16} />
+          </button>
+        ) : (
+          <span className="demo-outline-toggle" />
+        )}
+        {item.url ? (
+          <a href={item.url} target="_blank" rel="noopener noreferrer">
+            {item.title}
+          </a>
+        ) : (
+          <button
+            type="button"
+            disabled={item.dest === null}
+            onClick={() => void navigation.goToDestination(item.dest)}
+          >
+            {item.title}
+          </button>
+        )}
+      </div>
+      {open ? <OutlineList items={item.items} depth={depth + 1} /> : null}
+    </li>
   );
 }
 
@@ -159,7 +236,7 @@ function Attachments() {
   const viewer = usePdfViewer();
   const attachments = usePdfState((state) => state.attachments);
   return (
-    <ul className="demo-outline">
+    <ul className="demo-files">
       {attachments?.map((attachment) => (
         <li key={attachment.id}>
           <button
@@ -167,7 +244,9 @@ function Attachments() {
             title={attachment.description ?? undefined}
             onClick={() => void viewer.openAttachment(attachment)}
           >
-            {attachment.filename}
+            <Icon name="attachment" size={18} />
+            <span>{attachment.filename}</span>
+            <Icon name="download" size={16} />
           </button>
         </li>
       ))}
