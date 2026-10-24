@@ -2,11 +2,11 @@
 
 > **History, not rules.** This is the development context of ParaPDF 0.x up
 > to commit e10dcc4 (2026-10-24), kept for the facts it records: what was
-> measured, how, and why the code does what it does. On the `rebuild`
-> branch, `AGENTS.md`, `docs/rebuild/target.md`, and `docs/decisions/`
-> decide; where this file disagrees with them, it is out of date. Read it
-> for the reasons behind code you port, and cite its measurements, but do
-> not follow its principles, layout, or processes.
+> measured, how, and why the code does what it does. `AGENTS.md`,
+> `docs/rebuild/target.md`, and `docs/decisions/` decide; where this file
+> disagrees with them, it is out of date. Read it for the reasons behind
+> code you port, and cite its measurements, but do not follow its
+> principles, layout, or processes.
 
 This file is the canonical development context for coding agents.
 `CLAUDE.md` only imports this file; update this file instead.

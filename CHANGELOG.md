@@ -6,6 +6,28 @@ change the API.
 
 ## Unreleased
 
+ParaPDF is being rebuilt on `main` toward `docs/rebuild/target.md`, one
+milestone at a time (`docs/rebuild/milestones.md`). APIs change without
+deprecations (`docs/decisions/0002-no-compatibility.md`); each merged
+milestone gets an entry here, and the release lists every break from 0.x.
+
+### Rebuild M1: the measured work (2026-10-24)
+
+- pdf.js is the only engine (decision 0001): `document` in the viewer's
+  state holds pdf.js's `PDFDocumentProxy` as `proxy`, typed, instead of
+  `native`.
+- Pages that leave the mounted window keep their canvases, up to six
+  viewports' worth of device pixels by default (`maxKeptPixels`; `0` keeps
+  none), and a page the reader comes back to, by `back()`, by scrolling
+  back, or by flipping back, shows its drawing at once instead of being
+  drawn again (decision 0004). Within `maxCanvasPixels`, kept canvases
+  count as canvases and go first. Pages whose form fields are shown as HTML
+  keep nothing, and neither does a viewer without its viewport. `stats.kept`
+  counts the layers drawn back, and the runtime's `keptPixels` the pixels
+  kept.
+
+### Since 0.4.0
+
 - In `"page"` mode, a one-finger swipe turns the page on touch screens:
   to the left or up for the next page, to the right or down back. A zoomed
   page scrolls first and turns from its edge; short or slanted swipes,

@@ -12,8 +12,6 @@ no spare canvas, and kept drawings could move without copies.
 
 ## Evidence
 
-The result files are on branch `claude/frame-bench`.
-
 - pdf.js draws into an OffscreenCanvas as it is, and pdf.js master's
   renderer worker copies its frames into one; neither needs a patch.
 - Engine benchmark, `-frame` variants (`bench/results/frames-*.md`; 14
@@ -36,9 +34,13 @@ The result files are on branch `claude/frame-bench`.
   pinches in, by 6 to 29 ms (`examples/prototype/results/commit-frames-chromium.md`),
   and by 9 to 27 ms with OffscreenCanvases kept for later frames
   (`commit-frames-pool-chromium.md`). WebKit matched drawing in place.
-- Coming back to pages (`return-bench.ts`, `return-frames-*.md`), frames
-  alone matched drawing in place; in Firefox they blocked the main thread
-  over a scroll back 28 to 105 ms against 28 to 74.
+- Coming back to pages (`return-bench.ts`, `return-frames-*.md`, three runs,
+  medians), frames alone got sharp as soon as drawing in place, within
+  6 ms, except flipping back over bill-hr815.pdf in Firefox (15 against
+  6 ms), but they blocked Firefox's main thread longer: 40 and 35 against
+  23 and 24 ms over a jump back (bill-hr815.pdf, the vector pages), and 135
+  against 70 over a scroll back on the vector pages (37 against 48 on
+  bill-hr815.pdf).
 
 ## Why rejected
 

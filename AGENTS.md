@@ -1,12 +1,12 @@
 # AGENTS.md
 
-The development context for coding agents on the `rebuild` branch.
+The development context for coding agents.
 `CLAUDE.md` only imports this file; update this file instead.
 
 ParaPDF is a React PDF viewer built on pdf.js for maximum performance.
 "Para" carries two meanings: flipping quickly through pages (Japanese
-"parapara") and parallel, off-main-thread rendering. This branch rebuilds
-it toward the design in `docs/rebuild/target.md`.
+"parapara") and parallel, off-main-thread rendering. It is being rebuilt,
+on `main`, toward the design in `docs/rebuild/target.md`.
 
 ## Read first
 
@@ -26,9 +26,10 @@ the code that follows it.
 
 ## Status
 
-The rebuild runs milestone by milestone (`docs/rebuild/milestones.md`); M0
-is done, M1 is next. `main` holds 0.x, published on npm as `parapdf`
-0.1.0 to 0.4.0. The package's README, the documentation site, the root
+The rebuild runs milestone by milestone on `main`
+(`docs/rebuild/milestones.md`); M0 and M1 are done, M2 is next. 0.x was
+published on npm as `parapdf` 0.1.0 to 0.4.0, from the tags `v0.1.0` to
+`v0.4.0`. The package's README, the documentation site, the root
 `README.md`, `CONTRIBUTING.md`, and `SECURITY.md` describe 0.x until M7
 rewrites them (decision 0002).
 
@@ -64,9 +65,10 @@ rewrites them (decision 0002).
 ## How to work
 
 - One milestone at a time (decision 0003): a session of its own, on a
-  branch `rebuild-m<N>-<topic>` from `rebuild`, in a worktree of its own,
-  merged back when the milestone's "Done when" holds. Sessions that change
-  the runtime's core never run in parallel.
+  branch `rebuild-m<N>-<topic>` from `main`, in a worktree of its own,
+  merged into `main` through a pull request once the milestone's "Done
+  when" holds and CI passes. Sessions that change the runtime's core never
+  run in parallel.
 - A task names its milestone and follows this template:
 
   ```
@@ -87,11 +89,11 @@ rewrites them (decision 0002).
 - When the destination has to change, change `target.md` first, as part of
   the milestone that needs it, and record a decision if the choice matters
   for performance or direction.
-- Keep this file true of the branch: its layout, commands, and rules.
+- Keep this file true of the repository: its layout, commands, and rules.
 
 ## Repository layout
 
-As of M0; `target.md` describes where the runtime's code goes.
+As of M1; `target.md` describes where the runtime's code goes.
 
 - `packages/parapdf/` — the runtime, published as `parapdf`: pdf.js, how
   the runtime uses it, and the loader that starts it (`src/engine/`);
@@ -145,10 +147,19 @@ As of M0; `target.md` describes where the runtime's code goes.
   `docs/history/AGENTS-v0.md`, "Commands".
 - Runtime benchmarks in `examples/prototype/scripts/`: `scroll-bench.ts`
   (also `pnpm --filter @parapdf/prototype bench`), `commit-bench.ts` (zoom
-  commits), `zoom-bench.ts`, `main-thread-bench.ts`, and `hwa-bench.ts`,
-  each documented in its header comment.
+  commits), `zoom-bench.ts`, `return-bench.ts` (pages the reader comes back
+  to after they unmounted), `main-thread-bench.ts`, and `hwa-bench.ts`,
+  each documented in its header comment. `commit-bench.ts`, `zoom-bench.ts`,
+  and `return-bench.ts` measure the build in `DIST` against the one in
+  `BEFORE` (built from the commit before the change, in a directory of its
+  own) in the same run, job by job.
 - `pnpm bench:build` and `pnpm bench` run the engine benchmark (`BROWSER`,
-  `ENGINES`, `FILES`, `RUNS`, `PAGES`, `SCALE`).
+  `ENGINES`, `FILES`, `RUNS`, `PAGES`, `SCALE`; `OUTPUT`, a prefix that
+  keeps an experiment's result files apart from the committed ones; `DIST`).
+  `ENGINES` also takes the pdf.js engines' `-frame` and `-record` variants
+  (decisions 0005 and 0006); `bench/scripts/fidelity.ts` compares what the
+  `-frame` variants draw, and `bench/scripts/frame-ops.ts` times the canvas
+  and bitmap operations behind them.
 - `pnpm --filter @parapdf/site dev`, `build`, and `preview` for the site.
 
 ## Benchmark methodology
@@ -193,7 +204,8 @@ As of M0; `target.md` describes where the runtime's code goes.
 
 ## Releasing
 
-Nothing is released from `rebuild` before M7, which writes the release
-process for the rebuilt package here. A pdfjs-dist security fix is released
-from `main` as 0.x releases (`docs/history/AGENTS-v0.md`, "Releasing"),
-promptly, as `SECURITY.md` promises, and then merged into `rebuild`.
+Nothing is released before M7, which writes the release process for the
+rebuilt package here. A pdfjs-dist security fix is released promptly for
+0.x, as `SECURITY.md` promises, from a branch cut from the tag `v0.4.0`
+(`docs/history/AGENTS-v0.md`, "Releasing"), and `main` moves to the same
+pdfjs-dist.

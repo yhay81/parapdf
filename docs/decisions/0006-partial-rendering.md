@@ -14,8 +14,6 @@ operation.
 
 ## Evidence
 
-The result files are on branch `claude/frame-bench`.
-
 - On synthetic-vector-200k.pdf at 16 device pixels per point, a region of
   1.8% of the page kept 147 of the page's 4,003 operations. Drawing it took
   6 to 15 ms instead of 12 to 21 in WebKit, but 3 to 15 instead of 12 to 19

@@ -25,7 +25,7 @@ them. `CHANGELOG.md` gets one entry per merged milestone.
 - The functional checks (`check:*`) are the behavioral contract. A
   milestone that changes an API on purpose changes the checks in the same
   change; a check that fails for any other reason is a bug.
-- Nothing is released from `rebuild` before M7.
+- Nothing is released before M7.
 
 ## Reopen if
 

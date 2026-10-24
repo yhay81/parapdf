@@ -1,9 +1,9 @@
 # Milestones of the rebuild
 
 In order; one at a time (decision 0003). Each milestone runs in a session of
-its own, on a branch `rebuild-m<N>-<topic>` from `rebuild` in a worktree of
-its own, and merges back into `rebuild` when every item of "Done when"
-holds. The session that merges it updates its status here, adds a
+its own, on a branch `rebuild-m<N>-<topic>` from `main` in a worktree of
+its own, and merges into `main` through a pull request when every item of
+"Done when" holds and CI passes. The session that merges it updates its status here, adds a
 `CHANGELOG.md` entry for it, and records any new decision.
 
 Every milestone's "Done when" includes, besides its own items:
@@ -16,30 +16,35 @@ Every milestone's "Done when" includes, besides its own items:
 - A review of the diff against `target.md` and `docs/decisions/`, by a
   reviewer given those and the diff, found nothing the milestone leaves
   open.
-- `AGENTS.md` is true of the branch again: layout, commands, and rules.
+- `AGENTS.md` is true again: layout, commands, and rules.
 
 ## M0: foundation
 
 - Goal: one written destination that every session reads first.
-- Done when: `rebuild` holds this file, `docs/rebuild/target.md`,
+- Done when: the repository holds this file, `docs/rebuild/target.md`,
   `docs/decisions/`, the new `AGENTS.md`, and the 0.x `AGENTS.md` as
   `docs/history/AGENTS-v0.md`.
-- Status: done (2026-10-24).
+- Status: done (2026-10-24), on the branch `rebuild`, and merged into
+  `main` with M1.
 
 ## M1: bring in the measured work
 
 - Goal: start the rebuild from the measured state of 0.x.
-- Scope: merge branch `claude/frame-bench` once it is committed: kept
+- Scope: the work measured on the branch `claude/frame-bench`: kept
   canvases (decision 0004), the benchmarks and options that measured them
   (`return-bench.ts`; the engine benchmark's `OUTPUT`, `DIST`, `-frame`,
   and `-record`; `fidelity.ts`, `frame-ops.ts`; the `BEFORE` builds of
   `commit-bench.ts`, `zoom-bench.ts`, and `return-bench.ts`), their results,
-  and decision 0008's outcome. Record the commit the later milestones'
-  benchmarks compare against first.
+  and decision 0008's outcome.
 - Out of scope: any change of structure.
-- Done when: the items above are on `rebuild`, and `AGENTS.md` lists the new
+- Done when: the items above are on `main`, and `AGENTS.md` lists the new
   commands.
-- Status: waiting for `claude/frame-bench`.
+- Status: done (2026-10-24), with M0. Kept canvases are in; decision 0008
+  rejected the copied base in the form measured, and its code is in the tag
+  `experiment/demote-whole-page-detail`. `document.proxy` replaced
+  `document.native` ahead of M2 (decision 0001), and the rebuild moved to
+  `main` (decision 0003). M2's benchmarks compare against `main` as M1
+  leaves it.
 
 ## M2: pdf.js directly, and document sessions
 
@@ -90,8 +95,7 @@ Every milestone's "Done when" includes, besides its own items:
 - Scope: `render/` as `target.md` describes it; the 0.x heuristics move
   into the planner unchanged and get unit tests of their invariants; the
   renderer owns each page's canvases and layer containers inside its host,
-  and kept canvases move between hosts without copies; decision 0008 as
-  decided.
+  and kept canvases move between hosts without copies.
 - Out of scope: new rendering strategies, which need decisions of their
   own.
 - Done when: the planner's invariants are tested in Node; `check:pinch`,
@@ -119,8 +123,7 @@ Every milestone's "Done when" includes, besides its own items:
 - Scope: rewrite the package's README, the documentation site, the root
   `README.md`, `CONTRIBUTING.md`, and `SECURITY.md` for it; the full
   functional checks and benchmarks in Chromium, WebKit, and Firefox, with
-  their results; the release process in `AGENTS.md`; merge `rebuild` into
-  `main`; release.
+  their results; the release process in `AGENTS.md`; release.
 - Done when: the release is published and its CHANGELOG entry lists every
   break from 0.x.
 - Status: not started.

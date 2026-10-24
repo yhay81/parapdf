@@ -44,9 +44,10 @@ pdf.js costs before ParaPDF moves to it.
 
 ## Consequences
 
-- M2 removes `PdfEngine`, `PdfEngineDocument`, and the engine-neutral types
-  and names (`native: unknown`, `DestinationRef = unknown`,
-  `pdfjsDocumentOf`, `engineName`).
+- M1 replaced `native: unknown` with `proxy: PDFDocumentProxy` and removed
+  `pdfjsDocumentOf`. M2 removes `PdfEngine`, `PdfEngineDocument`, and the
+  other engine-neutral types and names (`DestinationRef = unknown`,
+  `engineName`).
 - pdf.js-specific optimizations are in scope, each decided by measurement
   (0004 to 0008).
 
