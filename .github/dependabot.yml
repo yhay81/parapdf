@@ -5,8 +5,8 @@ updates:
   # The engines under test, pdfjs-dist and @embedpdf/pdfium, are pinned
   # exactly and stay out of the groups, so each update is a pull request of
   # its own. Moving to another pdfjs-dist also takes `pnpm install`, whose
-  # `prepare` regenerates the committed src/engine/pdfjs-files.ts,
-  # pdfjs-legacy-files.ts, and src/react/editor-icons.ts; the version in
+  # `prepare` regenerates the committed src/pdfjs/files.ts,
+  # legacy-files.ts, and src/react/editor-icons.ts; the version in
   # NOTICE.md, packages/parapdf/README.md, and the files ported from pdf.js;
   # every functional check in Chromium, WebKit, and Firefox; and a CHANGELOG
   # entry. See AGENTS.md.

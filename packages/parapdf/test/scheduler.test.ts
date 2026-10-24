@@ -1,44 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  type PdfEngineDocument,
-  RenderCancelledError,
-  type RenderRequest,
-  type RenderTask,
-} from "../src/engine/types.ts";
 import { computeLayout } from "../src/runtime/layout.ts";
 import { RenderScheduler, type ScheduleInput } from "../src/runtime/scheduler.ts";
+import { fakeCanvas as canvas, LETTER, openSession, settle } from "./fake-pdfjs.ts";
 
-const settle = () => new Promise((resolve) => setImmediate(resolve));
-
-function canvas(): HTMLCanvasElement {
-  return { width: 0, height: 0, style: {} } as HTMLCanvasElement;
-}
-
-/** Keep each render pending until the test chooses whether it succeeds or fails. */
-function controlledDocument() {
-  const renders: {
-    request: RenderRequest;
-    resolve: () => void;
-    reject: (error: Error) => void;
-    task: RenderTask;
-  }[] = [];
-  const doc = {
-    render(request: RenderRequest) {
-      let resolve!: () => void;
-      let reject!: (error: Error) => void;
-      const promise = new Promise<void>((done, fail) => {
-        resolve = done;
-        reject = fail;
-      });
-      const task = { promise, cancel: () => reject(new RenderCancelledError()) };
-      renders.push({ request, resolve, reject, task });
-      return task;
-    },
-    releasePage() {},
-    drawKept() {},
-  } as unknown as PdfEngineDocument;
-  return { doc, renders };
+/** A session of two pages, whose drawings stay pending until the test settles them. */
+async function controlledDocument() {
+  const { session, drawings } = await openSession({ pages: [LETTER, LETTER] });
+  return { doc: session, renders: drawings };
 }
 
 function input(scale = 1, settled = false): ScheduleInput {
@@ -63,12 +32,13 @@ function input(scale = 1, settled = false): ScheduleInput {
 describe("RenderScheduler failures", () => {
   it("tries a base after detail fails, then leaves both failed layers alone", async (t) => {
     t.mock.method(console, "error", () => {});
-    const { doc, renders } = controlledDocument();
+    const { doc, renders } = await controlledDocument();
     const scheduler = new RenderScheduler(doc);
     t.after(() => scheduler.dispose());
     scheduler.attach(0, canvas(), canvas(), null, null);
     const view = input(1, true);
     scheduler.update(view);
+    await settle();
     assert.equal(renders.length, 1);
     assert.equal(renders[0]?.request.scale, 1);
     renders[0]?.reject(new Error("unsupported drawing"));
@@ -87,7 +57,7 @@ describe("RenderScheduler failures", () => {
   for (const initialBase of [false, true]) {
     it(`replaces stale detail with a base after a content change${initialBase ? " with an existing base" : ""}`, async (t) => {
       t.mock.method(console, "error", () => {});
-      const { doc, renders } = controlledDocument();
+      const { doc, renders } = await controlledDocument();
       const scheduler = new RenderScheduler(doc);
       t.after(() => scheduler.dispose());
       const base = canvas();
@@ -96,17 +66,20 @@ describe("RenderScheduler failures", () => {
       scheduler.attach(0, base, detail, null, null, null, spare);
       if (initialBase) {
         scheduler.update(input());
+        await settle();
         renders[0]?.resolve();
         await settle();
       }
       const view = input(1, true);
       scheduler.update(view);
+      await settle();
       renders.at(-1)?.resolve();
       await settle();
       assert.equal(detail.style.visibility, "");
       const before = renders.length;
 
       scheduler.invalidateContent();
+      await settle();
       assert.equal(renders.length, before + 1);
       assert.equal(renders.at(-1)?.request.canvas, spare);
       renders.at(-1)?.reject(new Error("failed replacement detail"));
@@ -132,16 +105,18 @@ describe("RenderScheduler failures", () => {
 
   it("keeps stale detail if its replacement and base fallback both fail", async (t) => {
     t.mock.method(console, "error", () => {});
-    const { doc, renders } = controlledDocument();
+    const { doc, renders } = await controlledDocument();
     const scheduler = new RenderScheduler(doc);
     t.after(() => scheduler.dispose());
     const detail = canvas();
     scheduler.attach(0, canvas(), detail, null, null, null, canvas());
     const view = input(1, true);
     scheduler.update(view);
+    await settle();
     renders[0]?.resolve();
     await settle();
     scheduler.invalidateContent();
+    await settle();
     renders[1]?.reject(new Error("failed replacement detail"));
     await settle();
     assert.equal(renders.length, 3);
@@ -157,7 +132,7 @@ describe("RenderScheduler failures", () => {
 
   it("lets other pages draw when a page fails", async (t) => {
     t.mock.method(console, "error", () => {});
-    const { doc, renders } = controlledDocument();
+    const { doc, renders } = await controlledDocument();
     const scheduler = new RenderScheduler(doc, { maxConcurrent: 1 });
     t.after(() => scheduler.dispose());
     scheduler.attach(0, canvas(), canvas(), null, null);
@@ -173,10 +148,11 @@ describe("RenderScheduler failures", () => {
     );
     view.last = 1;
     scheduler.update(view);
+    await settle();
     renders[0]?.reject(new Error("broken page"));
     await settle();
     assert.equal(renders.length, 2);
-    assert.equal(renders[1]?.request.pageIndex, 1);
+    assert.equal(renders[1]?.pageIndex, 1);
     renders[1]?.resolve();
     await settle();
     assert.equal(scheduler.hasPixels(1), true);
@@ -185,19 +161,22 @@ describe("RenderScheduler failures", () => {
 
   it("retries after zooming or changing the page's drawing", async (t) => {
     t.mock.method(console, "error", () => {});
-    const { doc, renders } = controlledDocument();
+    const { doc, renders } = await controlledDocument();
     const scheduler = new RenderScheduler(doc);
     t.after(() => scheduler.dispose());
     scheduler.attach(0, canvas(), canvas(), null, null);
     scheduler.update(input());
+    await settle();
     renders[0]?.reject(new Error("failed at the first zoom"));
     await settle();
     scheduler.update(input(2));
+    await settle();
     assert.equal(renders.length, 2);
     assert.equal(renders[1]?.request.scale, 1);
     renders[1]?.reject(new Error("failed at the second zoom"));
     await settle();
     scheduler.invalidateContent();
+    await settle();
     assert.equal(renders.length, 3);
     assert.equal(renders[2]?.request.scale, 1);
     renders[2]?.resolve();
@@ -208,15 +187,17 @@ describe("RenderScheduler failures", () => {
 
   it("retries a failed page when it mounts again", async (t) => {
     t.mock.method(console, "error", () => {});
-    const { doc, renders } = controlledDocument();
+    const { doc, renders } = await controlledDocument();
     const scheduler = new RenderScheduler(doc);
     t.after(() => scheduler.dispose());
     scheduler.attach(0, canvas(), canvas(), null, null);
     scheduler.update(input());
+    await settle();
     renders[0]?.reject(new Error("failed before leaving the mounted window"));
     await settle();
     scheduler.detach(0);
     scheduler.attach(0, canvas(), canvas(), null, null);
+    await settle();
     assert.equal(renders.length, 2);
     renders[1]?.resolve();
     await settle();
@@ -225,12 +206,13 @@ describe("RenderScheduler failures", () => {
 
   it("blocks a failed region until scrolling asks for a different region", async (t) => {
     t.mock.method(console, "error", () => {});
-    const { doc, renders } = controlledDocument();
+    const { doc, renders } = await controlledDocument();
     const scheduler = new RenderScheduler(doc, { maxDetailPixels: 1_000_000 });
     t.after(() => scheduler.dispose());
     scheduler.attach(0, canvas(), canvas(), null, null);
     const view = input(4, true);
     scheduler.update(view);
+    await settle();
     renders[0]?.resolve();
     await settle();
     assert.equal(renders.length, 2);
@@ -238,8 +220,10 @@ describe("RenderScheduler failures", () => {
     renders[1]?.reject(new Error("failed region"));
     await settle();
     scheduler.update(view);
+    await settle();
     assert.equal(renders.length, 2);
     scheduler.update({ ...view, viewport: { ...view.viewport, top: 300 } });
+    await settle();
     assert.equal(renders.length, 3);
     assert.notDeepEqual(renders[2]?.request.region, renders[1]?.request.region);
     renders[2]?.resolve();
@@ -248,11 +232,12 @@ describe("RenderScheduler failures", () => {
   });
 
   it("does not count cancellation as a failed drawing", async (t) => {
-    const { doc, renders } = controlledDocument();
+    const { doc, renders } = await controlledDocument();
     const scheduler = new RenderScheduler(doc);
     t.after(() => scheduler.dispose());
     scheduler.attach(0, canvas(), canvas(), null, null);
     scheduler.update(input());
+    await settle();
     renders[0]?.task.cancel();
     await settle();
     assert.equal(renders.length, 2);
@@ -261,5 +246,26 @@ describe("RenderScheduler failures", () => {
     assert.equal(scheduler.hasPixels(0), true);
     assert.equal(scheduler.stats.failed, 0);
     assert.equal(scheduler.stats.cancelled, 1);
+  });
+});
+
+describe("RenderScheduler lifecycle", () => {
+  it("disposes itself when its signal aborts: drawings stop, and pages are given back", async () => {
+    const { session, drawings, cleaned } = await openSession({ pages: [LETTER, LETTER] });
+    const controller = new AbortController();
+    const scheduler = new RenderScheduler(session, { signal: controller.signal });
+    const base = canvas();
+    scheduler.attach(0, base, canvas(), null, null);
+    scheduler.update(input());
+    await settle();
+    assert.equal(drawings.length, 1);
+    controller.abort();
+    await settle();
+    assert.equal(drawings[0]?.cancellations, 1, "the drawing in progress is cancelled");
+    assert.equal(base.width, 0, "the page's canvases are given back");
+    assert.deepEqual(cleaned, [0], "and pdf.js's parsing results of it");
+    scheduler.update(input());
+    await settle();
+    assert.equal(drawings.length, 1, "nothing is drawn after");
   });
 });

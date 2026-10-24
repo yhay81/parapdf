@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { PageText } from "../src/engine/types.ts";
+import type { PageText } from "../src/pdfjs/text.ts";
 import {
   buildPageIndex,
   findMatches,

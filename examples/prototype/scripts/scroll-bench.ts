@@ -4,14 +4,17 @@
  * page at devicePixelRatio 2, waits for the first page, scrolls at a constant
  * speed along the direction pages follow each other, and records blank area,
  * main-thread lag, dropped frames, React commits, the store's window and
- * current-page changes, and render counts.
+ * current-page changes, and render counts. Within each file and speed, the
+ * variants follow each other run by run, so that they meet the same machine.
  *
  * Usage: pnpm --filter @parapdf/prototype build && pnpm --filter @parapdf/prototype bench
  * Environment: BROWSER (chromium, webkit, or firefox), VARIANTS, TEXT and LINKS (1, 0, or 1,0),
  * SCROLL (scroll modes: vertical, horizontal, wrapped, or a list; vertical), SCALE (fit-width,
  * fit-page, CSS px per point, or a list; fit-width), FILES, SPEEDS (CSS px per second, 900,3600),
  * RUNS (2), DURATION (ms, 4000), LATENCY (ms added to every request, Chromium only), BANDWIDTH
- * (Mbit/s, Chromium only), and OUTPUT (the browser name).
+ * (Mbit/s, Chromium only), DIST (another build of the demo to measure), BEFORE (a build of the
+ * demo from before a change, whose twin of every variant is measured in turn with it, job by
+ * job), BEFORE_LABEL (its name in the report), and OUTPUT (the browser name).
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { arch, cpus, loadavg, platform, release } from "node:os";
@@ -40,7 +43,12 @@ interface Variant {
   links: boolean;
   scroll: string;
   scale: string;
+  /** Measured on the build in BEFORE. */
+  before: boolean;
 }
+
+const beforeDist = process.env.BEFORE;
+const beforeLabel = process.env.BEFORE_LABEL ?? "another build";
 
 const engineVariants = [
   { name: "pdfjs", engine: "pdfjs", hwa: false },
@@ -64,7 +72,7 @@ for (const mode of scrollModes) {
   }
 }
 const scales = (process.env.SCALE ?? "fit-width").split(",");
-const variants: Variant[] = engineVariants.flatMap((variant) =>
+const measured: Variant[] = engineVariants.flatMap((variant) =>
   textModes.flatMap((text) =>
     linkModes.flatMap((links) =>
       scrollModes.flatMap((scroll) =>
@@ -83,11 +91,19 @@ const variants: Variant[] = engineVariants.flatMap((variant) =>
           ]
             .filter(Boolean)
             .join(", "),
+          before: false,
         })),
       ),
     ),
   ),
 );
+// With BEFORE, each variant's twin on that build follows it.
+const variants: Variant[] = beforeDist
+  ? measured.flatMap((variant) => [
+      variant,
+      { ...variant, name: `${variant.name}, before`, before: true },
+    ])
+  : measured;
 const files = (process.env.FILES ?? "synthetic-text-1000.pdf,bill-hr815.pdf").split(",");
 const speeds = (process.env.SPEEDS ?? "900,3600").split(",").map(Number);
 const runs = Number(process.env.RUNS ?? "2");
@@ -152,9 +168,20 @@ const server = await preview({
   root: exampleDir,
   configFile: join(exampleDir, "vite.config.ts"),
   logLevel: "warn",
+  ...(process.env.DIST ? { build: { outDir: process.env.DIST } } : {}),
   preview: { port: 4183, host: "127.0.0.1", strictPort: false, open: false },
 });
+const before = beforeDist
+  ? await preview({
+      root: exampleDir,
+      configFile: join(exampleDir, "vite.config.ts"),
+      logLevel: "warn",
+      build: { outDir: beforeDist },
+      preview: { port: 4184, host: "127.0.0.1", strictPort: false, open: false },
+    })
+  : null;
 const baseUrl = server.resolvedUrls?.local[0] ?? "http://127.0.0.1:4183/";
+const beforeUrl = before?.resolvedUrls?.local[0] ?? "http://127.0.0.1:4184/";
 const waitForDone = (page: Page) =>
   page.waitForFunction(() => (window as { __done?: boolean }).__done === true, undefined, {
     timeout: 120_000,
@@ -183,9 +210,11 @@ const results: JobResult[] = [];
 try {
   for (const file of files) {
     for (const speed of speeds) {
-      for (const variant of variants) {
-        for (let run = 0; run < runs; run++) {
+      // The variants of one run follow each other, so they meet the same machine.
+      for (let run = 0; run < runs; run++) {
+        for (const variant of variants) {
           const job = { variant: variant.name, file, speed, run };
+          const url = variant.before ? beforeUrl : baseUrl;
           // Waits its turn with other Playwright browsers, and stops without
           // writing results if the machine lost AC power mid-run.
           const result = await measureInTurn(launched, async (browser): Promise<JobResult> => {
@@ -195,10 +224,10 @@ try {
             });
             try {
               const page = await context.newPage();
-              await restoreScaleFactor(page, `${baseUrl}calibrate.html`);
+              await restoreScaleFactor(page, `${url}calibrate.html`);
               // The idle baseline comes from a page without the viewer, in the
               // same context, right before the job.
-              await page.goto(`${baseUrl}calibrate.html`);
+              await page.goto(`${url}calibrate.html`);
               await waitForDone(page);
               const idle = (await page.evaluate(
                 () => (window as { __result?: unknown }).__result,
@@ -226,7 +255,7 @@ try {
                 idleLag: String(idle.timerLagP95Ms),
                 idleFrame: String(idle.frameIntervalMs),
               });
-              await page.goto(`${baseUrl}?${query}`);
+              await page.goto(`${url}?${query}`);
               await waitForDone(page);
               const payload = (await page.evaluate(
                 () => (window as { __result?: unknown }).__result,
@@ -256,6 +285,7 @@ try {
 } finally {
   await launched.close();
   await server.close();
+  await before?.close();
 }
 
 const summaries = files.flatMap((file) =>
@@ -315,6 +345,7 @@ const environment = {
   power,
   loadAverage: { start: loadAtStart, end: loadavg()[0] ?? 0 },
   turnTaking: { ...turnTaking },
+  before: beforeDist ? beforeLabel : undefined,
   // Medians of the per-job idle baselines from calibrate.html.
   idle: {
     timerLagP50Ms: median(okResults.map((result) => result.idle?.timerLagP50Ms ?? Number.NaN)),
@@ -375,7 +406,7 @@ const markdown = [
   `- Run at: ${environment.runAt}`,
   `- Machine: ${environment.os}, ${environment.cpu}; ${environment.browser} (Playwright build, ${environment.headless ? "headless" : "headed"}); power: ${power.source === "ac" && !power.lowPowerMode ? "AC" : `**${power.source}${power.lowPowerMode ? ", Low Power Mode" : ""}; not comparable with AC runs**`}; one-minute load average ${environment.loadAverage.start.toFixed(1)} at the start, ${environment.loadAverage.end.toFixed(1)} at the end; ${turnTakingSummary()}`,
   `- Idle baseline (calibrate.html, median of jobs): 4 ms timer late by ${fmt(environment.idle.timerLagP50Ms, 1)} ms (median) / ${fmt(environment.idle.timerLagP95Ms, 1)} ms (p95); animation frames every ${fmt(environment.idle.frameIntervalMs, 1)} ms.`,
-  `- Method: 1280×900 viewport at devicePixelRatio 2, ${zoomText}, ${scrollModes.join(" or ")} scroll mode, ${durationMs} ms of scrolling at a constant speed in CSS pixels per second after the first page is painted, sideways in horizontal mode and downward otherwise, median of ${runs} runs.${throttled ? ` Network: ${latencyMs} ms latency, ${bandwidthMbps > 0 ? `${bandwidthMbps} Mbit/s` : "unlimited bandwidth"} (DevTools protocol).` : ""}`,
+  `- Method: 1280×900 viewport at devicePixelRatio 2, ${zoomText}, ${scrollModes.join(" or ")} scroll mode, ${durationMs} ms of scrolling at a constant speed in CSS pixels per second after the first page is painted, sideways in horizontal mode and downward otherwise, median of ${runs} runs.${beforeDist ? ` Variants named "before" ran on ${beforeLabel}, each in turn with its twin, job by job.` : ""}${throttled ? ` Network: ${latencyMs} ms latency, ${bandwidthMbps > 0 ? `${bandwidthMbps} Mbit/s` : "unlimited bandwidth"} (DevTools protocol).` : ""}`,
   "- First paint: time from navigation start until page 1 shows pixels.",
   "- Blank: share of the viewport covered by pages without pixels, averaged over frames; blank frames: frames where more than 1% was blank.",
   "- Main thread: summed lateness of a 4 ms timer while scrolling, beyond 2 ms or the idle page's 95th percentile, whichever is larger, plus the raw p95 and maximum lateness.",

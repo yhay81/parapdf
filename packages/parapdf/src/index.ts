@@ -1,37 +1,35 @@
-export {
-  configurePdfjs,
-  type PdfjsBuild,
-  type PdfjsConfig,
-  preloadPdfjs,
-} from "./engine/bundled.ts";
-export type { PdfjsDocumentOptions } from "./engine/pdfjs.ts";
-export { pdfjsVersion } from "./engine/pdfjs-files.ts";
+export type {
+  OutlineNode,
+  PasswordReason,
+  PdfAttachment,
+  PdfInitialView,
+  PdfMetadata,
+  PdfPageLayout,
+  PdfPageMode,
+  PdfPermissions,
+  PdfSource,
+} from "./document/session.ts";
+export type { Destination } from "./pdfjs/destinations.ts";
+export type { PageColors, Rotation } from "./pdfjs/draw.ts";
 export type {
   AnnotationEditingState,
   AnnotationLabels,
   AnnotationStyles,
   AnnotationTool,
   AnnotationType,
-  DestinationRef,
-  FormChange,
-  FormField,
-  FormFieldType,
-  FormValue,
-  OutlineNode,
-  PageColors,
-  PasswordReason,
-  PdfAttachment,
-  PdfInitialView,
-  PdfLayer,
-  PdfMetadata,
-  PdfPageLayout,
-  PdfPageMode,
-  PdfPermissions,
-  PdfSource,
-  Rotation,
   SavedAnnotation,
   SignatureInput,
-} from "./engine/types.ts";
+} from "./pdfjs/editor.ts";
+export { pdfjsVersion } from "./pdfjs/files.ts";
+export type { FormChange, FormField, FormFieldType, FormValue } from "./pdfjs/forms.ts";
+export type { PdfLayer } from "./pdfjs/layers.ts";
+export {
+  configurePdfjs,
+  type PdfjsBuild,
+  type PdfjsConfig,
+  type PdfjsDocumentOptions,
+  preloadPdfjs,
+} from "./pdfjs/loader.ts";
 export { usePdfDocument, usePdfState, usePdfViewer } from "./react/context.ts";
 export { usePdfFormChange } from "./react/forms.ts";
 export { type PdfNavigation, usePdfNavigation, usePdfOutline } from "./react/navigation.ts";

@@ -1,43 +1,52 @@
-import type { PasswordReason, PdfEngine, PdfEngineDocument, PdfSource } from "../engine/types.ts";
+import type { LoadedPdfjs } from "../pdfjs/loader.ts";
+import { closeSession, DocumentSession, type PasswordReason, type PdfSource } from "./session.ts";
 
 /**
- * Loaded documents shared by every viewer of the same source. React
- * StrictMode mounts, unmounts, and mounts again, and applications remount
- * viewers when routes or layouts change; without sharing, every mount would
- * download and parse the PDF again. A document is destroyed once its last
- * viewer has released it and no viewer has acquired it again within
- * RELEASE_DELAY_MS; one still loading, or waiting for a password, stops
- * loading then.
+ * Sessions shared by every viewer of the same source. React StrictMode
+ * mounts, unmounts, and mounts again, and applications remount viewers when
+ * routes or layouts change; without sharing, every mount would download and
+ * parse the PDF again. A session closes once its last viewer has released
+ * it and no viewer has acquired it again within RELEASE_DELAY_MS; one still
+ * loading, or waiting for a password, stops loading then.
  */
 const RELEASE_DELAY_MS = 1000;
 
+/** Loads the pdf.js sessions open with: `loadPdfjs`, or one a test stands in for. */
+export type PdfjsLoader = () => Promise<LoadedPdfjs>;
+
 /** What a viewer hears about a document while it loads. */
-export interface DocumentListener {
+export interface SessionListener {
   onProgress?(loaded: number, total: number | null): void;
   /** The document needs a password: any viewer of it may submit one. */
   onPassword?(reason: PasswordReason): void;
 }
 
 interface Entry {
-  document: Promise<PdfEngineDocument>;
-  readonly abort: AbortController;
-  readonly listeners: Set<DocumentListener>;
+  session: Promise<DocumentSession>;
+  /** The session's AbortController, from before it loads: aborting it stops the load. */
+  readonly controller: AbortController;
+  readonly listeners: Set<SessionListener>;
   users: number;
   releaseTimer: ReturnType<typeof setTimeout> | undefined;
   /** The latest progress, for viewers that join while the document loads. */
   progress: { loaded: number; total: number | null } | null;
-  /** The engine's request for a password, until a viewer answers it. */
+  /** pdf.js's request for a password, until a viewer answers it. */
   passwordRequest: { reason: PasswordReason; answer(password: string | null): void } | null;
   /** Passwords already tried, so remounting never resubmits the same failed value. */
   readonly passwords: Set<string>;
-  /** A new source password supplied before the engine asks for one. */
+  /** A new source password supplied before pdf.js asks for one. */
   nextPassword: string | undefined;
 }
 
-export interface DocumentLease {
-  /** The shared document; rejects when it cannot be opened. */
-  readonly document: Promise<PdfEngineDocument>;
-  /** Gives the document back. Call it once, even before the document loads. */
+export interface SessionLease {
+  /** The shared session; rejects when the document cannot be opened. */
+  readonly session: Promise<DocumentSession>;
+  /**
+   * Aborted once the lease is released, or its session closes: what a
+   * viewer starts for the document takes it, and stops with it.
+   */
+  readonly signal: AbortSignal;
+  /** Gives the session back. Call it once, even before the document loads. */
   release(): void;
   /**
    * Answers the document's request for a password: the password to try, or
@@ -46,13 +55,13 @@ export interface DocumentLease {
   submitPassword(password: string | null): void;
 }
 
-/** Documents by source, for each engine, and for each viewer that holds its own. */
+/** Sessions by source, for each pdf.js loader, and for each viewer that holds its own. */
 const registries = new WeakMap<object, Map<unknown, Entry>>();
 
 /**
  * What identifies a source: its URL with the request's headers and
  * credentials mode, or the identity of its bytes. Sources with equal keys
- * share one loaded document; the password is not part of the key.
+ * share one session; the password is not part of the key.
  */
 export const sourceKey = (source: PdfSource): unknown => {
   if (!("url" in source)) return source.data;
@@ -71,11 +80,11 @@ function registryOf(owner: object): Map<unknown, Entry> {
   return registry;
 }
 
-function openEntry(engine: PdfEngine, source: PdfSource): Entry {
+function openEntry(pdfjs: PdfjsLoader, source: PdfSource): Entry {
   const entry: Entry = {
-    // Replaced at once: the engine's callbacks need the entry before open() returns.
-    document: new Promise<PdfEngineDocument>(() => {}),
-    abort: new AbortController(),
+    // Replaced at once: opening calls back into the entry before it returns.
+    session: new Promise<DocumentSession>(() => {}),
+    controller: new AbortController(),
     listeners: new Set(),
     users: 0,
     releaseTimer: undefined,
@@ -84,15 +93,14 @@ function openEntry(engine: PdfEngine, source: PdfSource): Entry {
     passwords: new Set(source.password === undefined ? [] : [source.password]),
     nextPassword: undefined,
   };
-  entry.document = engine.open(source, {
-    signal: entry.abort.signal,
+  entry.session = DocumentSession.open(pdfjs, source, entry.controller, {
     onProgress(loaded, total) {
       entry.progress = { loaded, total };
       for (const listener of entry.listeners) listener.onProgress?.(loaded, total);
     },
     password(reason) {
       return new Promise<string | null>((resolve) => {
-        if (entry.abort.signal.aborted) {
+        if (entry.controller.signal.aborted) {
           resolve(null);
           return;
         }
@@ -126,28 +134,28 @@ function openEntry(engine: PdfEngine, source: PdfSource): Entry {
 }
 
 /**
- * The document `source` names, loaded once for every viewer of it, or, with
- * `owner`, for that owner alone: a viewer that edits annotations keeps
- * them in its document, which StrictMode's second mount of the same viewer
- * still reuses.
+ * The session of the document `source` names, opened once for every viewer
+ * of it with the pdf.js `pdfjs` loads, or, with `owner`, for that owner
+ * alone: a viewer that edits annotations keeps them in its document, which
+ * StrictMode's second mount of the same viewer still reuses.
  */
-export function acquireDocument(
-  engine: PdfEngine,
+export function acquireSession(
+  pdfjs: PdfjsLoader,
   source: PdfSource,
-  listener: DocumentListener = {},
+  listener: SessionListener = {},
   owner?: object,
-): DocumentLease {
-  const registry = registryOf(owner ?? engine);
+): SessionLease {
+  const registry = registryOf(owner ?? pdfjs);
   const key = sourceKey(source);
   let entry = registry.get(key);
   if (entry) {
     clearTimeout(entry.releaseTimer);
     entry.releaseTimer = undefined;
   } else {
-    const created = openEntry(engine, source);
+    const created = openEntry(pdfjs, source);
     registry.set(key, created);
     // Forget a failed open at once, so the next viewer tries again.
-    created.document.catch(() => {
+    created.session.catch(() => {
       if (registry.get(key) === created) registry.delete(key);
     });
     entry = created;
@@ -155,8 +163,8 @@ export function acquireDocument(
   const held = entry;
   held.users++;
   held.listeners.add(listener);
-  // A changed password retries the shared load, including while its worker
-  // has not asked yet. Answer a pending request before replaying its old error.
+  // A changed password retries the shared load, including while pdf.js has
+  // not asked yet. Answer a pending request before replaying its old error.
   if (source.password !== undefined && !held.passwords.has(source.password)) {
     held.nextPassword = source.password;
     held.passwordRequest?.answer(source.password);
@@ -164,15 +172,23 @@ export function acquireDocument(
   // A viewer that joins late hears what the others already heard.
   if (held.progress) listener.onProgress?.(held.progress.loaded, held.progress.total);
   if (held.passwordRequest) listener.onPassword?.(held.passwordRequest.reason);
+  const lease = new AbortController();
+  // A lease ends with its session.
+  held.controller.signal.addEventListener("abort", () => lease.abort(), {
+    once: true,
+    signal: lease.signal,
+  });
   let released = false;
   return {
-    document: held.document,
+    session: held.session,
+    signal: lease.signal,
     submitPassword(password) {
       if (!released) held.passwordRequest?.answer(password);
     },
     release() {
       if (released) return;
       released = true;
+      lease.abort();
       held.listeners.delete(listener);
       held.users--;
       if (held.users > 0) return;
@@ -180,10 +196,10 @@ export function acquireDocument(
         if (held.users > 0 || registry.get(key) !== held) return;
         registry.delete(key);
         // Stops a load still in progress, or waiting for a password.
-        held.abort.abort();
+        held.controller.abort();
         held.passwordRequest?.answer(null);
-        held.document
-          .then((document) => document.destroy())
+        held.session
+          .then((session) => closeSession(session))
           .catch(() => {
             // The document failed to open, or destroying it failed: nothing is left to free.
           });

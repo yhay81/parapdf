@@ -1,4 +1,4 @@
-import type { PageText } from "../engine/types.ts";
+import type { PageText } from "../pdfjs/text.ts";
 import { joinLines, sourceChars, type TextPosition } from "./text-search.ts";
 
 /** A place in the document's text: before `offset` UTF-16 code units of item `item` of a page. */

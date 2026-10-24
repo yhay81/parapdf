@@ -59,7 +59,23 @@ Every milestone's "Done when" includes, besides its own items:
 - Done when: no `PdfEngine*` type remains; the session registry and the
   lifecycle have unit tests; `check:lifecycle` and `check:document` pass;
   the scroll and return benchmarks show no regression.
-- Status: not started.
+- Status: done (2026-10-24). `src/pdfjs/` and `src/document/` replace the
+  engine boundary and `runtime/documents.ts`; the session's
+  `AbortController` and each viewer's lease of it replace the generation
+  counters; unit tests stand in for pdf.js (`test/fake-pdfjs.ts`). The
+  return and scroll benchmarks, against a947f02 in turn in Chromium,
+  WebKit, and Firefox, three runs (`examples/prototype/results/return-m2-*`,
+  `scroll-m2-*`), show no regression beyond the runs' spread. The two cells
+  whose medians were higher in every run, WebKit's jump-back and Firefox's
+  scroll-back on bill-hr815.pdf, were lower than the build before when
+  measured first (`return-m2-swapped-*`): the second job of a pair measured
+  slower. Each viewer's store still publishes the document's state
+  (status, progress, password request); a store of the session's own, as
+  target.md's "State" describes, is left to the React API (M6). Annotation
+  editors retain separate sessions until M4 removes that migration
+  exception; M6 also settles the public session surface. Review corrected
+  failed text and search-index reads remaining cached, with regression
+  tests for retrying within the same session.
 
 ## M3: viewers
 
@@ -85,7 +101,9 @@ Every milestone's "Done when" includes, besides its own items:
 - Done when: nothing in `pdfjs/`, `document/`, `view/`, or `render/`
   imports from `features/`; each feature's logic that needs no DOM has unit
   tests; a demo build without search, forms, annotations, and print carries
-  none of their code.
+  none of their code; viewers that edit annotations share their document's
+  session too, without editor-id collisions, and edits and saving work
+  across those viewers.
 - Status: not started.
 
 ## M5: rendering
@@ -114,7 +132,9 @@ Every milestone's "Done when" includes, besides its own items:
   move to it.
 - Done when: the functional checks drive the new API; the scroll
   benchmark's React commits stay those of the mounted window and the
-  current page.
+  current page; document state is published by the session's own store,
+  and the public session surface is settled without exposing internal
+  lifecycle ownership to applications.
 - Status: not started.
 
 ## M7: finish

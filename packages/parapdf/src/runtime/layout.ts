@@ -1,4 +1,5 @@
-import type { PageSize, Rotation } from "../engine/types.ts";
+import type { PageSize } from "../document/session.ts";
+import type { Rotation } from "../pdfjs/draw.ts";
 
 /**
  * How pages pair up side by side, as in pdf.js: "none" shows one page per

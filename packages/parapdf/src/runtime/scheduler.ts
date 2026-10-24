@@ -1,22 +1,27 @@
+import type { DocumentSession, PageSize } from "../document/session.ts";
 import {
-  type AnnotationEditor,
-  type AnnotationEditorLayerTask,
-  type AnnotationLayerEditor,
   type AnnotationLayerHandle,
   type AnnotationLayerTask,
-  isRenderCancelled,
-  type LayerState,
+  buildAnnotationLayer,
   type LinkHandlers,
+} from "../pdfjs/annotation-layer.ts";
+import {
+  type DrawRegion,
+  type DrawRequest,
+  type DrawTask,
+  drawKept,
+  drawPage,
+  isRenderCancelled,
   type PageColors,
-  type PageSize,
-  type PdfEngineDocument,
-  type RenderRegion,
-  type RenderRequest,
-  type RenderTask,
   type Rotation,
-  type TextLayerHandle,
-  type TextLayerTask,
-} from "../engine/types.ts";
+} from "../pdfjs/draw.ts";
+import type {
+  AnnotationEditor,
+  AnnotationEditorLayerTask,
+  AnnotationLayerEditor,
+} from "../pdfjs/editor.ts";
+import type { LayerState } from "../pdfjs/layers.ts";
+import { buildTextLayer, type TextLayerHandle, type TextLayerTask } from "../pdfjs/text.ts";
 import {
   areaSize,
   intersectAreas,
@@ -103,7 +108,7 @@ interface Job {
   layer: Layer;
   scale: number;
   region: PageArea | null;
-  task: RenderTask;
+  task: DrawTask;
   /** The canvas it draws into: the layer's own, or for a detail beside a shown one, the spare. */
   canvas: HTMLCanvasElement;
 }
@@ -188,6 +193,8 @@ export interface SchedulerOptions {
   onPainted?: (pageIndex: number, layer: Layer) => void;
   onTextReady?: (pageIndex: number, handle: TextLayerHandle) => void;
   onTextRemoved?: (pageIndex: number) => void;
+  /** Aborting it disposes the scheduler, as when its document closes in the viewer. */
+  signal?: AbortSignal;
 }
 
 /**
@@ -356,9 +363,10 @@ function followZoom(slot: Slot, scale: number): void {
 
 /** A render outside the page layers, such as a thumbnail, waiting for a free render slot. */
 interface ExtraJob {
-  readonly request: RenderRequest;
+  readonly pageIndex: number;
+  readonly request: DrawRequest;
   readonly done: (error: unknown) => void;
-  task: RenderTask | undefined;
+  task: DrawTask | undefined;
   cancelled: boolean;
 }
 
@@ -380,7 +388,7 @@ export class RenderScheduler {
     trimmed: 0,
     kept: 0,
   };
-  readonly #doc: PdfEngineDocument;
+  readonly #session: DocumentSession;
   readonly #slots = new Map<number, Slot>();
   readonly #maxConcurrent: number;
   readonly #maxDetailPixels: number;
@@ -413,8 +421,8 @@ export class RenderScheduler {
    */
   #version = 0;
 
-  constructor(doc: PdfEngineDocument, options: SchedulerOptions = {}) {
-    this.#doc = doc;
+  constructor(session: DocumentSession, options: SchedulerOptions = {}) {
+    this.#session = session;
     this.#maxConcurrent = options.maxConcurrent ?? 2;
     this.#maxDetailPixels = options.maxDetailPixels ?? 16_777_216;
     this.#maxDetailViewports = options.maxDetailViewports ?? Number.POSITIVE_INFINITY;
@@ -422,6 +430,7 @@ export class RenderScheduler {
     this.#maxCanvasPixels = options.maxCanvasPixels ?? Number.POSITIVE_INFINITY;
     this.#options = options;
     this.#maxKeptPixels = options.maxKeptPixels;
+    options.signal?.addEventListener("abort", () => this.dispose(), { once: true });
   }
 
   /** The most pixels the canvases kept from pages that unmounted may hold now. */
@@ -498,6 +507,8 @@ export class RenderScheduler {
       editorHandle: undefined,
     };
     this.#slots.set(index, slot);
+    // pdf.js keeps the page's parsing results while a viewer of the session shows it.
+    this.#session.holdPage(index);
     this.#restore(slot);
     this.#pump();
   }
@@ -524,7 +535,7 @@ export class RenderScheduler {
     for (const canvas of [slot.base, slot.detail, slot.spare]) {
       if (canvas && !kept.has(canvas)) release(canvas);
     }
-    this.#doc.releasePage(index);
+    this.#session.releasePage(index);
   }
 
   /**
@@ -623,14 +634,18 @@ export class RenderScheduler {
       return;
     }
     if (kept.base) {
-      if (kept.base.canvas !== slot.base) this.#doc.drawKept(slot.base, kept.base.canvas);
+      if (kept.base.canvas !== slot.base) {
+        drawKept(this.#session.pdfjs, slot.base, kept.base.canvas);
+      }
       slot.base.style.visibility = "";
       slot.baseScale = kept.base.scale;
       slot.baseVersion = kept.version;
       this.stats.kept++;
     }
     if (kept.detail) {
-      if (kept.detail.canvas !== slot.detail) this.#doc.drawKept(slot.detail, kept.detail.canvas);
+      if (kept.detail.canvas !== slot.detail) {
+        drawKept(this.#session.pdfjs, slot.detail, kept.detail.canvas);
+      }
       placeDetail(slot.detail, kept.detail.region);
       slot.detail.style.visibility = "";
       slot.detailScale = kept.detail.scale;
@@ -733,12 +748,12 @@ export class RenderScheduler {
   }
 
   /**
-   * Draw `request` once no page layer waits for a render slot: thumbnails
-   * never delay the pages in view. `done` hears null on success, or the
-   * error. Returns the function that cancels the render.
+   * Draw page `pageIndex` as `request` asks once no page layer waits for a
+   * render slot: thumbnails never delay the pages in view. `done` hears null
+   * on success, or the error. Returns the function that cancels the render.
    */
-  enqueue(request: RenderRequest, done: (error: unknown) => void): () => void {
-    const job: ExtraJob = { request, done, task: undefined, cancelled: false };
+  enqueue(pageIndex: number, request: DrawRequest, done: (error: unknown) => void): () => void {
+    const job: ExtraJob = { pageIndex, request, done, task: undefined, cancelled: false };
     this.#extras.push(job);
     this.#pump();
     return () => {
@@ -1183,7 +1198,7 @@ export class RenderScheduler {
   }
 
   #startExtra(job: ExtraJob): void {
-    const task = this.#doc.render(job.request);
+    const task = drawPage(this.#session.pdfjs, this.#session.page(job.pageIndex), job.request);
     job.task = task;
     this.#running++;
     task.promise
@@ -1195,7 +1210,7 @@ export class RenderScheduler {
           if (isRenderCancelled(error)) this.stats.cancelled++;
           else {
             this.stats.failed++;
-            console.error(`page ${job.request.pageIndex + 1}: render failed`, error);
+            console.error(`page ${job.pageIndex + 1}: render failed`, error);
           }
           if (!job.cancelled) job.done(error);
         },
@@ -1224,7 +1239,7 @@ export class RenderScheduler {
         : null;
     const canvas = layer === "base" ? slot.base : (spare ?? slot.detail);
     let region = plannedRegion;
-    let pixels: RenderRegion | undefined;
+    let pixels: DrawRegion | undefined;
     const layout = input?.layout;
     const unturned = layout?.sizes[slot.index];
     const size = layout && unturned ? turnedSize(unturned, layout.rotation) : undefined;
@@ -1257,15 +1272,14 @@ export class RenderScheduler {
       }
     } else slot.baseScale = 0;
     const { forms, pageColors, layers } = this.#options;
-    const task = this.#doc.render({
-      pageIndex: slot.index,
+    const task = drawPage(this.#session.pdfjs, this.#session.page(slot.index), {
       scale,
       rotation: layout?.rotation ?? 0,
       canvas,
       ...(pixels ? { region: pixels } : {}),
       ...(forms && slot.annotations ? { formLayer: slot.annotations } : {}),
       ...(pageColors ? { colors: pageColors } : {}),
-      ...(layers ? { layers } : {}),
+      ...(layers ? { layers: layers.config } : {}),
     });
     const version = this.#version;
     slot.job = { layer, scale, region, task, canvas };
@@ -1353,7 +1367,7 @@ export class RenderScheduler {
   #pumpText(): void {
     const input = this.#input;
     if (!input?.settled || this.#textRunning) return;
-    // Text and annotations are parsed again in the engine's worker, so they
+    // Text and annotations are parsed again in pdf.js's worker, so they
     // wait while a visible page renders its first pixels: on a page of
     // 200,000 segments, the text layer used to delay them by 48 ms. The
     // render's completion pumps again.
@@ -1493,14 +1507,16 @@ export class RenderScheduler {
     const links = this.#options.links;
     if (!container || !links) return;
     container.replaceChildren();
-    const task = this.#doc.renderAnnotationLayer({
-      pageIndex: slot.index,
+    const session = this.#session;
+    const task = buildAnnotationLayer(session.pdfjs, session.proxy, session.page(slot.index), {
       container,
       cssScale,
       rotation,
       links,
       forms: this.#options.forms ?? false,
-      ...(this.#options.layers ? { layers: this.#options.layers } : {}),
+      ...(this.#options.layers ? { layers: this.#options.layers.config } : {}),
+      // The structure tree built with the page's text layer labels its annotations.
+      structTree: slot.textHandle?.structTree ?? null,
     });
     slot.annotationTask = task;
     this.#textRunning = true;
@@ -1536,8 +1552,7 @@ export class RenderScheduler {
     pinTextLayer(container, cssScale);
     slot.textScale = cssScale;
     slot.structure?.replaceChildren();
-    const task = this.#doc.renderTextLayer({
-      pageIndex: slot.index,
+    const task = buildTextLayer(this.#session.pdfjs, this.#session.page(slot.index), {
       container,
       cssScale,
       rotation,

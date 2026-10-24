@@ -377,7 +377,7 @@ function Toolbar({
         Forward
       </button>
       <strong title={title ?? undefined}>ParaPDF prototype</strong>
-      <span className="engine">{viewer.engineName}</span>
+      <span className="engine">{settings.engine}</span>
       <button type="button" onClick={() => viewer.previousPage()} aria-label="Previous page">
         ‹
       </button>

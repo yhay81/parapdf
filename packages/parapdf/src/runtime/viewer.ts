@@ -1,35 +1,32 @@
+import { acquireSession, type PdfjsLoader, type SessionLease } from "../document/registry.ts";
+import type {
+  DocumentSession,
+  OutlineNode,
+  PageSize,
+  PasswordReason,
+  PdfAttachment,
+  PdfInitialView,
+  PdfMetadata,
+  PdfPageLayout,
+  PdfPermissions,
+  PdfSource,
+} from "../document/session.ts";
+import type { LinkHandlers } from "../pdfjs/annotation-layer.ts";
+import type { Destination, ResolvedDestination } from "../pdfjs/destinations.ts";
+import type { PageColors, Rotation } from "../pdfjs/draw.ts";
 import type {
   AnnotationEditingState,
   AnnotationEditor,
   AnnotationLabels,
   AnnotationStyles,
   AnnotationTool,
-  DestinationRef,
-  FormChange,
-  FormField,
-  FormValue,
-  LayerState,
-  LinkHandlers,
-  OutlineNode,
-  PageColors,
-  PageSize,
-  PageText,
-  PasswordReason,
-  PdfAttachment,
-  PdfEngine,
-  PdfEngineDocument,
-  PdfInitialView,
-  PdfLayer,
-  PdfMetadata,
-  PdfPageLayout,
-  PdfPermissions,
-  PdfSource,
-  ResolvedDestination,
-  Rotation,
   SavedAnnotation,
   SignatureInput,
-  TextLayerHandle,
-} from "../engine/types.ts";
+} from "../pdfjs/editor.ts";
+import type { FormChange, FormField, FormValue } from "../pdfjs/forms.ts";
+import type { LayerState, PdfLayer } from "../pdfjs/layers.ts";
+import { loadPdfjs } from "../pdfjs/loader.ts";
+import type { PageText, TextLayerHandle } from "../pdfjs/text.ts";
 import {
   type DocumentText,
   PAGE_SEPARATOR,
@@ -38,7 +35,6 @@ import {
   type TextOptions,
   type TextPoint,
 } from "./document-text.ts";
-import { acquireDocument, type DocumentLease } from "./documents.ts";
 import { downloadBytes, filenameFromUrl } from "./files.ts";
 import { CONTROLS, ViewerGestures } from "./gestures.ts";
 import { SearchHighlights } from "./highlights.ts";
@@ -149,8 +145,12 @@ export interface ViewerState {
    * filling the viewport's width, or one page or spread at a time.
    */
   scrollMode: ScrollMode;
-  /** The open document, for engine features ParaPDF does not wrap; null until it loads. */
-  document: PdfEngineDocument | null;
+  /**
+   * The open document's session, shared with the other viewers of it: its
+   * `proxy` is pdf.js's document, for its APIs ParaPDF does not wrap. Null
+   * until it loads.
+   */
+  document: DocumentSession | null;
   search: SearchState;
   /** Document outline; null until loaded, empty when the PDF has none. */
   outline: readonly OutlineNode[] | null;
@@ -441,7 +441,7 @@ const PAGE_LAYOUTS: Record<PdfPageLayout, { spread: SpreadMode; scrollMode: Scro
 
 /** What Ctrl or ⌘ with + and - zooms by. */
 const ZOOM_STEP = 1.25;
-/** Pages `getText()` asks the engine for ahead of the one it reads. */
+/** Pages `getText()` asks pdf.js for ahead of the one it reads. */
 const TEXT_READ_AHEAD = 4;
 /** Search publishes partial results at most this often. */
 const SEARCH_PUBLISH_INTERVAL = 100;
@@ -547,6 +547,22 @@ const yieldToMain = (): Promise<void> => {
   return scheduler?.yield ? scheduler.yield() : new Promise((resolve) => setTimeout(resolve, 0));
 };
 
+/** A controller that each of `parents` aborts too, for work that may also stop before them. */
+function linked(...parents: readonly (AbortSignal | undefined)[]): AbortController {
+  const controller = new AbortController();
+  // With the parent's reason, which the work then fails with.
+  for (const parent of parents) {
+    if (parent?.aborted) controller.abort(parent.reason);
+    else {
+      parent?.addEventListener("abort", () => controller.abort(parent.reason), {
+        once: true,
+        signal: controller.signal,
+      });
+    }
+  }
+  return controller;
+}
+
 type PageElements = [
   HTMLCanvasElement,
   HTMLCanvasElement,
@@ -594,7 +610,7 @@ export class PdfViewerRuntime {
     annotationState: null,
     annotationStyles: null,
   });
-  readonly #engine: PdfEngine;
+  readonly #pdfjs: PdfjsLoader;
   readonly #gap: number;
   readonly #overscan: number;
   readonly #maxConcurrentRenders: number;
@@ -625,8 +641,11 @@ export class PdfViewerRuntime {
   readonly #annotationLabels: AnnotationLabels;
   /** Edits the open document's annotations once the document and the viewport are there. */
   #editor: AnnotationEditor | null = null;
-  /** The editor while its code loads. */
-  #editorStarting: Promise<AnnotationEditor> | null = null;
+  /**
+   * Aborted when editing stops, which ends the editor's start while its
+   * code loads, and what the editor reports afterwards.
+   */
+  #editorControl: AbortController | null = null;
   /** The page the editor was last told is current. */
   #editorPage = -1;
   /** Annotations kept while no viewport is attached, which the next one shows again. */
@@ -646,15 +665,21 @@ export class PdfViewerRuntime {
     rotation: () => this.store.get().rotation,
     layers: () => this.#layers,
   });
-  /** Which of the open document's layers show in this viewer. */
+  /** Which of the open document's layers show, in every viewer of it. */
   #layers: LayerState | null = null;
-  #generation = 0;
-  /** The open document's lease, through which a password is submitted. */
-  #lease: DocumentLease | null = null;
+  /**
+   * The open document's lease, from `open()` until its close: its signal
+   * stops what this viewer started for the document, and a password is
+   * submitted through it.
+   */
+  #lease: SessionLease | null = null;
+  /** Closes the open document. */
+  #close: (() => void) | null = null;
   /** Progress waiting to be published at the next animation frame. */
   #progress: LoadProgress | null = null;
   #progressFrame = 0;
-  #doc: PdfEngineDocument | null = null;
+  /** The open document, once it has loaded. */
+  #session: DocumentSession | null = null;
   /** The file name the open document's URL gives, for download(). */
   #sourceName: string | null = null;
   #scheduler: RenderScheduler | null = null;
@@ -663,7 +688,8 @@ export class PdfViewerRuntime {
   #textPages = new Map<number, TextLayerHandle>();
   /** Each page's search index, by the options that shape it ("case-sensitive diacritics"). */
   #indexes = new Map<string, Map<number, Promise<PageIndex>>>();
-  #searchGeneration = 0;
+  /** Stops the search in progress. */
+  #searchControl: AbortController | null = null;
   #scroller: HTMLElement | null = null;
   #content: HTMLElement | null = null;
   #frame = 0;
@@ -691,8 +717,12 @@ export class PdfViewerRuntime {
   /** The hand tool's drag in progress: the pointer and where it last was. */
   #grab: { pointerId: number; x: number; y: number } | null = null;
 
-  constructor(engine: PdfEngine, options: ViewerOptions = {}) {
-    this.#engine = engine;
+  /**
+   * `pdfjs` loads the pdf.js documents open with: the pdf.js the package
+   * ships, unless a test stands in for it.
+   */
+  constructor(options: ViewerOptions = {}, pdfjs: PdfjsLoader = loadPdfjs) {
+    this.#pdfjs = pdfjs;
     this.#gap = options.gap ?? 12;
     this.#overscan = options.overscan ?? 2;
     this.#maxConcurrentRenders = options.maxConcurrentRenders ?? 2;
@@ -721,7 +751,7 @@ export class PdfViewerRuntime {
       externalLinks: options.externalLinks ?? "new-tab",
       openAttachment:
         options.openAttachment ?? (({ filename, content }) => downloadBytes(content, filename)),
-      setLayers: (action) => this.#changeLayers((layers) => layers.apply(action)),
+      setLayers: (action) => this.#layers?.apply(action),
     };
     this.#annotationEditing = options.annotationEditing ?? false;
     this.#annotationLabels = { ...ANNOTATION_LABELS, ...options.annotationLabels };
@@ -740,10 +770,6 @@ export class PdfViewerRuntime {
       spread: options.spread ?? "none",
       scrollMode: options.scrollMode ?? "vertical",
     });
-  }
-
-  get engineName(): string {
-    return this.#engine.name;
   }
 
   get textLayer(): boolean {
@@ -779,12 +805,14 @@ export class PdfViewerRuntime {
   }
 
   /**
-   * Open a document and return the function that closes it. Viewers of the
-   * same source share one loaded document (see documents.ts).
+   * Open a document and return the function that closes it; a viewer shows
+   * one document at a time, so opening another closes this one. Viewers of
+   * the same source share one session (see document/registry.ts). Closing
+   * aborts the lease's signal, which what this viewer started for the
+   * document takes: drawing, searches, and background work stop with it.
    */
   open(source: PdfSource): () => void {
-    const generation = ++this.#generation;
-    let closed = false;
+    this.#close?.();
     this.#sourceName = "url" in source ? filenameFromUrl(source.url) : null;
     this.#firstPaintAt = null;
     this.#history = [];
@@ -812,21 +840,22 @@ export class PdfViewerRuntime {
     });
     // Acquisition replays a shared document's pending password request
     // synchronously; initialize first so that request remains visible.
-    const lease = acquireDocument(
-      this.#engine,
+    // Released leases hear nothing more.
+    const lease = acquireSession(
+      this.#pdfjs,
       source,
       {
         onProgress: (loaded, total) => {
-          if (closed) return;
           this.#progress = { loaded, total };
           // Chunks arrive many times a frame; the store hears of them once a frame.
           this.#progressFrame ||= requestAnimationFrame(() => {
             this.#progressFrame = 0;
-            if (!closed && this.#progress) this.store.set({ progress: this.#progress });
+            if (!lease.signal.aborted && this.#progress) {
+              this.store.set({ progress: this.#progress });
+            }
           });
         },
         onPassword: (reason) => {
-          if (closed) return;
           if (this.#passwordPrompt) {
             this.store.set({ status: "password", passwordReason: reason });
             return;
@@ -843,170 +872,178 @@ export class PdfViewerRuntime {
       this.#annotationEditing ? this : undefined,
     );
     this.#lease = lease;
-
-    void (async () => {
-      try {
-        const doc = await lease.document;
-        if (closed) return;
-        // Fetched beside the first page's size: the scheduler follows the
-        // permissions, and the first layout the document's initial view.
-        const [firstSize, permissions, documentView] = await Promise.all([
-          doc.pageSize(0),
-          doc.getPermissions().catch((error: unknown) => {
-            console.error("reading permissions failed", error);
-            return null;
-          }),
-          this.#documentView
-            ? doc.getInitialView().catch((error: unknown) => {
-                console.error("reading the initial view failed", error);
-                return null;
-              })
-            : null,
-        ]);
-        if (closed) return;
-        this.#doc = doc;
-        this.#permissions = permissions;
-        this.#applyPermissions();
-        // Assume every page matches the first until the background pass knows better.
-        this.#sizes = Array.from({ length: doc.pageCount }, () => firstSize);
-        this.#scheduler = new RenderScheduler(doc, {
-          maxConcurrent: this.#maxConcurrentRenders,
-          ...this.#canvasLimits,
-          links: this.#links,
-          forms: this.#forms && this.#permits("fillForms"),
-          ...(this.#pageColors ? { pageColors: this.#pageColors } : {}),
-          selection: this.#selection,
-          onPainted: (pageIndex) => {
-            if (pageIndex === 0 && this.#firstPaintAt === null) {
-              this.#firstPaintAt = performance.now();
-            }
-          },
-          onTextReady: (pageIndex, handle) => {
-            this.#textPages.set(pageIndex, handle);
-            this.#highlightPage(pageIndex);
-          },
-          onTextRemoved: (pageIndex) => {
-            this.#textPages.delete(pageIndex);
-            this.#highlights.clearPage(pageIndex);
-          },
-        });
-        // Pages unmounting while no viewport shows them keep nothing.
-        if (!this.#scroller) this.#scheduler.setKeeping(false);
-        for (const [index, elements] of this.#pendingPages) {
-          this.#scheduler.attach(index, ...elements);
-        }
-        this.#pendingPages.clear();
-        this.#thumbnails.refresh();
-        const destination = this.#arrangeAsDocument(documentView);
-        const scale = this.#resolveInitialScale();
-        this.#applyLayout(scale);
-        this.store.set({
-          status: "ready",
-          passwordReason: null,
-          pageCount: doc.pageCount,
-          scale,
-          document: doc,
-          permissions,
-          documentView: this.#documentView ? documentView : null,
-        });
-        if (this.#initialViewState) this.#showView(this.#initialViewState, destination);
-        else if (this.#initialPage > 0) this.goToPage(this.#initialPage);
-        else if (destination) this.#jump(destination, this.#destinationZoom);
-        if (!this.#documentView) {
-          this.#publishLater(generation, doc.getInitialView(), "documentView", null);
-        }
-        this.#update();
-        this.#startEditor();
-        this.#background(this.#refineSizes(doc, generation), "measuring page sizes", generation);
-        // The outline and the rest parse in the worker; each is published when ready.
-        this.#publishLater(generation, doc.getOutline(), "outline", []);
-        this.#publishLater(generation, doc.getPageLabels(), "pageLabels", null);
-        this.#publishLater(generation, doc.getMetadata(), "metadata", null);
-        this.#publishLater(generation, doc.getAttachments(), "attachments", []);
-        // Until its own state arrives, the viewer draws the document's
-        // default layers, which that state starts with: nothing is drawn again.
-        this.#publishLater(
-          generation,
-          doc.createLayerState().then((layers) => {
-            if (this.#generation === generation) {
-              this.#layers = layers;
-              this.#scheduler?.setLayers(layers);
-            }
-            return layers.layers();
-          }),
-          "layers",
-          [],
-        );
-      } catch (error) {
-        if (!closed)
-          this.store.set({ status: "error", error: String(error), passwordReason: null });
+    const { signal } = lease;
+    this.#load(lease).catch((error: unknown) => {
+      if (!signal.aborted) {
+        this.store.set({ status: "error", error: String(error), passwordReason: null });
       }
-    })();
+    });
 
-    return () => {
+    let closed = false;
+    const close = () => {
+      if (closed) return;
       closed = true;
+      this.#lease = null;
+      this.#close = null;
       cancelAnimationFrame(this.#progressFrame);
       this.#progressFrame = 0;
-      if (this.#lease === lease) this.#lease = null;
-      if (this.#generation === generation) {
-        // Work still running for this document now sees a stale generation.
-        this.#generation++;
-        // Its annotations go with it: an application keeps them through
-        // exportAnnotations() or save() first.
-        this.#stopEditor(false);
-        this.#scheduler?.dispose();
-        this.#thumbnails.reset();
-        this.#searchGeneration++;
-        this.#highlights.clear();
-        this.#selection.clear();
-        this.#textPages.clear();
-        this.#indexes.clear();
-        this.#history = [];
-        this.#future = [];
-        this.#permissions = null;
-        this.#applyPermissions();
-        this.#doc = null;
-        this.#layers = null;
-        this.#scheduler = null;
-        this.store.set({
-          status: "idle",
-          passwordReason: null,
-          progress: null,
-          pageCount: 0,
-          layout: null,
-          first: 0,
-          last: -1,
-          search: IDLE_SEARCH,
-          outline: null,
-          canGoBack: false,
-          canGoForward: false,
-          permissions: null,
-          documentView: null,
-          document: null,
-          pageLabels: null,
-          metadata: null,
-          attachments: null,
-          layers: null,
-        });
-      }
-      // Destroyed once no viewer uses it, even if it is still loading.
+      // Its annotations go with it: an application keeps them through
+      // exportAnnotations() or save() first.
+      this.#stopEditor(false);
+      // Aborts the lease's signal, which disposes the scheduler and stops
+      // searches and background work. The session closes once no viewer
+      // uses it, even if it is still loading.
       lease.release();
+      this.#searchControl = null;
+      this.#thumbnails.reset();
+      this.#highlights.clear();
+      this.#selection.clear();
+      this.#textPages.clear();
+      this.#indexes.clear();
+      this.#history = [];
+      this.#future = [];
+      this.#permissions = null;
+      this.#applyPermissions();
+      this.#session = null;
+      this.#layers = null;
+      this.#scheduler = null;
+      this.store.set({
+        status: "idle",
+        passwordReason: null,
+        progress: null,
+        pageCount: 0,
+        layout: null,
+        first: 0,
+        last: -1,
+        search: IDLE_SEARCH,
+        outline: null,
+        canGoBack: false,
+        canGoForward: false,
+        permissions: null,
+        documentView: null,
+        document: null,
+        pageLabels: null,
+        metadata: null,
+        attachments: null,
+        layers: null,
+      });
     };
+    this.#close = close;
+    return close;
   }
 
-  /** Publish what `work` loads as `field` while `generation` is open, or `fallback` if it fails. */
+  /** Show the document `lease` opens once it loads, and load the rest in the background. */
+  async #load(lease: SessionLease): Promise<void> {
+    const { signal } = lease;
+    const session = await lease.session;
+    signal.throwIfAborted();
+    // Fetched beside the first page's size: the scheduler follows the
+    // permissions, and the first layout the document's initial view.
+    const [sizes, permissions, documentView] = await Promise.all([
+      session.pageSizes(),
+      session.permissions().catch((error: unknown) => {
+        console.error("reading permissions failed", error);
+        return null;
+      }),
+      this.#documentView
+        ? session.initialView().catch((error: unknown) => {
+            console.error("reading the initial view failed", error);
+            return null;
+          })
+        : null,
+    ]);
+    signal.throwIfAborted();
+    this.#session = session;
+    this.#permissions = permissions;
+    this.#applyPermissions();
+    // Every page has the first one's size until the background pass knows better.
+    this.#sizes = [...sizes];
+    const scheduler = new RenderScheduler(session, {
+      maxConcurrent: this.#maxConcurrentRenders,
+      ...this.#canvasLimits,
+      links: this.#links,
+      forms: this.#forms && this.#permits("fillForms"),
+      ...(this.#pageColors ? { pageColors: this.#pageColors } : {}),
+      selection: this.#selection,
+      onPainted: (pageIndex) => {
+        if (pageIndex === 0 && this.#firstPaintAt === null) {
+          this.#firstPaintAt = performance.now();
+        }
+      },
+      onTextReady: (pageIndex, handle) => {
+        this.#textPages.set(pageIndex, handle);
+        this.#highlightPage(pageIndex);
+      },
+      onTextRemoved: (pageIndex) => {
+        this.#textPages.delete(pageIndex);
+        this.#highlights.clearPage(pageIndex);
+      },
+      signal,
+    });
+    this.#scheduler = scheduler;
+    // Pages unmounting while no viewport shows them keep nothing.
+    if (!this.#scroller) scheduler.setKeeping(false);
+    for (const [index, elements] of this.#pendingPages) scheduler.attach(index, ...elements);
+    this.#pendingPages.clear();
+    this.#thumbnails.refresh();
+    const destination = this.#arrangeAsDocument(documentView);
+    const scale = this.#resolveInitialScale();
+    this.#applyLayout(scale);
+    this.store.set({
+      status: "ready",
+      passwordReason: null,
+      pageCount: session.pageCount,
+      scale,
+      document: session,
+      permissions,
+      documentView: this.#documentView ? documentView : null,
+    });
+    if (this.#initialViewState) this.#showView(this.#initialViewState, destination);
+    else if (this.#initialPage > 0) this.goToPage(this.#initialPage);
+    else if (destination) this.#jump(destination, this.#destinationZoom);
+    if (!this.#documentView) {
+      this.#publishLater(signal, session.initialView(), "documentView", null);
+    }
+    this.#update();
+    this.#startEditor();
+    this.#background(this.#measurePages(session, signal), "measuring page sizes", signal);
+    // The outline and the rest parse in the worker; each is published when ready.
+    this.#publishLater(signal, session.outline(), "outline", []);
+    this.#publishLater(signal, session.pageLabels(), "pageLabels", null);
+    this.#publishLater(signal, session.metadata(), "metadata", null);
+    this.#publishLater(signal, session.attachments(), "attachments", []);
+    // Until the session's layers arrive, the viewer draws the document's
+    // default ones, which they start with: nothing is drawn again, unless
+    // another viewer of the session changed them already. Changes any viewer
+    // of the session makes are drawn in every one.
+    this.#publishLater(
+      signal,
+      session.layers().then((layers) => {
+        if (!signal.aborted) {
+          this.#layers = layers;
+          scheduler.setLayers(layers);
+          layers.subscribe(this.#onLayersChange, signal);
+          if (layers.changed) this.#onLayersChange();
+        }
+        return layers.layers();
+      }),
+      "layers",
+      [],
+    );
+  }
+
+  /** Publish what `work` loads as `field` until `signal` aborts, or `fallback` if it fails. */
   #publishLater<K extends keyof ViewerState>(
-    generation: number,
+    signal: AbortSignal,
     work: Promise<ViewerState[K]>,
     field: K,
     fallback: ViewerState[K],
   ): void {
     const publish = (value: ViewerState[K]) => {
-      if (this.#generation === generation)
-        this.store.set({ [field]: value } as Partial<ViewerState>);
+      if (!signal.aborted) this.store.set({ [field]: value } as Partial<ViewerState>);
     };
     work.then(publish, (error: unknown) => {
-      if (this.#generation === generation) console.error(`loading ${field} failed`, error);
+      if (!signal.aborted) console.error(`loading ${field} failed`, error);
       publish(fallback);
     });
   }
@@ -1019,7 +1056,7 @@ export class PdfViewerRuntime {
   async save(): Promise<Uint8Array | null> {
     // The text being typed counts, as it would once the reader clicks away.
     this.#editor?.commit();
-    return (await this.#doc?.save()) ?? null;
+    return (await this.#session?.save()) ?? null;
   }
 
   /**
@@ -1033,38 +1070,47 @@ export class PdfViewerRuntime {
   }
 
   /**
-   * Show or hide one of the document's layers (see `layers`) in this viewer.
-   * Showing one of a set of exclusive layers hides the others. Pages keep
-   * their pixels until they are drawn again.
+   * Show or hide one of the document's layers (see `layers`), in every
+   * viewer of the document. Showing one of a set of exclusive layers hides
+   * the others. Pages keep their pixels until they are drawn again.
    */
   setLayerVisible(id: string, visible: boolean): void {
-    this.#changeLayers((layers) => layers.setVisible(id, visible));
+    this.#layers?.setVisible(id, visible);
   }
 
-  #changeLayers(change: (layers: LayerState) => void): void {
+  /** A viewer of the document showed or hid layers: pages and thumbnails are drawn again. */
+  #onLayersChange = (): void => {
     const layers = this.#layers;
     if (!layers) return;
-    change(layers);
     this.store.set({ layers: layers.layers() });
     this.#scheduler?.invalidateContent();
     this.#thumbnails.reset();
     this.#thumbnails.refresh();
-  }
+  };
 
   /**
    * Print the document through the browser's print dialog: every page is
    * drawn for printing, with what was typed into its form fields, and only
    * those pages print. Resolves once the browser returns from printing,
    * and fails with `enforcePermissions` when the document does not permit
-   * printing.
+   * printing, and when the document closes first.
    */
   async print(options?: PrintOptions): Promise<void> {
-    const doc = this.#doc;
-    if (doc && !this.#permits("print")) {
+    const session = this.#session;
+    const lease = this.#lease;
+    if (session && !this.#permits("print")) {
       throw new Error("The document does not permit printing");
     }
     this.#editor?.commit();
-    if (doc) await printDocument(doc, { ...options, layers: this.#layers });
+    if (!session || !lease) return;
+    // Closing the document stops printing it, as the application's signal does.
+    const control = linked(lease.signal, options?.signal);
+    try {
+      await printDocument(session, { ...options, signal: control.signal, layers: this.#layers });
+    } finally {
+      // Printed or stopped: the lease's and the application's signals no longer follow it.
+      control.abort();
+    }
   }
 
   /**
@@ -1093,7 +1139,7 @@ export class PdfViewerRuntime {
    * no document is open.
    */
   async getFormFields(): Promise<readonly FormField[]> {
-    return (await this.#doc?.getFormFields()) ?? [];
+    return (await this.#session?.forms.getFormFields()) ?? [];
   }
 
   /**
@@ -1105,11 +1151,12 @@ export class PdfViewerRuntime {
    * `print()` include them.
    */
   async setFormValues(values: Readonly<Record<string, FormValue | boolean>>): Promise<string[]> {
-    const doc = this.#doc;
-    if (!doc) return [];
-    const set = await doc.setFormValues(values);
+    const session = this.#session;
+    const signal = this.#lease?.signal;
+    if (!session || !signal) return [];
+    const set = await session.forms.setFormValues(values);
     // Form layers read the values as they are built.
-    if (set.length > 0 && this.#doc === doc) this.#scheduler?.invalidateContent();
+    if (set.length > 0 && !signal.aborted) this.#scheduler?.invalidateContent();
     return set;
   }
 
@@ -1131,9 +1178,12 @@ export class PdfViewerRuntime {
    * buttons at their change, which comes after an input that changed nothing yet.
    */
   #onFormInput = (event: Event): void => {
-    const doc = this.#doc;
+    const session = this.#session;
+    const signal = this.#lease?.signal;
     const target = event.target;
-    if (!doc || this.#formListeners.size === 0 || !(target instanceof Element)) return;
+    if (!session || !signal || this.#formListeners.size === 0 || !(target instanceof Element)) {
+      return;
+    }
     const toggle =
       target instanceof HTMLInputElement && (target.type === "checkbox" || target.type === "radio");
     if (toggle !== (event.type === "change")) return;
@@ -1141,10 +1191,9 @@ export class PdfViewerRuntime {
       .closest(".parapdf-annotation-layer [data-element-id]")
       ?.getAttribute("data-element-id");
     if (!id) return;
-    const generation = this.#generation;
-    doc.formChange(id).then(
+    session.forms.formChange(id).then(
       (change) => {
-        if (!change || this.#generation !== generation) return;
+        if (!change || signal.aborted) return;
         for (const listener of this.#formListeners) listener(change);
       },
       (error: unknown) => console.error("reading a form change failed", error),
@@ -1157,43 +1206,52 @@ export class PdfViewerRuntime {
    * a viewport that detached left. The editor's code loads first.
    */
   #startEditor(): void {
-    const doc = this.#doc;
+    const session = this.#session;
+    const lease = this.#lease;
     const scheduler = this.#scheduler;
     const scroller = this.#scroller;
     const content = this.#content;
-    if (!this.#annotationEditing || this.#editor || this.#editorStarting) return;
-    if (!doc || !scheduler || !scroller || !content || !this.#permits("annotate")) return;
+    if (!this.#annotationEditing || this.#editor || this.#editorControl) return;
+    if (!session || !lease || !scheduler || !scroller || !content || !this.#permits("annotate")) {
+      return;
+    }
     const { layout, rotation, scale } = this.store.get();
+    // Stopping editing aborts it, and so do the viewport detaching and the
+    // document closing, while the editor's code loads and afterwards.
+    const control = linked(lease.signal);
+    const { signal } = control;
+    this.#editorControl = control;
     let editor: AnnotationEditor | null = null;
-    const starting = doc.createAnnotationEditor({
-      container: scroller,
-      pages: content,
-      labels: this.#annotationLabels,
-      ...(this.#pageColors ? { pageColors: this.#pageColors } : {}),
-      scale: layout?.scale ?? scale,
-      rotation,
-      onStateChange: (annotationState) => {
-        if (editor && this.#editor === editor) this.store.set({ annotationState });
-      },
-      onStylesChange: (annotationStyles) => {
-        if (editor && this.#editor === editor) this.store.set({ annotationStyles });
-      },
-      onToolChange: (annotationTool) => {
-        if (!editor || this.#editor !== editor) return;
-        this.store.set({ annotationTool });
-        content.classList.toggle("parapdf-annotating", annotationTool !== "none");
-      },
-    });
-    this.#editorStarting = starting;
+    // Loaded only by viewers that edit annotations.
+    const starting = import("../pdfjs/editor.ts").then(({ createPdfjsAnnotationEditor }) =>
+      createPdfjsAnnotationEditor(
+        session.pdfjs.pdfjs,
+        session.proxy,
+        (index) => session.page(index),
+        {
+          container: scroller,
+          pages: content,
+          labels: this.#annotationLabels,
+          ...(this.#pageColors ? { pageColors: this.#pageColors } : {}),
+          scale: layout?.scale ?? scale,
+          rotation,
+          onStateChange: (annotationState) => {
+            if (editor && !signal.aborted) this.store.set({ annotationState });
+          },
+          onStylesChange: (annotationStyles) => {
+            if (editor && !signal.aborted) this.store.set({ annotationStyles });
+          },
+          onToolChange: (annotationTool) => {
+            if (!editor || signal.aborted) return;
+            this.store.set({ annotationTool });
+            content.classList.toggle("parapdf-annotating", annotationTool !== "none");
+          },
+        },
+      ),
+    );
     starting.then(
       (started) => {
-        const current =
-          this.#editorStarting === starting &&
-          this.#doc === doc &&
-          this.#scheduler === scheduler &&
-          this.#scroller === scroller;
-        if (this.#editorStarting === starting) this.#editorStarting = null;
-        if (!current) {
+        if (signal.aborted) {
           started.destroy();
           return;
         }
@@ -1212,10 +1270,15 @@ export class PdfViewerRuntime {
         });
         const kept = this.#keptAnnotations;
         this.#keptAnnotations = null;
-        if (kept?.length) this.#background(started.import(kept), "restoring annotations");
+        if (kept?.length) {
+          this.#background(started.import(kept), "restoring annotations", signal);
+        }
       },
       (error: unknown) => {
-        if (this.#editorStarting === starting) this.#editorStarting = null;
+        if (signal.aborted) return;
+        // A later viewport or document may start it again.
+        this.#editorControl = null;
+        control.abort();
         console.error("starting the annotation editor failed", error);
       },
     );
@@ -1227,7 +1290,8 @@ export class PdfViewerRuntime {
    */
   #stopEditor(keep: boolean): void {
     const editor = this.#editor;
-    this.#editorStarting = null;
+    this.#editorControl?.abort();
+    this.#editorControl = null;
     if (!keep) this.#keptAnnotations = null;
     if (!editor) return;
     if (keep) {
@@ -1341,13 +1405,14 @@ export class PdfViewerRuntime {
   /** Page `requested`, or the current one, once its annotations can be edited; null if never. */
   async #editablePage(requested: number | undefined): Promise<number | null> {
     const scheduler = this.#scheduler;
+    const signal = this.#lease?.signal;
     const { pageCount, currentPage, first, last } = this.store.get();
     const pageIndex = requested ?? currentPage;
-    if (!scheduler || !this.#editor || pageIndex < 0 || pageIndex >= pageCount) return null;
+    if (!scheduler || !signal || !this.#editor || pageIndex < 0 || pageIndex >= pageCount) {
+      return null;
+    }
     if (pageIndex < first || pageIndex > last) this.goToPage(pageIndex);
-    return (await scheduler.whenEditable(pageIndex)) && this.#scheduler === scheduler
-      ? pageIndex
-      : null;
+    return (await scheduler.whenEditable(pageIndex)) && !signal.aborted ? pageIndex : null;
   }
 
   /**
@@ -1371,7 +1436,7 @@ export class PdfViewerRuntime {
 
   /** The content of the embedded file `id` (see `attachments`), null when there is none. */
   async getAttachmentContent(id: string): Promise<Uint8Array | null> {
-    return (await this.#doc?.getAttachmentContent(id)) ?? null;
+    return (await this.#session?.proxy.getAttachmentContent(id)) ?? null;
   }
 
   /** Open an embedded file the way activating its annotation does: by default, download it. */
@@ -1483,7 +1548,8 @@ export class PdfViewerRuntime {
     else this.#pendingPages.set(index, elements);
     return () => {
       this.#pendingPages.delete(index);
-      if (this.#scheduler === scheduler) scheduler?.detach(index);
+      // A scheduler its document's close disposed holds no pages.
+      scheduler?.detach(index);
     };
   }
 
@@ -1559,20 +1625,21 @@ export class PdfViewerRuntime {
   }
 
   /**
-   * The document's text, read from the engine's text content of every page
+   * The document's text, read from pdf.js's text content of every page
    * between `from` and `to`, mounted or not: items in content order, as
    * search and the text layers read them, with "\n" where lines end or, with
    * `lineBreaks: "join"`, lines joined as search joins them. Pages are
-   * parsed in the engine's worker, a few at a time; the texts are kept, so a
+   * parsed in pdf.js's worker, a few at a time; the texts are kept, so a
    * second read, or a search, parses nothing again. Rejects while no
    * document is open, and once it closes.
    */
   async getText(options: TextOptions = {}): Promise<DocumentText> {
-    const doc = this.#doc;
-    if (!doc) throw new Error("No document is open");
+    const session = this.#session;
+    const lease = this.#lease;
+    if (!session || !lease) throw new Error("No document is open");
     const { from, to, lineBreaks = "keep", signal } = options;
     signal?.throwIfAborted();
-    const lastPage = doc.pageCount - 1;
+    const lastPage = session.pageCount - 1;
     const start = typeof from === "number" ? { pageIndex: from } : from;
     const end = typeof to === "number" ? { pageIndex: to } : to;
     const first = clamp(start?.pageIndex ?? 0, 0, lastPage);
@@ -1582,7 +1649,7 @@ export class PdfViewerRuntime {
     const requested = new Map<number, Promise<PageText>>();
     const request = (pageIndex: number) => {
       if (pageIndex > last || requested.has(pageIndex)) return;
-      const text = doc.getText(pageIndex);
+      const text = session.text(pageIndex);
       // Abandoned when the read stops early; the read itself awaits it.
       text.catch(() => {});
       requested.set(pageIndex, text);
@@ -1594,7 +1661,7 @@ export class PdfViewerRuntime {
       const content = await requested.get(pageIndex);
       requested.delete(pageIndex);
       signal?.throwIfAborted();
-      if (this.#doc !== doc || !content) throw new Error("The document was closed");
+      if (lease.signal.aborted || !content) throw new Error("The document was closed");
       const startsHere = start && "item" in start && start.pageIndex === pageIndex;
       const endsHere = end && "item" in end && end.pageIndex === pageIndex;
       const read = pageText(content, lineBreaks, startsHere ? start : null, endsHere ? end : null);
@@ -1746,14 +1813,15 @@ export class PdfViewerRuntime {
    * Follow an internal link or outline entry, with the zoom its destination
    * asks for unless `destinationZoom` is false. The position before the
    * jump is remembered for `back()`. Resolves to false when the target is
-   * invalid.
+   * invalid or null, as an outline entry's without one is.
    */
-  async goToDestination(dest: DestinationRef): Promise<boolean> {
-    const doc = this.#doc;
-    if (!doc) return false;
-    const target = await doc.resolveDestination(dest).catch(() => null);
+  async goToDestination(dest: Destination | null): Promise<boolean> {
+    const session = this.#session;
+    const signal = this.#lease?.signal;
+    if (!session || !signal || dest === null) return false;
+    const target = await session.resolveDestination(dest).catch(() => null);
     const current = this.store.get().layout;
-    if (!target || !current || !this.#scroller || this.#doc !== doc) return false;
+    if (!target || !current || !this.#scroller || signal.aborted) return false;
     if (target.pageIndex < 0 || target.pageIndex >= current.tops.length) return false;
     this.#remember();
     this.#jump(target, this.#destinationZoom);
@@ -1785,7 +1853,7 @@ export class PdfViewerRuntime {
     }
     const layout = this.#show(current, pageIndex);
     const rect = target.view?.fit === "rect" ? target.view : null;
-    // The engine reports the point on the unturned page; a quarter turn makes
+    // The point is on the unturned page; a quarter turn makes
     // its left coordinate the vertical one.
     const size = layout.sizes[pageIndex] ?? { width: 0, height: 0 };
     const point = turnBox(
@@ -2298,19 +2366,26 @@ export class PdfViewerRuntime {
    * default case and diacritics are ignored and matches may be parts of words.
    */
   search(query: string, options: SearchOptions = {}): void {
-    const generation = ++this.#searchGeneration;
+    // A new search stops the one in progress.
+    this.#searchControl?.abort();
+    this.#searchControl = null;
     this.#highlights.clear();
     const normalized = normalizeQuery(query, options);
-    const doc = this.#doc;
-    if (!normalized || !doc) {
+    const session = this.#session;
+    const lease = this.#lease;
+    if (!normalized || !session || !lease) {
       this.store.set({ search: { ...IDLE_SEARCH, query, options } });
       return;
     }
+    // Clearing the search stops it, and so does closing the document.
+    const control = linked(lease.signal);
+    this.#searchControl = control;
+    const { signal } = control;
     this.store.set({
       search: { query, options, status: "searching", matches: [], current: -1, pagesSearched: 0 },
     });
-    this.#runSearch(doc, query, normalized, options, generation).catch((error: unknown) => {
-      if (generation !== this.#searchGeneration) return;
+    this.#runSearch(session, query, normalized, options, signal).catch((error: unknown) => {
+      if (signal.aborted) return;
       console.error("search failed", error);
       this.store.set({ search: { ...this.store.get().search, status: "done" } });
     });
@@ -2327,17 +2402,18 @@ export class PdfViewerRuntime {
   }
 
   clearSearch(): void {
-    this.#searchGeneration++;
+    this.#searchControl?.abort();
+    this.#searchControl = null;
     this.#highlights.clear();
     this.store.set({ search: IDLE_SEARCH });
   }
 
   async #runSearch(
-    doc: PdfEngineDocument,
+    session: DocumentSession,
     query: string,
     normalized: string,
     options: SearchOptions,
-    generation: number,
+    signal: AbortSignal,
   ): Promise<void> {
     const matches: SearchMatch[] = [];
     const startPage = this.store.get().currentPage;
@@ -2350,9 +2426,9 @@ export class PdfViewerRuntime {
       });
       this.#refreshHighlights();
     };
-    for (let page = 0; page < doc.pageCount; page++) {
-      const index = await this.#pageIndex(doc, page, options);
-      if (generation !== this.#searchGeneration) return;
+    for (let page = 0; page < session.pageCount; page++) {
+      const index = await this.#pageIndex(session, page, options);
+      if (signal.aborted) return;
       const found = findMatches(index, normalized, page, undefined, options);
       const select = current === -1 && page >= startPage && found.length > 0;
       if (select) current = matches.length;
@@ -2365,7 +2441,7 @@ export class PdfViewerRuntime {
         if (select && match) this.#background(this.#scrollToMatch(match), "scrolling to a match");
         publishedAt = now;
         await yieldToMain();
-        if (generation !== this.#searchGeneration) return;
+        if (signal.aborted) return;
       }
     }
     if (current === -1 && matches.length > 0) {
@@ -2377,7 +2453,7 @@ export class PdfViewerRuntime {
   }
 
   #pageIndex(
-    doc: PdfEngineDocument,
+    session: DocumentSession,
     pageIndex: number,
     options: SearchOptions,
   ): Promise<PageIndex> {
@@ -2389,7 +2465,13 @@ export class PdfViewerRuntime {
     }
     let index = indexes.get(pageIndex);
     if (!index) {
-      index = doc.getText(pageIndex).then((text) => buildPageIndex(text, options));
+      index = session
+        .text(pageIndex)
+        .then((text) => buildPageIndex(text, options))
+        .catch((error: unknown) => {
+          indexes.delete(pageIndex);
+          throw error;
+        });
       indexes.set(pageIndex, index);
     }
     return index;
@@ -2409,12 +2491,13 @@ export class PdfViewerRuntime {
    * "horizontal" mode, in its left third. "page" mode shows its page.
    */
   async #scrollToMatch(match: SearchMatch): Promise<void> {
-    const doc = this.#doc;
-    if (!doc) return;
-    const text = await doc.getText(match.pageIndex);
+    const session = this.#session;
+    const signal = this.#lease?.signal;
+    if (!session || !signal) return;
+    const text = await session.text(match.pageIndex);
     const current = this.store.get().layout;
     const scroller = this.#scroller;
-    if (!current || !scroller || this.#doc !== doc) return;
+    if (!current || !scroller || signal.aborted) return;
     const layout = this.#show(current, match.pageIndex);
     const at = match.start.item * 4;
     const size = layout.sizes[match.pageIndex] ?? { width: 0, height: 0 };
@@ -2513,41 +2596,38 @@ export class PdfViewerRuntime {
   }
 
   /**
-   * Background work may outlive its document: it then fails quietly. While the
-   * document that started it is still open, a failure is logged.
+   * Background work may outlive its document: it then fails quietly. Until
+   * `signal`, by default the open document's lease's, aborts, a failure is
+   * logged.
    */
-  #background(work: Promise<unknown>, what: string, generation = this.#generation): void {
+  #background(
+    work: Promise<unknown>,
+    what: string,
+    signal: AbortSignal | undefined = this.#lease?.signal,
+  ): void {
     work.catch((error: unknown) => {
-      if (this.#generation === generation) console.error(`${what} failed`, error);
+      if (signal && !signal.aborted) console.error(`${what} failed`, error);
     });
   }
 
-  /** Learn the real size of every page in the background, then relayout once. */
-  async #refineSizes(doc: PdfEngineDocument, generation: number): Promise<void> {
-    const sizes = [...this.#sizes];
-    let changed = false;
-    for (let index = 1; index < doc.pageCount; index += 64) {
-      const batch = Array.from({ length: Math.min(64, doc.pageCount - index) }, (_, offset) =>
-        doc.pageSize(index + offset),
-      );
-      const results = await Promise.all(batch);
-      if (this.#generation !== generation) return;
-      results.forEach((size, offset) => {
-        const current = sizes[index + offset];
-        if (!current || current.width !== size.width || current.height !== size.height) {
-          sizes[index + offset] = size;
-          changed = true;
-        }
-      });
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
-    if (!changed || this.#generation !== generation) return;
+  /**
+   * Once the session has learned the real size of every page in the
+   * background, relayout once if any differs from the first page's.
+   */
+  async #measurePages(session: DocumentSession, signal: AbortSignal): Promise<void> {
+    const sizes = await session.measurePages();
+    if (signal.aborted) return;
+    const changed = sizes.some((size, index) => {
+      const current = this.#sizes[index];
+      return !current || current.width !== size.width || current.height !== size.height;
+    });
+    if (!changed) return;
     this.#gestures.finish();
     const scroller = this.#scroller;
     const layout = this.store.get().layout;
     // Shrinking the content can clamp its scroll position immediately.
     const point = scroller ? { x: scroller.scrollLeft, y: scroller.scrollTop } : null;
-    this.#sizes = sizes;
+    this.#sizes = [...sizes];
     const next = this.#applyLayout(this.store.get().scale);
     if (scroller && layout && point) {
       // Keep the point at the viewport's top-left corner where it is.

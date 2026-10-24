@@ -1,58 +1,18 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  type PdfEngineDocument,
-  RenderCancelledError,
-  type RenderRequest,
-  type RenderTask,
-} from "../src/engine/types.ts";
 import { computeLayout } from "../src/runtime/layout.ts";
 import { RenderScheduler, type ScheduleInput } from "../src/runtime/scheduler.ts";
-
-const settle = () => new Promise((resolve) => setImmediate(resolve));
-
-function canvas(): HTMLCanvasElement {
-  return { width: 0, height: 0, style: {} } as HTMLCanvasElement;
-}
+import { fakeCanvas, LETTER, openSession, settle } from "./fake-pdfjs.ts";
 
 /**
- * Keeps each render pending until the test settles it; a completed render
- * sizes its canvas as the engine does. Records the drawings kept canvases
- * were drawn back from.
+ * A session of two pages, whose drawings stay pending until the test
+ * settles them, and canvases that record the kept drawings drawn back into
+ * them.
  */
-function controlledDocument() {
-  const renders: {
-    request: RenderRequest;
-    resolve: () => void;
-    reject: (error: Error) => void;
-    task: RenderTask;
-  }[] = [];
+async function controlledDocument() {
+  const { session, drawings } = await openSession({ pages: [LETTER, LETTER] });
   const drawnBack: { into: HTMLCanvasElement; from: HTMLCanvasElement }[] = [];
-  const doc = {
-    render(request: RenderRequest) {
-      let resolve!: () => void;
-      let reject!: (error: Error) => void;
-      const promise = new Promise<void>((done, fail) => {
-        resolve = () => {
-          const { canvas, region, scale } = request;
-          canvas.width = region ? region.width : Math.floor(612 * scale);
-          canvas.height = region ? region.height : Math.floor(792 * scale);
-          done();
-        };
-        reject = fail;
-      });
-      const task = { promise, cancel: () => reject(new RenderCancelledError()) };
-      renders.push({ request, resolve, reject, task });
-      return task;
-    },
-    releasePage() {},
-    drawKept(into: HTMLCanvasElement, from: HTMLCanvasElement) {
-      into.width = from.width;
-      into.height = from.height;
-      drawnBack.push({ into, from });
-    },
-  } as unknown as PdfEngineDocument;
-  return { doc, renders, drawnBack };
+  return { doc: session, renders: drawings, drawnBack, canvas: () => fakeCanvas(drawnBack) };
 }
 
 /** Two US Letter pages, page `page` in view. */
@@ -87,12 +47,13 @@ const whole = { minX: 0, minY: 0, maxX: 1, maxY: 1 };
 
 describe("RenderScheduler kept canvases", () => {
   it("draws a page's kept canvas back when it mounts again, without rendering it", async (t) => {
-    const { doc, renders, drawnBack } = controlledDocument();
+    const { doc, renders, drawnBack, canvas } = await controlledDocument();
     const scheduler = new RenderScheduler(doc, { maxKeptPixels: 4_000_000 });
     t.after(() => scheduler.dispose());
     const detail = canvas();
     scheduler.attach(0, canvas(), detail, null, null);
     scheduler.update(input(1));
+    await settle();
     assert.equal(renders.length, 1);
     renders[0]?.resolve();
     await settle();
@@ -113,17 +74,19 @@ describe("RenderScheduler kept canvases", () => {
     assert.equal(scheduler.stats.kept, 1);
     assert.equal(scheduler.sharpness(0, whole, 1), 1);
     scheduler.update(input(1));
+    await settle();
     assert.equal(renders.length, 1, "nothing is rendered again");
   });
 
   it("keeps the canvases as they are when React mounts the same ones again", async (t) => {
-    const { doc, renders, drawnBack } = controlledDocument();
+    const { doc, renders, drawnBack, canvas } = await controlledDocument();
     const scheduler = new RenderScheduler(doc, { maxKeptPixels: 4_000_000 });
     t.after(() => scheduler.dispose());
     const base = canvas();
     const detail = canvas();
     scheduler.attach(0, base, detail, null, null);
     scheduler.update(input(1));
+    await settle();
     renders[0]?.resolve();
     await settle();
     scheduler.detach(0);
@@ -134,11 +97,12 @@ describe("RenderScheduler kept canvases", () => {
   });
 
   it("shows a drawing kept at another zoom until the page is rendered again", async (t) => {
-    const { doc, renders } = controlledDocument();
+    const { doc, renders, canvas } = await controlledDocument();
     const scheduler = new RenderScheduler(doc, { maxKeptPixels: 4_000_000 });
     t.after(() => scheduler.dispose());
     scheduler.attach(0, canvas(), canvas(), null, null);
     scheduler.update(input(1));
+    await settle();
     renders[0]?.resolve();
     await settle();
     scheduler.detach(0);
@@ -148,12 +112,13 @@ describe("RenderScheduler kept canvases", () => {
     scheduler.attach(0, canvas(), canvas(), null, null, null, spare);
     assert.equal(scheduler.hasPixels(0), true);
     assert.equal(scheduler.sharpness(0, whole, 1.5), 2 / 3);
+    await settle();
     assert.equal(renders.at(-1)?.request.scale, 1.5);
     assert.equal(renders.at(-1)?.request.canvas, spare);
   });
 
   it("lets the least recently kept canvases go beyond its budget", async (t) => {
-    const { doc, renders } = controlledDocument();
+    const { doc, renders, canvas } = await controlledDocument();
     // Room for one page's drawing.
     const scheduler = new RenderScheduler(doc, { maxKeptPixels: 600_000 });
     t.after(() => scheduler.dispose());
@@ -161,6 +126,7 @@ describe("RenderScheduler kept canvases", () => {
     for (const page of [0, 1]) {
       scheduler.attach(page, canvas(), details[page] as HTMLCanvasElement, null, null);
       scheduler.update(input(1, page));
+      await settle();
       renders.at(-1)?.resolve();
       await settle();
       scheduler.detach(page);
@@ -174,19 +140,21 @@ describe("RenderScheduler kept canvases", () => {
   });
 
   it("lets a page mounting in the same commit take its canvases before others go", async (t) => {
-    const { doc, renders, drawnBack } = controlledDocument();
+    const { doc, renders, drawnBack, canvas } = await controlledDocument();
     // Room for one page's drawing.
     const scheduler = new RenderScheduler(doc, { maxKeptPixels: 600_000 });
     t.after(() => scheduler.dispose());
     const first = canvas();
     scheduler.attach(0, canvas(), first, null, null);
     scheduler.update(input(1));
+    await settle();
     renders.at(-1)?.resolve();
     await settle();
     scheduler.detach(0);
     const second = canvas();
     scheduler.attach(1, canvas(), second, null, null);
     scheduler.update(input(1, 1));
+    await settle();
     renders.at(-1)?.resolve();
     await settle();
     // One commit: page 2 unmounts, over the budget with page 1's, and page 1 mounts.
@@ -199,13 +167,14 @@ describe("RenderScheduler kept canvases", () => {
   });
 
   it("keeps nothing drawn before the content changed or the view turned", async (t) => {
-    const { doc, renders } = controlledDocument();
+    const { doc, renders, canvas } = await controlledDocument();
     const scheduler = new RenderScheduler(doc, { maxKeptPixels: 4_000_000 });
     t.after(() => scheduler.dispose());
     for (const change of [() => scheduler.invalidateContent(), () => scheduler.rotate(90)]) {
       const detail = canvas();
       scheduler.attach(0, canvas(), detail, null, null);
       scheduler.update(input(1));
+      await settle();
       renders.at(-1)?.resolve();
       await settle();
       scheduler.detach(0);
@@ -217,7 +186,7 @@ describe("RenderScheduler kept canvases", () => {
   });
 
   it("lets kept canvases go first within maxCanvasPixels", async (t) => {
-    const { doc, renders } = controlledDocument();
+    const { doc, renders, canvas } = await controlledDocument();
     const scheduler = new RenderScheduler(doc, {
       maxKeptPixels: 4_000_000,
       maxCanvasPixels: 1_200_000,
@@ -226,6 +195,7 @@ describe("RenderScheduler kept canvases", () => {
     const kept = canvas();
     scheduler.attach(0, canvas(), kept, null, null);
     scheduler.update(input(1));
+    await settle();
     renders.at(-1)?.resolve();
     await settle();
     scheduler.detach(0);
@@ -246,12 +216,13 @@ describe("RenderScheduler kept canvases", () => {
   });
 
   it("keeps nothing with a budget of 0", async (t) => {
-    const { doc, renders } = controlledDocument();
+    const { doc, renders, canvas } = await controlledDocument();
     const scheduler = new RenderScheduler(doc, { maxKeptPixels: 0 });
     t.after(() => scheduler.dispose());
     const detail = canvas();
     scheduler.attach(0, canvas(), detail, null, null);
     scheduler.update(input(1));
+    await settle();
     renders[0]?.resolve();
     await settle();
     scheduler.detach(0);
@@ -264,11 +235,12 @@ describe("RenderScheduler kept canvases", () => {
       [undefined, 612 * 792],
       [400_000, 0],
     ] as const) {
-      const { doc, renders } = controlledDocument();
+      const { doc, renders, canvas } = await controlledDocument();
       const scheduler = new RenderScheduler(doc, { maxKeptPixels });
       const detail = canvas();
       scheduler.attach(0, canvas(), detail, null, null);
       scheduler.update(input(1));
+      await settle();
       renders.at(-1)?.resolve();
       await settle();
       scheduler.detach(0);
@@ -279,7 +251,7 @@ describe("RenderScheduler kept canvases", () => {
   });
 
   it("keeps a base and a partial detail, and draws both back", async (t) => {
-    const { doc, renders, drawnBack } = controlledDocument();
+    const { doc, renders, drawnBack, canvas } = await controlledDocument();
     // At scale 2, the whole page (1,938,816 pixels) is over its detail budget.
     const scheduler = new RenderScheduler(doc, {
       maxKeptPixels: 4_000_000,
@@ -290,6 +262,7 @@ describe("RenderScheduler kept canvases", () => {
     const detail = canvas();
     scheduler.attach(0, base, detail, null, null);
     scheduler.update(input(2));
+    await settle();
     // The base, then the partial detail.
     for (let round = 0; round < 3; round++) {
       for (const render of renders) render.resolve();
@@ -316,7 +289,7 @@ describe("RenderScheduler kept canvases", () => {
   });
 
   it("takes a detail drawn into the spare back as it is when React mounts the same canvases again", async (t) => {
-    const { doc, renders, drawnBack } = controlledDocument();
+    const { doc, renders, drawnBack, canvas } = await controlledDocument();
     const scheduler = new RenderScheduler(doc, { maxKeptPixels: 4_000_000 });
     t.after(() => scheduler.dispose());
     const base = canvas();
@@ -324,10 +297,12 @@ describe("RenderScheduler kept canvases", () => {
     const spare = canvas();
     scheduler.attach(0, base, detail, null, null, null, spare);
     scheduler.update(input(1));
+    await settle();
     renders.at(-1)?.resolve();
     await settle();
     // A zoom draws the new detail into the spare, which then shows.
     scheduler.update(input(1.5));
+    await settle();
     assert.equal(renders.at(-1)?.request.canvas, spare);
     renders.at(-1)?.resolve();
     await settle();
@@ -347,12 +322,13 @@ describe("RenderScheduler kept canvases", () => {
   it("keeps nothing of pages whose form fields are shown as HTML", async () => {
     const container = { replaceChildren() {} } as unknown as HTMLElement;
     for (const forms of [false, true]) {
-      const { doc, renders } = controlledDocument();
+      const { doc, renders, canvas } = await controlledDocument();
       const scheduler = new RenderScheduler(doc, { maxKeptPixels: 4_000_000, forms });
       const base = canvas();
       // Unsettled, the page draws its base alone, and builds no layers.
       scheduler.attach(0, base, canvas(), null, container);
       scheduler.update({ ...input(1), settled: false });
+      await settle();
       renders.at(-1)?.resolve();
       await settle();
       const pixels = base.width * base.height;
@@ -365,12 +341,13 @@ describe("RenderScheduler kept canvases", () => {
   });
 
   it("keeps nothing while the viewer has no viewport", async (t) => {
-    const { doc, renders } = controlledDocument();
+    const { doc, renders, canvas } = await controlledDocument();
     const scheduler = new RenderScheduler(doc, { maxKeptPixels: 4_000_000 });
     t.after(() => scheduler.dispose());
     const first = canvas();
     scheduler.attach(0, canvas(), first, null, null);
     scheduler.update(input(1));
+    await settle();
     renders.at(-1)?.resolve();
     await settle();
     scheduler.detach(0);
@@ -382,6 +359,7 @@ describe("RenderScheduler kept canvases", () => {
     const second = canvas();
     scheduler.attach(1, canvas(), second, null, null);
     scheduler.update(input(1, 1));
+    await settle();
     renders.at(-1)?.resolve();
     await settle();
     scheduler.detach(1);
@@ -390,11 +368,12 @@ describe("RenderScheduler kept canvases", () => {
   });
 
   it("lets kept canvases go when it is disposed", async () => {
-    const { doc, renders } = controlledDocument();
+    const { doc, renders, canvas } = await controlledDocument();
     const scheduler = new RenderScheduler(doc, { maxKeptPixels: 4_000_000 });
     const detail = canvas();
     scheduler.attach(0, canvas(), detail, null, null);
     scheduler.update(input(1));
+    await settle();
     renders.at(-1)?.resolve();
     await settle();
     scheduler.detach(0);

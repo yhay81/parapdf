@@ -11,6 +11,30 @@ milestone at a time (`docs/rebuild/milestones.md`). APIs change without
 deprecations (`docs/decisions/0002-no-compatibility.md`); each merged
 milestone gets an entry here, and the release lists every break from 0.x.
 
+### Rebuild M2: pdf.js directly, and document sessions (2026-10-24)
+
+- pdf.js is used directly (decision 0001): the engine boundary,
+  `PdfEngine` and `PdfEngineDocument`, is gone, and so is the runtime's
+  `engineName`. `DestinationRef` is now `Destination`, pdf.js's: a name or
+  an explicit destination array. `goToDestination()` also takes the `null`
+  of an outline entry without one, and resolves to false.
+- A document is a session, shared by every viewer of its source as
+  before, which reads the pages' sizes, their text, the permissions, the
+  initial view, the outline, page labels, metadata, attachments, and the
+  layers once for all of them; failed secondary-data and text reads are
+  retried by the next caller. The state's `document` is the session; its `proxy` is
+  pdf.js's document, which `usePdfDocument()` returns.
+  Failed search-index reads are also forgotten, so retrying a search can
+  recover without closing the session.
+- Viewers of one document share which of its layers show: showing or
+  hiding one in a viewer draws it so in all of them. A page stays parsed
+  while any viewer of its document shows it.
+- Closing a document stops everything its viewer started for it, drawing,
+  searches, background work, the annotation editor, and printing, which
+  then fails, through an abort signal instead of counters; the session
+  stops its own work when it closes. Opening another document closes the
+  open one.
+
 ### Rebuild M1: the measured work (2026-10-24)
 
 - pdf.js is the only engine (decision 0001): `document` in the viewer's

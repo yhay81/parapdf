@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useEffectEvent } from "react";
-import type { FormChange } from "../engine/types.ts";
+import type { FormChange } from "../pdfjs/forms.ts";
 import { usePdfViewer } from "./context.ts";
 
 /**

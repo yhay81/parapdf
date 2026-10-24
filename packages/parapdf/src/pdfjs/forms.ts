@@ -1,5 +1,50 @@
 import type * as Pdfjs from "pdfjs-dist";
-import type { FormChange, FormField, FormFieldType, FormValue } from "./types.ts";
+
+export type FormFieldType =
+  | "text"
+  | "checkbox"
+  | "radio"
+  | "combobox"
+  | "listbox"
+  | "button"
+  | "signature";
+
+/**
+ * A form field's value: text, the export value of the checked box or radio
+ * button ("Off" when none is), or the selected options' export values.
+ */
+export type FormValue = string | readonly string[];
+
+/** A form field of the document, with the widgets that show it on pages. */
+export interface FormField {
+  /** The fully qualified name, such as "address.city". */
+  name: string;
+  type: FormFieldType;
+  /** The value now, with what the reader typed and `setFormValues()` set. */
+  value: FormValue;
+  /** The value the document starts with. */
+  defaultValue: FormValue;
+  readOnly: boolean;
+  required: boolean;
+  /** Whether a list box takes several options. */
+  multiple: boolean;
+  /** The options of a combo or list box. */
+  options: readonly { value: string; label: string }[];
+  /** The values that check one of its boxes or radio buttons. */
+  exportValues: readonly string[];
+  /** Where the field shows: a page and a rectangle in unturned PDF points from its top-left corner. */
+  widgets: readonly {
+    id: string;
+    pageIndex: number;
+    rect: { x: number; y: number; width: number; height: number };
+  }[];
+}
+
+/** A value the reader entered into a form field. */
+export interface FormChange {
+  name: string;
+  value: FormValue;
+}
 
 /** What pdf.js's display annotations hold for a form widget. */
 interface WidgetData {

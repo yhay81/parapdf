@@ -8,7 +8,7 @@ snippet, or the history. Not done before filing: reproducing by hand in
 release browsers and attaching screenshots. Drafted on 2026-10-20 by a side session of the
 ParaPDF work, from the finding recorded in `docs/history/AGENTS-v0.md` (Runtime prototype,
 the `TextLayer` and `lang` item) and worked around in ParaPDF by
-`inLayerLanguage()` in `packages/parapdf/src/engine/pdfjs.ts`.
+`inLayerLanguage()` in `packages/parapdf/src/pdfjs/text.ts`.
 
 Pull request: https://github.com/mozilla/pdf.js/pull/22261, opened on 2026-10-20.
 

@@ -1,4 +1,4 @@
-import type { PageText } from "../engine/types.ts";
+import type { PageText } from "../pdfjs/text.ts";
 
 /** A position inside one text item; `offset` counts UTF-16 code units like DOM ranges. */
 export interface TextPosition {

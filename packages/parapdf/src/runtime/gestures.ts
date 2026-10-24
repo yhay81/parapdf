@@ -1,4 +1,4 @@
-import type { AnnotationTool } from "../engine/types.ts";
+import type { AnnotationTool } from "../pdfjs/editor.ts";
 import { type Layout, type ScrollMode, type Viewport, zoomTarget } from "./layout.ts";
 import {
   type Edges,

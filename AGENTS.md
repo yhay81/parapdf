@@ -27,7 +27,7 @@ the code that follows it.
 ## Status
 
 The rebuild runs milestone by milestone on `main`
-(`docs/rebuild/milestones.md`); M0 and M1 are done, M2 is next. 0.x was
+(`docs/rebuild/milestones.md`); M0 to M2 are done, M3 is next. 0.x was
 published on npm as `parapdf` 0.1.0 to 0.4.0, from the tags `v0.1.0` to
 `v0.4.0`. The package's README, the documentation site, the root
 `README.md`, `CONTRIBUTING.md`, and `SECURITY.md` describe 0.x until M7
@@ -93,19 +93,23 @@ rewrites them (decision 0002).
 
 ## Repository layout
 
-As of M1; `target.md` describes where the runtime's code goes.
+As of M2; `target.md` describes where the runtime's code goes.
 
-- `packages/parapdf/` — the runtime, published as `parapdf`: pdf.js, how
-  the runtime uses it, and the loader that starts it (`src/engine/`);
-  layout, scheduler, viewer runtime, and the modules around them
-  (`src/runtime/`); React bindings (`src/react/`, `"use client"`); unit
-  tests of the modules that need no DOM (`test/`). `scripts/pdfjs-files.ts`,
-  run by `pnpm install` and `build`, copies pdf.js's worker behind
-  ParaPDF's prelude (`scripts/worker-prelude.js`) and the files it loads on
-  demand into `pdfjs/` (not committed), and writes `src/engine/pdfjs-files.ts`
-  (committed). The workspace consumes the TypeScript source; `build` emits
-  `dist/`, and packing (with pnpm, for `publishConfig`) ships `dist/`,
-  `src/`, `pdfjs/`, the README, and the license and notices.
+- `packages/parapdf/` — the runtime, published as `parapdf`: the loader
+  that starts pdf.js with the package's worker and files, and how ParaPDF
+  draws pages and builds layers with it (`src/pdfjs/`); document sessions,
+  one per open document, shared by its viewers through a registry
+  (`src/document/`); layout, scheduler, viewer runtime, and the modules
+  around them (`src/runtime/`); React bindings (`src/react/`,
+  `"use client"`); unit tests of the modules that need no DOM, which stand
+  in for pdf.js with `test/fake-pdfjs.ts` (`test/`).
+  `scripts/pdfjs-files.ts`, run by `pnpm install` and `build`, copies
+  pdf.js's worker behind ParaPDF's prelude (`scripts/worker-prelude.js`) and
+  the files it loads on demand into `pdfjs/` (not committed), and writes
+  `src/pdfjs/files.ts` (committed). The workspace consumes the TypeScript
+  source; `build` emits `dist/`, and packing (with pnpm, for
+  `publishConfig`) ships `dist/`, `src/`, `pdfjs/`, the README, and the
+  license and notices.
 - `examples/prototype/` — the Vite demo the functional checks and the
   runtime benchmarks drive (`scripts/check-*.ts`, `scripts/*-bench.ts`,
   results in `results/`). Its query parameters are read in `src/App.tsx`.
@@ -149,10 +153,10 @@ As of M1; `target.md` describes where the runtime's code goes.
   (also `pnpm --filter @parapdf/prototype bench`), `commit-bench.ts` (zoom
   commits), `zoom-bench.ts`, `return-bench.ts` (pages the reader comes back
   to after they unmounted), `main-thread-bench.ts`, and `hwa-bench.ts`,
-  each documented in its header comment. `commit-bench.ts`, `zoom-bench.ts`,
-  and `return-bench.ts` measure the build in `DIST` against the one in
-  `BEFORE` (built from the commit before the change, in a directory of its
-  own) in the same run, job by job.
+  each documented in its header comment. `scroll-bench.ts`,
+  `commit-bench.ts`, `zoom-bench.ts`, and `return-bench.ts` measure the
+  build in `DIST` against the one in `BEFORE` (built from the commit before
+  the change, in a directory of its own) in the same run, job by job.
 - `pnpm bench:build` and `pnpm bench` run the engine benchmark (`BROWSER`,
   `ENGINES`, `FILES`, `RUNS`, `PAGES`, `SCALE`; `OUTPUT`, a prefix that
   keeps an experiment's result files apart from the committed ones; `DIST`).
