@@ -2,7 +2,6 @@
 
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { createContext, useContext, useSyncExternalStore } from "react";
-import { pdfjsDocumentOf } from "../engine/pdfjs.ts";
 import type { PdfViewerRuntime, ViewerState } from "../runtime/viewer.ts";
 
 export const RuntimeContext = createContext<PdfViewerRuntime | null>(null);
@@ -33,5 +32,5 @@ export function usePdfState<T>(selector: (state: ViewerState) => T): T {
  * APIs that ParaPDF does not wrap, such as metadata or attachments.
  */
 export function usePdfDocument(): PDFDocumentProxy | null {
-  return pdfjsDocumentOf(usePdfState((state) => state.document));
+  return usePdfState((state) => state.document?.proxy ?? null);
 }

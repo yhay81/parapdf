@@ -1,0 +1,205 @@
+{
+  "environment": {
+    "runAt": "2026-10-24T03:48:51.597Z",
+    "os": "darwin 27.0.0 arm64",
+    "cpu": "Apple M2 Pro (12 logical cores)",
+    "browser": "WebKit 27.2",
+    "power": {
+      "source": "ac",
+      "lowPowerMode": false
+    },
+    "loadAverage": {
+      "start": 5.14,
+      "end": 4.31
+    },
+    "turnTaking": {
+      "waits": 0,
+      "waitedMs": 0,
+      "repeatedJobs": 0
+    },
+    "settings": {
+      "file": "synthetic-vector-200k.pdf",
+      "runs": 3,
+      "devices": [
+        {
+          "name": "desktop",
+          "viewport": {
+            "width": 1280,
+            "height": 900
+          },
+          "deviceScaleFactor": 2
+        },
+        {
+          "name": "phone",
+          "viewport": {
+            "width": 390,
+            "height": 844
+          },
+          "deviceScaleFactor": 3
+        }
+      ]
+    }
+  },
+  "summaries": [
+    {
+      "device": "desktop",
+      "scale": 4,
+      "variant": "before",
+      "runs": 3,
+      "zoom": {
+        "timeToSharpMs": 48.02,
+        "sharpRuns": 3,
+        "sharpness": 1,
+        "canvasMiB": 66.32,
+        "peakCanvasMiB": 100.2
+      },
+      "pan": {
+        "timeToSharpMs": 58.48,
+        "sharpRuns": 3,
+        "sharpness": 1,
+        "canvasMiB": 66.32,
+        "peakCanvasMiB": 130.35
+      }
+    },
+    {
+      "device": "desktop",
+      "scale": 4,
+      "variant": "pdfjs-hwa",
+      "runs": 3,
+      "zoom": {
+        "timeToSharpMs": 62.86,
+        "sharpRuns": 3,
+        "sharpness": 1,
+        "canvasMiB": 72.19,
+        "peakCanvasMiB": 100.2
+      },
+      "pan": {
+        "timeToSharpMs": 55.98,
+        "sharpRuns": 3,
+        "sharpness": 1,
+        "canvasMiB": 72.19,
+        "peakCanvasMiB": 136.21
+      }
+    },
+    {
+      "device": "desktop",
+      "scale": 8,
+      "variant": "before",
+      "runs": 3,
+      "zoom": {
+        "timeToSharpMs": 50.22,
+        "sharpRuns": 3,
+        "sharpness": 1,
+        "canvasMiB": 66.32,
+        "peakCanvasMiB": 100.2
+      },
+      "pan": {
+        "timeToSharpMs": 51.36,
+        "sharpRuns": 3,
+        "sharpness": 1,
+        "canvasMiB": 66.32,
+        "peakCanvasMiB": 130.35
+      }
+    },
+    {
+      "device": "desktop",
+      "scale": 8,
+      "variant": "pdfjs-hwa",
+      "runs": 3,
+      "zoom": {
+        "timeToSharpMs": 50.02,
+        "sharpRuns": 3,
+        "sharpness": 1,
+        "canvasMiB": 72.19,
+        "peakCanvasMiB": 100.2
+      },
+      "pan": {
+        "timeToSharpMs": 49.66,
+        "sharpRuns": 3,
+        "sharpness": 1,
+        "canvasMiB": 72.19,
+        "peakCanvasMiB": 136.21
+      }
+    },
+    {
+      "device": "phone",
+      "scale": 4,
+      "variant": "before",
+      "runs": 3,
+      "zoom": {
+        "timeToSharpMs": 62.88,
+        "sharpRuns": 3,
+        "sharpness": 1,
+        "canvasMiB": 72.2,
+        "peakCanvasMiB": 78.54
+      },
+      "pan": {
+        "timeToSharpMs": 11.06,
+        "sharpRuns": 3,
+        "sharpness": 1,
+        "canvasMiB": 62.92,
+        "peakCanvasMiB": 126.96
+      }
+    },
+    {
+      "device": "phone",
+      "scale": 4,
+      "variant": "pdfjs-hwa",
+      "runs": 3,
+      "zoom": {
+        "timeToSharpMs": 47.32,
+        "sharpRuns": 3,
+        "sharpness": 1,
+        "canvasMiB": 70.71,
+        "peakCanvasMiB": 70.71
+      },
+      "pan": {
+        "timeToSharpMs": 9.08,
+        "sharpRuns": 3,
+        "sharpness": 1,
+        "canvasMiB": 61.43,
+        "peakCanvasMiB": 125.47
+      }
+    },
+    {
+      "device": "phone",
+      "scale": 8,
+      "variant": "before",
+      "runs": 3,
+      "zoom": {
+        "timeToSharpMs": 62.98,
+        "sharpRuns": 3,
+        "sharpness": 1,
+        "canvasMiB": 72.2,
+        "peakCanvasMiB": 78.54
+      },
+      "pan": {
+        "timeToSharpMs": 9.66,
+        "sharpRuns": 3,
+        "sharpness": 1,
+        "canvasMiB": 72.2,
+        "peakCanvasMiB": 136.24
+      }
+    },
+    {
+      "device": "phone",
+      "scale": 8,
+      "variant": "pdfjs-hwa",
+      "runs": 3,
+      "zoom": {
+        "timeToSharpMs": 48.74,
+        "sharpRuns": 3,
+        "sharpness": 1,
+        "canvasMiB": 70.71,
+        "peakCanvasMiB": 70.71
+      },
+      "pan": {
+        "timeToSharpMs": 9.04,
+        "sharpRuns": 3,
+        "sharpness": 1,
+        "canvasMiB": 70.71,
+        "peakCanvasMiB": 134.75
+      }
+    }
+  ]
+}

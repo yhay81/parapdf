@@ -134,6 +134,8 @@ export interface SchedulerStats {
   failed: number;
   /** Canvases of pages outside the viewport cleared to stay within maxCanvasPixels. */
   trimmed: number;
+  /** Layers drawn back from the canvases a page kept when it unmounted (`maxKeptPixels`). */
+  kept: number;
 }
 
 export interface SchedulerOptions {
@@ -174,10 +176,28 @@ export interface SchedulerOptions {
   selection?: TextSelectionTracker;
   /** Edits annotations on the pages; see `setAnnotationEditor`. */
   annotationEditor?: AnnotationEditor;
+  /**
+   * The most pixels kept of the canvases of pages that unmount, so that a
+   * page coming back shows its drawing at once, drawn back from them, instead
+   * of drawing it again; by default KEPT_VIEWPORTS times the viewport's
+   * device pixels, and 0 keeps none. The least recently kept go first, and
+   * within maxCanvasPixels they count as canvases and go before any page's
+   * canvases, but never keep a page from drawing.
+   */
+  maxKeptPixels?: number;
   onPainted?: (pageIndex: number, layer: Layer) => void;
   onTextReady?: (pageIndex: number, handle: TextLayerHandle) => void;
   onTextRemoved?: (pageIndex: number) => void;
 }
+
+/**
+ * The canvases kept from pages that unmounted hold at most this many
+ * viewports' worth of device pixels by default (`maxKeptPixels`): a few pages
+ * at fit-width, so that going back to them, by a link's back, by scrolling,
+ * or by flipping, shows them at once. Kept, a page came back sharp after 3
+ * to 38 ms instead of 23 to 176 in the return benchmark.
+ */
+const KEPT_VIEWPORTS = 6;
 
 /** How long `whenEditable` waits for a page's annotation editor layer. */
 const EDITOR_WAIT_MS = 10_000;
@@ -291,6 +311,23 @@ function release(canvas: HTMLCanvasElement): void {
   canvas.style.visibility = "hidden";
 }
 
+/**
+ * The canvases of a page that unmounted, kept with what they show: its
+ * whole-page detail alone, which covers its base, or its base and any
+ * partial detail.
+ */
+interface KeptPage {
+  readonly rotation: Rotation;
+  readonly version: number;
+  readonly pixels: number;
+  readonly base: { readonly canvas: HTMLCanvasElement; readonly scale: number } | null;
+  readonly detail: {
+    readonly canvas: HTMLCanvasElement;
+    readonly scale: number;
+    readonly region: PageArea | null;
+  } | null;
+}
+
 /** Positions a detail canvas over `region` of its page, or over the whole page. */
 function placeDetail(canvas: HTMLCanvasElement, region: PageArea | null): void {
   const { style } = canvas;
@@ -341,6 +378,7 @@ export class RenderScheduler {
     cancelled: 0,
     failed: 0,
     trimmed: 0,
+    kept: 0,
   };
   readonly #doc: PdfEngineDocument;
   readonly #slots = new Map<number, Slot>();
@@ -350,6 +388,14 @@ export class RenderScheduler {
   readonly #maxBasePixels: number;
   readonly #maxCanvasPixels: number;
   readonly #options: SchedulerOptions;
+  /** `maxKeptPixels`; undefined follows the viewport. */
+  #maxKeptPixels: number | undefined;
+  /** Canvases of pages that unmounted, by page, least recently kept first. */
+  readonly #kept = new Map<number, KeptPage>();
+  #keptPixels = 0;
+  #trimKeptQueued = false;
+  /** Whether pages that unmount keep their canvases now; see setKeeping. */
+  #keeping = true;
   #input: ScheduleInput | undefined;
   #running = 0;
   #textRunning = false;
@@ -375,6 +421,33 @@ export class RenderScheduler {
     this.#maxBasePixels = options.maxBasePixels ?? 2_097_152;
     this.#maxCanvasPixels = options.maxCanvasPixels ?? Number.POSITIVE_INFINITY;
     this.#options = options;
+    this.#maxKeptPixels = options.maxKeptPixels;
+  }
+
+  /** The most pixels the canvases kept from pages that unmounted may hold now. */
+  #keptBudget(): number {
+    if (!this.#keeping) return 0;
+    if (this.#maxKeptPixels !== undefined) return this.#maxKeptPixels;
+    const input = this.#input;
+    if (!input) return 0;
+    const { width, height } = input.viewport;
+    return KEPT_VIEWPORTS * width * height * input.devicePixelRatio ** 2;
+  }
+
+  /** Pixels of the canvases kept from pages that unmounted. */
+  get keptPixels(): number {
+    return this.#keptPixels;
+  }
+
+  /**
+   * Whether pages that unmount keep their canvases: not while the viewer
+   * has no viewport, so that canvases kept for pages that cannot come back
+   * do not hold memory until the document closes. Turning it off lets the
+   * canvases kept so far go.
+   */
+  setKeeping(keeping: boolean): void {
+    this.#keeping = keeping;
+    if (!keeping) this.#forgetAll();
   }
 
   attach(
@@ -388,13 +461,20 @@ export class RenderScheduler {
     editor: HTMLElement | null = null,
   ): void {
     this.detach(index);
+    // A detail drawn into the spare made the spare the canvas the page shows,
+    // and keeps. If the same canvases mount again, the two change places
+    // again, so that the kept drawing is neither cleared nor drawn into the
+    // other.
+    const swapped = spare !== null && this.#kept.get(index)?.detail?.canvas === spare;
+    const shown = swapped && spare ? spare : detail;
+    const other = swapped ? detail : spare;
     // Canvas pixels are counted by size, and a new canvas is 300 by 150.
-    if (spare) release(spare);
-    this.#slots.set(index, {
+    if (other) release(other);
+    const slot: Slot = {
       index,
       base,
-      detail,
-      spare,
+      detail: shown,
+      spare: other,
       text,
       annotations,
       structure,
@@ -416,7 +496,9 @@ export class RenderScheduler {
       annotationRotation: 0,
       editorTask: undefined,
       editorHandle: undefined,
-    });
+    };
+    this.#slots.set(index, slot);
+    this.#restore(slot);
     this.#pump();
   }
 
@@ -438,10 +520,129 @@ export class RenderScheduler {
     }
     slot.annotations?.replaceChildren();
     slot.structure?.replaceChildren();
+    const kept = this.#keep(slot);
     for (const canvas of [slot.base, slot.detail, slot.spare]) {
-      if (canvas) release(canvas);
+      if (canvas && !kept.has(canvas)) release(canvas);
     }
     this.#doc.releasePage(index);
+  }
+
+  /**
+   * Keeps the canvases of an unmounting page that show its current drawing,
+   * as they are: unmounted, a canvas keeps its pixels. Returns them.
+   */
+  #keep(slot: Slot): Set<HTMLCanvasElement> {
+    const keep = new Set<HTMLCanvasElement>();
+    const budget = this.#keptBudget();
+    if (budget <= 0) return keep;
+    // With form fields shown as HTML, pdf.js draws check boxes, radio
+    // buttons, and some fields into canvases of their own, which only a
+    // render hands to the page's annotation layer: drawn back, the page
+    // would show them empty, as copyPage() knows.
+    if (this.#options.forms && slot.annotations) return keep;
+    const detail =
+      slot.detailScale > 0 && slot.detailVersion === this.#version
+        ? { canvas: slot.detail, scale: slot.detailScale, region: slot.detailRegion }
+        : null;
+    const base =
+      slot.baseScale > 0 && slot.baseVersion === this.#version && detail?.region !== null
+        ? { canvas: slot.base, scale: slot.baseScale }
+        : null;
+    if (!detail && !base) return keep;
+    const pixels = [detail?.canvas, base?.canvas].reduce(
+      (sum, canvas) => sum + (canvas ? canvas.width * canvas.height : 0),
+      0,
+    );
+    if (pixels > budget) return keep;
+    this.#forget(slot.index);
+    this.#kept.set(slot.index, {
+      rotation: this.#input?.layout.rotation ?? 0,
+      version: this.#version,
+      pixels,
+      base,
+      detail,
+    });
+    this.#keptPixels += pixels;
+    if (base) keep.add(base.canvas);
+    if (detail) keep.add(detail.canvas);
+    // Over the budget, the least recently kept go once the pages mounting
+    // in the same React commit, which unmounts pages before it mounts
+    // others, have taken theirs back: a jump away and back unmounted the
+    // pages it went to and let the ones it came back to go first.
+    if (!this.#trimKeptQueued) {
+      this.#trimKeptQueued = true;
+      queueMicrotask(() => {
+        this.#trimKeptQueued = false;
+        const limit = this.#keptBudget();
+        while (this.#keptPixels > limit && this.#kept.size > 0) this.#forgetOldest();
+      });
+    }
+    return keep;
+  }
+
+  /** Releases the canvases a page kept, unless `slot` took them back as its own. */
+  #forget(index: number, slot?: Slot): void {
+    const kept = this.#kept.get(index);
+    if (!kept) return;
+    this.#kept.delete(index);
+    this.#keptPixels -= kept.pixels;
+    for (const canvas of [kept.base?.canvas, kept.detail?.canvas]) {
+      if (canvas && canvas !== slot?.base && canvas !== slot?.detail) release(canvas);
+    }
+  }
+
+  #forgetOldest(): void {
+    const oldest = this.#kept.keys().next();
+    if (!oldest.done) this.#forget(oldest.value);
+  }
+
+  #forgetAll(): void {
+    for (const index of [...this.#kept.keys()]) this.#forget(index);
+  }
+
+  /**
+   * Shows what a mounting page kept, if it was drawn for the view's
+   * rotation and the content as it is: drawn into the page's new canvases,
+   * or, when they are the same ones, as React's StrictMode mounts them again,
+   * as they are. A drawing kept at another zoom still beats an empty page,
+   * and is drawn again as after a zoom.
+   */
+  #restore(slot: Slot): void {
+    const kept = this.#kept.get(slot.index);
+    if (!kept) return;
+    // A kept canvas cleared meanwhile has nothing to draw back.
+    const cleared = [kept.base?.canvas, kept.detail?.canvas].some(
+      (canvas) => canvas !== undefined && canvas.width * canvas.height === 0,
+    );
+    if (
+      cleared ||
+      kept.rotation !== (this.#input?.layout.rotation ?? 0) ||
+      kept.version !== this.#version
+    ) {
+      this.#forget(slot.index);
+      return;
+    }
+    if (kept.base) {
+      if (kept.base.canvas !== slot.base) this.#doc.drawKept(slot.base, kept.base.canvas);
+      slot.base.style.visibility = "";
+      slot.baseScale = kept.base.scale;
+      slot.baseVersion = kept.version;
+      this.stats.kept++;
+    }
+    if (kept.detail) {
+      if (kept.detail.canvas !== slot.detail) this.#doc.drawKept(slot.detail, kept.detail.canvas);
+      placeDetail(slot.detail, kept.detail.region);
+      slot.detail.style.visibility = "";
+      slot.detailScale = kept.detail.scale;
+      slot.detailVersion = kept.version;
+      slot.detailRegion = kept.detail.region;
+      this.stats.kept++;
+    }
+    // Drawn back: the kept canvases go, unless they are the page's own.
+    this.#forget(slot.index, slot);
+    for (const layer of ["base", "detail"] as const) {
+      if (kept[layer]) this.#options.onPainted?.(slot.index, layer);
+    }
   }
 
   /**
@@ -469,6 +670,8 @@ export class RenderScheduler {
       // Edited annotations turn with the page at once: they are what the reader works on.
       slot.editorHandle?.update(this.#input?.layout.scale ?? 1, rotation);
     }
+    // Kept canvases show the old rotation.
+    this.#forgetAll();
     // The next update() brings the turned layout and starts the new renders.
   }
 
@@ -504,6 +707,7 @@ export class RenderScheduler {
    */
   invalidateContent(): void {
     this.#version++;
+    this.#forgetAll();
     for (const slot of this.#slots.values()) {
       slot.job?.task.cancel();
       if (slot.annotations) {
@@ -518,6 +722,9 @@ export class RenderScheduler {
 
   /** Cancels all work and releases every page, for example when the document closes. */
   dispose(): void {
+    // Closing pages keep nothing.
+    this.#maxKeptPixels = 0;
+    this.#forgetAll();
     for (const index of [...this.#slots.keys()]) this.detach(index);
     for (const job of this.#extras.splice(0)) {
       job.cancelled = true;
@@ -792,6 +999,7 @@ export class RenderScheduler {
    */
   #trim(input: ScheduleInput): void {
     if (this.#maxCanvasPixels === Number.POSITIVE_INFINITY) return;
+    this.#trimKept(input);
     let total = this.#canvasPixels(input);
     if (total <= this.#maxCanvasPixels) return;
     const outside = [...this.#slots.values()]
@@ -812,6 +1020,18 @@ export class RenderScheduler {
         this.stats.trimmed++;
         total -= pixels;
       }
+    }
+  }
+
+  /**
+   * Kept canvases count within maxCanvasPixels too, and go first: while they
+   * and the pages' canvases, the renders running included, exceed it.
+   */
+  #trimKept(input: ScheduleInput): void {
+    if (this.#maxCanvasPixels === Number.POSITIVE_INFINITY) return;
+    const total = this.#canvasPixels(input);
+    while (total + this.#keptPixels > this.#maxCanvasPixels && this.#kept.size > 0) {
+      this.#forgetOldest();
     }
   }
 
@@ -957,6 +1177,8 @@ export class RenderScheduler {
       if (!job) break;
       this.#startExtra(job);
     }
+    // The renders just started may need the room kept canvases take.
+    if (this.#input) this.#trimKept(this.#input);
     this.#scheduleText();
   }
 

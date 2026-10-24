@@ -6,7 +6,7 @@ the text under "Issue text" below: the template fields, the result table,
 the cause, and the possible fix in one paragraph, without the diff, the
 snippet, or the history. Not done before filing: reproducing by hand in
 release browsers and attaching screenshots. Drafted on 2026-10-20 by a side session of the
-ParaPDF work, from the finding recorded in `AGENTS.md` (Runtime prototype,
+ParaPDF work, from the finding recorded in `docs/history/AGENTS-v0.md` (Runtime prototype,
 the item on drag selections over space without text) and in commit a0ef709,
 which fixed the same behaviour in ParaPDF (`TextSelectionTracker`,
 `packages/parapdf/src/runtime/selection.ts`).

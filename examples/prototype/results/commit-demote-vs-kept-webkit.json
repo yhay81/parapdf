@@ -1,0 +1,254 @@
+{
+  "environment": {
+    "runAt": "2026-10-24T06:04:33.117Z",
+    "os": "darwin 27.0.0 arm64",
+    "cpu": "Apple M2 Pro (12 logical cores)",
+    "browser": "WebKit 27.2",
+    "engine": "pdfjs",
+    "build": "this build",
+    "throttle": 1,
+    "power": {
+      "source": "ac",
+      "lowPowerMode": false
+    },
+    "loadAverage": {
+      "start": 6.29,
+      "end": 6.64
+    },
+    "turnTaking": {
+      "waits": 0,
+      "waitedMs": 0,
+      "repeatedJobs": 0
+    },
+    "settings": {
+      "file": "bill-hr815.pdf",
+      "runs": 3,
+      "viewport": {
+        "width": 820,
+        "height": 1000
+      },
+      "deviceScaleFactor": 2,
+      "queries": ["before", ""]
+    }
+  },
+  "summaries": [
+    {
+      "scenario": "pinch-out",
+      "query": "before",
+      "description": "a touch pinch out, 100 to 200 CSS pixels between the fingers, at fit-width",
+      "runs": 2,
+      "errors": [
+        "Not measuring on battery power: results would not be comparable. Connect AC power, or set ALLOW_BATTERY=1 to measure anyway."
+      ],
+      "scale": [1.11, 1.84],
+      "blankFrames": 0,
+      "blankMs": 0,
+      "baseFrames": 0,
+      "baseMs": 0,
+      "timeToSharpMs": 24.51,
+      "sharpRuns": 2,
+      "baseRenders": 0,
+      "detailRenders": 5,
+      "cancelled": 0,
+      "canvasMiBBefore": 73.37,
+      "peakCanvasMiB": 216.76
+    },
+    {
+      "scenario": "pinch-out",
+      "query": "",
+      "description": "a touch pinch out, 100 to 200 CSS pixels between the fingers, at fit-width",
+      "runs": 2,
+      "errors": [
+        "Not measuring on battery power: results would not be comparable. Connect AC power, or set ALLOW_BATTERY=1 to measure anyway."
+      ],
+      "scale": [1.11, 1.84],
+      "blankFrames": 0,
+      "blankMs": 0,
+      "baseFrames": 0,
+      "baseMs": 0,
+      "timeToSharpMs": 26.79,
+      "sharpRuns": 2,
+      "baseRenders": 0,
+      "detailRenders": 5,
+      "cancelled": 0,
+      "canvasMiBBefore": 73.37,
+      "peakCanvasMiB": 216.76
+    },
+    {
+      "scenario": "scale-up",
+      "query": "before",
+      "description": "setScale() to 1.75 times fit-width",
+      "runs": 1,
+      "errors": [
+        "Not measuring on battery power: results would not be comparable. Connect AC power, or set ALLOW_BATTERY=1 to measure anyway.",
+        "Not measuring on battery power: results would not be comparable. Connect AC power, or set ALLOW_BATTERY=1 to measure anyway."
+      ],
+      "scale": [1.11, 1.93],
+      "blankFrames": 0,
+      "blankMs": 0,
+      "baseFrames": 0,
+      "baseMs": 0,
+      "timeToSharpMs": 7.5,
+      "sharpRuns": 1,
+      "baseRenders": 0,
+      "detailRenders": 5,
+      "cancelled": 0,
+      "canvasMiBBefore": 73.37,
+      "peakCanvasMiB": 237.43
+    },
+    {
+      "scenario": "scale-up",
+      "query": "",
+      "description": "setScale() to 1.75 times fit-width",
+      "runs": 1,
+      "errors": [
+        "Not measuring on battery power: results would not be comparable. Connect AC power, or set ALLOW_BATTERY=1 to measure anyway.",
+        "Not measuring on battery power: results would not be comparable. Connect AC power, or set ALLOW_BATTERY=1 to measure anyway."
+      ],
+      "scale": [1.11, 1.93],
+      "blankFrames": 0,
+      "blankMs": 0,
+      "baseFrames": 0,
+      "baseMs": 0,
+      "timeToSharpMs": 6.46,
+      "sharpRuns": 1,
+      "baseRenders": 0,
+      "detailRenders": 5,
+      "cancelled": 0,
+      "canvasMiBBefore": 73.37,
+      "peakCanvasMiB": 237.43
+    },
+    {
+      "scenario": "zoom-step",
+      "query": "before",
+      "description": "zoomBy(1.1) at fit-width",
+      "runs": 1,
+      "errors": [
+        "Not measuring on battery power: results would not be comparable. Connect AC power, or set ALLOW_BATTERY=1 to measure anyway.",
+        "Not measuring on battery power: results would not be comparable. Connect AC power, or set ALLOW_BATTERY=1 to measure anyway."
+      ],
+      "scale": [1.11, 1.22],
+      "blankFrames": 0,
+      "blankMs": 0,
+      "baseFrames": 0,
+      "baseMs": 0,
+      "timeToSharpMs": 8.12,
+      "sharpRuns": 1,
+      "baseRenders": 0,
+      "detailRenders": 5,
+      "cancelled": 0,
+      "canvasMiBBefore": 73.37,
+      "peakCanvasMiB": 114.53
+    },
+    {
+      "scenario": "zoom-step",
+      "query": "",
+      "description": "zoomBy(1.1) at fit-width",
+      "runs": 1,
+      "errors": [
+        "Not measuring on battery power: results would not be comparable. Connect AC power, or set ALLOW_BATTERY=1 to measure anyway.",
+        "Not measuring on battery power: results would not be comparable. Connect AC power, or set ALLOW_BATTERY=1 to measure anyway."
+      ],
+      "scale": [1.11, 1.22],
+      "blankFrames": 0,
+      "blankMs": 0,
+      "baseFrames": 0,
+      "baseMs": 0,
+      "timeToSharpMs": 6.32,
+      "sharpRuns": 1,
+      "baseRenders": 0,
+      "detailRenders": 5,
+      "cancelled": 0,
+      "canvasMiBBefore": 73.37,
+      "peakCanvasMiB": 114.53
+    },
+    {
+      "scenario": "zoom-in-far",
+      "query": "before",
+      "description": "setScale() from fit-width to 5, where detail covers part of the page",
+      "runs": 1,
+      "errors": [
+        "Not measuring on battery power: results would not be comparable. Connect AC power, or set ALLOW_BATTERY=1 to measure anyway.",
+        "Not measuring on battery power: results would not be comparable. Connect AC power, or set ALLOW_BATTERY=1 to measure anyway."
+      ],
+      "scale": [1.11, 5],
+      "blankFrames": 0,
+      "blankMs": 0,
+      "baseFrames": 0,
+      "baseMs": 0,
+      "timeToSharpMs": 32.72,
+      "sharpRuns": 1,
+      "baseRenders": 5,
+      "detailRenders": 1,
+      "cancelled": 0,
+      "canvasMiBBefore": 73.37,
+      "peakCanvasMiB": 103.98
+    },
+    {
+      "scenario": "zoom-in-far",
+      "query": "",
+      "description": "setScale() from fit-width to 5, where detail covers part of the page",
+      "runs": 1,
+      "errors": [
+        "Not measuring on battery power: results would not be comparable. Connect AC power, or set ALLOW_BATTERY=1 to measure anyway.",
+        "Not measuring on battery power: results would not be comparable. Connect AC power, or set ALLOW_BATTERY=1 to measure anyway."
+      ],
+      "scale": [1.11, 5],
+      "blankFrames": 0,
+      "blankMs": 0,
+      "baseFrames": 0,
+      "baseMs": 0,
+      "timeToSharpMs": 10.94,
+      "sharpRuns": 1,
+      "baseRenders": 0,
+      "detailRenders": 1,
+      "cancelled": 0,
+      "canvasMiBBefore": 73.37,
+      "peakCanvasMiB": 103.98
+    },
+    {
+      "scenario": "zoom-out-far",
+      "query": "before",
+      "description": "setScale() from 5 back to \"fit-width\"",
+      "runs": 1,
+      "errors": [
+        "Not measuring on battery power: results would not be comparable. Connect AC power, or set ALLOW_BATTERY=1 to measure anyway.",
+        "Not measuring on battery power: results would not be comparable. Connect AC power, or set ALLOW_BATTERY=1 to measure anyway."
+      ],
+      "scale": [5, 1.11],
+      "blankFrames": 0,
+      "blankMs": 0,
+      "baseFrames": 0,
+      "baseMs": 0,
+      "timeToSharpMs": 11.4,
+      "sharpRuns": 1,
+      "baseRenders": 5,
+      "detailRenders": 5,
+      "cancelled": 0,
+      "canvasMiBBefore": 104.32,
+      "peakCanvasMiB": 105.4
+    },
+    {
+      "scenario": "zoom-out-far",
+      "query": "",
+      "description": "setScale() from 5 back to \"fit-width\"",
+      "runs": 1,
+      "errors": [
+        "Not measuring on battery power: results would not be comparable. Connect AC power, or set ALLOW_BATTERY=1 to measure anyway.",
+        "Not measuring on battery power: results would not be comparable. Connect AC power, or set ALLOW_BATTERY=1 to measure anyway."
+      ],
+      "scale": [5, 1.11],
+      "blankFrames": 0,
+      "blankMs": 0,
+      "baseFrames": 0,
+      "baseMs": 0,
+      "timeToSharpMs": 7.42,
+      "sharpRuns": 1,
+      "baseRenders": 5,
+      "detailRenders": 5,
+      "cancelled": 0,
+      "canvasMiBBefore": 104.32,
+      "peakCanvasMiB": 105.4
+    }
+  ]
+}

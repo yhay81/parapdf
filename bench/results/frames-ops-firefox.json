@@ -1,0 +1,80 @@
+{
+  "browser": "Firefox 157.0",
+  "rounds": 20,
+  "gpu": {
+    "newCanvasAndContext": {
+      "median": 3,
+      "max": 4
+    },
+    "keptCanvasResize": {
+      "median": 3,
+      "max": 5
+    },
+    "transferToImageBitmap": {
+      "median": 2,
+      "max": 4
+    },
+    "transferFromImageBitmap": {
+      "median": 0,
+      "max": 1
+    },
+    "createImageBitmapCall": {
+      "median": 0,
+      "max": 1
+    },
+    "createImageBitmapResolved": {
+      "median": 0,
+      "max": 1
+    },
+    "copyOf2dCall": {
+      "median": 2,
+      "max": 4
+    },
+    "copyOf2dResolved": {
+      "median": 4,
+      "max": 7
+    },
+    "drawImageInto2d": {
+      "median": 3,
+      "max": 5
+    }
+  },
+  "cpu": {
+    "newCanvasAndContext": {
+      "median": 3,
+      "max": 6
+    },
+    "keptCanvasResize": {
+      "median": 3,
+      "max": 5
+    },
+    "transferToImageBitmap": {
+      "median": 2,
+      "max": 4
+    },
+    "transferFromImageBitmap": {
+      "median": 0,
+      "max": 0
+    },
+    "createImageBitmapCall": {
+      "median": 0,
+      "max": 1
+    },
+    "createImageBitmapResolved": {
+      "median": 0,
+      "max": 1
+    },
+    "copyOf2dCall": {
+      "median": 2,
+      "max": 3
+    },
+    "copyOf2dResolved": {
+      "median": 4,
+      "max": 6
+    },
+    "drawImageInto2d": {
+      "median": 4,
+      "max": 6
+    }
+  }
+}

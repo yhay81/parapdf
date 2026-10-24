@@ -8,12 +8,16 @@
  * showed a detail canvas before the commit and shows none. A second pass
  * without the probe, which reads canvases back from the GPU, times how long
  * the visible pages take to get sharp, counts the renders, and sums the
- * pixels of every canvas in each frame.
+ * pixels of every canvas in each frame, those kept for pages that unmounted
+ * included.
  *
  * Usage: pnpm --filter @parapdf/prototype build && node examples/prototype/scripts/commit-bench.ts
  * Environment: BROWSER (chromium, webkit, or firefox), ENGINE (pdfjs), SCENARIOS, RUNS (3),
  * THROTTLE (Chromium's CPU slowdown, 1), DIST (another build of the demo to measure), LABEL
- * (that build's name in the report), OUTPUT (commit-<browser>).
+ * (that build's name in the report), QUERY (more demo query parameters, such as maxKeptPixels=0;
+ * several separated by "|", an empty one for the demo as built, are measured in turn within
+ * each run), BEFORE (a build of the demo from before a change, measured in turn with them as
+ * "before"), BEFORE_LABEL (its name in the report), OUTPUT (commit-<browser>).
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { arch, cpus, loadavg, platform, release } from "node:os";
@@ -38,6 +42,15 @@ const engine = process.env.ENGINE ?? "pdfjs";
 const runs = Number(process.env.RUNS ?? "3");
 const throttle = Number(process.env.THROTTLE ?? "1");
 const label = process.env.LABEL ?? "this build";
+/** A build of the demo from before a change, measured in turn with the queries as "before". */
+const beforeDist = process.env.BEFORE;
+const BEFORE = "before";
+/** Demo query parameters to measure in turn; "" is the demo as built. */
+const queries = [...(beforeDist ? [BEFORE] : []), ...(process.env.QUERY ?? "").split("|")];
+const queryLabel = (query: string) =>
+  query === BEFORE ? (process.env.BEFORE_LABEL ?? "before") : query || "as built";
+/** Where the build from before the change is served, once it is. */
+let beforeUrl = "";
 const output =
   process.env.OUTPUT ?? `commit-${browserName}${throttle > 1 ? `-throttle${throttle}` : ""}`;
 const file = "bill-hr815.pdf";
@@ -48,7 +61,7 @@ interface ProbeFrame {
   t: number;
   scale: number;
   sharpness: number;
-  /** Width × height of every canvas in the viewport. */
+  /** Width × height of every canvas in the viewport, and of those kept for pages that unmounted. */
   canvasPixels: number;
   pages: {
     page: number;
@@ -82,6 +95,8 @@ function installProbe(readPixels: boolean): void {
       };
       sharpness(): number;
       stats: Record<string, number> | null;
+      /** Absent in builds from before kept canvases. */
+      keptPixels?: number;
     };
     __commitProbe: unknown;
   };
@@ -152,7 +167,8 @@ function installProbe(readPixels: boolean): void {
     return ink / (data.length / 4);
   };
   const record = () => {
-    let canvasPixels = 0;
+    // Kept canvases are out of the document, and hold memory all the same.
+    let canvasPixels = viewer.keptPixels ?? 0;
     for (const canvas of scroller.querySelectorAll("canvas")) {
       canvasPixels += canvas.width * canvas.height;
     }
@@ -433,14 +449,18 @@ async function measure(
   baseUrl: string,
   scenario: Scenario,
   readPixels: boolean,
+  query: string,
 ): Promise<PassResult> {
   const context = await browser.newContext({ viewport, deviceScaleFactor: 2, hasTouch: true });
   try {
     const page = await context.newPage();
-    await restoreScaleFactor(page, `${baseUrl}calibrate.html`);
+    const url = query === BEFORE ? beforeUrl : baseUrl;
+    await restoreScaleFactor(page, `${url}calibrate.html`);
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
-    await page.goto(`${baseUrl}?engine=${engine}&file=${file}`);
+    await page.goto(
+      `${url}?engine=${engine}&file=${file}${query && query !== BEFORE ? `&${query}` : ""}`,
+    );
     await page.waitForFunction(
       () =>
         (
@@ -533,11 +553,22 @@ const server = await preview({
   preview: { port: 4182, host: "127.0.0.1", strictPort: false, open: false },
 });
 const baseUrl = server.resolvedUrls?.local[0] ?? "http://127.0.0.1:4182/";
+const before = beforeDist
+  ? await preview({
+      root: exampleDir,
+      configFile: join(exampleDir, "vite.config.ts"),
+      logLevel: "warn",
+      build: { outDir: beforeDist },
+      preview: { port: 4185, host: "127.0.0.1", strictPort: false, open: false },
+    })
+  : null;
+beforeUrl = before?.resolvedUrls?.local[0] ?? "http://127.0.0.1:4185/";
 const launched = await launchBrowser(browserName);
 console.log(`${launched.label}, engine ${engine}, ${label}, CPU throttle ${throttle}`);
 
 interface JobResult {
   scenario: string;
+  query: string;
   run: number;
   error?: string;
   frames?: PassResult;
@@ -547,26 +578,30 @@ const results: JobResult[] = [];
 try {
   for (let run = 1; run <= runs; run++) {
     for (const scenario of scenarios) {
-      const job: JobResult = { scenario: scenario.name, run };
-      try {
-        job.frames = await measureInTurn(launched, (browser) =>
-          measure(browser, baseUrl, scenario, true),
+      // The queries of one scenario follow each other, so they meet the same machine.
+      for (const query of queries) {
+        const job: JobResult = { scenario: scenario.name, query, run };
+        try {
+          job.frames = await measureInTurn(launched, (browser) =>
+            measure(browser, baseUrl, scenario, true, query),
+          );
+          job.timing = await measureInTurn(launched, (browser) =>
+            measure(browser, baseUrl, scenario, false, query),
+          );
+        } catch (error) {
+          job.error = error instanceof Error ? error.message : String(error);
+        }
+        results.push(job);
+        console.log(
+          `run ${run} ${scenario.name} ${queryLabel(query)}: ${job.error ?? JSON.stringify({ ...job.frames, ...job.timing })}`,
         );
-        job.timing = await measureInTurn(launched, (browser) =>
-          measure(browser, baseUrl, scenario, false),
-        );
-      } catch (error) {
-        job.error = error instanceof Error ? error.message : String(error);
       }
-      results.push(job);
-      console.log(
-        `run ${run} ${scenario.name}: ${job.error ?? JSON.stringify({ ...job.frames, ...job.timing })}`,
-      );
     }
   }
 } finally {
   await launched.close();
   await server.close();
+  await before?.close();
 }
 
 const median = (values: number[]): number => {
@@ -577,8 +612,13 @@ const median = (values: number[]): number => {
     ? (sorted[mid] as number)
     : ((sorted[mid - 1] as number) + (sorted[mid] as number)) / 2;
 };
-const summaries = scenarios.map((scenario) => {
-  const ok = results.filter((result) => result.scenario === scenario.name && !result.error);
+const summaries = scenarios.flatMap((scenario) =>
+  queries.map((query) => summarize(scenario, query)),
+);
+function summarize(scenario: Scenario, query: string) {
+  const ok = results.filter(
+    (result) => result.scenario === scenario.name && result.query === query && !result.error,
+  );
   const sum = (pick: (result: JobResult) => number | undefined) =>
     ok.reduce((total, result) => total + (pick(result) ?? 0), 0);
   const most = (pick: (result: JobResult) => number | undefined) =>
@@ -587,10 +627,13 @@ const summaries = scenarios.map((scenario) => {
     median(ok.map((result) => pick(result) ?? Number.NaN));
   return {
     scenario: scenario.name,
+    query,
     description: scenario.description,
     runs: ok.length,
     errors: results
-      .filter((result) => result.scenario === scenario.name && result.error)
+      .filter(
+        (result) => result.scenario === scenario.name && result.query === query && result.error,
+      )
       .map((result) => result.error),
     scale: ok[0]?.timing?.scale ?? ok[0]?.frames?.scale ?? [0, 0],
     blankFrames: sum((result) => result.frames?.blankFrames),
@@ -605,7 +648,7 @@ const summaries = scenarios.map((scenario) => {
     canvasMiBBefore: middle((result) => result.timing?.canvasMiBBefore),
     peakCanvasMiB: middle((result) => result.timing?.peakCanvasMiB),
   };
-});
+}
 
 const environment = {
   runAt: new Date().toISOString(),
@@ -618,7 +661,7 @@ const environment = {
   power,
   loadAverage: { start: loadAtStart, end: loadavg()[0] ?? 0 },
   turnTaking: { ...turnTaking },
-  settings: { file, runs, viewport, deviceScaleFactor: 2 },
+  settings: { file, runs, viewport, deviceScaleFactor: 2, queries },
 };
 const round = (_key: string, value: unknown) =>
   typeof value === "number" && !Number.isInteger(value) ? Math.round(value * 100) / 100 : value;
@@ -640,19 +683,19 @@ const markdown = [
   `- Machine: ${environment.os}, ${environment.cpu}; ${environment.browser} (Playwright build, ${launched.headless ? "headless" : "headed"})${throttle > 1 ? `, CPU slowed down ${throttle} times through the DevTools protocol` : ""}; power: ${power.source === "ac" && !power.lowPowerMode ? "AC" : `**${power.source}; not comparable with AC runs**`}`,
   `- One-minute load average: ${environment.loadAverage.start.toFixed(1)} at the start, ${environment.loadAverage.end.toFixed(1)} at the end, on ${cpus().length} cores. The run ${turnTakingSummary()}.`,
   `- Method: ${file} in ${engine === "pdfjs" ? "pdf.js drawing on the main thread" : engine}, ${viewport.width}×${viewport.height} at devicePixelRatio 2, ${runs} runs of each scenario. A probe composites each visible page's canvases as the page shows them, hidden ones left out, after every frame's animation frame callbacks, at a quarter of its CSS size. Blank: none of the pixels the page shows in its visible part is darker than 250 where its settled drawing has ink. Down to its base: the page showed a detail canvas before the commit and shows none. Frames are summed over the runs; the longest is the most any page stayed so.`,
-  "- A second pass without the probe, which reads canvases back from the GPU and delays frames: time to sharp is from the commit until the visible pages' sharpness reached 0.99 for good; renders count those completed from the commit until the visible pages had stayed sharp for half a second; canvas memory is width × height × 4 bytes of every canvas in the viewport, before the gesture and at its peak after the commit. Medians.",
-  `- Reproduce: \`pnpm --filter @parapdf/prototype build && BROWSER=${browserName}${throttle > 1 ? ` THROTTLE=${throttle}` : ""} node examples/prototype/scripts/commit-bench.ts\`${process.env.DIST ? `, with \`DIST\` pointing at the demo built from ${label.split(",")[0]} in a directory of its own` : ""}`,
+  "- A second pass without the probe, which reads canvases back from the GPU and delays frames: time to sharp is from the commit until the visible pages' sharpness reached 0.99 for good; renders count those completed from the commit until the visible pages had stayed sharp for half a second; canvas memory is width × height × 4 bytes of every canvas in the viewport and of those kept for pages that unmounted, before the gesture and at its peak after the commit. Medians.",
+  `- Reproduce: \`pnpm --filter @parapdf/prototype build && BROWSER=${browserName}${throttle > 1 ? ` THROTTLE=${throttle}` : ""}${process.env.QUERY ? ` QUERY="${process.env.QUERY}"` : ""} node examples/prototype/scripts/commit-bench.ts\`${process.env.DIST ? `, with \`DIST\` pointing at the demo built from ${label.split(",")[0]} in a directory of its own` : ""}`,
   "",
   "| Scenario | Scale | Frames with a blank page | Longest blank (ms) | Frames with a page down to its base | Longest (ms) | Time to sharp (ms) | Base renders | Detail renders | Cancelled | Canvas MiB before (peak after) |",
   "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
   ...summaries.map(
     (summary) =>
-      `| ${summary.scenario}${summary.errors.length ? ` (${summary.errors.length} failed)` : ""} | ${fmt(summary.scale[0], 2)} → ${fmt(summary.scale[1], 2)} | ${summary.blankFrames} | ${fmt(summary.blankMs)} | ${summary.baseFrames} | ${fmt(summary.baseMs)} | ${summary.sharpRuns === summary.runs ? fmt(summary.timeToSharpMs) : `${summary.sharpRuns}/${summary.runs} runs sharp`} | ${fmt(summary.baseRenders)} | ${fmt(summary.detailRenders)} | ${fmt(summary.cancelled)} | ${fmt(summary.canvasMiBBefore)} (${fmt(summary.peakCanvasMiB)}) |`,
+      `| ${summary.scenario}${queries.length > 1 ? ` · ${queryLabel(summary.query)}` : ""}${summary.errors.length ? ` (${summary.errors.length} failed)` : ""} | ${fmt(summary.scale[0], 2)} → ${fmt(summary.scale[1], 2)} | ${summary.blankFrames} | ${fmt(summary.blankMs)} | ${summary.baseFrames} | ${fmt(summary.baseMs)} | ${summary.sharpRuns === summary.runs ? fmt(summary.timeToSharpMs) : `${summary.sharpRuns}/${summary.runs} runs sharp`} | ${fmt(summary.baseRenders)} | ${fmt(summary.detailRenders)} | ${fmt(summary.cancelled)} | ${fmt(summary.canvasMiBBefore)} (${fmt(summary.peakCanvasMiB)}) |`,
   ),
   "",
   "Scenarios:",
   "",
-  ...summaries.map((summary) => `- ${summary.scenario}: ${summary.description}.`),
+  ...scenarios.map((scenario) => `- ${scenario.name}: ${scenario.description}.`),
   "",
 ];
 writeFileSync(join(resultsDir, `${output}.md`), `${markdown.join("\n")}\n`);

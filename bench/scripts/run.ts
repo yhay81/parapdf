@@ -6,12 +6,19 @@
  *
  * Environment: BROWSER (chromium, webkit, or firefox), ENGINES, FILES
  * (comma-separated), RUNS (3), PAGES (10), SCALE (2.6667 = 100% zoom at
- * devicePixelRatio 2), HEADED=1 to show the browser.
+ * devicePixelRatio 2), HEADED=1 to show the browser, and OUTPUT, a prefix
+ * for the result files (`OUTPUT=frames-` writes frames-<browser>.{json,md}
+ * and frames-browsers.md) so that a run of other engines leaves the
+ * committed results alone. ENGINES also takes the `-frame` variants of the
+ * pdf.js engines, which draw into an OffscreenCanvas and show it as a frame,
+ * and their `-record` variants, which record each operation's box. DIST
+ * serves another build of the harness, so that a run does not replace the
+ * build another run is measuring.
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { arch, cpus, platform, release, totalmem } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { brotliCompressSync, constants, gzipSync } from "node:zlib";
 import type { Browser } from "playwright";
@@ -26,7 +33,7 @@ import {
 import { writeComparison, writeReport } from "./report.ts";
 
 const benchDir = fileURLToPath(new URL("..", import.meta.url));
-const distDir = join(benchDir, "dist");
+const distDir = process.env.DIST ? resolve(process.env.DIST) : join(benchDir, "dist");
 const resultsDir = join(benchDir, "results");
 const pdfjsNextRepo = join(benchDir, "vendor/pdf.js");
 if (!existsSync(join(distDir, "index.html"))) {
@@ -42,6 +49,7 @@ const defaultEngines = [
   "hayro",
 ];
 const engines = process.env.ENGINES ? process.env.ENGINES.split(",") : defaultEngines;
+const output = process.env.OUTPUT ?? "";
 const runs = Number(process.env.RUNS ?? "3");
 const pages = Number(process.env.PAGES ?? "10");
 const scale = Number(process.env.SCALE ?? "2.6667");
@@ -63,6 +71,7 @@ interface JobResult {
   firstRenderMs?: number;
   firstPresentMs?: number;
   presentMs?: number[];
+  frameMs?: number[];
   renderPhaseMs?: number;
   longTasks?: { blockingMs: number; maxMs: number };
   idle?: { timerLagP50Ms: number; timerLagP95Ms: number; frameIntervalMs: number };
@@ -124,6 +133,7 @@ const server = await preview({
   root: benchDir,
   configFile: join(benchDir, "vite.config.ts"),
   logLevel: "warn",
+  ...(process.env.DIST ? { build: { outDir: distDir } } : {}),
   preview: { port: 4179, host: "127.0.0.1", strictPort: false, open: false },
 });
 const baseUrl = server.resolvedUrls?.local[0] ?? "http://127.0.0.1:4179/";
@@ -225,7 +235,7 @@ const environment = {
     "@embedpdf/pdfium": packageVersion("@embedpdf/pdfium"),
     hayro: hayroVersion,
   },
-  settings: { runs, pages, scale },
+  settings: { runs, pages, scale, engines, output },
 };
 
 // Aggregate per file and engine: medians across runs; percentiles across pages.
@@ -234,6 +244,7 @@ const summaries = files.flatMap((file) =>
     const jobs = results.filter((result) => result.file === file && result.engine === engine);
     const ok = jobs.filter((job) => !job.error);
     const presented = ok.flatMap((job) => job.presentMs ?? []);
+    const handovers = ok.flatMap((job) => job.frameMs ?? []);
     return {
       file,
       engine,
@@ -248,6 +259,8 @@ const summaries = files.flatMap((file) =>
       firstPresentMs: median(ok.map((job) => job.firstPresentMs ?? Number.NaN)),
       pagePresentP50Ms: percentile(presented, 50),
       pagePresentP95Ms: percentile(presented, 95),
+      frameP50Ms: handovers.length ? percentile(handovers, 50) : undefined,
+      frameMaxMs: handovers.length ? Math.max(...handovers) : undefined,
       renderPhaseMs: median(ok.map((job) => job.renderPhaseMs ?? Number.NaN)),
       blockedMs: median(ok.map((job) => job.lag?.blockedMs ?? Number.NaN)),
       lagP95Ms: median(ok.map((job) => job.lag?.p95Ms ?? Number.NaN)),
@@ -261,14 +274,14 @@ const summaries = files.flatMap((file) =>
 mkdirSync(join(resultsDir, "raw"), { recursive: true });
 const stamp = environment.runAt.replace(/[:.]/g, "-");
 writeFileSync(
-  join(resultsDir, "raw", `${browserName}-${stamp}.json`),
+  join(resultsDir, "raw", `${output}${browserName}-${stamp}.json`),
   JSON.stringify({ environment, results }, null, 1),
 );
 // Timer resolution is far coarser than float noise, so keep one decimal.
 const roundMetrics = (_key: string, value: unknown) =>
   typeof value === "number" && !Number.isInteger(value) ? Math.round(value * 10) / 10 : value;
 writeFileSync(
-  join(resultsDir, `${browserName}.json`),
+  join(resultsDir, `${output}${browserName}.json`),
   `${JSON.stringify({ environment, payload, summaries }, roundMetrics, 2)}\n`,
 );
 
@@ -288,7 +301,7 @@ const contact = [
   }),
   "</table>",
 ].join("\n");
-writeFileSync(join(resultsDir, "raw", `${browserName}-contact.html`), contact);
+writeFileSync(join(resultsDir, "raw", `${output}${browserName}-contact.html`), contact);
 
-console.log(`\nWrote ${writeReport(resultsDir, browserName)}`);
-console.log(`Wrote ${writeComparison(resultsDir)}`);
+console.log(`\nWrote ${writeReport(resultsDir, browserName, output)}`);
+console.log(`Wrote ${writeComparison(resultsDir, output)}`);

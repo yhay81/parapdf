@@ -8,6 +8,12 @@ export interface RenderStats {
   height: number;
   /** Raster time measured inside the worker, when the engine renders in one. */
   rasterMs?: number;
+  /**
+   * Time to hand a finished drawing to the displayed canvas as a frame
+   * (`transferToImageBitmap()` and `transferFromImageBitmap()`), for engines
+   * that draw off screen.
+   */
+  frameMs?: number;
 }
 
 /**

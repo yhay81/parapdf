@@ -358,6 +358,14 @@ export interface ViewerOptions {
    */
   maxCanvasPixels?: number;
   /**
+   * The most pixels kept of the canvases of pages that leave the mounted
+   * window, so that a page the reader comes back to, by a link's back, by
+   * scrolling back, or by flipping back, shows at once instead of being
+   * drawn again (default six viewports' worth of device pixels; 0 keeps
+   * none). Within `maxCanvasPixels`, they count as canvases and go first.
+   */
+  maxKeptPixels?: number;
+  /**
    * Let the reader create highlights, text, drawings, images, and
    * signatures on the pages (default false); see `setAnnotationTool()`.
    * `save()` writes them into the document, and `exportAnnotations()`
@@ -610,7 +618,7 @@ export class PdfViewerRuntime {
   readonly #pageColors: PageColors | undefined;
   readonly #canvasLimits: Pick<
     ViewerOptions,
-    "maxDetailPixels" | "maxDetailViewports" | "maxBasePixels" | "maxCanvasPixels"
+    "maxDetailPixels" | "maxDetailViewports" | "maxBasePixels" | "maxCanvasPixels" | "maxKeptPixels"
   >;
   readonly #links: LinkHandlers;
   readonly #annotationEditing: boolean;
@@ -724,6 +732,7 @@ export class PdfViewerRuntime {
       maxDetailViewports: options.maxDetailViewports,
       maxBasePixels: options.maxBasePixels,
       maxCanvasPixels: options.maxCanvasPixels,
+      maxKeptPixels: options.maxKeptPixels,
     };
     this.store.set({
       zoomMode: this.#initialZoomMode(),
@@ -757,6 +766,11 @@ export class PdfViewerRuntime {
   /** Render counters for the current document. */
   get stats(): SchedulerStats | null {
     return this.#scheduler?.stats ?? null;
+  }
+
+  /** Pixels of the canvases kept from pages that left the mounted window (`maxKeptPixels`). */
+  get keptPixels(): number {
+    return this.#scheduler?.keptPixels ?? 0;
   }
 
   /** `performance.now()` when the first page first showed pixels. */
@@ -876,6 +890,8 @@ export class PdfViewerRuntime {
             this.#highlights.clearPage(pageIndex);
           },
         });
+        // Pages unmounting while no viewport shows them keep nothing.
+        if (!this.#scroller) this.#scheduler.setKeeping(false);
         for (const [index, elements] of this.#pendingPages) {
           this.#scheduler.attach(index, ...elements);
         }
@@ -1379,6 +1395,7 @@ export class PdfViewerRuntime {
   attachViewport(scroller: HTMLElement, content: HTMLElement): () => void {
     this.#scroller = scroller;
     this.#content = content;
+    this.#scheduler?.setKeeping(true);
     const layout = this.store.get().layout;
     if (layout) this.#sizeContent(layout);
     scroller.addEventListener("scroll", this.#onScroll, { passive: true });
@@ -1422,6 +1439,8 @@ export class PdfViewerRuntime {
       this.#frame = 0;
       if (this.#scroller === scroller) {
         this.#gestures.drop();
+        // Kept canvases would hold memory for pages no viewport can show.
+        this.#scheduler?.setKeeping(false);
         this.#scroller = null;
         this.#content = null;
       }

@@ -89,12 +89,16 @@ const settings = {
     : undefined,
   /** Canvas pixel limits (ViewerOptions); the runtime's defaults when absent. */
   canvasLimits: Object.fromEntries(
-    ["maxDetailPixels", "maxDetailViewports", "maxBasePixels", "maxCanvasPixels"].flatMap((name) =>
-      params.has(name) ? [[name, Number(params.get(name))]] : [],
-    ),
+    [
+      "maxDetailPixels",
+      "maxDetailViewports",
+      "maxBasePixels",
+      "maxCanvasPixels",
+      "maxKeptPixels",
+    ].flatMap((name) => (params.has(name) ? [[name, Number(params.get(name))]] : [])),
   ) as Pick<
     ViewerOptions,
-    "maxDetailPixels" | "maxDetailViewports" | "maxBasePixels" | "maxCanvasPixels"
+    "maxDetailPixels" | "maxDetailViewports" | "maxBasePixels" | "maxCanvasPixels" | "maxKeptPixels"
   >,
 };
 

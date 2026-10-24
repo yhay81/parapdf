@@ -6,7 +6,7 @@ the text under "Issue text" below: the template fields, the result table,
 the cause, and the possible fix in one paragraph, without the diff, the
 snippet, or the history. Not done before filing: reproducing by hand in
 release browsers and attaching screenshots. Drafted on 2026-10-20 by a side session of the
-ParaPDF work, from the finding recorded in `AGENTS.md` (Runtime prototype,
+ParaPDF work, from the finding recorded in `docs/history/AGENTS-v0.md` (Runtime prototype,
 the `TextLayer` and `lang` item) and worked around in ParaPDF by
 `inLayerLanguage()` in `packages/parapdf/src/engine/pdfjs.ts`.
 
@@ -31,7 +31,7 @@ and runs the configurations below, and also measures pdf.js's own viewer,
   `bill-hr815.pdf`): with the page in Japanese, runs end 12–15% past their
   glyphs in Chromium and WebKit; with the page in English on this Japanese
   macOS, they end 11–13% short in Firefox (medians). The ranges in
-  `AGENTS.md`, 12–15% short and 14–18% past, fall within the spread of the
+  `docs/history/AGENTS-v0.md`, 12–15% short and 14–18% past, fall within the spread of the
   runs here (10th to 90th percentile).
 - The cause is narrower than "pdf.js measures in an unknown language": the
   canvas is a DOM canvas appended to `<body>` precisely so that it inherits

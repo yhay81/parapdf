@@ -11,6 +11,19 @@ export interface PdfjsAdapterOptions {
   /** Base URL of the cmaps/, standard_fonts/, wasm/, and iccs/ directories. */
   assetBase: string;
   hwa: boolean;
+  /**
+   * Draw each page into an OffscreenCanvas and show the finished drawing as
+   * a frame: `transferToImageBitmap()` hands its pixels to an ImageBitmap,
+   * and a `bitmaprenderer` context replaces the displayed pixels with it in
+   * one step, with no copy. Otherwise pdf.js draws into the displayed canvas.
+   */
+  frame?: boolean;
+  /**
+   * Record each drawing operation's box as pdf.js draws a page
+   * (`recordOperations`), which its partial rendering of a page's detail
+   * then filters operations with: what the recording costs.
+   */
+  record?: boolean;
 }
 
 /**
@@ -24,6 +37,8 @@ export function createPdfjsAdapter(options: PdfjsAdapterOptions): EngineAdapter 
 } {
   const { lib, hwa, assetBase } = options;
   const canvas = document.createElement("canvas");
+  const frames = options.frame ? canvas.getContext("bitmaprenderer") : null;
+  if (options.frame && !frames) throw new Error("bitmaprenderer is not supported");
   let worker: Pdfjs.PDFWorker | undefined;
   let loadingTask: Pdfjs.PDFDocumentLoadingTask | undefined;
   let doc: Pdfjs.PDFDocumentProxy | undefined;
@@ -66,10 +81,25 @@ export function createPdfjsAdapter(options: PdfjsAdapterOptions): EngineAdapter 
     async render(index, scale) {
       const page = await ready().getPage(index + 1);
       const viewport = page.getViewport({ scale });
-      canvas.width = Math.floor(viewport.width);
-      canvas.height = Math.floor(viewport.height);
-      await page.render({ canvas, viewport }).promise;
-      return { width: canvas.width, height: canvas.height };
+      const width = Math.floor(viewport.width);
+      const height = Math.floor(viewport.height);
+      if (!frames) {
+        canvas.width = width;
+        canvas.height = height;
+        await page.render({ canvas, viewport, recordOperations: options.record ?? false }).promise;
+        return { width, height };
+      }
+      // pdf.js asks the canvas it draws into for nothing but a 2D context, so
+      // an OffscreenCanvas takes the drawing, from the main thread or from
+      // the renderer worker's frames alike.
+      const offscreen = new OffscreenCanvas(width, height);
+      await page.render({ canvas: offscreen as unknown as HTMLCanvasElement, viewport }).promise;
+      const handover = performance.now();
+      const bitmap = offscreen.transferToImageBitmap();
+      canvas.width = width;
+      canvas.height = height;
+      frames.transferFromImageBitmap(bitmap);
+      return { width, height, frameMs: performance.now() - handover };
     },
     async memoryBytes() {
       return undefined;

@@ -29,6 +29,9 @@ Generated stress documents live in `generated/`, are recreated with
   behavior.
 - `synthetic-vector-200k.pdf` — one A3 page with 200,000 stroked segments, for
   operator-heavy drawings such as maps and plans.
+- `synthetic-vector-pages.pdf` — 24 US Letter pages of 50,000 stroked
+  segments each, every page its own, for what drawing pages again costs when
+  the reader comes back to them.
 - `synthetic-cjk-nonembedded.pdf` — Japanese text in a non-embedded
   Adobe-Japan1 CID font, the common case for older Word-generated documents.
 - `synthetic-mixed-sizes.pdf` — eight pages of different sizes and

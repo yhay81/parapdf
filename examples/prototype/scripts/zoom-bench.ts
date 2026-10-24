@@ -4,11 +4,15 @@
  * mounted pages hold. Sharpness is the runtime's own measure: the resolution
  * of the visible pixels as a share of full device resolution, weighted by
  * area. Canvas memory counts width × height × 4 bytes for every canvas in the
- * document; pixels held inside workers are not included.
+ * document and those kept for pages that unmounted; pixels held inside
+ * workers are not included.
  *
  * Usage: pnpm --filter @parapdf/prototype build && node examples/prototype/scripts/zoom-bench.ts
  * Environment: BROWSER (chromium, webkit, or firefox), VARIANTS (pdfjs-hwa,pdfjs-next-hwa),
- * FILE (bill-hr815.pdf), SCALES (CSS px per point, 4,8), RUNS (3), OUTPUT (zoom-<browser>).
+ * FILE (bill-hr815.pdf), SCALES (CSS px per point, 4,8), RUNS (3), DIST (another build of the
+ * demo to measure), BEFORE (a build of the demo from before a change, measured in turn with
+ * the variants on released pdf.js), BEFORE_LABEL (its name in the report), OUTPUT
+ * (zoom-<browser>).
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { arch, cpus, loadavg, platform, release } from "node:os";
@@ -29,11 +33,18 @@ import {
 const exampleDir = fileURLToPath(new URL("..", import.meta.url));
 const resultsDir = join(exampleDir, "results");
 const browserName = browserFromEnv();
+const beforeDist = process.env.BEFORE;
 const variants = [
-  { name: "pdfjs-hwa", engine: "pdfjs" },
-  { name: "pdfjs-next-hwa", engine: "pdfjs-next" },
+  ...(beforeDist
+    ? [{ name: process.env.BEFORE_LABEL ?? "before", engine: "pdfjs", before: true }]
+    : []),
+  { name: "pdfjs-hwa", engine: "pdfjs", before: false },
+  { name: "pdfjs-next-hwa", engine: "pdfjs-next", before: false },
 ].filter(
-  (variant) => !process.env.VARIANTS || process.env.VARIANTS.split(",").includes(variant.name),
+  (variant) =>
+    variant.before ||
+    !process.env.VARIANTS ||
+    process.env.VARIANTS.split(",").includes(variant.name),
 );
 const devices = [
   { name: "desktop", viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2 },
@@ -72,13 +83,20 @@ const measure = (page: Page, action: { zoom: number } | { pan: true }): Promise<
   page.evaluate(async (action) => {
     const viewer = (
       window as unknown as {
-        __viewer: { sharpness(): number; setScale(scale: number): void; scroller: HTMLElement };
+        __viewer: {
+          sharpness(): number;
+          setScale(scale: number): void;
+          scroller: HTMLElement;
+          /** Absent in builds from before kept canvases. */
+          keptPixels?: number;
+        };
       }
     ).__viewer;
+    // Kept canvases are out of the document, and hold memory all the same.
     const canvasBytes = () =>
       [...document.querySelectorAll("canvas")].reduce(
         (sum, canvas) => sum + canvas.width * canvas.height * 4,
-        0,
+        (viewer.keptPixels ?? 0) * 4,
       );
     const start = performance.now();
     if ("zoom" in action) viewer.setScale(action.zoom);
@@ -115,17 +133,32 @@ const server = await preview({
   root: exampleDir,
   configFile: join(exampleDir, "vite.config.ts"),
   logLevel: "warn",
+  ...(process.env.DIST ? { build: { outDir: process.env.DIST } } : {}),
   preview: { port: 4182, host: "127.0.0.1", strictPort: false, open: false },
 });
-const baseUrl = server.resolvedUrls?.local[0] ?? "http://127.0.0.1:4182/";
+const before = beforeDist
+  ? await preview({
+      root: exampleDir,
+      configFile: join(exampleDir, "vite.config.ts"),
+      logLevel: "warn",
+      build: { outDir: beforeDist },
+      preview: { port: 4186, host: "127.0.0.1", strictPort: false, open: false },
+    })
+  : null;
+const builds = {
+  current: server.resolvedUrls?.local[0] ?? "http://127.0.0.1:4182/",
+  before: before?.resolvedUrls?.local[0] ?? "http://127.0.0.1:4186/",
+};
 const launched = await launchBrowser(browserName);
 const results: JobResult[] = [];
 try {
   for (const device of devices) {
     for (const scale of scales) {
-      for (const variant of variants) {
-        for (let run = 0; run < runs; run++) {
+      // The variants of one run follow each other, so they meet the same machine.
+      for (let run = 0; run < runs; run++) {
+        for (const variant of variants) {
           const job = { device: device.name, variant: variant.name, scale, run };
+          const baseUrl = variant.before ? builds.before : builds.current;
           const result = await measureInTurn(launched, async (browser): Promise<JobResult> => {
             const context = await browser.newContext({
               viewport: device.viewport,
@@ -183,6 +216,7 @@ try {
 } finally {
   await launched.close();
   await server.close();
+  await before?.close();
 }
 
 const median = (values: number[]): number => {
@@ -255,7 +289,7 @@ const markdown = [
   `- One-minute load average: ${environment.loadAverage.start.toFixed(1)} at the start, ${environment.loadAverage.end.toFixed(1)} at the end, on ${cpus().length} cores; times are only comparable between quiet runs. The run ${turnTakingSummary()}.`,
   `- Method: ${file} opens at the fit-width zoom on a desktop (1280×900, devicePixelRatio 2) and a phone-sized viewport (390×844, devicePixelRatio 3). Once page 1 is sharp, the view zooms around its center to the given scale in CSS pixels per PDF point, then pans by 60% of the viewport height and 30% of its width. Median of ${runs} runs.`,
   "- Sharpness: the resolution of the visible pixels as a share of full device resolution, weighted by area, when the measurement ended (it ends after half a second of sharpness or after 8 seconds). Time to sharp: until sharpness reached 0.99 and stayed there.",
-  "- Canvas memory: width × height × 4 bytes for every canvas in the document when the measurement ended, with the peak in parentheses; pixels held inside workers are not included.",
+  "- Canvas memory: width × height × 4 bytes for every canvas in the document and those kept for pages that unmounted when the measurement ended, with the peak in parentheses; pixels held inside workers are not included.",
   `- Reproduce: \`pnpm --filter @parapdf/prototype build && BROWSER=${browserName} node examples/prototype/scripts/zoom-bench.ts\``,
   "",
   "| Device | Scale | Variant | Zoom: sharpness | Zoom: time to sharp (ms) | Zoom: canvas MiB (peak) | Pan: sharpness | Pan: time to sharp (ms) | Pan: canvas MiB (peak) |",
