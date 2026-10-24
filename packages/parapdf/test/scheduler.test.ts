@@ -36,6 +36,7 @@ function controlledDocument() {
       return task;
     },
     releasePage() {},
+    drawKept() {},
   } as unknown as PdfEngineDocument;
   return { doc, renders };
 }

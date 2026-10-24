@@ -1,7 +1,9 @@
 /**
- * The narrow engine boundary. The runtime only ever talks to an engine through
- * these types, so another engine can be measured without touching React code.
+ * How the runtime uses pdf.js: the documents it opens and what it asks of
+ * them, typed for the runtime and for tests that stand in for pdf.js.
+ * ParaPDF uses pdf.js alone and optimizes for it.
  */
+import type { PDFDocumentProxy } from "pdfjs-dist";
 
 /** Page size in PDF points (1/72 in), rotation already applied. */
 export interface PageSize {
@@ -547,11 +549,8 @@ export interface AnnotationEditor {
 
 export interface PdfEngineDocument {
   readonly pageCount: number;
-  /**
-   * The engine's own document object, for features ParaPDF does not wrap;
-   * pdf.js engines hold a PDFDocumentProxy here (see pdfjsDocumentOf).
-   */
-  readonly native: unknown;
+  /** pdf.js's own document, for its APIs ParaPDF does not wrap. */
+  readonly proxy: PDFDocumentProxy;
   /** The page's size in PDF points with its own rotation applied. */
   pageSize(pageIndex: number): Promise<PageSize>;
   render(request: RenderRequest): RenderTask;
@@ -601,6 +600,12 @@ export interface PdfEngineDocument {
   formChange(widgetId: string): Promise<FormChange | null>;
   /** Drop cached parsing results for a page that left the mounted window. */
   releasePage(pageIndex: number): void;
+  /**
+   * Draw `source`, a drawing kept from another canvas of a page of this
+   * document, into `canvas`, sized to it, with the context renders draw
+   * with, so that the page shows it at once and later renders draw over it.
+   */
+  drawKept(canvas: HTMLCanvasElement, source: HTMLCanvasElement): void;
   destroy(): Promise<void>;
 }
 

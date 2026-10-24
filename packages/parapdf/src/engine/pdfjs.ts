@@ -291,23 +291,6 @@ const toOutline = (items: readonly PdfjsOutlineItem[] | null): OutlineNode[] =>
     items: toOutline(item.items),
   }));
 
-/** Every PDFDocumentProxy a pdf.js engine has opened, so pdfjsDocumentOf can vouch for it. */
-const proxies = new WeakSet<object>();
-
-/**
- * pdf.js's own document behind a document a pdf.js engine opened, for its
- * APIs that ParaPDF does not wrap (metadata, attachments, form fields);
- * null for documents of other engines.
- */
-export function pdfjsDocumentOf(
-  document: PdfEngineDocument | null | undefined,
-): Pdfjs.PDFDocumentProxy | null {
-  const native = document?.native;
-  return typeof native === "object" && native !== null && proxies.has(native)
-    ? (native as Pdfjs.PDFDocumentProxy)
-    : null;
-}
-
 /** The page at `scale` turned by the view on top of its own rotation. */
 const viewportOf = (page: Pdfjs.PDFPageProxy, scale: number, rotation: Rotation = 0) =>
   page.getViewport({ scale, rotation: (page.rotate + rotation) % 360 });
@@ -337,6 +320,12 @@ function placeIcons(container: HTMLElement, icons: Record<string, string>): void
 /** pdf.js through its core display API only. */
 export function createPdfjsEngine(options: PdfjsEngineOptions): PdfEngine {
   const { pdfjs, assetBase } = options;
+  // The 2D context pdf.js draws pages with, which kept drawings are drawn
+  // back with too, so that later renders into the same canvas get it.
+  const contextOptions = {
+    alpha: false,
+    willReadFrequently: !(options.documentOptions?.enableHWA ?? options.enableHWA ?? true),
+  };
   const imageResourcesPath =
     options.imageResourcesPath ?? (assetBase ? `${assetBase}web/images/` : TRANSPARENT_ICONS);
   const iconUrls = imageResourcesPath === TRANSPARENT_ICONS ? options.iconUrls : undefined;
@@ -412,7 +401,6 @@ export function createPdfjsEngine(options: PdfjsEngineOptions): PdfEngine {
       const doc = await loadingTask.promise.finally(() =>
         signal?.removeEventListener("abort", abort),
       );
-      proxies.add(doc);
       const pages = new Map<number, Promise<Pdfjs.PDFPageProxy>>();
       const texts = new Map<number, Promise<PageText>>();
       /**
@@ -515,7 +503,7 @@ export function createPdfjsEngine(options: PdfjsEngineOptions): PdfEngine {
 
       return {
         pageCount: doc.numPages,
-        native: doc,
+        proxy: doc,
         async pageSize(pageIndex): Promise<PageSize> {
           const { width, height } = (await getPage(pageIndex)).getViewport({ scale: 1 });
           return { width, height };
@@ -804,6 +792,15 @@ export function createPdfjsEngine(options: PdfjsEngineOptions): PdfEngine {
             (page) => page.cleanup(),
             () => {},
           );
+        },
+        drawKept(canvas, source) {
+          canvas.width = source.width;
+          canvas.height = source.height;
+          const context = canvas.getContext(
+            "2d",
+            contextOptions,
+          ) as CanvasRenderingContext2D | null;
+          context?.drawImage(source, 0, 0);
         },
         async destroy() {
           pages.clear();
