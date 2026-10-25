@@ -15,4 +15,3 @@
 Scenarios:
 
 - zoom-in-far: setScale() from fit-width to 5, where detail covers part of the page.
-

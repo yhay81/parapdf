@@ -42,4 +42,3 @@ Scenarios:
 - zoom-out-far: setScale() from 5 back to "fit-width".
 - zoom-twice: zoomBy(1.25) twice 30 ms apart at fit-width.
 - ctrl-wheel: ctrl+wheel up by 50 at fit-width, which commits 150 ms after the event.
-
