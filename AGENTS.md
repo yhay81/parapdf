@@ -101,12 +101,14 @@ As of M5; `target.md` describes where the runtime's code goes.
   draws pages and builds layers with it (`src/pdfjs/`); document sessions,
   one per open document, shared by its viewers through a registry
   (`src/document/`); one `Viewer` per viewport, its layout, scrolling,
-  gestures, hot/cold state, and the hooks features extend it with
-  (`viewer.extend()`, `src/view/`); rendering: the planner, a pure
+  gestures, hot/cold state, the hooks features extend it with
+  (`viewer.extend()`), and handing bytes to the browser as a download
+  (`files.ts`) (`src/view/`); rendering: the planner, a pure
   function that decides what each page draws (`planner.ts`), and the
   renderer, which builds each page's canvases and layer containers inside
   the host React places, carries out the plans, keeps the canvases of pages
-  that unmount, and builds the DOM layers and the text selection tracker
+  that unmount, and builds the DOM layers; with them, the text selection
+  tracker the viewer keeps drags in text layers with
   (`src/render/`); the features, each attaching to a
   viewer or a session and imported by nothing in the core (`src/features/`);
   React bindings, among them `PdfDocument`, which loads the features its

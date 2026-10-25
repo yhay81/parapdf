@@ -560,11 +560,25 @@ export function started(page: PageState, drawing: PlannedDrawing): PageState {
     region: drawing.region,
     intoSpare: drawing.intoSpare,
   };
-  if (drawing.layer === "base") return { ...page, job, baseScale: 0 };
+  // Every field read one by one: the renderer's pages count their pixels
+  // with getters, which spreading an object leaves out.
+  const state: PageState = {
+    index: page.index,
+    baseScale: page.baseScale,
+    detailScale: page.detailScale,
+    baseVersion: page.baseVersion,
+    detailVersion: page.detailVersion,
+    detailRegion: page.detailRegion,
+    failures: page.failures,
+    job,
+    hasSpare: page.hasSpare,
+    basePixels: page.basePixels,
+    detailPixels: page.detailPixels,
+    sparePixels: page.sparePixels,
+  };
+  if (drawing.layer === "base") return { ...state, baseScale: 0 };
   // Drawn in place, a detail has none of its pixels until it completes.
-  return drawing.intoSpare
-    ? { ...page, job }
-    : { ...page, job, detailScale: 0, detailRegion: null };
+  return drawing.intoSpare ? state : { ...state, detailScale: 0, detailRegion: null };
 }
 
 /**

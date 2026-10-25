@@ -299,6 +299,49 @@ describe("planner", () => {
     assert.equal(detail?.intoSpare, false);
   });
 
+  it("plans the same for pages that count their pixels with getters, as the renderer's do", () => {
+    class Slot implements PageState {
+      readonly index: number;
+      baseScale = 0.5;
+      detailScale = 1;
+      baseVersion = 0;
+      detailVersion = 0;
+      detailRegion = null;
+      failures = {};
+      job = undefined;
+      hasSpare = true;
+      sparePixels = 0;
+      constructor(index: number) {
+        this.index = index;
+      }
+      get basePixels() {
+        return 306 * 396;
+      }
+      get detailPixels() {
+        return 612 * 792;
+      }
+    }
+    const plain = (index: number): Page => ({
+      ...blank(index),
+      baseScale: 0.5,
+      detailScale: 1,
+      basePixels: 306 * 396,
+      detailPixels: 612 * 792,
+    });
+    // Two visible pages zoomed from 0.5 to 1 at devicePixelRatio 2.
+    const { input } = view([LETTER, LETTER], 1, { devicePixelRatio: 2, width: 1400 });
+    input.viewport = { ...input.viewport, height: 3000, scrollerHeight: 3000 };
+    const zoomed = { ...input, first: 0, last: 1 };
+    const fromSlots = plan(context(zoomed), [new Slot(0), new Slot(1)], 2);
+    const fromObjects = plan(context(zoomed), [plain(0), plain(1)], 2);
+    assert.equal(fromSlots.length, 2);
+    assert.deepEqual(fromSlots, fromObjects);
+    assert.ok(
+      fromSlots.every((drawing) => drawing.intoSpare),
+      "both into their spares",
+    );
+  });
+
   it("draws the visible area grown within the budget when the whole page is over it", () => {
     const { input } = view([LETTER], 4, { top: 1000 });
     const planned = detailPlan(context(input, { maxDetailPixels: 4_000_000 }), 0);

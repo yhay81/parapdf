@@ -1,3 +1,5 @@
+"use client";
+
 /**
  * Keeps a drag selection from jumping across a page. Ported from the
  * selection handling of `TextLayerBuilder` in PDF.js
