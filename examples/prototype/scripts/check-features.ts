@@ -32,59 +32,7 @@ function check(name: string, ok: boolean, detail = ""): void {
   if (!ok) failures++;
 }
 
-/** The viewer runtime the demo exposes, as far as these checks call it. */
-interface Viewer {
-  store: {
-    get(): {
-      status: string;
-      error: string | null;
-      passwordReason: string | null;
-      progress: { loaded: number; total: number | null } | null;
-      pageCount: number;
-      currentPage: number;
-      scale: number;
-      zoomMode: string;
-      spread: string;
-      tool: string;
-      pageLabels: string[] | null;
-      metadata: { title: string | null; language: string | null; creationDate: Date | null } | null;
-      attachments: { id: string; filename: string; description: string | null }[] | null;
-      layers: { id: string | null; name: string; visible: boolean }[] | null;
-      search: { matches: unknown[]; status: string };
-      layout: {
-        gap: number;
-        tops: Float64Array;
-        rowTops: Float64Array;
-        widths: Float64Array;
-        heights: Float64Array;
-      } | null;
-    };
-  };
-  hasPixels(index: number): boolean;
-  goToPage(index: number): void;
-  setScale(scale: number | string): void;
-  setSpread(spread: string): void;
-  setTool(tool: string): void;
-  setLayerVisible(id: string, visible: boolean): void;
-  search(query: string, options?: object): void;
-  save(): Promise<Uint8Array | null>;
-  print(options?: object): Promise<void>;
-  getAttachmentContent(id: string): Promise<Uint8Array | null>;
-  getSelection(): {
-    text: string;
-    pages: {
-      pageIndex: number;
-      rects: { x: number; y: number; width: number; height: number }[];
-    }[];
-  } | null;
-  stats: Record<string, number> | null;
-}
-
-declare global {
-  interface Window {
-    __viewer?: Viewer;
-  }
-}
+// The demo declares `window.__viewer`, `__parapdf`, and `__search` (src/App.tsx).
 
 const state = (page: Page) => page.evaluate(() => window.__viewer?.store.get());
 
@@ -313,7 +261,10 @@ try {
       JSON.stringify(loaded?.attachments),
     );
     const content = await page.evaluate(async () => {
-      const bytes = await window.__viewer?.getAttachmentContent("notes.txt");
+      const viewer = window.__viewer;
+      const bytes = viewer
+        ? await window.__parapdf?.getAttachmentContent(viewer, "notes.txt")
+        : null;
       return bytes ? new TextDecoder().decode(bytes) : null;
     });
     check(
@@ -356,8 +307,11 @@ try {
       before.join(" / "),
     );
     await page.evaluate(([a, b]) => {
-      window.__viewer?.setLayerVisible(b ?? "", true);
-      window.__viewer?.setLayerVisible(a ?? "", false);
+      const viewer = window.__viewer;
+      if (viewer) {
+        window.__parapdf?.setLayerVisible(viewer, b ?? "", true);
+        window.__parapdf?.setLayerVisible(viewer, a ?? "", false);
+      }
     }, layerIds);
     await settle(page);
     const after = [await colorAt(page, 1, 132, 252), await colorAt(page, 1, 300, 252)];
@@ -408,12 +362,12 @@ try {
 
     // Search options on page 1's "Rose rose ROSE resume résumé cat concatenate cat-like".
     const count = async (query: string, options: object = {}) => {
-      await page.evaluate(([q, o]) => window.__viewer?.search(q as string, o as object), [
+      await page.evaluate(([q, o]) => window.__search?.search(q as string, o as object), [
         query,
         options,
       ] as const);
-      await page.waitForFunction(() => window.__viewer?.store.get().search.status === "done");
-      return (await state(page))?.search.matches.length ?? -1;
+      await page.waitForFunction(() => window.__search?.store.get().status === "done");
+      return page.evaluate(() => window.__search?.store.get().matches.length ?? -1);
     };
     const counts = {
       rose: await count("rose"),
@@ -433,7 +387,7 @@ try {
         counts.catWord === 2,
       JSON.stringify(counts),
     );
-    await page.evaluate(() => window.__viewer?.search(""));
+    await page.evaluate(() => window.__search?.search(""));
 
     // Selections in PDF points: "Rose" is drawn at 72 points, its baseline 112 below the top.
     const selection = await page.evaluate(() => {
@@ -447,7 +401,8 @@ try {
       range.setEnd(text, 4);
       document.getSelection()?.removeAllRanges();
       document.getSelection()?.addRange(range);
-      return window.__viewer?.getSelection() ?? null;
+      const viewer = window.__viewer;
+      return viewer ? (window.__parapdf?.getSelection(viewer) ?? null) : null;
     });
     const rect = selection?.pages[0]?.rects[0];
     check(
@@ -485,7 +440,8 @@ try {
       checkedShown,
     );
     const saved = await page.evaluate(async () => {
-      const bytes = await window.__viewer?.save();
+      const viewer = window.__viewer;
+      const bytes = viewer ? await window.__parapdf?.save(viewer) : null;
       return bytes ? new TextDecoder("latin1").decode(bytes) : "";
     });
     check(
@@ -507,7 +463,8 @@ try {
           (image) => image.naturalWidth,
         );
       };
-      await window.__viewer?.print();
+      const viewer = window.__viewer;
+      if (viewer) await window.__parapdf?.print(viewer);
       const pageRule = [...document.querySelectorAll("style")].some((style) =>
         style.textContent?.includes("@page"),
       );
@@ -532,10 +489,12 @@ try {
         calls++;
         pages = document.querySelectorAll(".parapdf-print img").length;
       };
-      await window.__viewer?.print({
+      const viewer = window.__viewer;
+      if (!viewer) return null;
+      await window.__parapdf?.print(viewer, {
         resolution: 36,
         onProgress(done: number) {
-          if (done === 1) replacement = window.__viewer?.print({ resolution: 36 });
+          if (done === 1) replacement = window.__parapdf?.print(viewer, { resolution: 36 });
         },
       });
       await replacement;
@@ -551,7 +510,7 @@ try {
     });
     check(
       "a replacement print stops the old job and releases both jobs' resources",
-      replacedPrint.calls === 1 &&
+      replacedPrint?.calls === 1 &&
         replacedPrint.pages === 6 &&
         replacedPrint.left === 0 &&
         replacedPrint.styles === 0,
@@ -695,7 +654,7 @@ try {
       top: number;
       right: number;
     }
-    const placement = async (spread: string): Promise<Box[]> => {
+    const placement = async (spread: "none" | "odd" | "even"): Promise<Box[]> => {
       await page.evaluate((mode) => {
         window.__viewer?.setSpread(mode);
         window.__viewer?.goToPage(0);

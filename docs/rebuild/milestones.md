@@ -115,7 +115,28 @@ Every milestone's "Done when" includes, besides its own items:
   none of their code; viewers that edit annotations share their document's
   session too, without editor-id collisions, and edits and saving work
   across those viewers.
-- Status: not started.
+- Status: done (2026-10-26), #39. `src/features/` holds search, history,
+  view state, initial view, permissions, forms (fields, and the form
+  layers the `forms` option loads), annotation editing (loaded by the
+  `annotationEditing` option), print, download, thumbnails, layers,
+  attachments, selection, and text; the viewer reaches them only through
+  `extend()` and generic methods, and `target.md` records how ("How
+  features reach the core"). Viewers that edit annotations share their
+  session: editor ids are the document's, each viewer removes only its own
+  annotations, a hidden viewport's stay saved, and saving and printing
+  commit what every viewer is typing; a viewer shows the annotations it
+  created (an open question in `target.md`). Unit tests cover the
+  features' logic that needs no DOM and the editors' ids;
+  `check:viewers` covers two editing viewers, and `check:modules` the
+  minimal demo, which loads none of search, forms, annotation editing, or
+  print (the full demo's form layers and editing come in chunks of their
+  own). Every functional check passes in Chromium with `ENGINE=pdfjs`. The
+  scroll and return benchmarks against f6f0f60, three runs in Chromium,
+  WebKit, and Firefox (`results/scroll-m4-*`, `return-m4-*`), show no
+  regression beyond the runs' spread: the two outlying cells, Chromium's
+  scroll-back and WebKit's 3600 px/s scroll on bill-hr815.pdf, measured
+  within a few milliseconds of the build before in five runs each way
+  (`*-m4-repeat-*`), while the same cells differed by 40 ms between runs.
 
 ## M5: rendering
 

@@ -71,11 +71,13 @@ read for search and `getText()`.
   document" checks.
 - Encrypted documents ask any of their viewers for a password, as 0.x does.
 
-During the migration, M2 retains a separate session for each viewer that
-edits annotations: the current editor managers would otherwise collide in
-pdf.js's annotation storage. This is temporary, not an exception to the
-shared-session target. M4 moves editing to the feature modules and removes
-this isolation, verifying edits and saving across viewers of one session.
+Viewers that edit annotations share their session too (M4): each edits
+with an editor of its own on the document's one annotation storage, under
+ids unique to the session. Saving and printing, from any viewer, include
+what every viewer created; a viewer shows the annotations it created, not
+those of the others (see "Open questions"). A viewer whose viewport is
+hidden leaves its annotations in the storage, and shows them again when it
+returns; closing a viewer removes them, as closing the document did before.
 M6 moves document state out of the viewer stores into the session's store
 and settles the public session surface; M2's exposed lifecycle methods are
 not the final React API.
@@ -98,10 +100,9 @@ scroll mode, and tool: a split view, or thumbnails beside the pages.
 - A viewer has an `AbortController` of its own, aborted when its viewport
   goes.
 
-M3 moves the viewer and its layout, scrolling, and gestures into `view/`.
-Feature methods remain on the viewer as a temporary facade until M4. Hot
-and cold subscriptions are separate; the combined snapshot remains for the
-feature/document APIs until M4/M6. During M3, the demo uses two
+M3 moves the viewer and its layout, scrolling, and gestures into `view/`;
+M4 moves its feature methods out. Hot and cold subscriptions are separate;
+the combined snapshot remains for the document's state until M6. During M3, the demo uses two
 `PdfDocument` providers whose viewers share the same session; M6 introduces
 multiple viewers under one provider through the final React API.
 
@@ -157,6 +158,37 @@ view state (get and set), initial view (`/OpenAction`, `/PageLayout`,
 annotations (editing, import, export), print, download, thumbnails, layers
 (optional content), attachments, selection (in PDF points), and text
 (`getText()`).
+
+How features reach the core (M4):
+
+- The viewer knows no feature by name. A feature registers hooks with
+  `viewer.extend()`, which returns the function that removes them: the
+  document is about to be laid out (`prepare`) or is ready (`ready`, with a
+  signal that aborts when the document closes or the viewport detaches), a
+  page's text layer was built or removed, a link or outline is about to
+  jump, a named action the core does not handle, the pages' content changed,
+  and what the reader is typing should be committed before saving or
+  printing. Through the viewer's own methods a feature shows a destination,
+  a view, or a rectangle of a page, reads and restores positions, turns
+  form layers on, and gives the renderer an annotation editor.
+- A feature with state keeps it in a store of its own, which its hook reads
+  with `useSyncExternalStore`: search, history, and annotation editing. The
+  viewer's store keeps its view state and, until M6, the document's state.
+- The document's own data stays read by the core and published as before
+  until M6 (outline, labels, metadata, attachments, layers, permissions, the
+  initial view); the features are what is done with it: following
+  permissions, opening attachments, showing and hiding layers, arranging
+  the pages as the document asks.
+- Forms and annotation editing, which change how pages are drawn, are
+  options of `PdfDocument`, which imports their module when one is set and
+  makes the viewer wait for it before its first layout. A build that never
+  sets them still emits their chunks; it loads none of them. Search, print,
+  and the other features are imported by their hooks, or by the application
+  calling them, and absent from builds that import neither.
+- The opening view is an option of the viewer, a function of the session
+  that the initial view feature makes from `initialView` and
+  `initialViewState`, applied once per document; a viewport that reattaches
+  returns to its position instead.
 
 ### State
 
@@ -262,4 +294,7 @@ them in passing:
 - When pdf.js's renderer worker reaches a release: measure it, then decide.
 - Text layers for unmounted pages, so that the browser's own find and
   assistive technology reach the whole document.
+- Whether viewers of one session show the annotations other viewers create
+  as they edit, beyond saving and printing them together (M4 shows each
+  viewer's own).
 - The final names of the React API (M6).

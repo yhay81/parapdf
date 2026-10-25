@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it, mock } from "node:test";
+import { attachSearch } from "../src/features/search/index.ts";
+import { getText } from "../src/features/text/index.ts";
 import { Viewer } from "../src/view/viewer.ts";
 import {
   askPassword,
@@ -158,9 +160,10 @@ describe("closing a viewer's document", () => {
     await settle();
     assert.equal(viewer.store.get().status, "ready");
     const session = viewer.store.get().document;
-    const reading = viewer.getText();
-    viewer.search("hello");
-    assert.equal(viewer.store.get().search.status, "searching");
+    const reading = getText(viewer);
+    const search = attachSearch(viewer);
+    search.search("hello");
+    assert.equal(search.store.get().status, "searching");
     closeDocument();
     read();
     await assert.rejects(reading, /closed/);
@@ -168,7 +171,7 @@ describe("closing a viewer's document", () => {
     await settle();
     mock.timers.tick(0);
     await settle();
-    assert.equal(viewer.store.get().search.status, "idle", "the search publishes nothing after");
+    assert.equal(search.store.get().status, "idle", "the search publishes nothing after");
     assert.equal(viewer.store.get().document, null);
     // The session stays a second for a viewer that comes back, then closes.
     assert.equal(session?.signal.aborted, false);
@@ -182,7 +185,7 @@ describe("closing a viewer's document", () => {
     const viewer = new Viewer({}, loader);
     const closeDocument = viewer.open({ url: "/a.pdf" });
     await settle();
-    viewer.search("hello");
+    attachSearch(viewer).search("hello");
     await settle();
     assert.deepEqual(textsRead, [0], "the search reads a page at a time");
     closeDocument();
@@ -229,7 +232,7 @@ describe("closing a viewer's document", () => {
     const session = second.store.get().document;
     assert.ok(session);
     assert.equal(first.store.get().document, session, "one session for both");
-    const reading = second.getText();
+    const reading = getText(second);
     closeFirst();
     read();
     assert.equal((await reading).text, "hello\n\nhello");
@@ -256,16 +259,17 @@ describe("closing a viewer's document", () => {
     const viewer = new Viewer({}, loader);
     close.push(viewer.open({ url: "/a.pdf" }));
     await settle();
-    viewer.search("hello");
+    const search = attachSearch(viewer);
+    search.search("hello");
     await settle();
-    assert.equal(viewer.store.get().search.status, "done");
-    assert.equal(viewer.store.get().search.matches.length, 0);
-    viewer.search("hello");
+    assert.equal(search.store.get().status, "done");
+    assert.equal(search.store.get().matches.length, 0);
+    search.search("hello");
     await settle();
     mock.timers.tick(0);
     await settle();
-    assert.equal(viewer.store.get().search.status, "done");
-    assert.equal(viewer.store.get().search.matches.length, 1);
+    assert.equal(search.store.get().status, "done");
+    assert.equal(search.store.get().matches.length, 1);
     assert.equal(attempts, 2);
   });
 
@@ -284,5 +288,95 @@ describe("closing a viewer's document", () => {
     assert.equal(first.signal.aborted, true);
     assert.equal(second.signal.aborted, false);
     assert.equal(calls.destroys, 1);
+  });
+});
+
+describe("a viewer's extensions", () => {
+  const cancelFrame = Object.getOwnPropertyDescriptor(globalThis, "cancelAnimationFrame");
+  const close: (() => void)[] = [];
+
+  beforeEach(() => {
+    mock.timers.enable({ apis: ["setTimeout"] });
+    Object.defineProperty(globalThis, "cancelAnimationFrame", {
+      configurable: true,
+      value: () => {},
+    });
+  });
+
+  afterEach(async () => {
+    for (const release of close.splice(0)) release();
+    mock.timers.tick(1000);
+    await settle();
+    mock.timers.reset();
+    if (cancelFrame) Object.defineProperty(globalThis, "cancelAnimationFrame", cancelFrame);
+    else Reflect.deleteProperty(globalThis, "cancelAnimationFrame");
+  });
+
+  /** An extension that counts what it hears. */
+  const counting = () => {
+    const heard = { prepare: 0, ready: 0, closed: 0, aborted: 0 };
+    return {
+      heard,
+      extension: {
+        prepare: () => void heard.prepare++,
+        ready: (_session: unknown, signal: AbortSignal) => {
+          heard.ready++;
+          signal.addEventListener("abort", () => heard.aborted++);
+        },
+        closed: () => {
+          // The document's work stops after the features let go of it.
+          assert.equal(heard.aborted, 0);
+          heard.closed++;
+        },
+      },
+    };
+  };
+
+  it("hear a document's load once, whether they extend before or after it", async () => {
+    const viewer = new Viewer({}, fakePdfjs().loader);
+    const early = counting();
+    viewer.extend(early.extension);
+    const closeDocument = viewer.open({ url: "/a.pdf" });
+    const loading = counting();
+    viewer.extend(loading.extension);
+    await settle();
+    const late = counting();
+    const remove = viewer.extend(late.extension);
+    for (const { heard } of [early, loading, late]) {
+      assert.deepEqual(heard, { prepare: 1, ready: 1, closed: 0, aborted: 0 });
+    }
+    remove();
+    closeDocument();
+    assert.deepEqual(early.heard, { prepare: 1, ready: 1, closed: 1, aborted: 1 });
+    assert.equal(late.heard.closed, 0, "a removed extension hears nothing more");
+  });
+
+  it("wait for the features they defer before the first layout", async () => {
+    const viewer = new Viewer({}, fakePdfjs().loader);
+    let load = () => {};
+    viewer.defer(new Promise<void>((resolve) => (load = resolve)));
+    close.push(viewer.open({ url: "/a.pdf" }));
+    await settle();
+    assert.equal(viewer.store.get().status, "loading");
+    load();
+    await settle();
+    assert.equal(viewer.store.get().status, "ready");
+  });
+
+  it("finish the edits in progress of every viewer of the document before it saves", async () => {
+    const { loader } = fakePdfjs();
+    const viewers = [new Viewer({}, loader), new Viewer({}, loader)];
+    for (const viewer of viewers) close.push(viewer.open({ url: "/a.pdf" }));
+    await settle();
+    const session = viewers[0]?.session;
+    assert.ok(session && session === viewers[1]?.session);
+    const committed: number[] = [];
+    const editing = new AbortController();
+    session.onCommit(() => committed.push(0), editing.signal);
+    session.onCommit(() => committed.push(1), new AbortController().signal);
+    session.commit();
+    editing.abort();
+    session.commit();
+    assert.deepEqual(committed, [0, 1, 1]);
   });
 });

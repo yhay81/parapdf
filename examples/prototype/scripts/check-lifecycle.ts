@@ -156,7 +156,7 @@ try {
     // Search all 1,000 pages and close the viewer while it runs, along with
     // the page-size pass and any renders still in flight.
     await page.evaluate(() => {
-      (window as { __viewer?: { search(query: string): void } }).__viewer?.search("lorem");
+      window.__search?.search("lorem");
     });
     await call(page, "unmount");
     await page.waitForTimeout(2500);

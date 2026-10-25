@@ -1,7 +1,9 @@
 import {
   type OutlineNode,
+  openAttachment,
   type PdfLayer,
   PdfThumbnail,
+  setLayerVisible,
   usePdfNavigation,
   usePdfOutline,
   usePdfState,
@@ -219,7 +221,7 @@ function LayerList({ layers }: { layers: readonly PdfLayer[] }) {
                 type="checkbox"
                 checked={layer.visible}
                 onChange={(event) => {
-                  if (layer.id) viewer.setLayerVisible(layer.id, event.target.checked);
+                  if (layer.id) setLayerVisible(viewer, layer.id, event.target.checked);
                 }}
               />
               {layer.name}
@@ -242,7 +244,7 @@ function Attachments() {
           <button
             type="button"
             title={attachment.description ?? undefined}
-            onClick={() => void viewer.openAttachment(attachment)}
+            onClick={() => void openAttachment(viewer, attachment)}
           >
             <Icon name="attachment" size={18} />
             <span>{attachment.filename}</span>

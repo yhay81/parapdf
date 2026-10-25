@@ -29,19 +29,11 @@ interface ViewerProbe {
 
 const probe = (page: Page): Promise<ViewerProbe> =>
   page.evaluate(() => {
-    const viewer = (
-      window as {
-        __viewer?: {
-          scroller: HTMLElement | null;
-          store: { get(): { currentPage: number; canGoBack: boolean } };
-        };
-      }
-    ).__viewer;
-    const state = viewer?.store.get();
+    const viewer = window.__viewer;
     return {
       scrollTop: Math.round(viewer?.scroller?.scrollTop ?? -1),
-      currentPage: state?.currentPage ?? -1,
-      canGoBack: state?.canGoBack ?? false,
+      currentPage: viewer?.store.get().currentPage ?? -1,
+      canGoBack: window.__history?.store.get().canGoBack ?? false,
     };
   });
 

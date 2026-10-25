@@ -716,6 +716,16 @@ export class RenderScheduler {
   }
 
   /**
+   * Show form fields as HTML in annotation layers, or leave them in the
+   * drawings: pages drawn the other way are drawn again.
+   */
+  setForms(forms: boolean): void {
+    if ((this.#options.forms ?? false) === forms) return;
+    this.#options.forms = forms;
+    this.invalidateContent();
+  }
+
+  /**
    * What the pages show changed, say a layer was shown or hidden: every
    * page is drawn again, keeping its old pixels until the new ones are in,
    * and annotation layers are built again.

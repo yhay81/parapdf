@@ -1,6 +1,5 @@
 "use client";
 
-import type { AnnotationTool } from "../pdfjs/editor.ts";
 import { type Layout, type ScrollMode, type Viewport, zoomTarget } from "./layout.ts";
 import {
   type Edges,
@@ -94,8 +93,9 @@ export interface GestureHost {
     layout: Layout | null;
     scale: number;
     scrollMode: ScrollMode;
-    annotationTool: AnnotationTool;
   };
+  /** A feature, such as an annotation tool, takes the pointer: swipes leave it alone. */
+  pointerClaimed(): boolean;
   minScale(): number;
   maxScale(): number;
   /** The pages laid out at `scale` as they are laid out now, without applying it. */
@@ -183,9 +183,9 @@ export class ViewerGestures {
   #onSwipeStart = (event: TouchEvent): void => {
     this.#swipe = null;
     const touch = event.changedTouches[0];
-    const { scrollMode, annotationTool } = this.#host.state();
+    const { scrollMode } = this.#host.state();
     if (event.touches.length !== 1 || !touch || scrollMode !== "page") return;
-    if (annotationTool !== "none") return;
+    if (this.#host.pointerClaimed()) return;
     const target = event.target instanceof Element ? event.target : null;
     const edges = target?.closest(CONTROLS) ? null : this.#edges();
     if (!edges) return;

@@ -1,13 +1,18 @@
 import {
   type AnnotationTool,
+  download,
+  getFormFields,
+  getText,
   PdfDocument,
   type PdfDocumentProps,
   PdfPageRect,
   type PdfRect,
   PdfThumbnail,
   PdfViewport,
+  print,
   type ScrollMode,
   type SpreadMode,
+  usePdfAnnotations,
   usePdfFormChange,
   usePdfSelection,
   usePdfState,
@@ -238,7 +243,7 @@ function SelectionTools({
       <button
         type="button"
         onClick={async () => {
-          const { text, pages } = await viewer.getText();
+          const { text, pages } = await getText(viewer);
           setRead(`${text.length.toLocaleString("en")} characters on ${pages.length} pages`);
         }}
       >
@@ -298,13 +303,13 @@ function FormTools() {
   usePdfFormChange(({ name, value }) => setLast(`${name} = ${JSON.stringify(value)}`));
   return (
     <>
-      <button type="button" onClick={async () => setFields((await viewer.getFormFields()).length)}>
+      <button type="button" onClick={async () => setFields((await getFormFields(viewer)).length)}>
         Count fields
       </button>
-      <button type="button" onClick={() => void viewer.download("f1040-filled.pdf")}>
+      <button type="button" onClick={() => void download(viewer, "f1040-filled.pdf")}>
         Download
       </button>
-      <button type="button" onClick={() => void viewer.print()}>
+      <button type="button" onClick={() => void print(viewer)}>
         Print
       </button>
       <output aria-live="polite" style={{ maxWidth: "24rem", overflow: "hidden" }}>
@@ -335,9 +340,10 @@ const TOOLS: readonly [AnnotationTool, string][] = [
 
 function AnnotationTools() {
   const viewer = usePdfViewer();
-  const tool = usePdfState((state) => state.annotationTool);
-  const editing = usePdfState((state) => state.annotationState);
-  const ink = usePdfState((state) => state.annotationStyles?.ink);
+  const annotations = usePdfAnnotations();
+  const tool = annotations?.tool ?? "none";
+  const editing = annotations?.state ?? null;
+  const ink = annotations?.styles?.ink;
   return (
     <>
       {TOOLS.map(([value, label]) => (
@@ -346,7 +352,7 @@ function AnnotationTools() {
           type="button"
           aria-pressed={tool === value}
           disabled={!editing}
-          onClick={() => void viewer.setAnnotationTool(value)}
+          onClick={() => void annotations?.setTool(value)}
         >
           {label}
         </button>
@@ -356,15 +362,15 @@ function AnnotationTools() {
         aria-label="Drawing color"
         disabled={!editing}
         value={ink?.color.toLowerCase() ?? "#000000"}
-        onChange={(event) => viewer.setAnnotationStyle("ink", { color: event.target.value })}
+        onChange={(event) => annotations?.setStyle("ink", { color: event.target.value })}
       />
-      <button type="button" disabled={!editing?.canUndo} onClick={() => viewer.undoAnnotation()}>
+      <button type="button" disabled={!editing?.canUndo} onClick={() => annotations?.undo()}>
         Undo
       </button>
-      <button type="button" disabled={!editing?.canRedo} onClick={() => viewer.redoAnnotation()}>
+      <button type="button" disabled={!editing?.canRedo} onClick={() => annotations?.redo()}>
         Redo
       </button>
-      <button type="button" onClick={() => void viewer.download("annotated.pdf")}>
+      <button type="button" onClick={() => void download(viewer, "annotated.pdf")}>
         Download
       </button>
     </>

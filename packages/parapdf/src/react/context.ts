@@ -7,6 +7,9 @@ import type { Viewer, ViewerState } from "../view/viewer.ts";
 
 export const RuntimeContext = createContext<Viewer | null>(null);
 
+/** Whether the nearest `<PdfDocument>` lets the reader create annotations (`annotationEditing`). */
+export const AnnotationEditingContext = createContext(false);
+
 /** The viewer runtime of the nearest `<PdfDocument>`. */
 export function usePdfViewer(): Viewer {
   const runtime = useContext(RuntimeContext);

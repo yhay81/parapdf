@@ -1,7 +1,8 @@
 // biome-ignore-all lint/style/noNonNullAssertion: the probes await both viewers before asserting their state.
 /**
  * M3: independent viewports of one document session, including viewport-only
- * teardown and StrictMode. Run after build; BROWSER, ENGINE, and DIST apply.
+ * teardown and StrictMode; M4: viewers that edit annotations sharing the
+ * session. Run after build; BROWSER, ENGINE, and DIST apply.
  */
 import assert from "node:assert/strict";
 import { join } from "node:path";
@@ -53,7 +54,9 @@ async function checkViews(url: string) {
     assert.deepEqual(shared, { same: true, opens: 1 });
     console.log("PASS two viewers open one shared session");
 
-    const rightBefore = await page.evaluate(() => window.__split!.viewers[1]!.getViewState());
+    const rightBefore = await page.evaluate(() =>
+      window.__parapdf!.getViewState(window.__split!.viewers[1]!),
+    );
     await page.evaluate(() => {
       const left = window.__split!.viewers[0]!;
       left.goToPage(8);
@@ -63,7 +66,7 @@ async function checkViews(url: string) {
     });
     await ready(page, 0);
     assert.deepEqual(
-      await page.evaluate(() => window.__split!.viewers[1]!.getViewState()),
+      await page.evaluate(() => window.__parapdf!.getViewState(window.__split!.viewers[1]!)),
       rightBefore,
     );
     assert.deepEqual(
@@ -89,23 +92,27 @@ async function checkViews(url: string) {
     console.log("PASS scroll, navigation, zoom, rotation, tool, and keyboard are independent");
 
     // Detach only the viewport while its provider and shared document stay alive.
-    const saved = await page.evaluate(() => window.__split!.viewers[0]!.getViewState());
+    const saved = await page.evaluate(() =>
+      window.__parapdf!.getViewState(window.__split!.viewers[0]!),
+    );
     await page.locator('[data-viewer="0"]').getByRole("button", { name: "Hide viewport" }).click();
     assert.equal(await page.evaluate(() => window.__split!.viewers[0]!.signal.aborted), true);
     assert.equal(await page.evaluate(() => window.__split!.viewers[1]!.signal.aborted), false);
     assert.equal(await page.evaluate(() => window.__split!.viewers[0]!.keptPixels), 0);
     assert.equal(
       await page.evaluate(() => {
-        const viewer = window.__split!.viewers[0]!;
-        viewer.search("lorem");
-        return viewer.store.get().search.status;
+        const search = window.__split!.searches[0]!;
+        search.search("lorem");
+        return search.store.get().status;
       }),
       "idle",
       "searching a detached viewport does not leave it searching forever",
     );
     await page.locator('[data-viewer="0"]').getByRole("button", { name: "Show viewport" }).click();
     await ready(page, 0);
-    const restored = await page.evaluate(() => window.__split!.viewers[0]!.getViewState());
+    const restored = await page.evaluate(() =>
+      window.__parapdf!.getViewState(window.__split!.viewers[0]!),
+    );
     assert.equal(restored!.page, saved!.page);
     assert.equal(restored!.rotation, saved!.rotation);
     assert.equal(restored!.scale, saved!.scale);
@@ -115,11 +122,11 @@ async function checkViews(url: string) {
 
     // Start long work in both viewers, then remove only the first provider.
     await page.evaluate(() => {
-      for (const viewer of window.__split!.viewers) viewer!.search("lorem");
+      for (const search of window.__split!.searches) search!.search("lorem");
     });
     await page.locator('[data-viewer="0"]').getByRole("button", { name: "Close viewer" }).click();
     await page.waitForFunction(
-      () => window.__split!.viewers[1]!.store.get().search.status === "done",
+      () => window.__split!.searches[1]!.store.get().status === "done",
       undefined,
       { timeout: 60_000 },
     );
@@ -130,7 +137,7 @@ async function checkViews(url: string) {
         right: right!.store.get().status,
         leftAborted: left!.signal.aborted,
         rightAborted: right!.signal.aborted,
-        matches: right!.store.get().search.matches.length,
+        matches: window.__split!.searches[1]!.store.get().matches.length,
         destroys: window.__lifecycle!.stats.destroys,
       };
     });
@@ -154,6 +161,104 @@ async function checkViews(url: string) {
   }
 }
 
+/** Annotations two viewers of one session create: kept apart, saved together. */
+async function checkSharedEditing(url: string) {
+  const context = await launched.browser.newContext({
+    viewport: { width: 1440, height: 900 },
+    deviceScaleFactor: 2,
+  });
+  const page = await context.newPage();
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(String(error)));
+  page.on("console", (message) => {
+    if (message.type() === "error") errors.push(message.text());
+  });
+  try {
+    await restoreScaleFactor(page, new URL("calibrate.html", url).href);
+    await page.goto(
+      `${url}?split=1&annotations=1&engine=${engine}&count=1&file=synthetic-text-1000.pdf`,
+    );
+    await ready(page, 0);
+    await ready(page, 1);
+    await page.waitForFunction(() =>
+      window.__split!.annotations.every((editing) => editing?.store.get().state != null),
+    );
+    const editorIds = () =>
+      page.evaluate(() => {
+        const proxy = window.__split!.viewers[1]!.store.get().document!.proxy;
+        const storage = proxy.annotationStorage as unknown as Iterable<[string, unknown]>;
+        return [...storage]
+          .map(([key]) => key)
+          .filter((key) => key.startsWith("pdfjs_internal_editor_"));
+      });
+    const added = await page.evaluate(async () => {
+      const [left, right] = window.__split!.annotations;
+      return [
+        await left!.addSignature({ text: "Left" }, { description: "Left" }),
+        await right!.addSignature({ text: "Right" }, { description: "Right" }),
+      ];
+    });
+    assert.deepEqual(added, [true, true]);
+    const shared = await page.evaluate(() => ({
+      same:
+        window.__split!.viewers[0]!.store.get().document ===
+        window.__split!.viewers[1]!.store.get().document,
+      opens: window.__lifecycle!.stats.opens,
+      exported: window.__split!.annotations.map((editing) => editing!.export().length),
+    }));
+    assert.deepEqual(shared, { same: true, opens: 1, exported: [1, 1] });
+    assert.equal(new Set(await editorIds()).size, 2, "the two viewers' editors have their own ids");
+    /** The stamps of page 1 of the document saved from viewer `index`. */
+    const savedStamps = (index: number) =>
+      page.evaluate(async (i) => {
+        const viewer = window.__split!.viewers[i]!;
+        const bytes = await window.__parapdf!.save(viewer);
+        const pdfjs = (
+          window as unknown as {
+            pdfjsLib: {
+              getDocument(source: { data: Uint8Array }): {
+                promise: Promise<{
+                  getPage(n: number): Promise<{ getAnnotations(): Promise<{ subtype: string }[]> }>;
+                }>;
+              };
+            };
+          }
+        ).pdfjsLib;
+        const saved = await pdfjs.getDocument({ data: bytes! }).promise;
+        const annotations = await (await saved.getPage(1)).getAnnotations();
+        return annotations.filter((annotation) => annotation.subtype === "Stamp").length;
+      }, index);
+    assert.equal(await savedStamps(0), 2, "saving from one viewer includes the other's");
+    console.log(
+      "PASS viewers that edit share one session, with ids of their own, and save together",
+    );
+
+    // A hidden viewport's annotations stay in the document, and come back once.
+    const left = page.locator('[data-viewer="0"]');
+    await left.getByRole("button", { name: "Hide viewport" }).click();
+    assert.equal(await savedStamps(1), 2, "saving keeps the annotations of a hidden viewer");
+    await left.getByRole("button", { name: "Show viewport" }).click();
+    await ready(page, 0);
+    await page.waitForFunction(
+      () => window.__split!.annotations[0]?.store.get().state?.isEmpty === false,
+    );
+    assert.equal(await page.evaluate(() => window.__split!.annotations[0]!.export().length), 1);
+    assert.equal((await editorIds()).length, 2, "shown again, not twice");
+    assert.equal(await savedStamps(1), 2);
+    console.log("PASS a hidden viewer's annotations are saved, and shown again once");
+
+    await left.getByRole("button", { name: "Close viewer" }).click();
+    await page.waitForFunction(() => window.__split!.viewers[0]!.store.get().status === "idle");
+    assert.equal((await editorIds()).length, 1, "closing a viewer removes only its annotations");
+    assert.equal(await savedStamps(1), 1);
+    assert.equal(await page.evaluate(() => window.__split!.annotations[1]!.export().length), 1);
+    assert.deepEqual(errors, []);
+    console.log("PASS closing one editing viewer leaves the other's annotations");
+  } finally {
+    await context.close();
+  }
+}
+
 try {
   const server = await preview({
     root: exampleDir,
@@ -164,6 +269,7 @@ try {
   });
   try {
     await checkViews(server.resolvedUrls!.local[0]!);
+    await checkSharedEditing(server.resolvedUrls!.local[0]!);
   } finally {
     await new Promise<void>((resolve) => server.httpServer.close(() => resolve()));
   }

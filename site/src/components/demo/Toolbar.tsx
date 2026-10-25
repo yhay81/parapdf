@@ -1,6 +1,11 @@
 import {
+  download,
+  getViewState,
+  print,
   type ScrollMode,
   type SpreadMode,
+  usePdfAnnotationEditing,
+  usePdfNavigation,
   usePdfState,
   usePdfViewer,
   type ViewState,
@@ -50,9 +55,10 @@ export interface ToolbarProps {
 /** Shows or hides the annotation tools; hiding them puts the pointer back to its default. */
 function useAnnotatingToggle({ annotating, onAnnotatingChange }: ToolbarProps) {
   const viewer = usePdfViewer();
+  const editing = usePdfAnnotationEditing();
   return () => {
-    if (annotating) void viewer.setAnnotationTool("none");
-    onAnnotatingChange(!annotating, viewer.getViewState());
+    if (annotating) void editing?.setTool("none");
+    onAnnotatingChange(!annotating, getViewState(viewer));
   };
 }
 
@@ -121,14 +127,14 @@ export function Toolbar(props: ToolbarProps) {
           icon="download"
           label="Download"
           disabled={!ready}
-          onClick={() => void viewer.download()}
+          onClick={() => void download(viewer)}
         />
         <IconButton
           className="demo-from-lg"
           icon="print"
           label="Print"
           disabled={!ready}
-          onClick={() => void viewer.print()}
+          onClick={() => void print(viewer)}
         />
         <MoreMenu {...props} />
       </div>
@@ -195,18 +201,11 @@ function DocumentMenu({ opened, onOpen, onOpenFile }: ToolbarProps) {
 
 /** Back and forward through the places links and the outline jumped from. */
 function History() {
-  const viewer = usePdfViewer();
-  const canBack = usePdfState((state) => state.canGoBack);
-  const canForward = usePdfState((state) => state.canGoForward);
+  const { canGoBack: canBack, canGoForward: canForward, back, forward } = usePdfNavigation();
   return (
     <div className="demo-group demo-from-xl">
-      <IconButton icon="back" label="Back" disabled={!canBack} onClick={() => viewer.back()} />
-      <IconButton
-        icon="forward"
-        label="Forward"
-        disabled={!canForward}
-        onClick={() => viewer.forward()}
-      />
+      <IconButton icon="back" label="Back" disabled={!canBack} onClick={back} />
+      <IconButton icon="forward" label="Forward" disabled={!canForward} onClick={forward} />
       <span className="demo-divider" />
     </div>
   );
@@ -355,8 +354,7 @@ function MoreMenu(props: ToolbarProps) {
   const scrollMode = usePdfState((state) => state.scrollMode);
   const spread = usePdfState((state) => state.spread);
   const tool = usePdfState((state) => state.tool);
-  const canBack = usePdfState((state) => state.canGoBack);
-  const canForward = usePdfState((state) => state.canGoForward);
+  const { canGoBack: canBack, canGoForward: canForward, back, forward } = usePdfNavigation();
   return (
     <Popover
       id="demo-more"
@@ -381,10 +379,10 @@ function MoreMenu(props: ToolbarProps) {
         </MenuItem>
       </div>
       <div className="demo-until-lg">
-        <MenuItem icon="download" disabled={!ready} onSelect={() => void viewer.download()}>
+        <MenuItem icon="download" disabled={!ready} onSelect={() => void download(viewer)}>
           Download
         </MenuItem>
-        <MenuItem icon="print" disabled={!ready} onSelect={() => void viewer.print()}>
+        <MenuItem icon="print" disabled={!ready} onSelect={() => void print(viewer)}>
           Print
         </MenuItem>
         <hr />
@@ -445,10 +443,10 @@ function MoreMenu(props: ToolbarProps) {
         Last page
       </MenuItem>
       <div className="demo-until-xl">
-        <MenuItem icon="back" disabled={!canBack} onSelect={() => viewer.back()}>
+        <MenuItem icon="back" disabled={!canBack} onSelect={back}>
           Back
         </MenuItem>
-        <MenuItem icon="forward" disabled={!canForward} onSelect={() => viewer.forward()}>
+        <MenuItem icon="forward" disabled={!canForward} onSelect={forward}>
           Forward
         </MenuItem>
       </div>

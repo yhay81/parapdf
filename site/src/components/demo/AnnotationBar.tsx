@@ -1,7 +1,9 @@
 import {
   type AnnotationStyles,
   type AnnotationTool,
-  usePdfState,
+  getViewState,
+  type PdfAnnotations,
+  usePdfAnnotations,
   usePdfViewer,
   type ViewState,
 } from "parapdf";
@@ -50,9 +52,10 @@ const SIZES: Record<keyof AnnotationStyles, { label: string; min: number; max: n
  */
 export function AnnotationBar({ onDone }: { onDone: (view: ViewState | null) => void }) {
   const viewer = usePdfViewer();
-  const tool = usePdfState((state) => state.annotationTool);
-  const editing = usePdfState((state) => state.annotationState);
-  const styles = usePdfState((state) => state.annotationStyles);
+  const annotations = usePdfAnnotations();
+  const tool = annotations?.tool ?? "none";
+  const editing = annotations?.state ?? null;
+  const styles = annotations?.styles ?? null;
   const imageInput = useRef<HTMLInputElement>(null);
   const styled = tool === "highlight" || tool === "freetext" || tool === "ink" ? tool : null;
   return (
@@ -65,7 +68,7 @@ export function AnnotationBar({ onDone }: { onDone: (view: ViewState | null) => 
             label={label}
             aria-pressed={tool === value}
             disabled={!editing}
-            onClick={() => void viewer.setAnnotationTool(value)}
+            onClick={() => void annotations?.setTool(value)}
           />
         ))}
         <IconButton
@@ -75,7 +78,11 @@ export function AnnotationBar({ onDone }: { onDone: (view: ViewState | null) => 
           disabled={!editing}
           onClick={() => imageInput.current?.click()}
         />
-        <Signature disabled={!editing} pressed={tool === "signature"} />
+        <Signature
+          disabled={!editing}
+          pressed={tool === "signature"}
+          onSign={(text) => void annotations?.addSignature({ text }, { description: text })}
+        />
         <input
           ref={imageInput}
           type="file"
@@ -84,11 +91,13 @@ export function AnnotationBar({ onDone }: { onDone: (view: ViewState | null) => 
           onChange={(event) => {
             const image = event.target.files?.[0];
             event.target.value = "";
-            if (image) void viewer.addImage(image, { altText: image.name });
+            if (image) void annotations?.addImage(image, { altText: image.name });
           }}
         />
       </div>
-      {styled && styles ? <Style tool={styled} styles={styles} /> : null}
+      {styled && styles && annotations ? (
+        <Style tool={styled} styles={styles} setStyle={annotations.setStyle} />
+      ) : null}
       <span className="demo-divider" />
       <div className="demo-group">
         <IconButton
@@ -96,21 +105,21 @@ export function AnnotationBar({ onDone }: { onDone: (view: ViewState | null) => 
           label="Undo"
           shortcut={`${modifier}Z`}
           disabled={!editing?.canUndo}
-          onClick={() => viewer.undoAnnotation()}
+          onClick={() => annotations?.undo()}
         />
         <IconButton
           icon="redo"
           label="Redo"
           shortcut={modifier === "⌘" ? "⌘⇧Z" : "Ctrl+Y"}
           disabled={!editing?.canRedo}
-          onClick={() => viewer.redoAnnotation()}
+          onClick={() => annotations?.redo()}
         />
         <IconButton
           icon="trash"
           label="Delete the selected annotations"
           shortcut="Delete"
           disabled={!editing?.hasSelection}
-          onClick={() => viewer.deleteSelectedAnnotations()}
+          onClick={() => annotations?.deleteSelected()}
         />
       </div>
       <span className="demo-divider" />
@@ -118,8 +127,8 @@ export function AnnotationBar({ onDone }: { onDone: (view: ViewState | null) => 
         type="button"
         className="demo-done"
         onClick={() => {
-          void viewer.setAnnotationTool("none");
-          onDone(viewer.getViewState());
+          void annotations?.setTool("none");
+          onDone(getViewState(viewer));
         }}
       >
         Done
@@ -129,8 +138,15 @@ export function AnnotationBar({ onDone }: { onDone: (view: ViewState | null) => 
 }
 
 /** The color and size of what a tool creates, or of the annotations selected. */
-function Style({ tool, styles }: { tool: keyof AnnotationStyles; styles: AnnotationStyles }) {
-  const viewer = usePdfViewer();
+function Style({
+  tool,
+  styles,
+  setStyle,
+}: {
+  tool: keyof AnnotationStyles;
+  styles: AnnotationStyles;
+  setStyle: PdfAnnotations["setStyle"];
+}) {
   const color = styles[tool].color.toLowerCase();
   const size = SIZES[tool];
   const value = tool === "freetext" ? styles.freetext.fontSize : styles[tool].thickness;
@@ -149,7 +165,7 @@ function Style({ tool, styles }: { tool: keyof AnnotationStyles; styles: Annotat
             title={name}
             aria-pressed={color === hex}
             style={{ "--swatch": hex } as CSSProperties}
-            onClick={() => viewer.setAnnotationStyle(tool, { color: hex })}
+            onClick={() => setStyle(tool, { color: hex })}
           />
         ))}
         <label
@@ -162,7 +178,7 @@ function Style({ tool, styles }: { tool: keyof AnnotationStyles; styles: Annotat
             type="color"
             aria-label="Another color"
             value={color}
-            onChange={(event) => viewer.setAnnotationStyle(tool, { color: event.target.value })}
+            onChange={(event) => setStyle(tool, { color: event.target.value })}
           />
         </label>
       </fieldset>
@@ -175,8 +191,8 @@ function Style({ tool, styles }: { tool: keyof AnnotationStyles; styles: Annotat
           value={Math.round(value)}
           onChange={(event) => {
             const points = Number(event.target.value);
-            if (tool === "freetext") viewer.setAnnotationStyle(tool, { fontSize: points });
-            else viewer.setAnnotationStyle(tool, { thickness: points });
+            if (tool === "freetext") setStyle(tool, { fontSize: points });
+            else setStyle(tool, { thickness: points });
           }}
         />
         <output>{Math.round(value)}</output>
@@ -186,8 +202,15 @@ function Style({ tool, styles }: { tool: keyof AnnotationStyles; styles: Annotat
 }
 
 /** A typed signature, which pdf.js draws in an italic serif and places on the current page. */
-function Signature({ disabled, pressed }: { disabled: boolean; pressed: boolean }) {
-  const viewer = usePdfViewer();
+function Signature({
+  disabled,
+  pressed,
+  onSign,
+}: {
+  disabled: boolean;
+  pressed: boolean;
+  onSign: (text: string) => void;
+}) {
   const [name, setName] = useState("");
   return (
     <Popover
@@ -213,7 +236,7 @@ function Signature({ disabled, pressed }: { disabled: boolean; pressed: boolean 
           const text = name.trim();
           if (!text) return;
           event.currentTarget.closest<HTMLElement>("[popover]")?.hidePopover();
-          void viewer.addSignature({ text }, { description: text });
+          onSign(text);
           setName("");
         }}
       >

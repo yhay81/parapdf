@@ -10,8 +10,8 @@ import { type PageColors, RenderCancelledError, type Rotation } from "./draw.ts"
  * manager hears of scrolling, zooming, and turning through a small event bus
  * of ParaPDF's, the shape pdf.js's editors expect of one.
  *
- * Viewers load this module only when they edit annotations; other modules
- * import its types alone.
+ * The annotation editing feature, which applications load only to edit
+ * annotations, imports this module; other modules import its types alone.
  */
 
 /**
@@ -158,6 +158,8 @@ export interface AnnotationEditorLayerTask {
 /**
  * The annotations one viewer creates and edits. Annotations stay with it
  * while their pages unmount and are shown again on the pages' new layers.
+ * Other viewers of the document edit theirs beside them, in the same
+ * annotation storage: saving and printing include them all.
  */
 export interface AnnotationEditor {
   readonly state: AnnotationEditingState;
@@ -191,8 +193,12 @@ export interface AnnotationEditor {
   /** The page keyboard shortcuts and pasting act on. */
   setCurrentPage(pageIndex: number): void;
   renderLayer(elements: AnnotationLayerElements): AnnotationEditorLayerTask;
-  /** Ends editing and forgets every annotation that was not saved. */
-  destroy(): void;
+  /**
+   * Ends editing. Its annotations leave the document's storage, unless
+   * `keep`: they stay there, saved and printed with the document as those
+   * of unmounted pages are, until the function it returns removes them.
+   */
+  destroy(keep?: boolean): () => void;
 }
 
 /** The parts of pdf.js's editors this module calls, which pdf.js types loosely. */
@@ -254,6 +260,8 @@ interface PdfjsUIManager {
   commitOrRemove(): void;
   endCurrentEditing(): void;
   addCommands(command: { cmd(): void; undo(): void; mustExec?: boolean }): void;
+  getId(): string;
+  findClonesForPage(layer: PdfjsEditorLayer): Promise<unknown>;
   readonly _signal: AbortSignal | null;
   combinedSignal(controller: AbortController): AbortSignal;
   destroy(): void;
@@ -464,6 +472,12 @@ function quietly<T>(manager: PdfjsUIManager, container: HTMLElement, run: () => 
     container.hidden = hidden;
   }
 }
+
+/** What pdf.js's ids of editors' annotations start with, followed by a number. */
+const EDITOR_PREFIX = "pdfjs_internal_editor_";
+
+/** The next editor id of each document, for every editor of it. */
+const editorIds = new WeakMap<Pdfjs.PDFDocumentProxy, { next: number }>();
 
 /** Builds annotation editing on pdf.js's display API for one viewer of `doc`. */
 export function createPdfjsAnnotationEditor(
@@ -694,6 +708,42 @@ export function createPdfjsAnnotationEditor(
     combined.add(signal);
     signal.addEventListener("abort", () => combined.delete(signal), { once: true });
     return signal;
+  };
+
+  // pdf.js numbers each manager's editors from 0, and the editors of every
+  // viewer of a document share its annotation storage, where two of the
+  // same id would replace each other: ids are the document's, and each
+  // manager keeps to the editors it made.
+  let ids = editorIds.get(doc);
+  if (!ids) {
+    ids = { next: 0 };
+    editorIds.set(doc, ids);
+  }
+  const counter = ids;
+  const own = new Set<string>();
+  manager.getId = () => {
+    const id = `${EDITOR_PREFIX}${counter.next++}`;
+    own.add(id);
+    return id;
+  };
+  // pdf.js's own, but for this manager's clones alone: another viewer's
+  // annotations, imported in place as clones, stay with that viewer.
+  manager.findClonesForPage = (layer) => {
+    const storage = doc.annotationStorage;
+    const found: Promise<void>[] = [];
+    for (const [id, value] of [...storage]) {
+      const clone = value as { pageIndex?: number; isClone?: boolean } | null;
+      if (!own.has(id) || !clone?.isClone || clone.pageIndex !== layer.pageIndex) continue;
+      storage.remove(id);
+      found.push(
+        layer.deserialize(clone).then((editor) => {
+          if (!editor) return;
+          editor.isClone = true;
+          layer.addOrRebuild(editor);
+        }),
+      );
+    }
+    return Promise.all(found);
   };
 
   let scale = options.scale;
@@ -1073,18 +1123,24 @@ export function createPdfjsAnnotationEditor(
         },
       } satisfies AnnotationEditorLayerTask;
     },
-    destroy() {
-      if (destroyed) return;
+    destroy(keep = false) {
+      // The document forgets this editor's annotations, which it would save
+      // otherwise, and keeps those of the other viewers.
+      const storage = doc.annotationStorage;
+      const forget = () => {
+        for (const id of own) storage.remove(id);
+        own.clear();
+      };
+      if (destroyed) return forget;
       destroyed = true;
       for (const { destroy } of [...layers.values()]) destroy();
       layers.clear();
+      // The manager lets go of its editors, which serialize without it, as
+      // those of unmounted pages do without their layers.
       manager.destroy();
       eventBus.clear();
-      // The document forgets the editors' annotations, which it would save otherwise.
-      const storage = doc.annotationStorage;
-      for (const [key] of [...storage]) {
-        if (key.startsWith("pdfjs_internal_editor_")) storage.remove(key);
-      }
+      if (!keep) forget();
+      return forget;
     },
   };
 }

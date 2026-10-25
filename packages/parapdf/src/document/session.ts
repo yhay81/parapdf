@@ -5,7 +5,6 @@ import {
   resolveDestination,
   resolveExplicit,
 } from "../pdfjs/destinations.ts";
-import { createFormAccess } from "../pdfjs/forms.ts";
 import { LayerState } from "../pdfjs/layers.ts";
 import type { LoadedPdfjs } from "../pdfjs/loader.ts";
 import { type PageText, readPageText } from "../pdfjs/text.ts";
@@ -202,9 +201,10 @@ export class DocumentSession {
    * viewer: kept while the read succeeds, and asked for again after it fails.
    */
   readonly #reads = new Map<string, Promise<unknown>>();
+  /** What finishes the edits in progress in the session's viewers; see `commit()`. */
+  readonly #commits = new Set<() => void>();
   /** Every page's size, once the background pass has learned them. */
   #sizes: readonly PageSize[] | null = null;
-  #forms: ReturnType<typeof createFormAccess> | null = null;
 
   private constructor(
     pdfjs: LoadedPdfjs,
@@ -500,10 +500,19 @@ export class DocumentSession {
     return resolveDestination(this.proxy, (index) => this.page(index), dest);
   }
 
-  /** The document's form fields, read and set through pdf.js's annotation storage. */
-  get forms(): ReturnType<typeof createFormAccess> {
-    this.#forms ??= createFormAccess(this.proxy, (index) => this.page(index));
-    return this.#forms;
+  /**
+   * Call `commit` at each `commit()` until `signal` aborts: a viewer's
+   * annotation editor finishes what the reader is typing or drawing there.
+   */
+  onCommit(commit: () => void, signal: AbortSignal): void {
+    if (signal.aborted) return;
+    this.#commits.add(commit);
+    signal.addEventListener("abort", () => this.#commits.delete(commit), { once: true });
+  }
+
+  /** Finish the edits in progress in every viewer of the document, before saving or printing. */
+  commit(): void {
+    for (const commit of this.#commits) commit();
   }
 
   /**

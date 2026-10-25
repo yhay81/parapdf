@@ -27,7 +27,7 @@ the code that follows it.
 ## Status
 
 The rebuild runs milestone by milestone on `main`
-(`docs/rebuild/milestones.md`); M0 to M3 are done; M4 is next (#39).
+(`docs/rebuild/milestones.md`); M0 to M4 are done; M5 is next (#40).
 0.x was
 published on npm as `parapdf` 0.1.0 to 0.4.0, from the tags `v0.1.0` to
 `v0.4.0`. The package's README, the documentation site, the root
@@ -94,16 +94,19 @@ rewrites them (decision 0002).
 
 ## Repository layout
 
-As of M3; `target.md` describes where the runtime's code goes.
+As of M4; `target.md` describes where the runtime's code goes.
 
 - `packages/parapdf/` — the runtime, published as `parapdf`: the loader
   that starts pdf.js with the package's worker and files, and how ParaPDF
   draws pages and builds layers with it (`src/pdfjs/`); document sessions,
   one per open document, shared by its viewers through a registry
   (`src/document/`); one `Viewer` per viewport, its layout, scrolling,
-  gestures, and hot/cold state (`src/view/`); the scheduler and feature helpers (`src/runtime/`),
-  with feature methods still on `Viewer` until M4; React bindings
-  (`src/react/`,
+  gestures, hot/cold state, and the hooks features extend it with
+  (`viewer.extend()`, `src/view/`); the scheduler and the text selection
+  tracker until M5 (`src/runtime/`); the features, each attaching to a
+  viewer or a session and imported by nothing in the core (`src/features/`);
+  React bindings, among them `PdfDocument`, which loads the features its
+  options ask for (`src/react/`,
   `"use client"`); unit tests of the modules that need no DOM, which stand
   in for pdf.js with `test/fake-pdfjs.ts` (`test/`).
   `scripts/pdfjs-files.ts`, run by `pnpm install` and `build`, copies
@@ -115,7 +118,10 @@ As of M3; `target.md` describes where the runtime's code goes.
   license and notices.
 - `examples/prototype/` — the Vite demo the functional checks and the
   runtime benchmarks drive (`scripts/check-*.ts`, `scripts/*-bench.ts`,
-  results in `results/`). Its query parameters are read in `src/App.tsx`.
+  results in `results/`). Its query parameters are read in `src/App.tsx`,
+  which exposes the viewer and its features to the checks (`window.__viewer`,
+  `__parapdf`, `__search`, `__history`, `__annotations`). `minimal.html`
+  is the demo without search, forms, annotation editing, and print.
 - `bench/` — the engine benchmark (research, decision 0001): an adapter per
   engine (`src/engines/`), the corpus (`corpus/`, sources and licenses in
   its README), the synthetic corpus generator, the Playwright runner,
@@ -149,9 +155,12 @@ As of M3; `target.md` describes where the runtime's code goes.
   `options`, `pinch`, `features`, `scroll`, `annotations`, `document`,
   `viewers`, and `bundle`. `check:viewers` opens two viewers of one session
   and checks independent view state, closing one while the other works,
-  viewport-only detach/reattach, and StrictMode. The prototype shows it with
-  `?split=1`; separate `PdfDocument` providers share the session until M6
-  introduces the new React API. Each feature has one primary home among
+  viewport-only detach/reattach, StrictMode, and two viewers editing
+  annotations in one session. The prototype shows it with `?split=1`;
+  separate `PdfDocument` providers share the session until M6 introduces
+  the new React API. `check:modules` builds the demo with source maps and
+  checks which features' modules each page loads: `minimal.html` none of
+  search, forms, annotation editing, and print. Each feature has one primary home among
   them; extend that check
   instead of duplicating it. They default to `ENGINE=pdfjs-next`, which
   needs `bench/scripts/build-pdfjs-next.sh`; CI runs them with

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { PdfSelection } from "../view/viewer.ts";
+import { getSelection, type PdfSelection } from "../features/selection.ts";
 import { usePdfViewer } from "./context.ts";
 
 const sameSelection = (a: PdfSelection | null, b: PdfSelection | null): boolean =>
@@ -19,7 +19,7 @@ export function usePdfSelection(): PdfSelection | null {
     let frame = 0;
     const read = () => {
       frame = 0;
-      const next = viewer.getSelection();
+      const next = getSelection(viewer);
       setSelection((previous) => (sameSelection(previous, next) ? previous : next));
     };
     const onChange = () => {

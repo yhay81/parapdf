@@ -35,37 +35,44 @@ interface Saved {
 
 /** The viewer runtime the demo exposes, as far as these checks call it. */
 interface Viewer {
-  store: {
-    get(): {
-      currentPage: number;
-      annotationTool: string;
-      annotationState: {
-        canUndo: boolean;
-        canRedo: boolean;
-        hasSelection: boolean;
-        isEmpty: boolean;
-      } | null;
-      annotationStyles: { ink: { color: string; thickness: number } } | null;
-    };
-  };
+  store: { get(): { currentPage: number } };
   stats: Record<string, number> | null;
   hasPixels(index: number): boolean;
   goToPage(index: number): void;
   setScale(scale: number | string): void;
   rotate(degrees?: number): void;
-  setAnnotationTool(tool: string): Promise<void>;
-  setAnnotationStyle(tool: string, style: object): void;
-  undoAnnotation(): void;
-  redoAnnotation(): void;
+}
+
+/** The viewer's annotation editing, which the demo loads for `?annotations=1`. */
+interface Editing {
+  store: {
+    get(): {
+      tool: string;
+      state: {
+        canUndo: boolean;
+        canRedo: boolean;
+        hasSelection: boolean;
+        isEmpty: boolean;
+      } | null;
+      styles: { ink: { color: string; thickness: number } } | null;
+    };
+  };
+  setTool(tool: string): Promise<void>;
+  setStyle(tool: string, style: object): void;
+  undo(): void;
+  redo(): void;
   addImage(image: Blob | string, options?: object): Promise<boolean>;
   addSignature(signature: object, options?: object): Promise<boolean>;
-  exportAnnotations(): Saved[];
-  importAnnotations(annotations: Saved[]): Promise<number>;
-  save(): Promise<Uint8Array | null>;
+  export(): Saved[];
+  import(annotations: Saved[]): Promise<number>;
 }
 
 /** The demo's window: other checks declare `__viewer` with their own `Viewer`. */
-type Demo = { __viewer?: Viewer };
+type Demo = {
+  __viewer?: Viewer;
+  __annotations?: Editing | null;
+  __parapdf?: { save(viewer: Viewer | undefined): Promise<Uint8Array | null> };
+};
 
 interface ImageResult {
   added: boolean;
@@ -100,9 +107,18 @@ declare global {
 }
 
 const viewerState = (page: Page) =>
-  page.evaluate(() => (window as unknown as Demo).__viewer?.store.get());
+  page.evaluate(() => {
+    const demo = window as unknown as Demo;
+    const editing = demo.__annotations?.store.get();
+    return {
+      currentPage: demo.__viewer?.store.get().currentPage ?? 0,
+      annotationTool: editing?.tool ?? "none",
+      annotationState: editing?.state ?? null,
+      annotationStyles: editing?.styles ?? null,
+    };
+  });
 const exported = (page: Page) =>
-  page.evaluate(() => (window as unknown as Demo).__viewer?.exportAnnotations() ?? []);
+  page.evaluate(() => (window as unknown as Demo).__annotations?.export() ?? []);
 
 async function open(browser: Browser, url: string) {
   const context = await browser.newContext({
@@ -186,9 +202,9 @@ try {
   );
 
   // --- Drawing ---
-  await page.evaluate(() => (window as unknown as Demo).__viewer?.setAnnotationTool("ink"));
+  await page.evaluate(() => (window as unknown as Demo).__annotations?.setTool("ink"));
   await page.evaluate(() =>
-    (window as unknown as Demo).__viewer?.setAnnotationStyle("ink", {
+    (window as unknown as Demo).__annotations?.setStyle("ink", {
       color: "#ff0000",
       thickness: 3,
     }),
@@ -205,7 +221,7 @@ try {
   }
   await page.mouse.up();
   // Finishes the drawing, which takes more lines until then.
-  await page.evaluate(() => (window as unknown as Demo).__viewer?.setAnnotationTool("none"));
+  await page.evaluate(() => (window as unknown as Demo).__annotations?.setTool("none"));
   let annotations = await exported(page);
   const ink = annotations.find((annotation) => annotation.type === "ink");
   check(
@@ -219,7 +235,7 @@ try {
   );
 
   // --- Text ---
-  await page.evaluate(() => (window as unknown as Demo).__viewer?.setAnnotationTool("freetext"));
+  await page.evaluate(() => (window as unknown as Demo).__annotations?.setTool("freetext"));
   await page.mouse.click(box.x + 300, box.y + 300);
   await page.waitForTimeout(200);
   await page.keyboard.type("Hello ParaPDF");
@@ -236,7 +252,7 @@ try {
   await page.mouse.click(box.x + 300, box.y + 450);
   await page.waitForTimeout(200);
   await page.keyboard.type("Second");
-  await page.evaluate(() => (window as unknown as Demo).__viewer?.setAnnotationTool("highlight"));
+  await page.evaluate(() => (window as unknown as Demo).__annotations?.setTool("highlight"));
   const second = (await exported(page)).find((annotation) => annotation.data.value === "Second");
   check(
     "choosing another tool while typing keeps the text and the new tool",
@@ -260,7 +276,7 @@ try {
   check("the text editor is labelled", editorLabel === "Text Editor", String(editorLabel));
 
   // --- Highlight of selected text ---
-  await page.evaluate(() => (window as unknown as Demo).__viewer?.setAnnotationTool("highlight"));
+  await page.evaluate(() => (window as unknown as Demo).__annotations?.setTool("highlight"));
   await page.mouse.click(box.x + 600, box.y + 700);
   const run = section.locator(".parapdf-text-layer span", { hasText: "Copyright" }).first();
   const runBox = await run.boundingBox();
@@ -292,7 +308,7 @@ try {
       context.fillRect(0, 0, 40, 20);
     }
     const blob = await canvas.convertToBlob({ type: "image/png" });
-    return (window as unknown as Demo).__viewer?.addImage(blob, { altText: "Blue box" });
+    return (window as unknown as Demo).__annotations?.addImage(blob, { altText: "Blue box" });
   });
   await page.waitForFunction(() => document.querySelector(".stampEditor canvas") !== null);
   check(
@@ -300,7 +316,7 @@ try {
     imageAdded === true && (await viewerState(page))?.annotationTool === "stamp",
   );
   const signed = await page.evaluate(() =>
-    (window as unknown as Demo).__viewer?.addSignature(
+    (window as unknown as Demo).__annotations?.addSignature(
       { text: "Ada Lovelace" },
       { description: "Ada Lovelace" },
     ),
@@ -316,7 +332,7 @@ try {
       (await page.locator(".signatureEditor").first().getAttribute("aria-label")) ===
         "Signature editor: Ada Lovelace",
   );
-  await page.evaluate(() => (window as unknown as Demo).__viewer?.setAnnotationTool("none"));
+  await page.evaluate(() => (window as unknown as Demo).__annotations?.setTool("none"));
   annotations = await exported(page);
   const types = annotations.map((annotation) => annotation.type).sort();
   check(
@@ -331,18 +347,18 @@ try {
   );
 
   // --- Undo and redo ---
-  await page.evaluate(() => (window as unknown as Demo).__viewer?.setAnnotationTool("ink"));
+  await page.evaluate(() => (window as unknown as Demo).__annotations?.setTool("ink"));
   const beforeUndo = (await exported(page)).length;
-  await page.evaluate(() => (window as unknown as Demo).__viewer?.undoAnnotation());
+  await page.evaluate(() => (window as unknown as Demo).__annotations?.undo());
   const afterUndo = (await exported(page)).length;
-  await page.evaluate(() => (window as unknown as Demo).__viewer?.redoAnnotation());
+  await page.evaluate(() => (window as unknown as Demo).__annotations?.redo());
   const afterRedo = (await exported(page)).length;
   check(
     "undo removes the last annotation and redo brings it back",
     afterUndo === beforeUndo - 1 && afterRedo === beforeUndo,
     `${beforeUndo} → ${afterUndo} → ${afterRedo}`,
   );
-  await page.evaluate(() => (window as unknown as Demo).__viewer?.setAnnotationTool("none"));
+  await page.evaluate(() => (window as unknown as Demo).__annotations?.setTool("none"));
 
   // --- Pages that unmount and mount again ---
   await page
@@ -353,7 +369,7 @@ try {
   const focused = await page.evaluate(() => document.activeElement?.tagName ?? "");
   // With a tool chosen, the layer that shows them again is not hidden, and
   // pdf.js's editors focus themselves as it adds them.
-  await page.evaluate(() => (window as unknown as Demo).__viewer?.setAnnotationTool("ink"));
+  await page.evaluate(() => (window as unknown as Demo).__annotations?.setTool("ink"));
   await page.getByRole("searchbox").first().focus();
   const before = await exported(page);
   await page.evaluate(() => (window as unknown as Demo).__viewer?.goToPage(20));
@@ -375,9 +391,9 @@ try {
     (await page.evaluate(() => document.activeElement?.tagName ?? "")) === focused,
     focused,
   );
-  await page.evaluate(() => (window as unknown as Demo).__viewer?.setAnnotationTool("ink"));
+  await page.evaluate(() => (window as unknown as Demo).__annotations?.setTool("ink"));
   const count = (await exported(page)).length;
-  await page.evaluate(() => (window as unknown as Demo).__viewer?.undoAnnotation());
+  await page.evaluate(() => (window as unknown as Demo).__annotations?.undo());
   const afterRemountUndo = await exported(page);
   check(
     "showing them again adds no undo step",
@@ -385,8 +401,8 @@ try {
       !afterRemountUndo.some((annotation) => annotation.type === "signature"),
     `${count} → ${afterRemountUndo.length}`,
   );
-  await page.evaluate(() => (window as unknown as Demo).__viewer?.redoAnnotation());
-  await page.evaluate(() => (window as unknown as Demo).__viewer?.setAnnotationTool("none"));
+  await page.evaluate(() => (window as unknown as Demo).__annotations?.redo());
+  await page.evaluate(() => (window as unknown as Demo).__annotations?.setTool("none"));
 
   // --- Zoom and rotation ---
   await page.evaluate(() => (window as unknown as Demo).__viewer?.setScale(2));
@@ -416,7 +432,9 @@ try {
   // Read back by a second document, whose worker WebKit refuses from its
   // cache in this context: pdf.js then parses on the page.
   const subtypes = await page.evaluate(async () => {
-    const bytes = await (window as unknown as Demo).__viewer?.save();
+    const bytes = await (window as unknown as Demo).__parapdf?.save(
+      (window as unknown as Demo).__viewer,
+    );
     if (!bytes || !window.pdfjsLib) return [];
     const saved = await window.pdfjsLib.getDocument({ data: bytes }).promise;
     const first = await saved.getPage(1);
@@ -437,7 +455,7 @@ try {
     const ink = saved.find((annotation) => annotation.type === "ink");
     const elsewhere = ink ? [{ ...ink, pageIndex: 15, data: { ...ink.data, pageIndex: 15 } }] : [];
     const added = await page.evaluate(
-      (annotations) => (window as unknown as Demo).__viewer?.importAnnotations(annotations),
+      (annotations) => (window as unknown as Demo).__annotations?.import(annotations),
       [...saved, ...elsewhere],
     );
     check(
@@ -473,7 +491,7 @@ try {
       (await exported(page)).filter((annotation) => annotation.type === "signature").length;
     const signaturesBefore = await signatures();
     const drawn = await page.evaluate(() =>
-      (window as unknown as Demo).__viewer?.addSignature(
+      (window as unknown as Demo).__annotations?.addSignature(
         { strokes: [[10, 30, 40, 5, 70, 35, 100, 10]], width: 110, height: 40, thickness: 2 },
         { pageIndex: 0, description: "Drawn" },
       ),
@@ -516,11 +534,12 @@ try {
       const demo = window as unknown as ImageDemo;
       demo.__imageSettled = false;
       demo.__imageResult = (async () => {
-        const added = (await demo.__viewer?.addImage(url, { altText: "Ready image" })) === true;
+        const added =
+          (await demo.__annotations?.addImage(url, { altText: "Ready image" })) === true;
         demo.__imageSettled = true;
         // Deliberately no canvas, timeout, or frame wait after addImage().
-        const exported = demo.__viewer?.exportAnnotations() ?? [];
-        const bytes = await demo.__viewer?.save();
+        const exported = demo.__annotations?.export() ?? [];
+        const bytes = await demo.__parapdf?.save(demo.__viewer);
         const doc = bytes && (await window.pdfjsLib?.getDocument({ data: bytes }).promise);
         const annotations = doc ? await (await doc.getPage(1)).getAnnotations() : [];
         return {
@@ -552,17 +571,19 @@ try {
       JSON.stringify(image),
     );
     const failed = await page.evaluate(async () => {
-      const viewer = (window as unknown as Demo).__viewer;
-      await viewer?.setAnnotationTool("freetext");
-      const before = viewer?.exportAnnotations().length;
+      const viewer = (window as unknown as Demo).__annotations;
+      await viewer?.setTool("freetext");
+      const before = viewer?.export().length;
       const added = await viewer?.addImage(new Blob(["invalid image"], { type: "image/png" }));
-      const after = viewer?.exportAnnotations().length;
+      const after = viewer?.export().length;
       return {
         added,
         before,
         after,
-        saved: (await viewer?.save())?.byteLength ?? 0,
-        tool: viewer?.store.get().annotationTool,
+        saved:
+          (await (window as unknown as Demo).__parapdf?.save((window as unknown as Demo).__viewer))
+            ?.byteLength ?? 0,
+        tool: viewer?.store.get().tool,
         stampEditing: document
           .querySelector(".parapdf-editor-layer")
           ?.classList.contains("stampEditing"),
@@ -579,11 +600,13 @@ try {
       JSON.stringify(failed),
     );
     const signature = await page.evaluate(async (png) => {
-      const viewer = (window as unknown as Demo).__viewer;
+      const viewer = (window as unknown as Demo).__annotations;
       const blob = await (await fetch(`data:image/png;base64,${png}`)).blob();
       const added = await viewer?.addSignature({ image: blob }, { description: "Image signature" });
-      const exported = viewer?.exportAnnotations() ?? [];
-      const bytes = await viewer?.save();
+      const exported = viewer?.export() ?? [];
+      const bytes = await (window as unknown as Demo).__parapdf?.save(
+        (window as unknown as Demo).__viewer,
+      );
       const doc = bytes && (await window.pdfjsLib?.getDocument({ data: bytes }).promise);
       const annotations = doc ? await (await doc.getPage(1)).getAnnotations() : [];
       return {
@@ -598,7 +621,7 @@ try {
       JSON.stringify(signature),
     );
     const bitmapSignature = await page.evaluate(async (png) => {
-      const viewer = (window as unknown as Demo).__viewer;
+      const viewer = (window as unknown as Demo).__annotations;
       const blob = await (await fetch(`data:image/png;base64,${png}`)).blob();
       const bitmap = await createImageBitmap(blob);
       try {
@@ -606,8 +629,10 @@ try {
           { image: bitmap },
           { description: "Bitmap signature" },
         );
-        const exported = viewer?.exportAnnotations() ?? [];
-        const bytes = await viewer?.save();
+        const exported = viewer?.export() ?? [];
+        const bytes = await (window as unknown as Demo).__parapdf?.save(
+          (window as unknown as Demo).__viewer,
+        );
         const doc = bytes && (await window.pdfjsLib?.getDocument({ data: bytes }).promise);
         const annotations = doc ? await (await doc.getPage(1)).getAnnotations() : [];
         return {
@@ -629,11 +654,11 @@ try {
       JSON.stringify(bitmapSignature),
     );
     const failedSignature = await page.evaluate(async () => {
-      const viewer = (window as unknown as Demo).__viewer;
+      const viewer = (window as unknown as Demo).__annotations;
       const added = await viewer?.addSignature({
         image: new Blob(["invalid image"], { type: "image/png" }),
       });
-      return { added, count: viewer?.exportAnnotations().length };
+      return { added, count: viewer?.export().length };
     });
     check(
       "an undecodable image signature resolves false without an annotation",
@@ -655,21 +680,21 @@ try {
       const cancelledRequest = page.waitForRequest(`**/${path}`);
       await page.evaluate((url) => {
         const demo = window as unknown as ImageDemo;
-        demo.__pendingImage = demo.__viewer?.addImage(url);
+        demo.__pendingImage = demo.__annotations?.addImage(url);
       }, new URL(path, baseUrl).href);
       await cancelledRequest;
       await page.evaluate(async (tool) => {
-        const viewer = (window as unknown as Demo).__viewer;
-        await viewer?.setAnnotationTool("freetext");
+        const viewer = (window as unknown as Demo).__annotations;
+        await viewer?.setTool("freetext");
         // Choosing stamp again must not revive an earlier insertion.
-        if (tool === "stamp") await viewer?.setAnnotationTool(tool);
+        if (tool === "stamp") await viewer?.setTool(tool);
       }, tool);
       releaseCancelledImage();
       const cancelled = await page.evaluate(() => (window as unknown as ImageDemo).__pendingImage);
       const active = await page.evaluate((tool) => {
-        const viewer = (window as unknown as Demo).__viewer;
+        const viewer = (window as unknown as Demo).__annotations;
         return {
-          tool: viewer?.store.get().annotationTool,
+          tool: viewer?.store.get().tool,
           editing: document
             .querySelector(".parapdf-editor-layer")
             ?.classList.contains(`${tool}Editing`),
@@ -697,7 +722,7 @@ try {
     await page.evaluate((url) => {
       const demo = window as unknown as ImageDemo;
       demo.__imageSettled = false;
-      demo.__pendingImage = demo.__viewer?.addImage(url).then((added) => {
+      demo.__pendingImage = demo.__annotations?.addImage(url).then((added) => {
         demo.__imageSettled = true;
         return added;
       });
@@ -729,13 +754,13 @@ try {
     ];
     for (const signature of emptySignatures) {
       const failed = await page.evaluate(async (signature) => {
-        const viewer = (window as unknown as Demo).__viewer;
+        const viewer = (window as unknown as Demo).__annotations;
         const added = await viewer?.addSignature(signature);
         return {
           added,
-          exported: viewer?.exportAnnotations().length,
+          exported: viewer?.export().length,
           editors: document.querySelectorAll(".signatureEditor").length,
-          state: viewer?.store.get().annotationState,
+          state: viewer?.store.get().state,
         };
       }, signature);
       check(
@@ -749,21 +774,21 @@ try {
       );
     }
     const history = await page.evaluate(async (emptySignatures) => {
-      const viewer = (window as unknown as Demo).__viewer;
+      const viewer = (window as unknown as Demo).__annotations;
       const added = await viewer?.addSignature({ text: "Ada Lovelace" });
-      viewer?.undoAnnotation();
-      const afterUndo = viewer?.exportAnnotations().length;
+      viewer?.undo();
+      const afterUndo = viewer?.export().length;
       for (const signature of emptySignatures) await viewer?.addSignature(signature);
-      const canRedo = viewer?.store.get().annotationState?.canRedo;
-      viewer?.redoAnnotation();
-      const afterRedo = viewer?.exportAnnotations().length;
-      viewer?.undoAnnotation();
+      const canRedo = viewer?.store.get().state?.canRedo;
+      viewer?.redo();
+      const afterRedo = viewer?.export().length;
+      viewer?.undo();
       return {
         added,
         afterUndo,
         canRedo,
         afterRedo,
-        afterSecondUndo: viewer?.exportAnnotations().length,
+        afterSecondUndo: viewer?.export().length,
       };
     }, emptySignatures);
     check(
@@ -799,7 +824,7 @@ try {
         demo.__signatureDecodeStarted = true;
         return decoding.then(() => original(...args));
       }) as typeof createImageBitmap;
-      demo.__pendingSignature = demo.__viewer?.addSignature({ image: blob });
+      demo.__pendingSignature = demo.__annotations?.addSignature({ image: blob });
     });
     await page.waitForFunction(
       () => (window as unknown as SignatureDemo).__signatureDecodeStarted === true,
@@ -810,7 +835,7 @@ try {
     await textTool.click();
     await page.waitForFunction(
       () =>
-        (window as unknown as Demo).__viewer?.store.get().annotationTool === "freetext" &&
+        (window as unknown as Demo).__annotations?.store.get().tool === "freetext" &&
         document.querySelector(".parapdf-editor-layer")?.classList.contains("freetextEditing"),
     );
     await textTool.focus();
@@ -820,13 +845,13 @@ try {
       const added = await demo.__pendingSignature;
       return {
         added,
-        tool: demo.__viewer?.store.get().annotationTool,
+        tool: demo.__annotations?.store.get().tool,
         editing: document
           .querySelector(".parapdf-editor-layer")
           ?.classList.contains("freetextEditing"),
-        exported: demo.__viewer?.exportAnnotations().length,
+        exported: demo.__annotations?.export().length,
         editors: document.querySelectorAll(".signatureEditor").length,
-        state: demo.__viewer?.store.get().annotationState,
+        state: demo.__annotations?.store.get().state,
         focused: document.activeElement?.textContent === "Text",
       };
     });

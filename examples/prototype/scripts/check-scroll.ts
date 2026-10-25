@@ -49,17 +49,13 @@ interface Viewer {
         totalWidth: number;
         totalHeight: number;
       } | null;
-      search: { status: string; matches: unknown[] };
-      annotationState: unknown;
     };
   };
   hasPixels(index: number): boolean;
-  setAnnotationTool(tool: string): Promise<void>;
   goToPage(index: number): void;
   setScale(scale: number | string, anchor?: { x: number; y: number }): void;
   setScrollMode(mode: string): void;
   setSpread(spread: string): void;
-  search(query: string): void;
 }
 
 /** The demo's window, which exposes the viewer for these checks. */
@@ -437,11 +433,9 @@ try {
     await page.evaluate(() => {
       (window as unknown as Demo).__viewer?.setScale(0.5);
       (window as unknown as Demo).__viewer?.goToPage(0);
-      (window as unknown as Demo).__viewer?.search("marker 5");
+      window.__search?.search("marker 5");
     });
-    await page.waitForFunction(
-      () => (window as unknown as Demo).__viewer?.store.get().search.status === "done",
-    );
+    await page.waitForFunction(() => window.__search?.store.get().status === "done");
     await settle(page);
     const match = await page.evaluate(() => {
       const scroller = document.querySelector(".parapdf-viewport") as HTMLElement;
@@ -469,7 +463,7 @@ try {
         (mode === "page" ? g.shown?.first === 4 : true),
       `${JSON.stringify(match)} in ${g.clientWidth}x${g.clientHeight}`,
     );
-    await page.evaluate(() => (window as unknown as Demo).__viewer?.search(""));
+    await page.evaluate(() => window.__search?.search(""));
 
     // Every other mode keeps the current page in view.
     for (const next of MODES.filter((other) => other !== mode)) {
@@ -830,13 +824,11 @@ try {
     // An annotation tool keeps the touches for itself.
     const editing = await openTouch("scroll=page&scale=fit-page&annotations=1");
     await editing.page.waitForFunction(
-      () => (window as unknown as Demo).__viewer?.store.get().annotationState != null,
+      () => window.__annotations?.store.get().state != null,
       undefined,
       { timeout: 10_000 },
     );
-    await editing.page.evaluate(() =>
-      (window as unknown as Demo).__viewer?.setAnnotationTool("ink"),
-    );
+    await editing.page.evaluate(() => window.__annotations?.setTool("ink"));
     const drawn = await editing.swipe(-200, 0);
     check(
       "page, swipe: with an annotation tool chosen, a swipe does not flip",

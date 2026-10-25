@@ -71,11 +71,13 @@ export default defineConfig(({ command }) => ({
     outDir: "dist",
     emptyOutDir: true,
     assetsInlineLimit: 0,
-    // calibrate.html measures the idle baseline for the scroll benchmark.
+    // calibrate.html measures the idle baseline for the scroll benchmark;
+    // minimal.html is the demo without search, forms, annotations, and print.
     rolldownOptions: {
       input: {
         main: join(exampleDir, "index.html"),
         calibrate: join(exampleDir, "calibrate.html"),
+        minimal: join(exampleDir, "minimal.html"),
       },
     },
   },
