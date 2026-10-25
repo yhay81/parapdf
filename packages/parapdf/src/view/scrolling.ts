@@ -1,3 +1,5 @@
+"use client";
+
 import type { ScrollerSize, ScrollMode, Viewport } from "./layout.ts";
 
 /** Scrolling faster than this (CSS px/ms) defers full-resolution renders. */

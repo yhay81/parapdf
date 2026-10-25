@@ -47,6 +47,7 @@ jobs:
       - run: pnpm --filter @parapdf/prototype check:text
       - run: pnpm --filter @parapdf/prototype check:links
       - run: pnpm --filter @parapdf/prototype check:lifecycle
+      - run: pnpm --filter @parapdf/prototype check:viewers
       - run: pnpm --filter @parapdf/prototype check:rotation
       - run: pnpm --filter @parapdf/prototype check:options
       - run: pnpm --filter @parapdf/prototype check:pinch

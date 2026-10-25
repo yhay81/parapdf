@@ -14,7 +14,7 @@ import type { Page } from "playwright";
 import { preview } from "vite";
 import { launchBrowser, restoreScaleFactor } from "../../../bench/scripts/browsers.ts";
 import type { LoadedPdfjs } from "../../../packages/parapdf/src/pdfjs/loader.ts";
-import type { PdfViewerRuntime } from "../../../packages/parapdf/src/runtime/viewer.ts";
+import type { Viewer } from "../../../packages/parapdf/src/view/viewer.ts";
 
 const exampleDir = fileURLToPath(new URL("..", import.meta.url));
 const engine = process.env.ENGINE ?? "pdfjs-next";
@@ -213,8 +213,8 @@ try {
   // Hold the size pass until the reader has moved far down an overestimated
   // document. The real browser must clamp the scroll when its size shrinks.
   const refined = await mixed.evaluate(async () => {
-    const Runtime = (window as unknown as { __viewer: PdfViewerRuntime }).__viewer
-      .constructor as typeof PdfViewerRuntime;
+    const Runtime = (window as unknown as { __viewer: Viewer }).__viewer
+      .constructor as typeof Viewer;
     const results = [];
     for (const scrollMode of ["vertical", "horizontal"] as const) {
       let finishSizes = () => {};

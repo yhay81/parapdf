@@ -27,7 +27,8 @@ the code that follows it.
 ## Status
 
 The rebuild runs milestone by milestone on `main`
-(`docs/rebuild/milestones.md`); M0 to M2 are done, M3 is next. 0.x was
+(`docs/rebuild/milestones.md`); M0 to M3 are done; M4 is next (#39).
+0.x was
 published on npm as `parapdf` 0.1.0 to 0.4.0, from the tags `v0.1.0` to
 `v0.4.0`. The package's README, the documentation site, the root
 `README.md`, `CONTRIBUTING.md`, and `SECURITY.md` describe 0.x until M7
@@ -93,14 +94,16 @@ rewrites them (decision 0002).
 
 ## Repository layout
 
-As of M2; `target.md` describes where the runtime's code goes.
+As of M3; `target.md` describes where the runtime's code goes.
 
 - `packages/parapdf/` — the runtime, published as `parapdf`: the loader
   that starts pdf.js with the package's worker and files, and how ParaPDF
   draws pages and builds layers with it (`src/pdfjs/`); document sessions,
   one per open document, shared by its viewers through a registry
-  (`src/document/`); layout, scheduler, viewer runtime, and the modules
-  around them (`src/runtime/`); React bindings (`src/react/`,
+  (`src/document/`); one `Viewer` per viewport, its layout, scrolling,
+  gestures, and hot/cold state (`src/view/`); the scheduler and feature helpers (`src/runtime/`),
+  with feature methods still on `Viewer` until M4; React bindings
+  (`src/react/`,
   `"use client"`); unit tests of the modules that need no DOM, which stand
   in for pdf.js with `test/fake-pdfjs.ts` (`test/`).
   `scripts/pdfjs-files.ts`, run by `pnpm install` and `build`, copies
@@ -143,8 +146,13 @@ As of M2; `target.md` describes where the runtime's code goes.
   another one measures.
 - Functional checks, `pnpm --filter @parapdf/prototype check:<name>`, with
   `BROWSER` and `ENGINE`: `text`, `links`, `lifecycle`, `rotation`,
-  `options`, `pinch`, `features`, `scroll`, `annotations`, `document`, and
-  `bundle`. Each feature has one primary home among them; extend that check
+  `options`, `pinch`, `features`, `scroll`, `annotations`, `document`,
+  `viewers`, and `bundle`. `check:viewers` opens two viewers of one session
+  and checks independent view state, closing one while the other works,
+  viewport-only detach/reattach, and StrictMode. The prototype shows it with
+  `?split=1`; separate `PdfDocument` providers share the session until M6
+  introduces the new React API. Each feature has one primary home among
+  them; extend that check
   instead of duplicating it. They default to `ENGINE=pdfjs-next`, which
   needs `bench/scripts/build-pdfjs-next.sh`; CI runs them with
   `ENGINE=pdfjs` in Chromium. What each covers is listed in

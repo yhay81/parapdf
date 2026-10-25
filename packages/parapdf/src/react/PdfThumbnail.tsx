@@ -1,7 +1,7 @@
 "use client";
 
 import { type CSSProperties, useLayoutEffect, useRef } from "react";
-import { turnedSize } from "../runtime/layout.ts";
+import { turnedSize } from "../view/layout.ts";
 import { usePdfState, usePdfViewer } from "./context.ts";
 
 export interface PdfThumbnailProps {

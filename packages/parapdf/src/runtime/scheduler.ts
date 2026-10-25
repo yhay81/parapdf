@@ -30,7 +30,7 @@ import {
   turnedSize,
   type Viewport,
   visibleArea,
-} from "./layout.ts";
+} from "../view/layout.ts";
 import type { TextSelectionTracker } from "./selection.ts";
 
 type Layer = "base" | "detail";

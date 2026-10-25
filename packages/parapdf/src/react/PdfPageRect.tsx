@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
-import { usePdfState } from "./context.ts";
+import { usePdfHotState } from "./context.ts";
 
 export interface PdfPageRectProps {
   pageIndex: number;
@@ -20,7 +20,7 @@ export interface PdfPageRectProps {
  * alone and never needs to re-render it.
  */
 export function PdfPageRect({ pageIndex, x, y, width, height, style, children }: PdfPageRectProps) {
-  const size = usePdfState((state) => state.layout?.sizes[pageIndex]);
+  const size = usePdfHotState((state) => state.layout?.sizes[pageIndex]);
   if (!size || size.width === 0 || size.height === 0) return null;
   return (
     <div

@@ -1,0 +1,74 @@
+{
+  "environment": {
+    "runAt": "2026-10-25T10:27:46.998Z",
+    "os": "darwin 27.0.0 arm64",
+    "cpu": "Apple M2 Pro (12 logical cores)",
+    "browser": "Chromium 156.0.8078.4",
+    "engine": "pdfjs",
+    "build": "M2 6dd7349",
+    "throttle": 1,
+    "power": {
+      "source": "ac",
+      "lowPowerMode": false
+    },
+    "loadAverage": {
+      "start": 1.68,
+      "end": 2.15
+    },
+    "turnTaking": {
+      "waits": 0,
+      "waitedMs": 0,
+      "repeatedJobs": 0
+    },
+    "settings": {
+      "file": "bill-hr815.pdf",
+      "runs": 5,
+      "viewport": {
+        "width": 820,
+        "height": 1000
+      },
+      "deviceScaleFactor": 2,
+      "queries": ["before", ""]
+    }
+  },
+  "summaries": [
+    {
+      "scenario": "zoom-in-far",
+      "query": "before",
+      "description": "setScale() from fit-width to 5, where detail covers part of the page",
+      "runs": 5,
+      "errors": [],
+      "scale": [1.11, 5],
+      "blankFrames": 0,
+      "blankMs": 0,
+      "baseFrames": 0,
+      "baseMs": 0,
+      "timeToSharpMs": 40.31,
+      "sharpRuns": 5,
+      "baseRenders": 5,
+      "detailRenders": 1,
+      "cancelled": 0,
+      "canvasMiBBefore": 73.37,
+      "peakCanvasMiB": 103.98
+    },
+    {
+      "scenario": "zoom-in-far",
+      "query": "",
+      "description": "setScale() from fit-width to 5, where detail covers part of the page",
+      "runs": 5,
+      "errors": [],
+      "scale": [1.11, 5],
+      "blankFrames": 0,
+      "blankMs": 0,
+      "baseFrames": 0,
+      "baseMs": 0,
+      "timeToSharpMs": 31.88,
+      "sharpRuns": 5,
+      "baseRenders": 5,
+      "detailRenders": 1,
+      "cancelled": 0,
+      "canvasMiBBefore": 73.37,
+      "peakCanvasMiB": 103.98
+    }
+  ]
+}

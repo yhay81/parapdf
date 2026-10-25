@@ -17,7 +17,8 @@
     "check:annotations": "node scripts/check-annotations.ts",
     "check:document": "node scripts/check-document.ts",
     "typecheck": "tsc -p .",
-    "check:bundle": "node scripts/check-bundle.ts"
+    "check:bundle": "node scripts/check-bundle.ts",
+    "check:viewers": "node scripts/check-viewers.ts"
   },
   "dependencies": {
     "parapdf": "workspace:*",

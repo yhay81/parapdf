@@ -2,12 +2,13 @@
 
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { createContext, useContext, useSyncExternalStore } from "react";
-import type { PdfViewerRuntime, ViewerState } from "../runtime/viewer.ts";
+import type { HotViewState } from "../view/state.ts";
+import type { Viewer, ViewerState } from "../view/viewer.ts";
 
-export const RuntimeContext = createContext<PdfViewerRuntime | null>(null);
+export const RuntimeContext = createContext<Viewer | null>(null);
 
 /** The viewer runtime of the nearest `<PdfDocument>`. */
-export function usePdfViewer(): PdfViewerRuntime {
+export function usePdfViewer(): Viewer {
   const runtime = useContext(RuntimeContext);
   if (!runtime) throw new Error("usePdfViewer must be used inside <PdfDocument>");
   return runtime;
@@ -33,4 +34,14 @@ export function usePdfState<T>(selector: (state: ViewerState) => T): T {
  */
 export function usePdfDocument(): PDFDocumentProxy | null {
   return usePdfState((state) => state.document?.proxy ?? null);
+}
+
+/** Internal view subscription; document and feature updates do not reach it. */
+export function usePdfHotState<T>(selector: (state: HotViewState) => T): T {
+  const { hot } = usePdfViewer().store;
+  return useSyncExternalStore(
+    hot.subscribe,
+    () => selector(hot.get()),
+    () => selector(hot.get()),
+  );
 }

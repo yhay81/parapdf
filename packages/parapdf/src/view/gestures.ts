@@ -1,3 +1,5 @@
+"use client";
+
 import type { AnnotationTool } from "../pdfjs/editor.ts";
 import { type Layout, type ScrollMode, type Viewport, zoomTarget } from "./layout.ts";
 import {

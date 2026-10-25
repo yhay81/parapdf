@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import type { SearchOptions } from "../runtime/text-search.ts";
-import type { SearchState } from "../runtime/viewer.ts";
+import type { SearchState } from "../view/viewer.ts";
 import { usePdfState, usePdfViewer } from "./context.ts";
 
 export interface PdfSearch extends SearchState {

@@ -11,6 +11,20 @@ milestone at a time (`docs/rebuild/milestones.md`). APIs change without
 deprecations (`docs/decisions/0002-no-compatibility.md`); each merged
 milestone gets an entry here, and the release lists every break from 0.x.
 
+### Rebuild M3: independent viewers (2026-10-25)
+
+- `Viewer` replaces `PdfViewerRuntime`, and moves with layout, scrolling,
+  and gestures to `src/view/`. A viewer owns exactly one viewport; separate
+  viewers share a document session and keep their navigation, zoom,
+  rotation, tool, mounted pages, and canvas budgets independent.
+- View state publishes through separate `store.hot` and `store.cold`
+  subscriptions. The combined `store` remains the feature/document facade
+  during the migration; page layout subscribes only to hot state.
+- Detaching a viewport aborts its drawing, searches, printing, and
+  background publishing. Reattaching restores its view and annotations
+  while a mounted document provider retains the session. Closing one
+  provider leaves other viewers of the session working.
+
 ### Rebuild M2: pdf.js directly, and document sessions (2026-10-24)
 
 - pdf.js is used directly (decision 0001): the engine boundary,

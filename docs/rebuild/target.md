@@ -98,6 +98,19 @@ scroll mode, and tool: a split view, or thumbnails beside the pages.
 - A viewer has an `AbortController` of its own, aborted when its viewport
   goes.
 
+M3 moves the viewer and its layout, scrolling, and gestures into `view/`.
+Feature methods remain on the viewer as a temporary facade until M4. Hot
+and cold subscriptions are separate; the combined snapshot remains for the
+feature/document APIs until M4/M6. During M3, the demo uses two
+`PdfDocument` providers whose viewers share the same session; M6 introduces
+multiple viewers under one provider through the final React API.
+
+A viewport detaching aborts its viewer work (drawing, searches, printing,
+and background publishing). If its document provider remains mounted, it
+keeps its session lease and the view and edits for reattachment. Unmounting
+the provider releases that lease; only the last release closes the shared
+session after the registry's grace period.
+
 ### render/
 
 The renderer draws a viewer's mounted pages. It splits what 0.x

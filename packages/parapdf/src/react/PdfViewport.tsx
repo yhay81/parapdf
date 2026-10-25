@@ -10,7 +10,7 @@ import {
   useRef,
 } from "react";
 import type { Rotation } from "../pdfjs/draw.ts";
-import { usePdfState, usePdfViewer } from "./context.ts";
+import { usePdfHotState, usePdfState, usePdfViewer } from "./context.ts";
 import { VIEWER_CSS } from "./styles.ts";
 
 export interface PdfViewportProps {
@@ -57,9 +57,9 @@ export function PdfViewport({
   const runtime = usePdfViewer();
   const scrollerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const layout = usePdfState((state) => state.layout);
-  const first = usePdfState((state) => state.first);
-  const last = usePdfState((state) => state.last);
+  const layout = usePdfHotState((state) => state.layout);
+  const first = usePdfHotState((state) => state.first);
+  const last = usePdfHotState((state) => state.last);
   const pageCount = usePdfState((state) => state.pageCount);
 
   useLayoutEffect(() => {
