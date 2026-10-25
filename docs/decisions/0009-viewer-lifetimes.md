@@ -104,7 +104,10 @@ Smaller median costs remain: Chromium's reversed `zoom-in-far` is 8.43 ms
 slower, and Firefox's reversed `scale-up` is 9.98 ms slower, within the
 observed ranges. WebKit's reversed `zoom-in-far` is 3.94 ms faster. In the
 initial desktop zoom measurements Chromium is 14.94 ms faster at scale 4
-and 11.42 ms faster at scale 8; these are within the observed spread too.
+with overlapping ranges. At scale 8 its initial 11.42 ms improvement has
+non-overlapping ranges (M2 47.23–50.89 ms, M3 35.74–36.31 ms), but the
+reversed runs overlap (M2 36.61–51.43 ms, M3 31.47–51.66 ms). This is why
+neither the initial wins nor the initial losses alone decide the outcome.
 This meets the milestone's criterion of no regression beyond the runs'
 spread; it is **not evidence of a speed improvement or of exact equality**.
 
