@@ -1,6 +1,6 @@
 "use client";
 
-import { downloadBytes } from "../runtime/files.ts";
+import { downloadBytes } from "../view/files.ts";
 import type { Viewer } from "../view/viewer.ts";
 
 /**

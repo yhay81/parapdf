@@ -259,7 +259,6 @@ try {
         },
         worker: {},
         documentParameters: {},
-        contextOptions: {},
         imageResourcesPath: "",
         iconUrls: null,
         workerLocation: "",

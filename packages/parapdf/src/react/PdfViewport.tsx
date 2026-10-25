@@ -91,9 +91,6 @@ export function PdfViewport({
           height={layout.heights[index] ?? 0}
           scale={layout.scale}
           rotation={layout.rotation}
-          textLayer={runtime.textLayer}
-          annotationLayer={runtime.annotationLayer}
-          annotationEditing={annotationEditing}
           overlay={renderOverlay?.(index)}
         />,
       );
@@ -159,19 +156,8 @@ interface PdfPageProps {
   /** CSS pixels per PDF point; pdf.js's text layer reads it as `--total-scale-factor`. */
   scale: number;
   rotation: Rotation;
-  textLayer: boolean;
-  annotationLayer: boolean;
-  /** Whether the page gets a layer for the annotations the reader creates. */
-  annotationEditing: boolean;
   overlay: ReactNode;
 }
-
-const layerStyle: CSSProperties = {
-  position: "absolute",
-  inset: 0,
-  width: "100%",
-  height: "100%",
-};
 
 const PdfPage = memo(function PdfPage({
   index,
@@ -186,39 +172,23 @@ const PdfPage = memo(function PdfPage({
   height,
   scale,
   rotation,
-  textLayer,
-  annotationLayer,
-  annotationEditing,
   overlay,
 }: PdfPageProps) {
   const runtime = usePdfViewer();
-  const baseRef = useRef<HTMLCanvasElement>(null);
-  const detailRef = useRef<HTMLCanvasElement>(null);
-  const spareRef = useRef<HTMLCanvasElement>(null);
-  const textRef = useRef<HTMLDivElement>(null);
-  const annotationRef = useRef<HTMLDivElement>(null);
-  const structureRef = useRef<HTMLCanvasElement>(null);
-  const editorRef = useRef<HTMLDivElement>(null);
+  const hostRef = useRef<HTMLElement>(null);
 
+  // The renderer builds the page's canvases and layers in the section,
+  // before the overlay.
   useLayoutEffect(() => {
-    const base = baseRef.current;
-    const detail = detailRef.current;
-    if (!base || !detail) return;
-    return runtime.attachPage(
-      index,
-      base,
-      detail,
-      textRef.current,
-      annotationRef.current,
-      structureRef.current,
-      spareRef.current,
-      editorRef.current,
-    );
+    const host = hostRef.current;
+    if (!host) return;
+    return runtime.attachPage(index, host);
   }, [runtime, index]);
 
   return (
     // A labelled section is a region landmark, the role pdf.js gives its pages.
     <section
+      ref={hostRef}
       data-page={index + 1}
       aria-label={label}
       style={
@@ -243,25 +213,6 @@ const PdfPage = memo(function PdfPage({
         } as CSSProperties
       }
     >
-      {/*
-        Pixels only; the text layer carries the content for assistive
-        technology. Highlights and drawn lines are drawn here too, over the
-        page's own drawing.
-      */}
-      <div aria-hidden="true" className="parapdf-canvas-wrapper" style={layerStyle}>
-        <canvas ref={baseRef} style={layerStyle} />
-        {/* Two detail canvases: a new detail is drawn into one while the other shows the old. */}
-        <canvas ref={detailRef} style={layerStyle} />
-        <canvas ref={spareRef} style={layerStyle} />
-      </div>
-      {textLayer ? (
-        // A tagged page's structure, as pdf.js's viewer keeps it: a canvas's
-        // fallback content is read by assistive technology but never drawn.
-        <canvas ref={structureRef} className="parapdf-structure" width={0} height={0} />
-      ) : null}
-      {textLayer ? <div ref={textRef} className="parapdf-text-layer" /> : null}
-      {annotationLayer ? <div ref={annotationRef} className="parapdf-annotation-layer" /> : null}
-      {annotationEditing ? <div ref={editorRef} className="parapdf-editor-layer" /> : null}
       {overlay ? (
         // Overlays are placed on the unturned page, like the text layer, and
         // turn with it through the viewer CSS.

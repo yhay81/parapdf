@@ -19,9 +19,9 @@ import type { AnnotationEditor } from "../pdfjs/editor.ts";
 import type { LayerState, PdfLayer } from "../pdfjs/layers.ts";
 import { loadPdfjs } from "../pdfjs/loader.ts";
 import type { TextLayerHandle } from "../pdfjs/text.ts";
-import { downloadBytes, filenameFromUrl } from "../runtime/files.ts";
-import { RenderScheduler, type SchedulerStats } from "../runtime/scheduler.ts";
-import { TextSelectionTracker } from "../runtime/selection.ts";
+import { Renderer, type RenderStats } from "../render/renderer.ts";
+import { TextSelectionTracker } from "../render/selection.ts";
+import { downloadBytes, filenameFromUrl } from "./files.ts";
 import { CONTROLS, ViewerGestures } from "./gestures.ts";
 import {
   computeLayout,
@@ -339,16 +339,6 @@ const clamp = (value: number, min: number, max: number) => Math.min(max, Math.ma
 const whole = (area: PageArea | null): boolean =>
   area !== null && area.minX === 0 && area.minY === 0 && area.maxX === 1 && area.maxY === 1;
 
-type PageElements = [
-  HTMLCanvasElement,
-  HTMLCanvasElement,
-  HTMLElement | null,
-  HTMLElement | null,
-  HTMLElement | null,
-  HTMLCanvasElement | null,
-  HTMLElement | null,
-];
-
 /**
  * One viewport onto a shared document session: layout, gestures,
  * navigation, and the viewport's lifetime. Features (search, history,
@@ -440,9 +430,10 @@ export class Viewer {
   #session: DocumentSession | null = null;
   /** The file name the open document's URL gives, for download(). */
   #sourceName: string | null = null;
-  #scheduler: RenderScheduler | null = null;
+  #renderer: Renderer | null = null;
   #sizes: PageSize[] = [];
-  #pendingPages = new Map<number, PageElements>();
+  /** The hosts of the mounted pages, by page. */
+  #pageHosts = new Map<number, HTMLElement>();
   #textPages = new Map<number, TextLayerHandle>();
   #scroller: HTMLElement | null = null;
   #content: HTMLElement | null = null;
@@ -546,8 +537,8 @@ export class Viewer {
   }
 
   /** The renderer of the open document's pages, once it has loaded. */
-  get scheduler(): RenderScheduler | null {
-    return this.#scheduler;
+  get renderer(): Renderer | null {
+    return this.#renderer;
   }
 
   /** Which of the open document's layers show, once known. */
@@ -571,13 +562,13 @@ export class Viewer {
   }
 
   /** Render counters for the current document. */
-  get stats(): SchedulerStats | null {
-    return this.#scheduler?.stats ?? null;
+  get stats(): RenderStats | null {
+    return this.#renderer?.stats ?? null;
   }
 
   /** Pixels of the canvases kept from pages that left the mounted window (`maxKeptPixels`). */
   get keptPixels(): number {
-    return this.#scheduler?.keptPixels ?? 0;
+    return this.#renderer?.keptPixels ?? 0;
   }
 
   /** `performance.now()` when the first page first showed pixels. */
@@ -624,7 +615,7 @@ export class Viewer {
    */
   setFormLayers(enabled: boolean): void {
     this.#formLayers = enabled;
-    this.#scheduler?.setForms(enabled);
+    this.#renderer?.setForms(enabled);
   }
 
   /**
@@ -633,7 +624,7 @@ export class Viewer {
    */
   setAnnotationEditor(editor: AnnotationEditor | null): void {
     this.#annotationEditor = editor;
-    this.#scheduler?.setAnnotationEditor(editor);
+    this.#renderer?.setAnnotationEditor(editor);
   }
 
   /** While claimed, a mouse drag is a feature's, such as an annotation tool's, not the hand tool's. */
@@ -643,7 +634,7 @@ export class Viewer {
 
   /** What the pages show changed, such as form values: every page is drawn again. */
   invalidateContent(): void {
-    this.#scheduler?.invalidateContent();
+    this.#renderer?.invalidateContent();
   }
 
   /** Open an embedded file as activating its annotation does: by default, download it. */
@@ -733,7 +724,7 @@ export class Viewer {
       this.#close = null;
       cancelAnimationFrame(this.#progressFrame);
       this.#progressFrame = 0;
-      // Aborts the lease's signal, which disposes the scheduler and stops
+      // Aborts the lease's signal, which disposes the renderer and stops
       // background work. The session closes once no viewer uses it, even if
       // it is still loading.
       lease.release();
@@ -741,7 +732,7 @@ export class Viewer {
       this.#textPages.clear();
       this.#session = null;
       this.#layers = null;
-      this.#scheduler = null;
+      this.#renderer = null;
       this.store.set({
         status: "idle",
         passwordReason: null,
@@ -796,8 +787,10 @@ export class Viewer {
     this.store.set({ permissions });
     for (const extension of this.#extensions) extension.prepare?.(session, signal);
     signal.throwIfAborted();
-    const scheduler = new RenderScheduler(session, {
+    const renderer = new Renderer(session, {
       maxConcurrent: this.#maxConcurrentRenders,
+      textLayer: this.#textLayer,
+      annotationLayer: this.#annotationLayer,
       ...this.#canvasLimits,
       links: this.#links,
       forms: this.#formLayers,
@@ -819,10 +812,10 @@ export class Viewer {
       },
       signal,
     });
-    this.#scheduler = scheduler;
+    this.#renderer = renderer;
     // Pages unmounting while no viewport shows them keep nothing.
-    if (!this.#scroller) scheduler.setKeeping(false);
-    for (const [index, elements] of this.#pendingPages) scheduler.attach(index, ...elements);
+    if (!this.#scroller) renderer.setKeeping(false);
+    for (const [index, host] of this.#pageHosts) renderer.attach(index, host);
     if (view?.spread) this.store.set({ spread: view.spread });
     if (view?.scrollMode) this.store.set({ scrollMode: view.scrollMode });
     const scale = this.#resolveInitialScale();
@@ -859,7 +852,7 @@ export class Viewer {
       session.layers().then((layers) => {
         if (!signal.aborted) {
           this.#layers = layers;
-          scheduler.setLayers(layers);
+          renderer.setLayers(layers);
           layers.subscribe(this.#onLayersChange, signal);
           if (layers.changed) this.#onLayersChange();
         }
@@ -891,7 +884,7 @@ export class Viewer {
     const layers = this.#layers;
     if (!layers) return;
     this.store.set({ layers: layers.layers() });
-    this.#scheduler?.invalidateContent();
+    this.#renderer?.invalidateContent();
     for (const extension of this.#extensions) extension.layersChanged?.();
   };
 
@@ -924,7 +917,7 @@ export class Viewer {
         if (!signal.aborted) this.store.set({ status: "error", error: String(error) });
       });
     }
-    this.#scheduler?.setKeeping(true);
+    this.#renderer?.setKeeping(true);
     const layout = this.store.get().layout;
     if (layout) this.#sizeContent(layout);
     scroller.addEventListener("scroll", this.#onScroll, { passive: true });
@@ -951,8 +944,8 @@ export class Viewer {
       this.#savedPosition = this.store.get().status === "ready" ? this.position() : null;
       for (const extension of this.#extensions) extension.detaching?.();
       control.abort();
-      this.#scheduler = null;
-      this.#pendingPages.clear();
+      this.#renderer = null;
+      this.#pageHosts.clear();
       cancelAnimationFrame(this.#progressFrame);
       this.#progressFrame = 0;
       clearTimeout(this.#settleTimer);
@@ -980,48 +973,23 @@ export class Viewer {
   }
 
   /**
-   * Register a mounted page's layers; returns the function that releases
-   * them. With `spare`, a second detail canvas stacked over the base like
-   * `detail`, a new detail is drawn there while the page shows the old one.
-   * `editor` receives the annotations the reader creates on the page, once
-   * a feature gives the viewer an annotation editor, and the drawings of
-   * highlights and lines go into `base`'s parent.
+   * Register a mounted page's host, the element React places for page
+   * `index`; returns the function that releases it. The renderer builds the
+   * page's canvases and layers at the start of the host, before what React
+   * renders there.
    */
-  attachPage(
-    index: number,
-    base: HTMLCanvasElement,
-    detail: HTMLCanvasElement,
-    text: HTMLElement | null,
-    annotations: HTMLElement | null = null,
-    structure: HTMLElement | null = null,
-    spare: HTMLCanvasElement | null = null,
-    editor: HTMLElement | null = null,
-  ): () => void {
-    const textLayer = this.#textLayer ? text : null;
-    const annotationLayer = this.#annotationLayer ? annotations : null;
-    // The structure takes the text layer's runs in, so it comes with them.
-    const structureLayer = textLayer ? structure : null;
-    const elements: PageElements = [
-      base,
-      detail,
-      textLayer,
-      annotationLayer,
-      structureLayer,
-      spare,
-      editor,
-    ];
-    const scheduler = this.#scheduler;
-    if (scheduler) scheduler.attach(index, ...elements);
-    this.#pendingPages.set(index, elements);
+  attachPage(index: number, host: HTMLElement): () => void {
+    this.#renderer?.attach(index, host);
+    this.#pageHosts.set(index, host);
     return () => {
-      if (this.#pendingPages.get(index) !== elements) return;
-      this.#pendingPages.delete(index);
-      this.#scheduler?.detach(index);
+      if (this.#pageHosts.get(index) !== host) return;
+      this.#pageHosts.delete(index);
+      this.#renderer?.detach(index);
     };
   }
 
   hasPixels(index: number): boolean {
-    return this.#scheduler?.hasPixels(index) ?? false;
+    return this.#renderer?.hasPixels(index) ?? false;
   }
 
   /** Fraction of the viewport covered by pages that show no pixels yet. */
@@ -1052,8 +1020,8 @@ export class Viewer {
   sharpness(): number {
     const layout = this.store.get().layout;
     const scroller = this.#scroller;
-    const scheduler = this.#scheduler;
-    if (!layout || !scroller || !scheduler || scroller.clientHeight === 0) return 0;
+    const renderer = this.#renderer;
+    if (!layout || !scroller || !renderer || scroller.clientHeight === 0) return 0;
     const viewport = viewportOf(scroller);
     const needed = layout.scale * (window.devicePixelRatio || 1);
     const { first, last } = visibleRange(layout, viewport);
@@ -1067,7 +1035,7 @@ export class Viewer {
         (layout.widths[index] ?? 0) *
         (area.maxY - area.minY) *
         (layout.heights[index] ?? 0);
-      weighted += size * scheduler.sharpness(index, area, needed);
+      weighted += size * renderer.sharpness(index, area, needed);
       total += size;
     }
     return total > 0 ? weighted / total : 0;
@@ -1309,7 +1277,7 @@ export class Viewer {
     }
     this.store.set({ zoomMode: mode, scale });
     this.#applyLayout(scale, page);
-    if (rotation !== before.rotation) this.#scheduler?.rotate(rotation);
+    if (rotation !== before.rotation) this.#renderer?.rotate(rotation);
     // The destination's zoom applies only when the view leaves the zoom unsaid.
     if (target.x === null && target.y === null && !target.view) this.goToPage(page);
     else this.#jump(target, requested === undefined && this.#destinationZoom, true);
@@ -1450,7 +1418,7 @@ export class Viewer {
     const target = zoomTarget(layout, next, sizeOf(scroller), anchor, point);
     scroller.scrollTop = target.top;
     scroller.scrollLeft = target.left;
-    this.#scheduler?.rotate(turned);
+    this.#renderer?.rotate(turned);
     this.#update();
     // A turned page has another width to fit.
     this.#fit();
@@ -1961,7 +1929,7 @@ export class Viewer {
     // the preview counts as fast scrolling.
     const settled =
       (quiet || Math.abs(motion.velocity) < SETTLE_VELOCITY) && !this.#gestures.zooming();
-    this.#scheduler?.update({
+    this.#renderer?.update({
       layout,
       first,
       last,
