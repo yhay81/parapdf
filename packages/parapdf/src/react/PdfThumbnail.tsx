@@ -1,6 +1,7 @@
 "use client";
 
 import { type CSSProperties, useLayoutEffect, useRef } from "react";
+import { attachThumbnail } from "../features/thumbnails/index.ts";
 import { turnedSize } from "../view/layout.ts";
 import { usePdfState, usePdfViewer } from "./context.ts";
 
@@ -35,7 +36,7 @@ export function PdfThumbnail({ pageIndex, width, className, style }: PdfThumbnai
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    return runtime.attachThumbnail(pageIndex, canvas, width);
+    return attachThumbnail(runtime, pageIndex, canvas, width);
   }, [runtime, pageIndex, width, size, rotation]);
 
   return (

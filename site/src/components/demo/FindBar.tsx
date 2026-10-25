@@ -1,4 +1,4 @@
-import { type SearchOptions, usePdfSearch, usePdfState, usePdfViewer } from "parapdf";
+import { type SearchOptions, searchOf, usePdfSearch, usePdfState, usePdfViewer } from "parapdf";
 import { useEffect, useRef, useState } from "react";
 import { Icon, IconButton } from "./icons.tsx";
 
@@ -24,19 +24,19 @@ export function FindBar({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     input.current?.focus();
-    return () => viewer.clearSearch();
+    return () => searchOf(viewer).clear();
   }, [viewer]);
 
   useEffect(() => {
     if (value === query) return;
-    const timer = setTimeout(() => viewer.search(value, options), 250);
+    const timer = setTimeout(() => searchOf(viewer).search(value, options), 250);
     return () => clearTimeout(timer);
   }, [value, query, viewer, options]);
 
   const toggle = (name: keyof SearchOptions) => {
     const next = { ...options, [name]: !options[name] };
     setOptions(next);
-    if (value) viewer.search(value, next);
+    if (value) search.search(value, next);
   };
 
   const total = search.matches.length;
@@ -67,7 +67,7 @@ export function FindBar({ onClose }: { onClose: () => void }) {
             onKeyDown={(event) => {
               if (event.key === "Enter") {
                 event.preventDefault();
-                if (value !== query) viewer.search(value, options);
+                if (value !== query) search.search(value, options);
                 else if (event.shiftKey) search.previous();
                 else search.next();
               } else if (event.key === "Escape") {

@@ -1,0 +1,70 @@
+"use client";
+
+import { useMemo } from "react";
+import type { AnnotationEditing, AnnotationEditingStore } from "../features/annotations.ts";
+import type {
+  AnnotationStyles,
+  AnnotationTool,
+  SavedAnnotation,
+  SignatureInput,
+} from "../pdfjs/editor.ts";
+import { usePdfViewer } from "./context.ts";
+import { useLoadedFeature, useStore } from "./features.ts";
+
+export interface PdfAnnotations extends AnnotationEditingStore {
+  setTool(tool: AnnotationTool): Promise<void>;
+  setStyle<T extends keyof AnnotationStyles>(tool: T, style: Partial<AnnotationStyles[T]>): void;
+  undo(): void;
+  redo(): void;
+  deleteSelected(): void;
+  selectAll(): void;
+  addImage(
+    image: Blob | string,
+    options?: { pageIndex?: number; altText?: string },
+  ): Promise<boolean>;
+  addSignature(
+    signature: SignatureInput,
+    options?: { pageIndex?: number; description?: string },
+  ): Promise<boolean>;
+  export(): SavedAnnotation[];
+  import(annotations: readonly SavedAnnotation[]): Promise<number>;
+}
+
+const STOPPED: AnnotationEditingStore = { tool: "none", state: null, styles: null };
+const STOPPED_STORE = { get: () => STOPPED, subscribe: () => () => {} };
+
+/**
+ * The viewer's annotation editing, whose store reads its state as it is;
+ * null until its code loads, and without the `annotationEditing` option.
+ */
+export function usePdfAnnotationEditing(): AnnotationEditing | null {
+  return useLoadedFeature(usePdfViewer(), "annotations");
+}
+
+/**
+ * The annotations the reader creates in the viewer, and their tools; null
+ * until the editing code loads, and without the `annotationEditing` option.
+ */
+export function usePdfAnnotations(): PdfAnnotations | null {
+  const editing = usePdfAnnotationEditing();
+  const state = useStore(editing?.store ?? STOPPED_STORE);
+  return useMemo(
+    () =>
+      editing
+        ? {
+            ...state,
+            setTool: (tool) => editing.setTool(tool),
+            setStyle: (tool, style) => editing.setStyle(tool, style),
+            undo: () => editing.undo(),
+            redo: () => editing.redo(),
+            deleteSelected: () => editing.deleteSelected(),
+            selectAll: () => editing.selectAll(),
+            addImage: (image, options) => editing.addImage(image, options),
+            addSignature: (signature, options) => editing.addSignature(signature, options),
+            export: () => editing.export(),
+            import: (annotations) => editing.import(annotations),
+          }
+        : null,
+    [editing, state],
+  );
+}

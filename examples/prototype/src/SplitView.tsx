@@ -1,27 +1,35 @@
 import {
+  type AnnotationEditing,
   PdfDocument,
+  type PdfDocumentOptions,
   type PdfSource,
   PdfViewport,
+  type Search,
+  searchOf,
+  usePdfAnnotationEditing,
   usePdfState,
   usePdfViewer,
   type Viewer,
-  type ViewerOptions,
 } from "parapdf";
 import { useEffect, useState } from "react";
 
 declare global {
   interface Window {
-    __split?: { viewers: (Viewer | null)[] };
+    __split?: {
+      viewers: (Viewer | null)[];
+      searches: (Search | null)[];
+      annotations: (AnnotationEditing | null)[];
+    };
   }
 }
 
-/** M3 exercises the shared session through separate providers; M6 changes their React API. */
+/** Separate providers share the session until M6 changes their React API. */
 export default function SplitView({
   source,
   options,
 }: {
   source: PdfSource;
-  options: ViewerOptions;
+  options: PdfDocumentOptions;
 }) {
   const [mounted, setMounted] = useState([true, true]);
   return (
@@ -57,8 +65,13 @@ function Pane({ index }: { index: number }) {
   const scale = usePdfState((state) => state.scale);
   const status = usePdfState((state) => state.status);
   const [visible, setVisible] = useState(true);
+  const annotations = usePdfAnnotationEditing();
+  window.__split ??= { viewers: [null, null], searches: [null, null], annotations: [null, null] };
+  // For the checks.
+  window.__split.searches[index] = searchOf(viewer);
+  window.__split.annotations[index] = annotations;
   useEffect(() => {
-    window.__split ??= { viewers: [null, null] };
+    window.__split ??= { viewers: [null, null], searches: [null, null], annotations: [null, null] };
     window.__split.viewers[index] = viewer;
     // Keep the closed instance available to the lifecycle probe.
   }, [index, viewer]);

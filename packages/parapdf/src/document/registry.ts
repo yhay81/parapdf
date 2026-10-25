@@ -55,7 +55,7 @@ export interface SessionLease {
   submitPassword(password: string | null): void;
 }
 
-/** Sessions by source, for each pdf.js loader, and for each viewer that holds its own. */
+/** Sessions by source, for each pdf.js loader. */
 const registries = new WeakMap<object, Map<unknown, Entry>>();
 
 /**
@@ -71,11 +71,11 @@ export const sourceKey = (source: PdfSource): unknown => {
   return `url:${url} ${JSON.stringify([headers, withCredentials ?? false])}`;
 };
 
-function registryOf(owner: object): Map<unknown, Entry> {
-  let registry = registries.get(owner);
+function registryOf(pdfjs: PdfjsLoader): Map<unknown, Entry> {
+  let registry = registries.get(pdfjs);
   if (!registry) {
     registry = new Map();
-    registries.set(owner, registry);
+    registries.set(pdfjs, registry);
   }
   return registry;
 }
@@ -135,17 +135,14 @@ function openEntry(pdfjs: PdfjsLoader, source: PdfSource): Entry {
 
 /**
  * The session of the document `source` names, opened once for every viewer
- * of it with the pdf.js `pdfjs` loads, or, with `owner`, for that owner
- * alone: a viewer that edits annotations keeps them in its document, which
- * StrictMode's second mount of the same viewer still reuses.
+ * of it with the pdf.js `pdfjs` loads, those that edit annotations included.
  */
 export function acquireSession(
   pdfjs: PdfjsLoader,
   source: PdfSource,
   listener: SessionListener = {},
-  owner?: object,
 ): SessionLease {
-  const registry = registryOf(owner ?? pdfjs);
+  const registry = registryOf(pdfjs);
   const key = sourceKey(source);
   let entry = registry.get(key);
   if (entry) {

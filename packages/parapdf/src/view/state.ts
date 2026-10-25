@@ -12,7 +12,11 @@ export interface ReadableStore<T> {
   subscribe(listener: () => void): () => void;
 }
 
-class Snapshot<T extends object> implements ReadableStore<T> {
+/**
+ * An immutable snapshot and its listeners: the viewer's state, and that of
+ * each feature with state of its own.
+ */
+export class Store<T extends object> implements ReadableStore<T> {
   #value: T;
   readonly #listeners = new Set<() => void>();
 
@@ -40,22 +44,27 @@ class Snapshot<T extends object> implements ReadableStore<T> {
   publish(): void {
     for (const listener of this.#listeners) listener();
   }
+
+  /** Apply `patch` and notify the listeners, unless it changes nothing. */
+  set(patch: Partial<T>): void {
+    if (this.update(patch)) this.publish();
+  }
 }
 
 /**
- * View state publishes separately from document/feature state. The combined
- * snapshot is the temporary feature facade until M4/M6 move those states to
- * their owners. Patches are atomic across all three subscription surfaces.
+ * View state publishes separately from the document's state. The combined
+ * snapshot keeps the document's state until M6 moves it to the session.
+ * Patches are atomic across all three subscription surfaces.
  */
 export class ViewerStore implements ReadableStore<ViewerState> {
-  readonly #all: Snapshot<ViewerState>;
-  readonly #hot: Snapshot<HotViewState>;
-  readonly #cold: Snapshot<ColdViewState>;
+  readonly #all: Store<ViewerState>;
+  readonly #hot: Store<HotViewState>;
+  readonly #cold: Store<ColdViewState>;
   readonly hot: ReadableStore<HotViewState>;
   readonly cold: ReadableStore<ColdViewState>;
 
   constructor(initial: ViewerState) {
-    this.#all = new Snapshot(initial);
+    this.#all = new Store(initial);
     const {
       layout,
       first,
@@ -68,8 +77,8 @@ export class ViewerStore implements ReadableStore<ViewerState> {
       scrollMode,
       tool,
     } = initial;
-    this.hot = this.#hot = new Snapshot({ layout, first, last, currentPage, scale, zoomMode });
-    this.cold = this.#cold = new Snapshot({ rotation, spread, scrollMode, tool });
+    this.hot = this.#hot = new Store({ layout, first, last, currentPage, scale, zoomMode });
+    this.cold = this.#cold = new Store({ rotation, spread, scrollMode, tool });
   }
 
   get = (): ViewerState => this.#all.get();

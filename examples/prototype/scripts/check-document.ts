@@ -60,15 +60,12 @@ interface Viewer {
       zoomMode: string;
       spread: string;
       scrollMode: string;
-      canGoBack: boolean;
-      canGoForward: boolean;
       permissions: Record<string, boolean> | null;
       documentView: {
         destination: { pageIndex: number } | null;
         pageLayout: string | null;
         pageMode: string | null;
       } | null;
-      annotationState: unknown;
     };
   };
   scroller: HTMLElement | null;
@@ -76,32 +73,55 @@ interface Viewer {
   goToPage(index: number): void;
   setScale(scale: number | string): void;
   goToDestination(dest: unknown): Promise<boolean>;
-  back(): void;
-  forward(): void;
   rotate(degrees: number): void;
   setSpread(spread: string): void;
-  getViewState(): ViewState | null;
-  setViewState(view: Record<string, unknown>): void;
-  print(): Promise<void>;
-  save(): Promise<Uint8Array | null>;
-  setAnnotationTool(tool: string): Promise<void>;
-  getFormFields(): Promise<FormField[]>;
-  setFormValues(values: Record<string, unknown>): Promise<string[]>;
-  onFormChange(listener: (change: { name: string; value: unknown }) => void): () => void;
   stats: Record<string, number> | null;
+}
+
+/** The package's functions the demo exposes, which take the viewer. */
+interface Parapdf {
+  getViewState(viewer: Viewer): ViewState | null;
+  setViewState(viewer: Viewer, view: Record<string, unknown>): void;
+  print(viewer: Viewer | undefined): Promise<void>;
+  save(viewer: Viewer | undefined): Promise<Uint8Array | null>;
+  getFormFields(viewer: Viewer | undefined): Promise<FormField[]>;
+  setFormValues(viewer: Viewer | undefined, values: Record<string, unknown>): Promise<string[]>;
 }
 
 /** What the demo exposes on `window` for these checks. */
 interface Demo {
   __viewer?: Viewer;
+  __parapdf?: Parapdf;
+  __history?: {
+    store: { get(): { canGoBack: boolean; canGoForward: boolean } };
+    back(): void;
+    forward(): void;
+  };
+  __annotations?: {
+    store: { get(): { state: unknown } };
+    setTool(tool: string): Promise<void>;
+  } | null;
+  __onFormChange?: (change: { name: string; value: unknown }) => void;
   __pdfDocument?: {
     getPage(n: number): Promise<{ getAnnotations(): Promise<{ dest?: unknown }[]> }>;
   };
   __changes?: { name: string; value: unknown }[];
 }
 
+/** The viewer's state, with its history's and its annotation editing's. */
 const state = (page: Page) =>
-  page.evaluate(() => (window as unknown as Demo).__viewer?.store.get());
+  page.evaluate(() => {
+    const demo = window as unknown as Demo;
+    const viewer = demo.__viewer?.store.get();
+    if (!viewer) return undefined;
+    const history = demo.__history?.store.get();
+    return {
+      ...viewer,
+      canGoBack: history?.canGoBack ?? false,
+      canGoForward: history?.canGoForward ?? false,
+      annotationState: demo.__annotations?.store.get().state ?? null,
+    };
+  });
 
 async function open(browser: Browser, url: string) {
   const context = await browser.newContext({
@@ -244,7 +264,7 @@ try {
       inView(zoomed, 100, clicked?.scale) && close(zoomed?.y, 792 - 500, 1),
       JSON.stringify(zoomed),
     );
-    await page.evaluate(() => (window as unknown as Demo).__viewer?.back());
+    await page.evaluate(() => (window as unknown as Demo).__history?.back());
     await page.waitForTimeout(100);
     const back = await state(page);
     check(
@@ -256,7 +276,7 @@ try {
         !back.canGoBack,
       JSON.stringify({ page: back?.currentPage, mode: back?.zoomMode, scale: back?.scale }),
     );
-    await page.evaluate(() => (window as unknown as Demo).__viewer?.forward());
+    await page.evaluate(() => (window as unknown as Demo).__history?.forward());
     await page.waitForTimeout(100);
     const forward = await state(page);
     const forwardCorner = await corner(page);
@@ -270,7 +290,7 @@ try {
         !forward.canGoForward,
       JSON.stringify({ page: forward?.currentPage, scale: forward?.scale, ...forwardCorner }),
     );
-    await page.evaluate(() => (window as unknown as Demo).__viewer?.back());
+    await page.evaluate(() => (window as unknown as Demo).__history?.back());
     const kept = await go(1);
     check(
       "an XYZ destination with a zoom of 0 keeps the zoom",
@@ -315,7 +335,7 @@ try {
       JSON.stringify({ scale: fitR.state?.scale, rectScale, ...fitR.corner }),
     );
     for (let step = 0; step < 5; step++)
-      await page.evaluate(() => (window as unknown as Demo).__viewer?.back());
+      await page.evaluate(() => (window as unknown as Demo).__history?.back());
     await page.waitForTimeout(100);
     const first = await state(page);
     check(
@@ -442,8 +462,8 @@ try {
     const free = await page.evaluate(async () => {
       window.print = () => {};
       const span = document.querySelector(".parapdf-text-layer span");
-      const printed = await (window as unknown as Demo).__viewer
-        ?.print()
+      const printed = await (window as unknown as Demo).__parapdf
+        ?.print((window as unknown as Demo).__viewer)
         .then(() => "printed")
         .catch((error: unknown) => String(error));
       window.dispatchEvent(new Event("afterprint"));
@@ -468,16 +488,16 @@ try {
       window.print = () => {};
       const copy = new Event("copy", { bubbles: true, cancelable: true });
       span?.dispatchEvent(copy);
-      const printed = await (window as unknown as Demo).__viewer
-        ?.print()
+      const printed = await (window as unknown as Demo).__parapdf
+        ?.print((window as unknown as Demo).__viewer)
         .then(() => "printed")
         .catch((error: unknown) => String(error));
-      await (window as unknown as Demo).__viewer?.setAnnotationTool("ink");
+      await (window as unknown as Demo).__annotations?.setTool("ink");
       return {
         select: span ? getComputedStyle(span).userSelect : null,
         copyPrevented: copy.defaultPrevented,
         printed,
-        editing: (window as unknown as Demo).__viewer?.store.get().annotationState ?? null,
+        editing: (window as unknown as Demo).__annotations?.store.get().state ?? null,
         field: document.querySelector('.parapdf-annotation-layer input[name="comment"]') !== null,
       };
     });
@@ -510,7 +530,7 @@ try {
       demo("file=synthetic-features.pdf&permissions=1&annotations=1"),
     );
     await page.waitForFunction(
-      () => (window as unknown as Demo).__viewer?.store.get().annotationState != null,
+      () => (window as unknown as Demo).__annotations?.store.get().state != null,
       {
         timeout: 10_000,
       },
@@ -538,7 +558,9 @@ try {
       demo("file=synthetic-features.pdf&forms=1&page=2"),
     );
     await page.waitForSelector('.parapdf-annotation-layer input[name="name"]');
-    const fields = await page.evaluate(() => (window as unknown as Demo).__viewer?.getFormFields());
+    const fields = await page.evaluate(() =>
+      (window as unknown as Demo).__parapdf?.getFormFields((window as unknown as Demo).__viewer),
+    );
     const summary = fields?.map(({ name, type, value, options, exportValues, widgets }) => ({
       name,
       type,
@@ -581,9 +603,8 @@ try {
     );
     await page.evaluate(() => {
       (window as unknown as Demo).__changes = [];
-      (window as unknown as Demo).__viewer?.onFormChange((change) =>
-        (window as unknown as Demo).__changes?.push(change),
-      );
+      (window as unknown as Demo).__onFormChange = (change) =>
+        (window as unknown as Demo).__changes?.push(change);
     });
     await page.locator('.parapdf-annotation-layer input[name="name"]').fill("Ada");
     await page.locator('.parapdf-annotation-layer input[name="agree"]').check();
@@ -602,9 +623,11 @@ try {
     );
     const entered = await page.evaluate(async () =>
       Object.fromEntries(
-        ((await (window as unknown as Demo).__viewer?.getFormFields()) ?? []).map(
-          ({ name, value }) => [name, value],
-        ),
+        (
+          (await (window as unknown as Demo).__parapdf?.getFormFields(
+            (window as unknown as Demo).__viewer,
+          )) ?? []
+        ).map(({ name, value }) => [name, value]),
       ),
     );
     check(
@@ -614,7 +637,7 @@ try {
       JSON.stringify(entered),
     );
     const set = await page.evaluate(() =>
-      (window as unknown as Demo).__viewer?.setFormValues({
+      (window as unknown as Demo).__parapdf?.setFormValues((window as unknown as Demo).__viewer, {
         name: "Grace",
         agree: false,
         color: "green",
@@ -664,7 +687,9 @@ try {
       (await page.evaluate(() => (window as unknown as Demo).__changes?.length)) === changes.length,
     );
     const saved = await page.evaluate(async () => {
-      const bytes = await (window as unknown as Demo).__viewer?.save();
+      const bytes = await (window as unknown as Demo).__parapdf?.save(
+        (window as unknown as Demo).__viewer,
+      );
       const text = bytes ? new TextDecoder("latin1").decode(bytes) : "";
       return { grace: text.includes("(Grace)"), large: text.includes("(large)") };
     });
@@ -686,7 +711,7 @@ try {
         scroller.scrollTop += 333;
         scroller.scrollLeft += 120;
       }
-      return viewer?.getViewState() ?? null;
+      return viewer ? ((window as unknown as Demo).__parapdf?.getViewState(viewer) ?? null) : null;
     });
     await page.waitForTimeout(200);
     check(
@@ -723,7 +748,10 @@ try {
     await settle(reopened);
     const shown = await reopened.evaluate(() => {
       const viewer = (window as unknown as Demo).__viewer;
-      return { view: viewer?.getViewState() ?? null, back: viewer?.store.get().canGoBack };
+      return {
+        view: viewer ? ((window as unknown as Demo).__parapdf?.getViewState(viewer) ?? null) : null,
+        back: (window as unknown as Demo).__history?.store.get().canGoBack,
+      };
     });
     check(
       "initialViewState opens the same view in another viewport, over initialPage",
@@ -739,10 +767,11 @@ try {
       JSON.stringify(shown),
     );
     const later = await reopened.evaluate(() => {
-      const viewer = (window as unknown as Demo).__viewer;
-      viewer?.setViewState({ page: 5, scale: "fit-width", rotation: 0, spread: "none" });
-      const fitted = viewer?.getViewState();
-      viewer?.setViewState({
+      const { __viewer: viewer, __parapdf: parapdf } = window as unknown as Demo;
+      if (!viewer || !parapdf) return { fitted: null, ignored: null, state: null };
+      parapdf.setViewState(viewer, { page: 5, scale: "fit-width", rotation: 0, spread: "none" });
+      const fitted = parapdf.getViewState(viewer);
+      parapdf.setViewState(viewer, {
         page: "x",
         x: Number.NaN,
         scale: -1,
@@ -750,7 +779,11 @@ try {
         spread: "sideways",
         scrollMode: 3,
       });
-      return { fitted, ignored: viewer?.getViewState(), state: viewer?.store.get().zoomMode };
+      return {
+        fitted,
+        ignored: parapdf.getViewState(viewer),
+        state: viewer.store.get().zoomMode,
+      };
     });
     check(
       "setViewState() shows a page from its top with the fit it asks for",
@@ -779,7 +812,10 @@ try {
       demo(`file=synthetic-navigation.pdf&view=document&viewState=${kept}`),
     );
     const opened = await state(page);
-    const view = await page.evaluate(() => (window as unknown as Demo).__viewer?.getViewState());
+    const view = await page.evaluate(() => {
+      const { __viewer: viewer, __parapdf: parapdf } = window as unknown as Demo;
+      return viewer ? parapdf?.getViewState(viewer) : undefined;
+    });
     check(
       "a view state wins over /OpenAction, and the layout it leaves out still applies",
       opened?.currentPage !== 2 &&

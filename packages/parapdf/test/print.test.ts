@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it, type TestContext } from "node:test";
-import { printDocument } from "../src/runtime/print.ts";
+import { print } from "../src/features/print/index.ts";
+import { printDocument } from "../src/features/print/print.ts";
 import { Viewer } from "../src/view/viewer.ts";
 import { fakeDocument, fakePdfjs, openSession, settle } from "./fake-pdfjs.ts";
 
@@ -153,7 +154,7 @@ describe("print job replacement", () => {
     const viewer = new Viewer({}, fakePdfjs(async () => document.proxy).loader);
     const closeDocument = viewer.open({ url: "/a.pdf" });
     await settle();
-    const printing = viewer.print();
+    const printing = print(viewer);
     await settle();
     assert.equal(document.drawings.length, 1);
     closeDocument();

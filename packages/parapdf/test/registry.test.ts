@@ -31,19 +31,6 @@ describe("acquireSession", () => {
     assert.equal(calls.opens, 2);
   });
 
-  it("gives an owner a session of its own, which it shares with no other viewer", async () => {
-    const { loader, calls } = fakePdfjs();
-    const editor = {};
-    const shared = acquireSession(loader, { url: "/a.pdf" });
-    const own = acquireSession(loader, { url: "/a.pdf" }, {}, editor);
-    // The owner's second mount, as StrictMode makes, reuses its own.
-    own.release();
-    const again = acquireSession(loader, { url: "/a.pdf" }, {}, editor);
-    assert.notEqual(await shared.session, await own.session);
-    assert.equal(await own.session, await again.session);
-    assert.equal(calls.opens, 2);
-  });
-
   it("closes a session a second after its last viewer releases it", async () => {
     const { loader, calls } = fakePdfjs();
     const a = acquireSession(loader, { url: "/a.pdf" });

@@ -190,7 +190,7 @@ try {
     `${JSON.stringify(overlay)} vs ${JSON.stringify(expected)}`,
   );
   await page.evaluate(() => {
-    (window as unknown as { __viewer: { search(query: string): void } }).__viewer.search("israel");
+    window.__search?.search("israel");
   });
   // The match's page builds its text layer once scrolling settles.
   await page

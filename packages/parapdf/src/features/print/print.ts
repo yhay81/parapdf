@@ -1,6 +1,6 @@
-import type { DocumentSession, PageSize } from "../document/session.ts";
-import { drawPage } from "../pdfjs/draw.ts";
-import type { LayerState } from "../pdfjs/layers.ts";
+import type { DocumentSession, PageSize } from "../../document/session.ts";
+import { drawPage } from "../../pdfjs/draw.ts";
+import type { LayerState } from "../../pdfjs/layers.ts";
 
 export interface PrintOptions {
   /** Dots per inch the pages are drawn at (default 150, as pdf.js's viewer prints). */

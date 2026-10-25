@@ -2,8 +2,10 @@
 
 import { useMemo } from "react";
 import type { OutlineNode } from "../document/session.ts";
+import { historyOf } from "../features/history.ts";
 import type { Destination } from "../pdfjs/destinations.ts";
 import { usePdfState, usePdfViewer } from "./context.ts";
+import { useStore } from "./features.ts";
 
 export interface PdfNavigation {
   canGoBack: boolean;
@@ -14,21 +16,25 @@ export interface PdfNavigation {
   goToDestination(dest: Destination | null): Promise<boolean>;
 }
 
-/** Page and destination navigation with back and forward stacks for link jumps. */
+/**
+ * Page and destination navigation, with back and forward stacks for the
+ * viewer's link and outline jumps: its own history (`historyOf()`), kept
+ * from the first use.
+ */
 export function usePdfNavigation(): PdfNavigation {
   const viewer = usePdfViewer();
-  const canGoBack = usePdfState((state) => state.canGoBack);
-  const canGoForward = usePdfState((state) => state.canGoForward);
+  const history = historyOf(viewer);
+  const { canGoBack, canGoForward } = useStore(history.store);
   return useMemo(
     () => ({
       canGoBack,
-      back: () => viewer.back(),
+      back: () => history.back(),
       canGoForward,
-      forward: () => viewer.forward(),
+      forward: () => history.forward(),
       goToPage: (pageIndex: number) => viewer.goToPage(pageIndex),
       goToDestination: (dest: Destination | null) => viewer.goToDestination(dest),
     }),
-    [viewer, canGoBack, canGoForward],
+    [viewer, history, canGoBack, canGoForward],
   );
 }
 

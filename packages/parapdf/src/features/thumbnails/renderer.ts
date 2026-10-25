@@ -1,8 +1,8 @@
-import type { PageSize } from "../document/session.ts";
-import type { Rotation } from "../pdfjs/draw.ts";
-import type { LayerState } from "../pdfjs/layers.ts";
-import { turnedSize } from "../view/layout.ts";
-import type { RenderScheduler } from "./scheduler.ts";
+import type { PageSize } from "../../document/session.ts";
+import type { Rotation } from "../../pdfjs/draw.ts";
+import type { LayerState } from "../../pdfjs/layers.ts";
+import type { RenderScheduler } from "../../runtime/scheduler.ts";
+import { turnedSize } from "../../view/layout.ts";
 
 /** What thumbnails need from the viewer. */
 export interface ThumbnailHost {

@@ -1,4 +1,11 @@
-import { type PdfLayer, PdfThumbnail, usePdfState, usePdfViewer } from "parapdf";
+import {
+  openAttachment,
+  type PdfLayer,
+  PdfThumbnail,
+  setLayerVisible,
+  usePdfState,
+  usePdfViewer,
+} from "parapdf";
 import { OutlinePanel } from "./OutlinePanel.tsx";
 
 export type SidebarView = "outline" | "thumbnails" | "layers" | "attachments";
@@ -73,7 +80,7 @@ function LayerList({ layers }: { layers: readonly PdfLayer[] }) {
                 type="checkbox"
                 checked={layer.visible}
                 onChange={(event) => {
-                  if (layer.id) viewer.setLayerVisible(layer.id, event.target.checked);
+                  if (layer.id) setLayerVisible(viewer, layer.id, event.target.checked);
                 }}
               />
               {layer.name}
@@ -99,7 +106,7 @@ function AttachmentsPanel({ id }: { id: string }) {
             <button
               type="button"
               title={attachment.description ?? undefined}
-              onClick={() => void viewer.openAttachment(attachment)}
+              onClick={() => void openAttachment(viewer, attachment)}
             >
               {attachment.filename}
             </button>

@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { PageText } from "../src/pdfjs/text.ts";
 import {
   buildPageIndex,
   findMatches,
   normalizeQuery,
   type SearchMatch,
   type SearchOptions,
-} from "../src/runtime/text-search.ts";
+} from "../src/features/search/text-search.ts";
+import type { PageText } from "../src/pdfjs/text.ts";
 
 /** A page of text items; `endsLine` marks the items a line end follows. */
 const page = (items: string[], endsLine: boolean[] = items.map(() => false)): PageText => ({

@@ -37,23 +37,14 @@ async function searchFor(page: Page, query: string): Promise<{ total: number; su
   const input = page.getByRole("searchbox", { name: "Find in document" });
   await input.fill(query);
   await input.press("Enter");
-  await page.waitForFunction(
-    () => {
-      const viewer = (window as { __viewer?: { store: { get(): { search: { status: string } } } } })
-        .__viewer;
-      return viewer?.store.get().search.status === "done";
-    },
-    undefined,
-    { timeout: 60_000 },
-  );
+  await page.waitForFunction(() => window.__search?.store.get().status === "done", undefined, {
+    timeout: 60_000,
+  });
   // Let the selected match's page build its text layer and highlights.
   await page.waitForTimeout(800);
   return page.evaluate(() => {
-    const viewer = (
-      window as { __viewer?: { store: { get(): { search: { matches: unknown[] } } } } }
-    ).__viewer;
     return {
-      total: viewer?.store.get().search.matches.length ?? 0,
+      total: window.__search?.store.get().matches.length ?? 0,
       summary: document.querySelector(".search-summary")?.textContent ?? "",
     };
   });
@@ -442,11 +433,7 @@ try {
   check("result count is announced", /^1 of \d+$/.test(israel.summary), israel.summary);
   await page.getByRole("searchbox", { name: "Find in document" }).press("Enter");
   await page.waitForTimeout(800);
-  const second = await page.evaluate(() => {
-    const viewer = (window as { __viewer?: { store: { get(): { search: { current: number } } } } })
-      .__viewer;
-    return viewer?.store.get().search.current;
-  });
+  const second = await page.evaluate(() => window.__search?.store.get().current);
   check("Enter moves to the next match", second === 1, `current=${second}`);
   check(
     "the next match is highlighted",
@@ -842,26 +829,15 @@ try {
   page = await newPage();
   await openViewer(page, baseUrl, "bill-hr815.pdf");
   const documentText = await page.evaluate(async () => {
-    type Point = { pageIndex: number; item: number; offset: number };
-    const viewer = (
-      window as {
-        __viewer?: {
-          store: { get(): { pageCount: number } };
-          getText(options?: object): Promise<{
-            text: string;
-            pages: { pageIndex: number; text: string; offset: number }[];
-          }>;
-          getSelection(): { text: string; start: Point | null; end: Point | null } | null;
-        };
-      }
-    ).__viewer;
-    if (!viewer) return null;
-    const { text, pages } = await viewer.getText();
+    const viewer = window.__viewer;
+    const parapdf = window.__parapdf;
+    if (!viewer || !parapdf) return null;
+    const { text, pages } = await parapdf.getText(viewer);
     const layer = document.querySelector('section[data-page="1"] .parapdf-text-layer');
     const runs = [...(layer?.querySelectorAll(":scope span:not(.markedContent)") ?? [])]
       .map((span) => span.textContent)
       .join("");
-    const joined = await viewer.getText({ lineBreaks: "join" });
+    const joined = await parapdf.getText(viewer, { lineBreaks: "join" });
     const last = pages.at(-1);
     // A selection of page 1's first two runs, as the reader would drag it.
     const spans = [
@@ -878,13 +854,13 @@ try {
       getSelection()?.removeAllRanges();
       getSelection()?.addRange(range);
     }
-    const selection = viewer.getSelection();
+    const selection = parapdf.getSelection(viewer);
     const selected =
       selection?.start && selection.end
-        ? await viewer.getText({ from: selection.start, to: selection.end })
+        ? await parapdf.getText(viewer, { from: selection.start, to: selection.end })
         : null;
     getSelection()?.removeAllRanges();
-    const aborted = await viewer.getText({ signal: AbortSignal.abort() }).then(
+    const aborted = await parapdf.getText(viewer, { signal: AbortSignal.abort() }).then(
       () => false,
       (error: Error) => error.name === "AbortError",
     );
@@ -925,31 +901,18 @@ try {
   );
   check("an aborted read rejects", documentText?.aborted === true);
   const matched = await page.evaluate(async () => {
-    const viewer = (
-      window as {
-        __viewer?: {
-          store: {
-            get(): {
-              search: {
-                status: string;
-                matches: { pageIndex: number; start: object; end: object }[];
-              };
-            };
-          };
-          search(query: string): void;
-          getText(options?: object): Promise<{ text: string }>;
-        };
-      }
-    ).__viewer;
-    if (!viewer) return null;
-    viewer.search("appropriations");
-    while (viewer.store.get().search.status !== "done") {
+    const viewer = window.__viewer;
+    const parapdf = window.__parapdf;
+    const search = window.__search;
+    if (!viewer || !parapdf || !search) return null;
+    search.search("appropriations");
+    while (search.store.get().status !== "done") {
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
-    const { matches } = viewer.store.get().search;
+    const { matches } = search.store.get();
     const match = matches.at(-1);
     if (!match) return null;
-    const { text } = await viewer.getText({
+    const { text } = await parapdf.getText(viewer, {
       from: { pageIndex: match.pageIndex, ...match.start },
       to: { pageIndex: match.pageIndex, ...match.end },
       // Joined as search joins lines: a match may span a hyphenated word.

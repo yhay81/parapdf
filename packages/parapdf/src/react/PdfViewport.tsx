@@ -6,11 +6,12 @@ import {
   memo,
   type ReactNode,
   Suspense,
+  use,
   useLayoutEffect,
   useRef,
 } from "react";
 import type { Rotation } from "../pdfjs/draw.ts";
-import { usePdfHotState, usePdfState, usePdfViewer } from "./context.ts";
+import { AnnotationEditingContext, usePdfHotState, usePdfState, usePdfViewer } from "./context.ts";
 import { VIEWER_CSS } from "./styles.ts";
 
 export interface PdfViewportProps {
@@ -61,6 +62,7 @@ export function PdfViewport({
   const first = usePdfHotState((state) => state.first);
   const last = usePdfHotState((state) => state.last);
   const pageCount = usePdfState((state) => state.pageCount);
+  const annotationEditing = use(AnnotationEditingContext);
 
   useLayoutEffect(() => {
     const scroller = scrollerRef.current;
@@ -91,7 +93,7 @@ export function PdfViewport({
           rotation={layout.rotation}
           textLayer={runtime.textLayer}
           annotationLayer={runtime.annotationLayer}
-          annotationEditing={runtime.annotationEditing}
+          annotationEditing={annotationEditing}
           overlay={renderOverlay?.(index)}
         />,
       );
@@ -125,7 +127,7 @@ export function PdfViewport({
       <style href="parapdf-viewer" precedence="parapdf">
         {VIEWER_CSS}
       </style>
-      {runtime.annotationEditing ? (
+      {annotationEditing ? (
         <Suspense fallback={null}>
           <EditorStyles />
         </Suspense>

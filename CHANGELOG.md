@@ -11,6 +11,45 @@ milestone at a time (`docs/rebuild/milestones.md`). APIs change without
 deprecations (`docs/decisions/0002-no-compatibility.md`); each merged
 milestone gets an entry here, and the release lists every break from 0.x.
 
+### Rebuild M4: features as modules (2026-10-26)
+
+- The viewer keeps its core: layout, scrolling, zoom, navigation, and the
+  viewport's lifetime. Its feature methods moved into `src/features/`, as
+  functions that take the viewer, and features with state of their own:
+  - Search: `attachSearch(viewer)`, or the viewer's own `searchOf(viewer)`,
+    which `usePdfSearch()` shows, with `search()`, `next()`, `previous()`,
+    `clear()`, and a `store`; the state's `search` is gone. Page indexes are
+    read once per session for every viewer of it.
+  - History: `attachHistory(viewer)` and `historyOf(viewer)`, which
+    `usePdfNavigation()` shows; the state's `canGoBack` and `canGoForward`,
+    and `back()` and `forward()`, moved there. Jumps are kept, and links'
+    GoBack and GoForward actions followed, once the history is attached.
+  - Annotation editing: the `annotationEditing` option of `PdfDocument`
+    loads it; `usePdfAnnotations()` gives its tool, state, styles, and
+    `setTool()`, `setStyle()`, `undo()`, `redo()`, `deleteSelected()`,
+    `selectAll()`, `addImage()`, `addSignature()`, `export()`, and
+    `import()`, which replace the viewer's `setAnnotationTool()` and the
+    rest; `usePdfAnnotationEditing()` gives the feature itself.
+  - Functions: `print()`, `save()`, `download()`, `getText()`,
+    `getSelection()`, `getViewState()`, `setViewState()`,
+    `getFormFields()`, `setFormValues()`, `setLayerVisible()`,
+    `getAttachmentContent()`, `openAttachment()`, `enforcePermissions()`,
+    and `permits()`.
+- `PdfDocument` takes `PdfDocumentOptions`: `ViewerOptions` without
+  `initialView`, `initialViewState`, `enforcePermissions`, `forms`,
+  `annotationEditing`, and `annotationLabels`, which `PdfDocument` turns
+  into features. Forms and annotation editing load only when set, before
+  the first page is drawn; search, print, and the rest only when imported.
+  `ViewerOptions.opening` replaces the first two for a `Viewer` made
+  without `PdfDocument`. `usePdfFormChange()` replaces `onFormChange()`.
+- Viewers that edit annotations share their document's session: each
+  editor numbers its annotations in the document's sequence and removes
+  only its own when it closes, and `save()` and `print()` from any viewer
+  include every viewer's annotations, those of a hidden viewport too, and
+  what is being typed in any of them. A viewer shows those it created.
+- A viewport that reattaches returns to its position; the document's
+  initial view and `initialViewState` apply only when the document opens.
+
 ### Rebuild M3: independent viewers (2026-10-25)
 
 - `Viewer` replaces `PdfViewerRuntime`, and moves with layout, scrolling,

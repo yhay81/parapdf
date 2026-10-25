@@ -1,18 +1,25 @@
+import * as parapdf from "parapdf";
 import {
+  download,
+  historyOf,
   PdfDocument,
+  type PdfDocumentOptions,
   type PdfjsDocumentOptions,
   type PdfPageMode,
   PdfPageRect,
   type PdfSource,
   PdfViewport,
+  print,
   type ScrollMode,
   type SpreadMode,
+  searchOf,
+  usePdfAnnotationEditing,
   usePdfDocument,
+  usePdfFormChange,
   usePdfNavigation,
   usePdfOutline,
   usePdfState,
   usePdfViewer,
-  type ViewerOptions,
 } from "parapdf";
 import {
   lazy,
@@ -40,7 +47,7 @@ const settings = {
   /** "disabled" leaves links to other documents inert. */
   externalLinks: (params.get("externalLinks") === "disabled"
     ? "disabled"
-    : "new-tab") as ViewerOptions["externalLinks"],
+    : "new-tab") as PdfDocumentOptions["externalLinks"],
   /** Scripted scroll speed in CSS pixels per second; 0 disables the benchmark driver. */
   autoscroll: Number(params.get("autoscroll") ?? "0"),
   durationMs: Number(params.get("duration") ?? "4000"),
@@ -73,19 +80,19 @@ const settings = {
    */
   initialView: (params.get("view") === "document"
     ? "document"
-    : "options") as ViewerOptions["initialView"],
+    : "options") as PdfDocumentOptions["initialView"],
   /** "0" keeps the zoom when following links and the outline. */
   destinationZoom: params.get("destinationZoom") !== "0",
   /** "1" follows what the document permits. */
   enforcePermissions: params.get("permissions") === "1",
   /** A view kept from `getViewState()`, as JSON, to open with. */
   viewState: params.has("viewState")
-    ? (JSON.parse(params.get("viewState") ?? "{}") as ViewerOptions["initialViewState"])
+    ? (JSON.parse(params.get("viewState") ?? "{}") as PdfDocumentOptions["initialViewState"])
     : undefined,
   /** The one-based page shown first. */
   initialPage: Number(params.get("page") ?? "1") - 1,
   /** A scale in CSS pixels per point, "fit-width", or "fit-page". */
-  initialScale: ((value): ViewerOptions["initialScale"] =>
+  initialScale: ((value): PdfDocumentOptions["initialScale"] =>
     value === "fit-page" || value === "fit-width" ? value : value ? Number(value) : undefined)(
     params.get("scale"),
   ),
@@ -105,7 +112,7 @@ const settings = {
       "maxKeptPixels",
     ].flatMap((name) => (params.has(name) ? [[name, Number(params.get(name))]] : [])),
   ) as Pick<
-    ViewerOptions,
+    PdfDocumentOptions,
     "maxDetailPixels" | "maxDetailViewports" | "maxBasePixels" | "maxCanvasPixels" | "maxKeptPixels"
   >,
 };
@@ -176,7 +183,7 @@ let bytes: Uint8Array | null = null;
 void bytesPromise.then((loaded) => {
   bytes = loaded;
 });
-const viewerOptions: ViewerOptions = {
+const viewerOptions: PdfDocumentOptions = {
   textLayer: settings.text,
   annotationLayer: settings.links,
   externalLinks: settings.externalLinks,
@@ -272,6 +279,7 @@ function Viewer(_props: { renders: number }) {
           onToggleSidebar={(view) => setSidebar((open) => (open === view ? null : view))}
           onOpenSidebar={setSidebar}
         />
+        <Probes />
         {settings.annotations ? <AnnotationToolbar file={settings.file} /> : null}
         <PasswordPrompt />
         {sidebar ? <Sidebar view={sidebar} id="sidebar" /> : null}
@@ -298,6 +306,37 @@ function Viewer(_props: { renders: number }) {
       </PdfDocument>
     </Profiler>
   );
+}
+
+declare global {
+  interface Window {
+    /** The viewer and its features, for the Playwright checks; not part of the library surface. */
+    __viewer?: parapdf.Viewer;
+    /** The package's functions, which take the viewer. */
+    __parapdf?: typeof parapdf;
+    __search?: parapdf.Search;
+    __history?: parapdf.History;
+    __annotations?: parapdf.AnnotationEditing | null;
+    /** The escape hatch: pdf.js's own PDFDocumentProxy, for check-rotation.ts. */
+    __pdfDocument?: unknown;
+    /** Hears what the reader enters into form fields (`usePdfFormChange()`), for check-document.ts. */
+    __onFormChange?: (change: parapdf.FormChange) => void;
+  }
+}
+
+// The package's functions, for the checks, in the split view too.
+window.__parapdf = parapdf;
+
+/** Exposes the viewer and its features to the checks: the same the toolbars use. */
+function Probes() {
+  const viewer = usePdfViewer();
+  window.__viewer = viewer;
+  window.__search = searchOf(viewer);
+  window.__history = historyOf(viewer);
+  window.__annotations = usePdfAnnotationEditing();
+  window.__pdfDocument = usePdfDocument() ?? undefined;
+  usePdfFormChange((change) => window.__onFormChange?.(change));
+  return null;
 }
 
 /** The sidebar panel that shows what each /PageMode asks to show beside the pages. */
@@ -345,10 +384,6 @@ function Toolbar({
   useEffect(() => {
     if (askedPanel) onOpenSidebar(askedPanel);
   }, [askedPanel, onOpenSidebar]);
-  // Exposed for the Playwright probes; not part of the library surface.
-  (window as { __viewer?: unknown }).__viewer = viewer;
-  // The escape hatch: pdf.js's own PDFDocumentProxy, for check-rotation.ts.
-  (window as { __pdfDocument?: unknown }).__pdfDocument = usePdfDocument() ?? undefined;
   const status = usePdfState((state) => state.status);
   const error = usePdfState((state) => state.error);
   const progress = usePdfState((state) => state.progress);
@@ -455,12 +490,12 @@ function Toolbar({
       </button>
       <button
         type="button"
-        onClick={() => void viewer.print()}
+        onClick={() => void print(viewer)}
         disabled={status !== "ready" || (settings.enforcePermissions && !canPrint)}
       >
         Print
       </button>
-      <button type="button" onClick={() => void viewer.download()} disabled={status !== "ready"}>
+      <button type="button" onClick={() => void download(viewer)} disabled={status !== "ready"}>
         Download
       </button>
       {viewer.textLayer ? <SearchBox /> : null}

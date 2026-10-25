@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { pageText } from "../src/features/text/document-text.ts";
 import type { PageText } from "../src/pdfjs/text.ts";
-import { pageText } from "../src/runtime/document-text.ts";
 
 /** A page of text items; `endsLine` marks the items a line end follows. */
 const page = (items: string[], endsLine: boolean[] = items.map(() => false)): PageText => ({
