@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { PdfSelection } from "../runtime/viewer.ts";
+import type { PdfSelection } from "../view/viewer.ts";
 import { usePdfViewer } from "./context.ts";
 
 const sameSelection = (a: PdfSelection | null, b: PdfSelection | null): boolean =>

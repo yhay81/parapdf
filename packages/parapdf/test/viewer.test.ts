@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it, mock } from "node:test";
-import { PdfViewerRuntime } from "../src/runtime/viewer.ts";
+import { Viewer } from "../src/view/viewer.ts";
 import {
   askPassword,
   fakeDocument,
@@ -48,14 +48,14 @@ describe("the viewer's pending password request", () => {
 
   it("preserves a password request replayed to a second viewer", async () => {
     const pdfjs = lockedPdfjs();
-    const first = new PdfViewerRuntime({}, pdfjs);
+    const first = new Viewer({}, pdfjs);
     close.push(first.open({ url: "/locked.pdf" }));
     await settle();
     assert.equal(first.store.get().status, "password");
     first.submitPassword("wrong");
     await settle();
 
-    const second = new PdfViewerRuntime({}, pdfjs);
+    const second = new Viewer({}, pdfjs);
     close.push(second.open({ url: "/locked.pdf" }));
     assert.equal(second.store.get().status, "password");
     assert.equal(second.store.get().passwordReason, "incorrect");
@@ -67,7 +67,7 @@ describe("the viewer's pending password request", () => {
   });
 
   it("preserves the prompt when a waiting viewer remounts within the release delay", async () => {
-    const viewer = new PdfViewerRuntime({}, lockedPdfjs());
+    const viewer = new Viewer({}, lockedPdfjs());
     const release = viewer.open({ url: "/locked.pdf" });
     await settle();
     release();
@@ -78,10 +78,10 @@ describe("the viewer's pending password request", () => {
 
   it("preserves the replayed error when the second viewer has no password prompt", async () => {
     const pdfjs = lockedPdfjs();
-    const first = new PdfViewerRuntime({}, pdfjs);
+    const first = new Viewer({}, pdfjs);
     close.push(first.open({ url: "/locked.pdf" }));
     await settle();
-    const second = new PdfViewerRuntime({ passwordPrompt: false }, pdfjs);
+    const second = new Viewer({ passwordPrompt: false }, pdfjs);
     close.push(second.open({ url: "/locked.pdf" }));
     assert.equal(second.store.get().status, "error");
     assert.equal(second.store.get().error, "PasswordException: No password given");
@@ -97,7 +97,7 @@ describe("the viewer's pending password request", () => {
       }
       return fakeDocument().proxy;
     });
-    const viewer = new PdfViewerRuntime({ passwordPrompt: false }, loader);
+    const viewer = new Viewer({ passwordPrompt: false }, loader);
     const release = viewer.open({ url: "/locked.pdf", password: "wrong" });
     await settle();
     assert.equal(viewer.store.get().status, "error");
@@ -153,7 +153,7 @@ describe("closing a viewer's document", () => {
 
   it("stops what the viewer started for the document", async () => {
     const { loader, read } = slowTexts();
-    const viewer = new PdfViewerRuntime({}, loader);
+    const viewer = new Viewer({}, loader);
     const closeDocument = viewer.open({ url: "/a.pdf" });
     await settle();
     assert.equal(viewer.store.get().status, "ready");
@@ -179,7 +179,7 @@ describe("closing a viewer's document", () => {
 
   it("stops a search, which reads no more pages once its document closes", async () => {
     const { loader, read, textsRead } = slowTexts(3);
-    const viewer = new PdfViewerRuntime({}, loader);
+    const viewer = new Viewer({}, loader);
     const closeDocument = viewer.open({ url: "/a.pdf" });
     await settle();
     viewer.search("hello");
@@ -198,7 +198,7 @@ describe("closing a viewer's document", () => {
   it("lays the pages out again once their sizes are known, unless the document closed", async () => {
     const pages = [LETTER, A4, LETTER];
     const open = fakePdfjs(async () => fakeDocument({ pages }).proxy);
-    const viewer = new PdfViewerRuntime({}, open.loader);
+    const viewer = new Viewer({}, open.loader);
     close.push(viewer.open({ url: "/a.pdf" }));
     await settle();
     // Every page has the first one's size until the background pass knows better.
@@ -208,7 +208,7 @@ describe("closing a viewer's document", () => {
     assert.deepEqual(viewer.store.get().layout?.sizes, pages);
 
     const closed = fakePdfjs(async () => fakeDocument({ pages }).proxy);
-    const other = new PdfViewerRuntime({}, closed.loader);
+    const other = new Viewer({}, closed.loader);
     const closeOther = other.open({ url: "/a.pdf" });
     await settle();
     closeOther();
@@ -221,8 +221,8 @@ describe("closing a viewer's document", () => {
 
   it("leaves the work of another viewer of the same document running", async () => {
     const { loader, calls, read } = slowTexts();
-    const first = new PdfViewerRuntime({}, loader);
-    const second = new PdfViewerRuntime({}, loader);
+    const first = new Viewer({}, loader);
+    const second = new Viewer({}, loader);
     const closeFirst = first.open({ url: "/a.pdf" });
     close.push(second.open({ url: "/a.pdf" }));
     await settle();
@@ -253,7 +253,7 @@ describe("closing a viewer's document", () => {
     });
     context.mock.method(console, "error", () => {});
     const { loader } = fakePdfjs(async () => document.proxy);
-    const viewer = new PdfViewerRuntime({}, loader);
+    const viewer = new Viewer({}, loader);
     close.push(viewer.open({ url: "/a.pdf" }));
     await settle();
     viewer.search("hello");
@@ -271,7 +271,7 @@ describe("closing a viewer's document", () => {
 
   it("closes the open document when it opens another", async () => {
     const { loader, calls } = fakePdfjs();
-    const viewer = new PdfViewerRuntime({}, loader);
+    const viewer = new Viewer({}, loader);
     viewer.open({ url: "/a.pdf" });
     await settle();
     const first = viewer.store.get().document;

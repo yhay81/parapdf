@@ -5,7 +5,7 @@ import { preload } from "react-dom";
 import { sourceKey } from "../document/registry.ts";
 import type { PdfSource } from "../document/session.ts";
 import { documentRequestMode, preloadPdfjs } from "../pdfjs/loader.ts";
-import { PdfViewerRuntime, type ViewerOptions } from "../runtime/viewer.ts";
+import { Viewer, type ViewerOptions } from "../view/viewer.ts";
 import { RuntimeContext } from "./context.ts";
 
 export interface PdfDocumentProps {
@@ -24,7 +24,7 @@ export interface PdfDocumentProps {
 /** Opens `source` and provides the viewer to its children. */
 export function PdfDocument({ source, options, children }: PdfDocumentProps) {
   // The runtime lives as long as the component; the options apply at creation.
-  const [runtime] = useState(() => new PdfViewerRuntime(options));
+  const [runtime] = useState(() => new Viewer(options));
   const resolved: PdfSource = typeof source === "string" ? { url: source } : source;
   if ("url" in resolved) {
     // The download starts now, and with server rendering as soon as the

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { computeLayout } from "../src/runtime/layout.ts";
 import { RenderScheduler, type ScheduleInput } from "../src/runtime/scheduler.ts";
+import { computeLayout } from "../src/view/layout.ts";
 import { fakeCanvas as canvas, LETTER, openSession, settle } from "./fake-pdfjs.ts";
 
 /** A session of two pages, whose drawings stay pending until the test settles them. */

@@ -17,7 +17,7 @@ import {
   type Viewport,
   visibleArea,
   visibleRange,
-} from "../src/runtime/layout.ts";
+} from "../src/view/layout.ts";
 
 // A US Letter page and an A4 page in landscape, 10 CSS pixels apart.
 const sizes = [

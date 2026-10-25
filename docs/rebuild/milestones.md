@@ -88,7 +88,9 @@ Every milestone's "Done when" includes, besides its own items:
 - Done when: two viewers of one document scroll, zoom, and close
   independently in a new functional check; the scroll, commit, and zoom
   benchmarks show no regression.
-- Status: not started.
+- Status: in progress (#38), on `rebuild-m3-viewers` from 6dd7349.
+  Implementation and multi-view checks are in place; remaining validation,
+  benchmark comparisons, and review are tracked in the issue.
 
 ## M4: features as modules
 

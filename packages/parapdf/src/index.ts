@@ -46,19 +46,19 @@ export type {
   TextOptions,
   TextPoint,
 } from "./runtime/document-text.ts";
-export type { Layout, ScrollMode, SpreadMode } from "./runtime/layout.ts";
 export type { PrintOptions } from "./runtime/print.ts";
 export type { SchedulerStats } from "./runtime/scheduler.ts";
 export type { SearchMatch, SearchOptions, TextPosition } from "./runtime/text-search.ts";
+export type { Layout, ScrollMode, SpreadMode } from "./view/layout.ts";
 export type {
   LoadProgress,
   PdfRect,
   PdfSelection,
-  PdfViewerRuntime,
   PointerTool,
   SearchState,
+  Viewer,
   ViewerOptions,
   ViewerState,
   ViewState,
   ZoomMode,
-} from "./runtime/viewer.ts";
+} from "./view/viewer.ts";

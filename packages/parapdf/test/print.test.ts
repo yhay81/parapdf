@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it, type TestContext } from "node:test";
 import { printDocument } from "../src/runtime/print.ts";
-import { PdfViewerRuntime } from "../src/runtime/viewer.ts";
+import { Viewer } from "../src/view/viewer.ts";
 import { fakeDocument, fakePdfjs, openSession, settle } from "./fake-pdfjs.ts";
 
 /** Only the element operations printDocument uses; rendering is controlled separately. */
@@ -150,7 +150,7 @@ describe("print job replacement", () => {
       else Reflect.deleteProperty(globalThis, "cancelAnimationFrame");
     });
     const document = fakeDocument();
-    const viewer = new PdfViewerRuntime({}, fakePdfjs(async () => document.proxy).loader);
+    const viewer = new Viewer({}, fakePdfjs(async () => document.proxy).loader);
     const closeDocument = viewer.open({ url: "/a.pdf" });
     await settle();
     const printing = viewer.print();

@@ -14,7 +14,15 @@ import {
   usePdfViewer,
   type ViewerOptions,
 } from "parapdf";
-import { Profiler, type ProfilerOnRenderCallback, Suspense, use, useEffect, useState } from "react";
+import {
+  lazy,
+  Profiler,
+  type ProfilerOnRenderCallback,
+  Suspense,
+  use,
+  useEffect,
+  useState,
+} from "react";
 import { AnnotationToolbar } from "./AnnotationToolbar.tsx";
 import { BenchDriver } from "./BenchDriver.tsx";
 import { configureEngine, type Pdfjs } from "./engines.ts";
@@ -217,6 +225,8 @@ const renderOverlay = (pageIndex: number) =>
     />
   ) : null;
 
+const SplitView = lazy(() => import("./SplitView.tsx"));
+
 export function App() {
   // A new key mounts a new viewer with a new runtime for the same source.
   const [mounted, setMounted] = useState(true);
@@ -235,7 +245,11 @@ export function App() {
   }, []);
   return (
     <Suspense fallback={<div className="status">Loading…</div>}>
-      {mounted ? <Viewer key={generation} renders={renders} /> : null}
+      {params.get("split") === "1" ? (
+        <SplitView source={{ url }} options={viewerOptions} />
+      ) : mounted ? (
+        <Viewer key={generation} renders={renders} />
+      ) : null}
     </Suspense>
   );
 }

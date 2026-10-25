@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { computeLayout } from "../src/runtime/layout.ts";
 import { RenderScheduler, type ScheduleInput } from "../src/runtime/scheduler.ts";
+import { computeLayout } from "../src/view/layout.ts";
 import { fakeCanvas, LETTER, openSession, settle } from "./fake-pdfjs.ts";
 
 /**

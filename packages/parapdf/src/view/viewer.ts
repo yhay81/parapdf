@@ -1,3 +1,5 @@
+"use client";
+
 import { acquireSession, type PdfjsLoader, type SessionLease } from "../document/registry.ts";
 import type {
   DocumentSession,
@@ -34,10 +36,22 @@ import {
   pageText,
   type TextOptions,
   type TextPoint,
-} from "./document-text.ts";
-import { downloadBytes, filenameFromUrl } from "./files.ts";
+} from "../runtime/document-text.ts";
+import { downloadBytes, filenameFromUrl } from "../runtime/files.ts";
+import { SearchHighlights } from "../runtime/highlights.ts";
+import { type PrintOptions, printDocument } from "../runtime/print.ts";
+import { RenderScheduler, type SchedulerStats } from "../runtime/scheduler.ts";
+import { TextSelectionTracker } from "../runtime/selection.ts";
+import {
+  buildPageIndex,
+  findMatches,
+  normalizeQuery,
+  type PageIndex,
+  type SearchMatch,
+  type SearchOptions,
+} from "../runtime/text-search.ts";
+import { ThumbnailRenderer } from "../runtime/thumbnails.ts";
 import { CONTROLS, ViewerGestures } from "./gestures.ts";
-import { SearchHighlights } from "./highlights.ts";
 import {
   computeLayout,
   type Layout,
@@ -59,8 +73,6 @@ import {
   visibleRange,
   zoomTarget,
 } from "./layout.ts";
-import { type PrintOptions, printDocument } from "./print.ts";
-import { RenderScheduler, type SchedulerStats } from "./scheduler.ts";
 import {
   type Edges,
   type Motion,
@@ -72,17 +84,7 @@ import {
   sizeOf,
   viewportOf,
 } from "./scrolling.ts";
-import { TextSelectionTracker } from "./selection.ts";
-import { Store } from "./store.ts";
-import {
-  buildPageIndex,
-  findMatches,
-  normalizeQuery,
-  type PageIndex,
-  type SearchMatch,
-  type SearchOptions,
-} from "./text-search.ts";
-import { ThumbnailRenderer } from "./thumbnails.ts";
+import { ViewerStore } from "./state.ts";
 
 export interface SearchState {
   query: string;
@@ -574,12 +576,12 @@ type PageElements = [
 ];
 
 /**
- * The imperative core behind the React components. It owns scrolling, layout,
- * zoom, search, navigation, and the render scheduler; React only re-renders
- * when the published store fields change.
+ * One viewport onto a shared document session. Layout, gestures, navigation,
+ * and viewport lifetime belong here. Feature methods remain a temporary
+ * facade until M4; the renderer moves in M5.
  */
-export class PdfViewerRuntime {
-  readonly store = new Store<ViewerState>({
+export class Viewer {
+  readonly store = new ViewerStore({
     status: "idle",
     error: null,
     passwordReason: null,
@@ -673,6 +675,15 @@ export class PdfViewerRuntime {
    * submitted through it.
    */
   #lease: SessionLease | null = null;
+  /** The viewport's lifetime, independent of the document and other viewers. */
+  #viewportControl = new AbortController();
+  /** Work for this viewport and its document; either ending aborts it. */
+  #work: AbortController | null = null;
+  #savedView: ViewState | null = null;
+
+  get signal(): AbortSignal {
+    return this.#viewportControl.signal;
+  }
   /** Closes the open document. */
   #close: (() => void) | null = null;
   /** Progress waiting to be published at the next animation frame. */
@@ -813,6 +824,7 @@ export class PdfViewerRuntime {
    */
   open(source: PdfSource): () => void {
     this.#close?.();
+    this.#progress = null;
     this.#sourceName = "url" in source ? filenameFromUrl(source.url) : null;
     this.#firstPaintAt = null;
     this.#history = [];
@@ -847,10 +859,11 @@ export class PdfViewerRuntime {
       {
         onProgress: (loaded, total) => {
           this.#progress = { loaded, total };
+          if (this.#viewportControl.signal.aborted) return;
           // Chunks arrive many times a frame; the store hears of them once a frame.
           this.#progressFrame ||= requestAnimationFrame(() => {
             this.#progressFrame = 0;
-            if (!lease.signal.aborted && this.#progress) {
+            if (!lease.signal.aborted && !this.#viewportControl.signal.aborted && this.#progress) {
               this.store.set({ progress: this.#progress });
             }
           });
@@ -872,8 +885,9 @@ export class PdfViewerRuntime {
       this.#annotationEditing ? this : undefined,
     );
     this.#lease = lease;
-    const { signal } = lease;
-    this.#load(lease).catch((error: unknown) => {
+    this.#work = linked(lease.signal, this.#viewportControl.signal);
+    const { signal } = this.#work;
+    this.#load(lease, signal).catch((error: unknown) => {
       if (!signal.aborted) {
         this.store.set({ status: "error", error: String(error), passwordReason: null });
       }
@@ -883,6 +897,9 @@ export class PdfViewerRuntime {
     const close = () => {
       if (closed) return;
       closed = true;
+      this.#work?.abort();
+      this.#work = null;
+      this.#savedView = null;
       this.#lease = null;
       this.#close = null;
       cancelAnimationFrame(this.#progressFrame);
@@ -933,8 +950,7 @@ export class PdfViewerRuntime {
   }
 
   /** Show the document `lease` opens once it loads, and load the rest in the background. */
-  async #load(lease: SessionLease): Promise<void> {
-    const { signal } = lease;
+  async #load(lease: SessionLease, signal: AbortSignal): Promise<void> {
     const session = await lease.session;
     signal.throwIfAborted();
     // Fetched beside the first page's size: the scheduler follows the
@@ -984,7 +1000,6 @@ export class PdfViewerRuntime {
     // Pages unmounting while no viewport shows them keep nothing.
     if (!this.#scroller) scheduler.setKeeping(false);
     for (const [index, elements] of this.#pendingPages) scheduler.attach(index, ...elements);
-    this.#pendingPages.clear();
     this.#thumbnails.refresh();
     const destination = this.#arrangeAsDocument(documentView);
     const scale = this.#resolveInitialScale();
@@ -998,7 +1013,10 @@ export class PdfViewerRuntime {
       permissions,
       documentView: this.#documentView ? documentView : null,
     });
-    if (this.#initialViewState) this.#showView(this.#initialViewState, destination);
+    const savedView = this.#savedView;
+    this.#savedView = null;
+    if (savedView) this.#showView(savedView, null);
+    else if (this.#initialViewState) this.#showView(this.#initialViewState, destination);
     else if (this.#initialPage > 0) this.goToPage(this.#initialPage);
     else if (destination) this.#jump(destination, this.#destinationZoom);
     if (!this.#documentView) {
@@ -1104,7 +1122,7 @@ export class PdfViewerRuntime {
     this.#editor?.commit();
     if (!session || !lease) return;
     // Closing the document stops printing it, as the application's signal does.
-    const control = linked(lease.signal, options?.signal);
+    const control = linked(this.#work?.signal, options?.signal);
     try {
       await printDocument(session, { ...options, signal: control.signal, layers: this.#layers });
     } finally {
@@ -1152,7 +1170,7 @@ export class PdfViewerRuntime {
    */
   async setFormValues(values: Readonly<Record<string, FormValue | boolean>>): Promise<string[]> {
     const session = this.#session;
-    const signal = this.#lease?.signal;
+    const signal = this.#work?.signal;
     if (!session || !signal) return [];
     const set = await session.forms.setFormValues(values);
     // Form layers read the values as they are built.
@@ -1179,7 +1197,7 @@ export class PdfViewerRuntime {
    */
   #onFormInput = (event: Event): void => {
     const session = this.#session;
-    const signal = this.#lease?.signal;
+    const signal = this.#work?.signal;
     const target = event.target;
     if (!session || !signal || this.#formListeners.size === 0 || !(target instanceof Element)) {
       return;
@@ -1218,7 +1236,7 @@ export class PdfViewerRuntime {
     const { layout, rotation, scale } = this.store.get();
     // Stopping editing aborts it, and so do the viewport detaching and the
     // document closing, while the editor's code loads and afterwards.
-    const control = linked(lease.signal);
+    const control = linked(this.#work?.signal);
     const { signal } = control;
     this.#editorControl = control;
     let editor: AnnotationEditor | null = null;
@@ -1405,7 +1423,7 @@ export class PdfViewerRuntime {
   /** Page `requested`, or the current one, once its annotations can be edited; null if never. */
   async #editablePage(requested: number | undefined): Promise<number | null> {
     const scheduler = this.#scheduler;
-    const signal = this.#lease?.signal;
+    const signal = this.#work?.signal;
     const { pageCount, currentPage, first, last } = this.store.get();
     const pageIndex = requested ?? currentPage;
     if (!scheduler || !signal || !this.#editor || pageIndex < 0 || pageIndex >= pageCount) {
@@ -1458,8 +1476,22 @@ export class PdfViewerRuntime {
 
   /** Bind the scroll container and its sized content element. */
   attachViewport(scroller: HTMLElement, content: HTMLElement): () => void {
+    if (this.#scroller)
+      throw new Error("A Viewer owns one viewport; create another Viewer for a second viewport");
+    const resuming = this.#viewportControl.signal.aborted;
+    if (resuming) this.#viewportControl = new AbortController();
+    const control = this.#viewportControl;
     this.#scroller = scroller;
     this.#content = content;
+    const lease = this.#lease;
+    if (resuming && lease) {
+      this.store.set({ progress: this.#progress });
+      this.#work = linked(lease.signal, control.signal);
+      const { signal } = this.#work;
+      this.#load(lease, signal).catch((error: unknown) => {
+        if (!signal.aborted) this.store.set({ status: "error", error: String(error) });
+      });
+    }
     this.#scheduler?.setKeeping(true);
     const layout = this.store.get().layout;
     if (layout) this.#sizeContent(layout);
@@ -1481,9 +1513,25 @@ export class PdfViewerRuntime {
     const detachSelection = this.#selection.attachPages(content);
     this.#requestUpdate();
     this.#startEditor();
+    let detached = false;
     return () => {
-      // The annotations stay for the next viewport.
-      if (this.#scroller === scroller) this.#stopEditor(true);
+      if (detached) return;
+      detached = true;
+      // A provider may keep the session while its viewport is hidden (Activity).
+      // Only viewport work ends; its view and edits return on the next attach.
+      this.#savedView = this.getViewState();
+      this.#stopEditor(true);
+      control.abort();
+      this.#scheduler = null;
+      this.#searchControl = null;
+      if (this.store.get().search.status === "searching") this.store.set({ search: IDLE_SEARCH });
+      this.#highlights.clear();
+      this.#thumbnails.reset();
+      this.#pendingPages.clear();
+      cancelAnimationFrame(this.#progressFrame);
+      this.#progressFrame = 0;
+      clearTimeout(this.#settleTimer);
+      this.#settleTimer = 0;
       scroller.removeEventListener("scroll", this.#onScroll);
       detachGestures();
       scroller.removeEventListener("pointerdown", this.#onGrabStart);
@@ -1505,7 +1553,6 @@ export class PdfViewerRuntime {
       if (this.#scroller === scroller) {
         this.#gestures.drop();
         // Kept canvases would hold memory for pages no viewport can show.
-        this.#scheduler?.setKeeping(false);
         this.#scroller = null;
         this.#content = null;
       }
@@ -1545,11 +1592,11 @@ export class PdfViewerRuntime {
     ];
     const scheduler = this.#scheduler;
     if (scheduler) scheduler.attach(index, ...elements);
-    else this.#pendingPages.set(index, elements);
+    this.#pendingPages.set(index, elements);
     return () => {
+      if (this.#pendingPages.get(index) !== elements) return;
       this.#pendingPages.delete(index);
-      // A scheduler its document's close disposed holds no pages.
-      scheduler?.detach(index);
+      this.#scheduler?.detach(index);
     };
   }
 
@@ -1637,6 +1684,8 @@ export class PdfViewerRuntime {
     const session = this.#session;
     const lease = this.#lease;
     if (!session || !lease) throw new Error("No document is open");
+    const viewerSignal = this.#work?.signal;
+    viewerSignal?.throwIfAborted();
     const { from, to, lineBreaks = "keep", signal } = options;
     signal?.throwIfAborted();
     const lastPage = session.pageCount - 1;
@@ -1661,7 +1710,8 @@ export class PdfViewerRuntime {
       const content = await requested.get(pageIndex);
       requested.delete(pageIndex);
       signal?.throwIfAborted();
-      if (lease.signal.aborted || !content) throw new Error("The document was closed");
+      if (lease.signal.aborted || viewerSignal?.aborted || !content)
+        throw new Error("The document was closed");
       const startsHere = start && "item" in start && start.pageIndex === pageIndex;
       const endsHere = end && "item" in end && end.pageIndex === pageIndex;
       const read = pageText(content, lineBreaks, startsHere ? start : null, endsHere ? end : null);
@@ -1817,7 +1867,7 @@ export class PdfViewerRuntime {
    */
   async goToDestination(dest: Destination | null): Promise<boolean> {
     const session = this.#session;
-    const signal = this.#lease?.signal;
+    const signal = this.#work?.signal;
     if (!session || !signal || dest === null) return false;
     const target = await session.resolveDestination(dest).catch(() => null);
     const current = this.store.get().layout;
@@ -2373,12 +2423,12 @@ export class PdfViewerRuntime {
     const normalized = normalizeQuery(query, options);
     const session = this.#session;
     const lease = this.#lease;
-    if (!normalized || !session || !lease) {
+    if (!normalized || !session || !lease || this.#work?.signal.aborted) {
       this.store.set({ search: { ...IDLE_SEARCH, query, options } });
       return;
     }
     // Clearing the search stops it, and so does closing the document.
-    const control = linked(lease.signal);
+    const control = linked(this.#work?.signal);
     this.#searchControl = control;
     const { signal } = control;
     this.store.set({
@@ -2492,7 +2542,7 @@ export class PdfViewerRuntime {
    */
   async #scrollToMatch(match: SearchMatch): Promise<void> {
     const session = this.#session;
-    const signal = this.#lease?.signal;
+    const signal = this.#work?.signal;
     if (!session || !signal) return;
     const text = await session.text(match.pageIndex);
     const current = this.store.get().layout;
@@ -2603,7 +2653,7 @@ export class PdfViewerRuntime {
   #background(
     work: Promise<unknown>,
     what: string,
-    signal: AbortSignal | undefined = this.#lease?.signal,
+    signal: AbortSignal | undefined = this.#work?.signal,
   ): void {
     work.catch((error: unknown) => {
       if (signal && !signal.aborted) console.error(`${what} failed`, error);
