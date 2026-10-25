@@ -27,7 +27,7 @@ the code that follows it.
 ## Status
 
 The rebuild runs milestone by milestone on `main`
-(`docs/rebuild/milestones.md`); M0 to M2 are done; M3 is in progress (#38).
+(`docs/rebuild/milestones.md`); M0 to M3 are done; M4 is next (#39).
 0.x was
 published on npm as `parapdf` 0.1.0 to 0.4.0, from the tags `v0.1.0` to
 `v0.4.0`. The package's README, the documentation site, the root

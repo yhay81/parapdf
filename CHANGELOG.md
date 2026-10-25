@@ -11,7 +11,7 @@ milestone at a time (`docs/rebuild/milestones.md`). APIs change without
 deprecations (`docs/decisions/0002-no-compatibility.md`); each merged
 milestone gets an entry here, and the release lists every break from 0.x.
 
-### Rebuild M3: independent viewers (unreleased)
+### Rebuild M3: independent viewers (2026-10-25)
 
 - `Viewer` replaces `PdfViewerRuntime`, and moves with layout, scrolling,
   and gestures to `src/view/`. A viewer owns exactly one viewport; separate

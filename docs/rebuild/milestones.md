@@ -88,9 +88,18 @@ Every milestone's "Done when" includes, besides its own items:
 - Done when: two viewers of one document scroll, zoom, and close
   independently in a new functional check; the scroll, commit, and zoom
   benchmarks show no regression.
-- Status: in progress (#38), on `rebuild-m3-viewers` from 6dd7349.
-  Implementation and multi-view checks are in place; remaining validation,
-  benchmark comparisons, and review are tracked in the issue.
+- Status: done (2026-10-25), #38 / PR #42. `src/view/` owns the viewport
+  lifetime and separate hot/cold snapshots; the split-view demo and
+  `check:viewers` verify one shared session, independent views, viewport
+  detach/reattach, and final cleanup in all three browsers and StrictMode.
+  All Chromium functional checks and CI pass. The scroll, commit, and zoom
+  comparisons against 6dd7349 use three paired runs in Chromium, WebKit,
+  and Firefox, with five reversed-order repeats of the outlying zoom cases.
+  The repeated ranges overlap; smaller median costs remain, and no speed
+  improvement is claimed (decision 0009 and `results/*-m3-*`). Review found
+  and corrected progress publication after detach and hidden-view search
+  remaining active. Features remain a facade until M4, and the React API
+  remains M6.
 
 ## M4: features as modules
 

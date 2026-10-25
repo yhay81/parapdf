@@ -17,6 +17,7 @@ for the direction of the rebuild gets a new record, numbered next.
 | [0006](0006-partial-rendering.md) | pdf.js's partial rendering of regions | rejected |
 | [0007](0007-keep-parsed-pages.md) | Keeping unmounted pages' parsed content | rejected |
 | [0008](0008-demote-whole-page-detail.md) | A whole-page detail becomes the base when zooming past its budget | rejected |
+| [0009](0009-viewer-lifetimes.md) | Each viewport owns its viewer work; separate hot and cold snapshots | adopted |
 
 ## Template
 
