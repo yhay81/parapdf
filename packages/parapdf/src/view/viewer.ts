@@ -28,7 +28,6 @@ import {
   sameRows,
   showPage,
   turnBox,
-  turnedSize,
   visibleArea,
   visibleRange,
   zoomTarget,
@@ -47,6 +46,7 @@ import {
 } from "./scrolling.ts";
 import { linked } from "./signals.ts";
 import { type PointerTool, ViewerStore, type ZoomMode } from "./state.ts";
+import { destinationScale, fitScale, refits } from "./zoom.ts";
 
 /**
  * Where a viewer shows its document, to come back to: the page at the
@@ -862,12 +862,21 @@ export class Viewer {
     const scroller = this.#scroller;
     if (!current || !scroller) return;
     const { pageIndex } = target;
-    const fitted = zoom ? this.#destinationScale(target) : null;
+    const fitted = zoom
+      ? destinationScale(
+          this.#sizes,
+          this.store.get(),
+          target,
+          scroller,
+          this.#gap,
+          this.#minScale,
+          this.#maxScale,
+        )
+      : null;
     if (fitted) {
       this.store.set({ zoomMode: fitted.mode, currentPage: pageIndex });
       if (fitted.mode !== "custom") {
-        this.#fittedWidth = scroller.clientWidth;
-        this.#fittedHeight = scroller.clientHeight;
+        this.#markFitted(scroller);
       }
       if (Math.abs(fitted.scale - current.scale) > 1e-4) {
         current = this.#applyLayout(fitted.scale, pageIndex);
@@ -908,44 +917,6 @@ export class Viewer {
   }
 
   /**
-   * The zoom a destination asks for on page `target.pageIndex`, and the
-   * zoom mode that keeps it; null to keep the zoom.
-   */
-  #destinationScale(target: ResolvedDestination): { scale: number; mode: ZoomMode } | null {
-    const view = target.view;
-    const scroller = this.#scroller;
-    const size = this.#sizes[target.pageIndex];
-    if (!view || !scroller || !size) return null;
-    const scaled = (scale: number) =>
-      Number.isFinite(scale) && scale > 0
-        ? { scale: clamp(scale, this.#minScale, this.#maxScale), mode: "custom" as const }
-        : null;
-    const quarter = this.store.get().rotation % 180 !== 0;
-    switch (view.fit) {
-      case "zoom":
-        // A zoom of 1 shows the page at its printed size, 96 CSS pixels an inch.
-        return view.zoom === null ? null : scaled((view.zoom * 96) / 72);
-      case "page":
-      case "width": {
-        const mode = view.fit === "page" ? "fit-page" : "fit-width";
-        const scale = this.#fitScale(target.pageIndex, mode);
-        return scale === null ? null : { scale, mode };
-      }
-      case "height":
-        return scaled(
-          (scroller.clientHeight - 2 * this.#gap) / (quarter ? size.width : size.height),
-        );
-      case "rect":
-        return scaled(
-          Math.min(
-            scroller.clientWidth / (quarter ? view.height : view.width),
-            scroller.clientHeight / (quarter ? view.width : view.height),
-          ),
-        );
-    }
-  }
-
-  /**
    * Show `view`: its arrangement, rotation, and zoom, and its target's point
    * at the viewport's top-left corner, scrolled sideways to it even when in
    * view. Fields left out keep the viewer's; a page out of range and a
@@ -975,8 +946,7 @@ export class Viewer {
     }
     if (mode !== "custom") {
       scale = this.#fitScale(page, mode) ?? scale;
-      this.#fittedWidth = scroller.clientWidth;
-      this.#fittedHeight = scroller.clientHeight;
+      this.#markFitted(scroller);
     }
     this.store.set({ zoomMode: mode, scale });
     this.#applyLayout(scale, page);
@@ -1051,8 +1021,7 @@ export class Viewer {
     this.store.set({ zoomMode, currentPage: entry.current });
     if (Math.abs(scale - current.scale) > 1e-4) {
       if (zoomMode !== "custom") {
-        this.#fittedWidth = scroller.clientWidth;
-        this.#fittedHeight = scroller.clientHeight;
+        this.#markFitted(scroller);
       }
       current = this.#applyLayout(scale, pageIndex);
       this.store.set({ scale });
@@ -1169,8 +1138,7 @@ export class Viewer {
       const fitted = this.#fitScale(page, state.zoomMode);
       if (fitted !== null) {
         scale = fitted;
-        this.#fittedWidth = scroller.clientWidth;
-        this.#fittedHeight = scroller.clientHeight;
+        this.#markFitted(scroller);
       }
     }
     this.#applyLayout(scale, page);
@@ -1224,46 +1192,29 @@ export class Viewer {
     const page = state.currentPage;
     const scale = this.#fitScale(page, mode);
     if (scale === null) return;
-    this.#fittedWidth = scroller.clientWidth;
-    this.#fittedHeight = scroller.clientHeight;
+    this.#markFitted(scroller);
     this.#zoomTo(scale);
     if (mode === "fit-page") this.goToPage(page);
   }
 
-  /**
-   * The scale that fits the row of page `index`, the page or its spread, to
-   * the viewport in `mode`; null while the pages' sizes are unknown. In a
-   * spread mode, a page alone in its row, such as a cover, counts twice, as
-   * in pdf.js: the zoom then stays the same from row to row. In "horizontal"
-   * mode, where all pages share one row, the page alone fits.
-   */
+  /** `fitScale()` for this viewer's pages, arrangement, viewport, and limits. */
   #fitScale(index: number, mode: "fit-width" | "fit-page"): number | null {
-    const { rotation, scrollMode } = this.store.get();
-    // Pages that share one row side by side fit one by one, as in pdf.js.
-    const spread = scrollMode === "horizontal" ? "none" : this.store.get().spread;
-    const { first, last } = rowBounds(spread, index, this.#sizes.length);
-    let width = 0;
-    let height = 0;
-    for (let page = first; page <= last; page++) {
-      const size = this.#sizes[page];
-      if (!size) return null;
-      const turned = turnedSize(size, rotation);
-      width += turned.width;
-      height = Math.max(height, turned.height);
-    }
-    const pages = spread === "none" ? 1 : 2;
-    if (last === first) width *= pages;
-    if (width === 0 || height === 0) return null;
-    const scroller = this.#scroller;
-    // The gaps around the row and between its pages stay the same at every zoom.
-    const room = (scroller?.clientWidth ?? 0) - (1 + pages) * this.#gap;
-    const roomHeight = (scroller?.clientHeight ?? 0) - 2 * this.#gap;
-    const scale = room / width;
-    return clamp(
-      mode === "fit-page" && roomHeight > 0 ? Math.min(scale, roomHeight / height) : scale,
+    return fitScale(
+      this.#sizes,
+      this.store.get(),
+      index,
+      mode,
+      this.#scroller,
+      this.#gap,
       this.#minScale,
       this.#maxScale,
     );
+  }
+
+  /** The zoom was fitted to the viewport as it is now: a resize to another size fits it again. */
+  #markFitted(scroller: HTMLElement): void {
+    this.#fittedWidth = scroller.clientWidth;
+    this.#fittedHeight = scroller.clientHeight;
   }
 
   /**
@@ -1312,8 +1263,7 @@ export class Viewer {
       this.#initialScale,
     );
     if (scale === null) return 1;
-    this.#fittedWidth = scroller.clientWidth;
-    this.#fittedHeight = scroller.clientHeight;
+    this.#markFitted(scroller);
     return scale;
   }
 
@@ -1402,13 +1352,7 @@ export class Viewer {
   #onResize = (): void => {
     const scroller = this.#scroller;
     const mode = this.store.get().zoomMode;
-    if (
-      scroller &&
-      ((mode === "fit-width" && scroller.clientWidth !== this.#fittedWidth) ||
-        (mode === "fit-page" &&
-          (scroller.clientWidth !== this.#fittedWidth ||
-            scroller.clientHeight !== this.#fittedHeight)))
-    ) {
+    if (scroller && refits(mode, scroller, this.#fittedWidth, this.#fittedHeight)) {
       this.#gestures.finish();
       this.#fit();
     }
