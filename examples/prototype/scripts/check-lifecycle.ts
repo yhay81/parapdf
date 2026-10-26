@@ -210,10 +210,13 @@ try {
     );
     const rotation = () =>
       equal.page.evaluate(() => {
-        const state = (
-          window as { __viewer?: { store: { get(): { rotation: number; status: string } } } }
-        ).__viewer?.store.get();
-        return state ? { rotation: state.rotation, status: state.status } : null;
+        const demo = window as {
+          __viewer?: { store: { get(): { rotation: number } } };
+          __session?: { state: { get(): { status: string } } };
+        };
+        const state = demo.__viewer?.store.get();
+        const status = demo.__session?.state.get().status;
+        return state ? { rotation: state.rotation, status } : null;
       });
     await equal.page.evaluate(() => {
       (window as { __viewer?: { rotate(degrees: number): void } }).__viewer?.rotate(90);

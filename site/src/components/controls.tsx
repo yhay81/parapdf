@@ -1,11 +1,17 @@
-import { type SearchOptions, usePdfSearch, usePdfState, usePdfViewer } from "parapdf";
+import {
+  type SearchOptions,
+  useDocumentState,
+  useSearch,
+  useSession,
+  useViewState,
+  type Viewer,
+} from "parapdf";
 import { useEffect, useState } from "react";
 
 /** Previous and next page, and the page being read. */
-export function PageControls() {
-  const viewer = usePdfViewer();
-  const page = usePdfState((state) => state.currentPage);
-  const pageCount = usePdfState((state) => state.pageCount);
+export function PageControls({ viewer }: { viewer: Viewer }) {
+  const page = useViewState(viewer, (state) => state.currentPage);
+  const pageCount = useDocumentState((state) => state.pageCount);
   return (
     <>
       <button
@@ -30,10 +36,9 @@ export function PageControls() {
 }
 
 /** Zoom out and in, the zoom as a share of the printed size, and fitting. */
-export function ZoomControls({ fit = true }: { fit?: boolean }) {
-  const viewer = usePdfViewer();
-  const scale = usePdfState((state) => state.scale);
-  const zoomMode = usePdfState((state) => state.zoomMode);
+export function ZoomControls({ viewer, fit = true }: { viewer: Viewer; fit?: boolean }) {
+  const scale = useViewState(viewer, (state) => state.scale);
+  const zoomMode = useViewState(viewer, (state) => state.zoomMode);
   return (
     <>
       <button type="button" aria-label="Zoom out" onClick={() => viewer.zoomBy(1 / 1.25)}>
@@ -70,9 +75,17 @@ export function ZoomControls({ fit = true }: { fit?: boolean }) {
  * Find in the document: typing searches after a pause, Enter and Shift+Enter
  * move between matches, and Escape clears.
  */
-export function SearchField({ id, withOptions = false }: { id?: string; withOptions?: boolean }) {
-  const search = usePdfSearch();
-  const pageCount = usePdfState((state) => state.pageCount);
+export function SearchField({
+  viewer,
+  id,
+  withOptions = false,
+}: {
+  viewer: Viewer;
+  id?: string;
+  withOptions?: boolean;
+}) {
+  const search = useSearch(viewer);
+  const pageCount = useDocumentState((state) => state.pageCount);
   const [value, setValue] = useState("");
   const [options, setOptions] = useState<SearchOptions>({});
   const { search: run, query } = search;
@@ -158,10 +171,10 @@ export function SearchField({ id, withOptions = false }: { id?: string; withOpti
   );
 }
 
-/** Asks for the password of an encrypted document while the viewer waits for one. */
+/** Asks for the password of an encrypted document while its session waits for one. */
 export function PasswordPrompt({ className, hint }: { className?: string; hint?: string }) {
-  const viewer = usePdfViewer();
-  const reason = usePdfState((state) => state.passwordReason);
+  const session = useSession();
+  const reason = useDocumentState((state) => state.passwordReason);
   const [password, setPassword] = useState("");
   if (reason === null) return null;
   return (
@@ -170,7 +183,7 @@ export function PasswordPrompt({ className, hint }: { className?: string; hint?:
       aria-label="Password"
       onSubmit={(event) => {
         event.preventDefault();
-        viewer.submitPassword(password);
+        session.submitPassword(password);
         setPassword("");
       }}
     >
@@ -184,7 +197,7 @@ export function PasswordPrompt({ className, hint }: { className?: string; hint?:
         />
       </label>
       <button type="submit">Open</button>
-      <button type="button" onClick={() => viewer.submitPassword(null)}>
+      <button type="button" onClick={() => session.submitPassword(null)}>
         Cancel
       </button>
     </form>
@@ -193,9 +206,9 @@ export function PasswordPrompt({ className, hint }: { className?: string; hint?:
 
 /** Loading and errors, which the viewport itself does not show. */
 export function DocumentStatus({ className }: { className?: string }) {
-  const status = usePdfState((state) => state.status);
-  const error = usePdfState((state) => state.error);
-  const progress = usePdfState((state) => state.progress);
+  const status = useDocumentState((state) => state.status);
+  const error = useDocumentState((state) => state.error);
+  const progress = useDocumentState((state) => state.progress);
   if (status === "error") {
     return (
       <span className={className} role="alert" data-error="">

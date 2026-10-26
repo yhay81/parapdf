@@ -1,4 +1,4 @@
-import { type ReadableStore, Store } from "../view/state.ts";
+import { type ReadableStore, Store } from "../document/store.ts";
 import type { Viewer, ViewerPosition } from "../view/viewer.ts";
 
 export interface HistoryState {
@@ -109,11 +109,11 @@ export function attachHistory(viewer: Viewer): History {
   };
 }
 
-/** Each viewer's own history, which `usePdfNavigation()` shows. */
+/** Each viewer's own history, which `useHistory()` shows. */
 const shared = new WeakMap<Viewer, History>();
 
 /**
- * `viewer`'s own history, which `usePdfNavigation()` shows: attached at the
+ * `viewer`'s own history, which `useHistory()` shows: attached at the
  * first call, and kept until its `detach()`.
  */
 export function historyOf(viewer: Viewer): History {

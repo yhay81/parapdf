@@ -1,3 +1,5 @@
+export type { PdfSession } from "./document/pdf-session.ts";
+export type { DocumentState, LoadProgress } from "./document/registry.ts";
 export type {
   OutlineNode,
   PasswordReason,
@@ -74,33 +76,37 @@ export {
   preloadPdfjs,
 } from "./pdfjs/loader.ts";
 export {
-  type PdfAnnotations,
-  usePdfAnnotationEditing,
-  usePdfAnnotations,
+  type AnnotationControls,
+  useAnnotationEditing,
+  useAnnotations,
 } from "./react/annotations.ts";
-export { usePdfDocument, usePdfState, usePdfViewer } from "./react/context.ts";
-export { usePdfFormChange } from "./react/forms.ts";
-export { type PdfNavigation, usePdfNavigation, usePdfOutline } from "./react/navigation.ts";
+export { useDocumentState, useSession, useViewState } from "./react/context.ts";
 export {
-  PdfDocument,
-  type PdfDocumentOptions,
-  type PdfDocumentProps,
-} from "./react/PdfDocument.tsx";
+  useAttachments,
+  useInitialView,
+  useLayers,
+  useMetadata,
+  useOutline,
+  usePageLabels,
+} from "./react/data.ts";
+export { useViewer } from "./react/features.ts";
+export { useFormChange, useFormFields } from "./react/forms.ts";
+export { type HistoryControls, useHistory } from "./react/history.ts";
+export { PdfDocument, type PdfDocumentProps } from "./react/PdfDocument.tsx";
 export { PdfPageRect, type PdfPageRectProps } from "./react/PdfPageRect.tsx";
 export { PdfThumbnail, type PdfThumbnailProps } from "./react/PdfThumbnail.tsx";
-export { PdfViewport, type PdfViewportProps } from "./react/PdfViewport.tsx";
-export { type PdfSearch, usePdfSearch } from "./react/search.ts";
-export { usePdfSelection } from "./react/selection.ts";
+export { PdfThumbnails, type PdfThumbnailsProps } from "./react/PdfThumbnails.tsx";
+export { PdfViewer, type PdfViewerProps, type Zoom } from "./react/PdfViewer.tsx";
+export { type SearchControls, useSearch } from "./react/search.ts";
+export { useSelection } from "./react/selection.ts";
 export type { RenderStats } from "./render/renderer.ts";
 export type { Layout, ScrollMode, SpreadMode } from "./view/layout.ts";
 export type {
-  LoadProgress,
   Opening,
   PointerTool,
   ShownView,
   Viewer,
   ViewerExtension,
-  ViewerOptions,
   ViewerPosition,
   ViewerState,
   ZoomMode,

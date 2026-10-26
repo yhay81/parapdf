@@ -11,6 +11,49 @@ milestone at a time (`docs/rebuild/milestones.md`). APIs change without
 deprecations (`docs/decisions/0002-no-compatibility.md`); each merged
 milestone gets an entry here, and the release lists every break from 0.x.
 
+### Rebuild M6: React API (2026-10-26)
+
+- `useViewer()` creates a viewer, one viewport's controller and state, for
+  the life of the component that calls it; `<PdfViewer viewer={viewer}>`
+  shows the nearest `PdfDocument`'s document with it, and replaces
+  `PdfViewport`. Several viewers show one document under one `PdfDocument`.
+  A viewer keeps its view and annotations while its `PdfViewer` unmounts,
+  and closes the document once its owner unmounts. `usePdfViewer()` is gone:
+  hooks and functions take the viewer they act through.
+- `PdfDocument` takes `source`, `passwordPrompt`, and `children`; its
+  `options` are gone. The viewer's options are `PdfViewer`'s props and stay
+  live: changing `textLayer`, `forms`, `annotationEditing`, the budgets, or
+  any other needs no remount, and keeps the position and the edits.
+- View state is controlled or not: `zoom`, `rotation`, `spread`,
+  `scrollMode`, and `tool` with their `on…Change` callbacks, or
+  `defaultZoom` (for `initialScale`), `defaultRotation`, `defaultSpread`,
+  `defaultScrollMode`, and `defaultTool` (for `initialTool`). The current
+  page is reported by `onPageChange` and set by `goToPage()`; `defaultPage`
+  replaces `initialPage`.
+- The session publishes the document's state, apart from the viewers':
+  `useDocumentState(selector)` reads status, error, password request,
+  progress, page count, and permissions; `useSession()` gives the
+  `PdfSession`, with `submitPassword()` (no longer the viewer's) and
+  pdf.js's `proxy` (for `usePdfDocument()`). `useViewState(viewer,
+  selector)` reads view state only, and replaces `usePdfState()`.
+- Secondary data is read with React's `use()` under the application's
+  Suspense boundaries: `useOutline()` (for `usePdfOutline()`),
+  `usePageLabels()`, `useMetadata()`, `useAttachments()`, `useLayers()`,
+  `useFormFields()`, and `useInitialView()`; the viewer state's fields for
+  them are gone.
+- Hooks lose their `Pdf` prefix and take the viewer: `useSearch(viewer)`,
+  `useHistory(viewer)` (back and forward, for `usePdfNavigation()`, whose
+  `goToPage()` and `goToDestination()` are the viewer's),
+  `useAnnotations(viewer)`, `useAnnotationEditing(viewer)`,
+  `useFormChange(viewer, listener)`, and `useSelection(viewer)`.
+- `renderOverlay`'s content renders through a portal into a layer of the
+  page's host, after the renderer's layers; `PdfPageRect` takes the page
+  from the overlay and loses `pageIndex`.
+- `PdfThumbnails` lists a viewer's pages as buttons with thumbnails;
+  `PdfThumbnail` takes the viewer.
+- Opening a viewer's document and releasing sessions are no longer public:
+  `Viewer.open()` and `ViewerOptions` are gone.
+
 ### Rebuild M5: rendering (2026-10-26)
 
 - What each page draws is decided by a planner, pure functions of the

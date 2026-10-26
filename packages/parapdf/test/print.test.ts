@@ -3,7 +3,7 @@ import { describe, it, type TestContext } from "node:test";
 import { print } from "../src/features/print/index.ts";
 import { printDocument } from "../src/features/print/print.ts";
 import { Viewer } from "../src/view/viewer.ts";
-import { fakeDocument, fakePdfjs, openSession, settle } from "./fake-pdfjs.ts";
+import { fakeDocument, fakePdfjs, openSession, settle, show } from "./fake-pdfjs.ts";
 
 /** Only the element operations printDocument uses; rendering is controlled separately. */
 class PrintElement {
@@ -151,8 +151,12 @@ describe("print job replacement", () => {
       else Reflect.deleteProperty(globalThis, "cancelAnimationFrame");
     });
     const document = fakeDocument();
-    const viewer = new Viewer({}, fakePdfjs(async () => document.proxy).loader);
-    const closeDocument = viewer.open({ url: "/a.pdf" });
+    const viewer = new Viewer();
+    const { close: closeDocument } = show(
+      viewer,
+      { url: "/a.pdf" },
+      fakePdfjs(async () => document.proxy).loader,
+    );
     await settle();
     const printing = print(viewer);
     await settle();

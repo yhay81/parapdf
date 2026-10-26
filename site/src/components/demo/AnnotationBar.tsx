@@ -1,15 +1,13 @@
 import {
+  type AnnotationControls,
   type AnnotationStyles,
   type AnnotationTool,
-  getViewState,
-  type PdfAnnotations,
-  usePdfAnnotations,
-  usePdfViewer,
-  type ViewState,
+  useAnnotations,
 } from "parapdf";
 import { type CSSProperties, useRef, useState } from "react";
 import { IconButton, type IconName, modifier } from "./icons.tsx";
 import { Popover } from "./popover.tsx";
+import { useDemoViewer } from "./viewer.ts";
 
 const TOOLS: readonly [AnnotationTool, string, IconName][] = [
   ["none", "Select annotations", "pointer"],
@@ -50,9 +48,9 @@ const SIZES: Record<keyof AnnotationStyles, { label: string; min: number; max: n
  * one chosen, images and signatures, undo, redo, and deleting. Done hides
  * them and puts the pointer back to its default.
  */
-export function AnnotationBar({ onDone }: { onDone: (view: ViewState | null) => void }) {
-  const viewer = usePdfViewer();
-  const annotations = usePdfAnnotations();
+export function AnnotationBar({ onDone }: { onDone: () => void }) {
+  const viewer = useDemoViewer();
+  const annotations = useAnnotations(viewer);
   const tool = annotations?.tool ?? "none";
   const editing = annotations?.state ?? null;
   const styles = annotations?.styles ?? null;
@@ -128,7 +126,7 @@ export function AnnotationBar({ onDone }: { onDone: (view: ViewState | null) => 
         className="demo-done"
         onClick={() => {
           void annotations?.setTool("none");
-          onDone(getViewState(viewer));
+          onDone();
         }}
       >
         Done
@@ -145,7 +143,7 @@ function Style({
 }: {
   tool: keyof AnnotationStyles;
   styles: AnnotationStyles;
-  setStyle: PdfAnnotations["setStyle"];
+  setStyle: AnnotationControls["setStyle"];
 }) {
   const color = styles[tool].color.toLowerCase();
   const size = SIZES[tool];

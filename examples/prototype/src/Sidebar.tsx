@@ -1,73 +1,62 @@
 import {
   openAttachment,
   type PdfLayer,
-  PdfThumbnail,
+  PdfThumbnails,
   setLayerVisible,
-  usePdfState,
-  usePdfViewer,
+  useAttachments,
+  useLayers,
+  usePageLabels,
+  type Viewer,
 } from "parapdf";
+import { Suspense } from "react";
 import { OutlinePanel } from "./OutlinePanel.tsx";
 
 export type SidebarView = "outline" | "thumbnails" | "layers" | "attachments";
 
 /** The panel beside the pages: the outline, page thumbnails, layers, or attachments. */
-export function Sidebar({ view, id }: { view: SidebarView; id: string }) {
+export function Sidebar({ viewer, view, id }: { viewer: Viewer; view: SidebarView; id: string }) {
+  // The document's data loads apart from the pages, which never wait for it.
+  return <Suspense fallback={null}>{panel(viewer, view, id)}</Suspense>;
+}
+
+function panel(viewer: Viewer, view: SidebarView, id: string) {
   switch (view) {
     case "outline":
-      return <OutlinePanel id={id} />;
+      return <OutlinePanel viewer={viewer} id={id} />;
     case "thumbnails":
-      return <ThumbnailsPanel id={id} />;
+      return <ThumbnailsPanel viewer={viewer} id={id} />;
     case "layers":
-      return <LayersPanel id={id} />;
+      return <LayersPanel viewer={viewer} id={id} />;
     case "attachments":
-      return <AttachmentsPanel id={id} />;
+      return <AttachmentsPanel viewer={viewer} id={id} />;
   }
 }
 
-/** Every page as a thumbnail; each one is drawn only near the panel's visible part. */
-function ThumbnailsPanel({ id }: { id: string }) {
-  const viewer = usePdfViewer();
-  const pageCount = usePdfState((state) => state.pageCount);
-  const currentPage = usePdfState((state) => state.currentPage);
-  const labels = usePdfState((state) => state.pageLabels);
+/** Every page as a thumbnail, named by its label; each is drawn only near the panel's visible part. */
+function ThumbnailsPanel({ viewer, id }: { viewer: Viewer; id: string }) {
+  const labels = usePageLabels();
   return (
-    <nav id={id} className="sidebar thumbnails" aria-label="Page thumbnails">
-      <ol>
-        {Array.from({ length: pageCount }, (_, pageIndex) => {
-          const label = labels?.[pageIndex] ?? String(pageIndex + 1);
-          return (
-            // biome-ignore lint/suspicious/noArrayIndexKey: pages are identified by their index.
-            <li key={pageIndex}>
-              <button
-                type="button"
-                aria-label={`Page ${label}`}
-                aria-current={pageIndex === currentPage ? "page" : undefined}
-                onClick={() => viewer.goToPage(pageIndex)}
-              >
-                <PdfThumbnail pageIndex={pageIndex} width={120} />
-                <span aria-hidden="true">{label}</span>
-              </button>
-            </li>
-          );
-        })}
-      </ol>
-    </nav>
+    <div id={id} className="sidebar thumbnails">
+      <PdfThumbnails
+        viewer={viewer}
+        pageLabel={(pageNumber) => `Page ${labels?.[pageNumber - 1] ?? pageNumber}`}
+      />
+    </div>
   );
 }
 
 /** The document's layers as check boxes, nested as the document orders them. */
-function LayersPanel({ id }: { id: string }) {
-  const layers = usePdfState((state) => state.layers);
-  if (!layers || layers.length === 0) return null;
+function LayersPanel({ viewer, id }: { viewer: Viewer; id: string }) {
+  const layers = useLayers();
+  if (layers.length === 0) return null;
   return (
     <section id={id} className="sidebar layers" aria-label="Layers">
-      <LayerList layers={layers} />
+      <LayerList viewer={viewer} layers={layers} />
     </section>
   );
 }
 
-function LayerList({ layers }: { layers: readonly PdfLayer[] }) {
-  const viewer = usePdfViewer();
+function LayerList({ viewer, layers }: { viewer: Viewer; layers: readonly PdfLayer[] }) {
   return (
     <ul>
       {layers.map((layer, index) => (
@@ -86,7 +75,7 @@ function LayerList({ layers }: { layers: readonly PdfLayer[] }) {
               {layer.name}
             </label>
           )}
-          {layer.children.length > 0 ? <LayerList layers={layer.children} /> : null}
+          {layer.children.length > 0 ? <LayerList viewer={viewer} layers={layer.children} /> : null}
         </li>
       ))}
     </ul>
@@ -94,10 +83,9 @@ function LayerList({ layers }: { layers: readonly PdfLayer[] }) {
 }
 
 /** Files embedded in the document; activating one downloads it. */
-function AttachmentsPanel({ id }: { id: string }) {
-  const viewer = usePdfViewer();
-  const attachments = usePdfState((state) => state.attachments);
-  if (!attachments || attachments.length === 0) return null;
+function AttachmentsPanel({ viewer, id }: { viewer: Viewer; id: string }) {
+  const attachments = useAttachments();
+  if (attachments.length === 0) return null;
   return (
     <section id={id} className="sidebar attachments" aria-label="Attachments">
       <ul>

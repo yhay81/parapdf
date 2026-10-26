@@ -138,42 +138,47 @@ try {
   configurePdfjs,
   PdfDocument,
   PdfPageRect,
-  PdfViewport,
+  PdfViewer,
+  type PdfViewerProps,
   preloadPdfjs,
-  usePdfDocument,
-  usePdfSearch,
-  usePdfState,
-  usePdfViewer,
-  type ViewerOptions,
+  useDocumentState,
+  useSearch,
+  useSession,
+  useViewer,
+  useViewState,
+  type Viewer,
 } from "parapdf";
 
 configurePdfjs({ enableHWA: true, documentOptions: { withCredentials: true } });
 preloadPdfjs();
-const options: ViewerOptions = { initialScale: "fit-width", maxCanvasPixels: 50_000_000 };
+const options: PdfViewerProps = { defaultZoom: "fit-width", maxCanvasPixels: 50_000_000 };
 
-export function Viewer() {
+export function Reader() {
+  const viewer = useViewer();
   return (
-    <PdfDocument source="/manual.pdf" options={options}>
-      <Toolbar />
-      <PdfViewport
+    <PdfDocument source="/manual.pdf">
+      <Toolbar viewer={viewer} />
+      <PdfViewer
+        {...options}
+        viewer={viewer}
         style={{ height: 600 }}
         pageLabel={(pageNumber, pageCount) => \`\${pageNumber} / \${pageCount}\`}
         renderOverlay={(pageIndex) =>
-          pageIndex === 0 ? <PdfPageRect pageIndex={0} x={72} y={72} width={100} height={20} /> : null
+          pageIndex === 0 ? <PdfPageRect x={72} y={72} width={100} height={20} /> : null
         }
       />
     </PdfDocument>
   );
 }
 
-function Toolbar() {
-  const viewer = usePdfViewer();
-  const search = usePdfSearch();
-  const page: number = usePdfState((state) => state.currentPage);
-  const pages: number | undefined = usePdfDocument()?.numPages;
+function Toolbar({ viewer }: { viewer: Viewer }) {
+  const search = useSearch(viewer);
+  const page: number = useViewState(viewer, (state) => state.currentPage);
+  const pages: number = useDocumentState((state) => state.pageCount);
+  const proxy = useSession().proxy;
   return (
     <button type="button" onClick={() => { viewer.setScale("fit-width"); search.search("pdf"); }}>
-      {page + 1} / {pages}
+      {page + 1} / {pages} {proxy?.numPages}
     </button>
   );
 }
@@ -183,9 +188,9 @@ function Toolbar() {
   // TypeScript did check the application against them.
   writeFileSync(
     join(project, "misuse.tsx"),
-    `import { PdfViewport } from "parapdf";
+    `import { PdfViewer } from "parapdf";
 
-export const misuse = <PdfViewport pageLabel={5} />;
+export const misuse = <PdfViewer pageLabel={5} />;
 `,
   );
   const tsc = join(dirname(require.resolve("typescript/package.json")), "bin", "tsc");
@@ -232,11 +237,11 @@ export const misuse = <PdfViewport pageLabel={5} />;
     join(project, "ssr.js"),
     `import { createElement } from "react";
 import { renderToString } from "react-dom/server";
-import { PdfDocument, PdfViewport } from "parapdf";
+import { PdfDocument, PdfViewer } from "parapdf";
 
 process.stdout.write(
   renderToString(
-    createElement(PdfDocument, { source: "/manual.pdf" }, createElement(PdfViewport, { label: "Manual" })),
+    createElement(PdfDocument, { source: "/manual.pdf" }, createElement(PdfViewer, { label: "Manual" })),
   ),
 );
 `,

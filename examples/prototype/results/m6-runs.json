@@ -1,0 +1,1163 @@
+{
+  "note": "Per-run results of scroll-m6-<browser>: \"pdfjs-hwa\" is M6 (rebuild-m6-react-api), \"pdfjs-hwa, before\" is main ff5cba1, measured in turn job by job.",
+  "runs": {
+    "chromium": [
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa",
+        "run": 0,
+        "firstPaintMs": 178.6,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 6,
+        "droppedFrames": 1
+      },
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa, before",
+        "run": 0,
+        "firstPaintMs": 176.9,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 12.2,
+        "droppedFrames": 0
+      },
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa",
+        "run": 1,
+        "firstPaintMs": 198,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 7.8,
+        "droppedFrames": 0
+      },
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa, before",
+        "run": 1,
+        "firstPaintMs": 177,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 12.1,
+        "droppedFrames": 0
+      },
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa",
+        "run": 2,
+        "firstPaintMs": 176.4,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 5.2,
+        "droppedFrames": 0
+      },
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa, before",
+        "run": 2,
+        "firstPaintMs": 178.3,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 2.1,
+        "droppedFrames": 0
+      },
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa",
+        "run": 0,
+        "firstPaintMs": 176.5,
+        "commitsDuringScroll": 24,
+        "published": {
+          "updates": 24,
+          "windows": 15,
+          "currentPages": 9
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 2.9,
+        "droppedFrames": 0
+      },
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa, before",
+        "run": 0,
+        "firstPaintMs": 179.6,
+        "commitsDuringScroll": 24,
+        "published": {
+          "updates": 24,
+          "windows": 15,
+          "currentPages": 9
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 30.5,
+        "droppedFrames": 0
+      },
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa",
+        "run": 1,
+        "firstPaintMs": 176.9,
+        "commitsDuringScroll": 24,
+        "published": {
+          "updates": 24,
+          "windows": 15,
+          "currentPages": 9
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 15.2,
+        "droppedFrames": 0
+      },
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa, before",
+        "run": 1,
+        "firstPaintMs": 176.3,
+        "commitsDuringScroll": 24,
+        "published": {
+          "updates": 24,
+          "windows": 15,
+          "currentPages": 9
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 23.5,
+        "droppedFrames": 0
+      },
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa",
+        "run": 2,
+        "firstPaintMs": 193.7,
+        "commitsDuringScroll": 24,
+        "published": {
+          "updates": 24,
+          "windows": 15,
+          "currentPages": 9
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 19.3,
+        "droppedFrames": 0
+      },
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa, before",
+        "run": 2,
+        "firstPaintMs": 209.6,
+        "commitsDuringScroll": 24,
+        "published": {
+          "updates": 24,
+          "windows": 15,
+          "currentPages": 9
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 4.9,
+        "droppedFrames": 0
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa",
+        "run": 0,
+        "firstPaintMs": 188.9,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 9.8,
+        "droppedFrames": 0
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa, before",
+        "run": 0,
+        "firstPaintMs": 171.6,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 17.2,
+        "droppedFrames": 0
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa",
+        "run": 1,
+        "firstPaintMs": 138.1,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 5.3,
+        "droppedFrames": 0
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa, before",
+        "run": 1,
+        "firstPaintMs": 141.2,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 11.6,
+        "droppedFrames": 1
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa",
+        "run": 2,
+        "firstPaintMs": 138.5,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 7.7,
+        "droppedFrames": 0
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa, before",
+        "run": 2,
+        "firstPaintMs": 169.2,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 12,
+        "droppedFrames": 0
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa",
+        "run": 0,
+        "firstPaintMs": 187.7,
+        "commitsDuringScroll": 20,
+        "published": {
+          "updates": 20,
+          "windows": 13,
+          "currentPages": 7
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 5.5,
+        "droppedFrames": 0
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa, before",
+        "run": 0,
+        "firstPaintMs": 169.9,
+        "commitsDuringScroll": 20,
+        "published": {
+          "updates": 20,
+          "windows": 13,
+          "currentPages": 7
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 16.2,
+        "droppedFrames": 0
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa",
+        "run": 1,
+        "firstPaintMs": 175.2,
+        "commitsDuringScroll": 20,
+        "published": {
+          "updates": 20,
+          "windows": 13,
+          "currentPages": 7
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 17.2,
+        "droppedFrames": 0
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa, before",
+        "run": 1,
+        "firstPaintMs": 138.9,
+        "commitsDuringScroll": 20,
+        "published": {
+          "updates": 20,
+          "windows": 13,
+          "currentPages": 7
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 35.9,
+        "droppedFrames": 0
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa",
+        "run": 2,
+        "firstPaintMs": 141.9,
+        "commitsDuringScroll": 20,
+        "published": {
+          "updates": 20,
+          "windows": 13,
+          "currentPages": 7
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 12.3,
+        "droppedFrames": 0
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa, before",
+        "run": 2,
+        "firstPaintMs": 171.5,
+        "commitsDuringScroll": 20,
+        "published": {
+          "updates": 20,
+          "windows": 13,
+          "currentPages": 7
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 14.1,
+        "droppedFrames": 0
+      }
+    ],
+    "webkit": [
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa",
+        "run": 0,
+        "firstPaintMs": 200.1,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 9.5,
+        "droppedFrames": 0
+      },
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa, before",
+        "run": 0,
+        "firstPaintMs": 192.7,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 3.9,
+        "droppedFrames": 0
+      },
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa",
+        "run": 1,
+        "firstPaintMs": 205.9,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 7.3,
+        "droppedFrames": 0
+      },
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa, before",
+        "run": 1,
+        "firstPaintMs": 208.6,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 6.5,
+        "droppedFrames": 0
+      },
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa",
+        "run": 2,
+        "firstPaintMs": 200.4,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 5.5,
+        "droppedFrames": 0
+      },
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa, before",
+        "run": 2,
+        "firstPaintMs": 209.9,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 12.7,
+        "droppedFrames": 0
+      },
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa",
+        "run": 0,
+        "firstPaintMs": 207.9,
+        "commitsDuringScroll": 24,
+        "published": {
+          "updates": 24,
+          "windows": 15,
+          "currentPages": 9
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 15.9,
+        "droppedFrames": 0
+      },
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa, before",
+        "run": 0,
+        "firstPaintMs": 204.7,
+        "commitsDuringScroll": 24,
+        "published": {
+          "updates": 24,
+          "windows": 15,
+          "currentPages": 9
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 13.8,
+        "droppedFrames": 0
+      },
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa",
+        "run": 1,
+        "firstPaintMs": 206.8,
+        "commitsDuringScroll": 24,
+        "published": {
+          "updates": 24,
+          "windows": 15,
+          "currentPages": 9
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 18.4,
+        "droppedFrames": 0
+      },
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa, before",
+        "run": 1,
+        "firstPaintMs": 209.5,
+        "commitsDuringScroll": 24,
+        "published": {
+          "updates": 24,
+          "windows": 15,
+          "currentPages": 9
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 11.6,
+        "droppedFrames": 0
+      },
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa",
+        "run": 2,
+        "firstPaintMs": 196.6,
+        "commitsDuringScroll": 24,
+        "published": {
+          "updates": 24,
+          "windows": 15,
+          "currentPages": 9
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 11.5,
+        "droppedFrames": 0
+      },
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa, before",
+        "run": 2,
+        "firstPaintMs": 193.8,
+        "commitsDuringScroll": 24,
+        "published": {
+          "updates": 24,
+          "windows": 15,
+          "currentPages": 9
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 25.4,
+        "droppedFrames": 0
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa",
+        "run": 0,
+        "firstPaintMs": 171,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 51.3,
+        "droppedFrames": 1
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa, before",
+        "run": 0,
+        "firstPaintMs": 155.3,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 39.1,
+        "droppedFrames": 1
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa",
+        "run": 1,
+        "firstPaintMs": 181.6,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 38.6,
+        "droppedFrames": 0
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa, before",
+        "run": 1,
+        "firstPaintMs": 156.5,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 46.7,
+        "droppedFrames": 1
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa",
+        "run": 2,
+        "firstPaintMs": 279.8,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 61.9,
+        "droppedFrames": 1
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa, before",
+        "run": 2,
+        "firstPaintMs": 157.9,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 53.8,
+        "droppedFrames": 1
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa",
+        "run": 0,
+        "firstPaintMs": 167.7,
+        "commitsDuringScroll": 20,
+        "published": {
+          "updates": 20,
+          "windows": 13,
+          "currentPages": 7
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 31.1,
+        "droppedFrames": 0
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa, before",
+        "run": 0,
+        "firstPaintMs": 166.6,
+        "commitsDuringScroll": 20,
+        "published": {
+          "updates": 20,
+          "windows": 13,
+          "currentPages": 7
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 31.5,
+        "droppedFrames": 0
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa",
+        "run": 1,
+        "firstPaintMs": 166.2,
+        "commitsDuringScroll": 20,
+        "published": {
+          "updates": 20,
+          "windows": 13,
+          "currentPages": 7
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 48.9,
+        "droppedFrames": 0
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa, before",
+        "run": 1,
+        "firstPaintMs": 167.2,
+        "commitsDuringScroll": 20,
+        "published": {
+          "updates": 20,
+          "windows": 13,
+          "currentPages": 7
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 40.6,
+        "droppedFrames": 0
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa",
+        "run": 2,
+        "firstPaintMs": 168.5,
+        "commitsDuringScroll": 20,
+        "published": {
+          "updates": 20,
+          "windows": 13,
+          "currentPages": 7
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 34.6,
+        "droppedFrames": 0
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa, before",
+        "run": 2,
+        "firstPaintMs": 156.2,
+        "commitsDuringScroll": 20,
+        "published": {
+          "updates": 20,
+          "windows": 13,
+          "currentPages": 7
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 56,
+        "droppedFrames": 0
+      }
+    ],
+    "firefox": [
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa",
+        "run": 0,
+        "firstPaintMs": 282.8,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 39.6,
+        "droppedFrames": 0
+      },
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa, before",
+        "run": 0,
+        "firstPaintMs": 272.8,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 56.4,
+        "droppedFrames": 0
+      },
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa",
+        "run": 1,
+        "firstPaintMs": 273.6,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 40.5,
+        "droppedFrames": 0
+      },
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa, before",
+        "run": 1,
+        "firstPaintMs": 295.3,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 56.5,
+        "droppedFrames": 0
+      },
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa",
+        "run": 2,
+        "firstPaintMs": 293.4,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 45,
+        "droppedFrames": 0
+      },
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa, before",
+        "run": 2,
+        "firstPaintMs": 310.8,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 48.3,
+        "droppedFrames": 0
+      },
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa",
+        "run": 0,
+        "firstPaintMs": 275.9,
+        "commitsDuringScroll": 24,
+        "published": {
+          "updates": 24,
+          "windows": 15,
+          "currentPages": 9
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 64.8,
+        "droppedFrames": 0
+      },
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa, before",
+        "run": 0,
+        "firstPaintMs": 276.4,
+        "commitsDuringScroll": 24,
+        "published": {
+          "updates": 24,
+          "windows": 15,
+          "currentPages": 9
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 70,
+        "droppedFrames": 0
+      },
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa",
+        "run": 1,
+        "firstPaintMs": 283.6,
+        "commitsDuringScroll": 24,
+        "published": {
+          "updates": 24,
+          "windows": 15,
+          "currentPages": 9
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 85,
+        "droppedFrames": 0
+      },
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa, before",
+        "run": 1,
+        "firstPaintMs": 290.3,
+        "commitsDuringScroll": 24,
+        "published": {
+          "updates": 24,
+          "windows": 15,
+          "currentPages": 9
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 83.3,
+        "droppedFrames": 0
+      },
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa",
+        "run": 2,
+        "firstPaintMs": 279.9,
+        "commitsDuringScroll": 24,
+        "published": {
+          "updates": 24,
+          "windows": 15,
+          "currentPages": 9
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 73.8,
+        "droppedFrames": 0
+      },
+      {
+        "file": "synthetic-text-1000.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa, before",
+        "run": 2,
+        "firstPaintMs": 281.3,
+        "commitsDuringScroll": 24,
+        "published": {
+          "updates": 24,
+          "windows": 15,
+          "currentPages": 9
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 68.5,
+        "droppedFrames": 0
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa",
+        "run": 0,
+        "firstPaintMs": 225.7,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 57.9,
+        "droppedFrames": 0
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa, before",
+        "run": 0,
+        "firstPaintMs": 257.7,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 119.4,
+        "droppedFrames": 0
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa",
+        "run": 1,
+        "firstPaintMs": 258.9,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 41.3,
+        "droppedFrames": 0
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa, before",
+        "run": 1,
+        "firstPaintMs": 258.7,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 60.1,
+        "droppedFrames": 0
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa",
+        "run": 2,
+        "firstPaintMs": 223.2,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 63.6,
+        "droppedFrames": 0
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 900,
+        "variant": "pdfjs-hwa, before",
+        "run": 2,
+        "firstPaintMs": 247.7,
+        "commitsDuringScroll": 4,
+        "published": {
+          "updates": 4,
+          "windows": 2,
+          "currentPages": 2
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 46.9,
+        "droppedFrames": 0
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa",
+        "run": 0,
+        "firstPaintMs": 240.9,
+        "commitsDuringScroll": 20,
+        "published": {
+          "updates": 20,
+          "windows": 13,
+          "currentPages": 7
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 60.5,
+        "droppedFrames": 0
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa, before",
+        "run": 0,
+        "firstPaintMs": 223.4,
+        "commitsDuringScroll": 20,
+        "published": {
+          "updates": 20,
+          "windows": 13,
+          "currentPages": 7
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 61.5,
+        "droppedFrames": 0
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa",
+        "run": 1,
+        "firstPaintMs": 252.8,
+        "commitsDuringScroll": 20,
+        "published": {
+          "updates": 20,
+          "windows": 13,
+          "currentPages": 7
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 68.5,
+        "droppedFrames": 0
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa, before",
+        "run": 1,
+        "firstPaintMs": 251.7,
+        "commitsDuringScroll": 20,
+        "published": {
+          "updates": 20,
+          "windows": 13,
+          "currentPages": 7
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 78.1,
+        "droppedFrames": 0
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa",
+        "run": 2,
+        "firstPaintMs": 224.6,
+        "commitsDuringScroll": 20,
+        "published": {
+          "updates": 20,
+          "windows": 13,
+          "currentPages": 7
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 77.4,
+        "droppedFrames": 0
+      },
+      {
+        "file": "bill-hr815.pdf",
+        "speed": 3600,
+        "variant": "pdfjs-hwa, before",
+        "run": 2,
+        "firstPaintMs": 231.1,
+        "commitsDuringScroll": 20,
+        "published": {
+          "updates": 20,
+          "windows": 13,
+          "currentPages": 7
+        },
+        "blankMeanPct": 0,
+        "blockedMs": 51.5,
+        "droppedFrames": 0
+      }
+    ]
+  }
+}

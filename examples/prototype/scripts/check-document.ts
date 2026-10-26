@@ -60,12 +60,6 @@ interface Viewer {
       zoomMode: string;
       spread: string;
       scrollMode: string;
-      permissions: Record<string, boolean> | null;
-      documentView: {
-        destination: { pageIndex: number } | null;
-        pageLayout: string | null;
-        pageMode: string | null;
-      } | null;
     };
   };
   scroller: HTMLElement | null;
@@ -91,6 +85,14 @@ interface Parapdf {
 /** What the demo exposes on `window` for these checks. */
 interface Demo {
   __viewer?: Viewer;
+  __session?: {
+    state: { get(): { status: string; permissions: Record<string, boolean> | null } };
+    initialView(): Promise<{
+      destination: { pageIndex: number } | null;
+      pageLayout: string | null;
+      pageMode: string | null;
+    } | null>;
+  };
   __parapdf?: Parapdf;
   __history?: {
     store: { get(): { canGoBack: boolean; canGoForward: boolean } };
@@ -108,15 +110,20 @@ interface Demo {
   __changes?: { name: string; value: unknown }[];
 }
 
-/** The viewer's state, with its history's and its annotation editing's. */
+/**
+ * The viewer's state, with its history's and its annotation editing's, and
+ * its session's permissions and initial view.
+ */
 const state = (page: Page) =>
-  page.evaluate(() => {
+  page.evaluate(async () => {
     const demo = window as unknown as Demo;
     const viewer = demo.__viewer?.store.get();
     if (!viewer) return undefined;
     const history = demo.__history?.store.get();
     return {
       ...viewer,
+      permissions: demo.__session?.state.get().permissions ?? null,
+      documentView: (await demo.__session?.initialView()) ?? null,
       canGoBack: history?.canGoBack ?? false,
       canGoForward: history?.canGoForward ?? false,
       annotationState: demo.__annotations?.store.get().state ?? null,
@@ -137,7 +144,7 @@ async function open(browser: Browser, url: string) {
   });
   await page.goto(url);
   await page.waitForFunction(
-    () => (window as unknown as Demo).__viewer?.store.get().status === "ready",
+    () => (window as unknown as Demo).__session?.state.get().status === "ready",
     undefined,
     {
       timeout: 30_000,
@@ -741,7 +748,7 @@ try {
       demo(`file=usrguide.pdf&page=1&viewState=${encodeURIComponent(JSON.stringify(kept))}`),
     );
     await reopened.waitForFunction(
-      () => (window as unknown as Demo).__viewer?.store.get().status === "ready",
+      () => (window as unknown as Demo).__session?.state.get().status === "ready",
       undefined,
       { timeout: 30_000 },
     );

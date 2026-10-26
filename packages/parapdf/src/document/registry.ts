@@ -1,5 +1,12 @@
 import type { LoadedPdfjs } from "../pdfjs/loader.ts";
-import { closeSession, DocumentSession, type PasswordReason, type PdfSource } from "./session.ts";
+import {
+  closeSession,
+  DocumentSession,
+  type PasswordReason,
+  type PdfPermissions,
+  type PdfSource,
+} from "./session.ts";
+import { type ReadableStore, Store } from "./store.ts";
 
 /**
  * Sessions shared by every viewer of the same source. React StrictMode
@@ -13,6 +20,52 @@ const RELEASE_DELAY_MS = 1000;
 
 /** Loads the pdf.js sessions open with: `loadPdfjs`, or one a test stands in for. */
 export type PdfjsLoader = () => Promise<LoadedPdfjs>;
+
+export interface LoadProgress {
+  loaded: number;
+  total: number | null;
+}
+
+/** What a session publishes about its document, from the moment it starts to open. */
+export interface DocumentState {
+  /**
+   * "password" while an encrypted document waits for a password;
+   * `passwordReason` says whether one is needed or the last one was wrong.
+   * "ready" once pdf.js's document and its permissions are read.
+   */
+  status: "loading" | "password" | "ready" | "error";
+  error: string | null;
+  passwordReason: PasswordReason | null;
+  /**
+   * Bytes of the document received so far, and its size when the server
+   * reported it; null before any arrive. pdf.js may keep fetching the rest
+   * of a large document in the background after it is ready.
+   */
+  progress: LoadProgress | null;
+  /** 0 until the document is ready. */
+  pageCount: number;
+  /**
+   * What the document permits, everything when it is not encrypted; null
+   * until it is ready, and when reading them failed.
+   */
+  permissions: PdfPermissions | null;
+}
+
+/** A session's state as it starts to open. */
+export const OPENING: DocumentState = {
+  status: "loading",
+  error: null,
+  passwordReason: null,
+  progress: null,
+  pageCount: 0,
+  permissions: null,
+};
+
+/** Progress arrives many times a frame; the session's store hears of it once a frame. */
+const nextFrame = (callback: () => void): void => {
+  if (typeof requestAnimationFrame === "function") requestAnimationFrame(callback);
+  else setTimeout(callback, 16);
+};
 
 /** What a viewer hears about a document while it loads. */
 export interface SessionListener {
@@ -29,7 +82,11 @@ interface Entry {
   users: number;
   releaseTimer: ReturnType<typeof setTimeout> | undefined;
   /** The latest progress, for viewers that join while the document loads. */
-  progress: { loaded: number; total: number | null } | null;
+  progress: LoadProgress | null;
+  /** Whether the latest progress waits for the next frame to be published. */
+  progressQueued: boolean;
+  /** The session's document state, which every viewer of it reads. */
+  readonly state: Store<DocumentState>;
   /** pdf.js's request for a password, until a viewer answers it. */
   passwordRequest: { reason: PasswordReason; answer(password: string | null): void } | null;
   /** Passwords already tried, so remounting never resubmits the same failed value. */
@@ -41,6 +98,8 @@ interface Entry {
 export interface SessionLease {
   /** The shared session; rejects when the document cannot be opened. */
   readonly session: Promise<DocumentSession>;
+  /** The session's document state, shared by every lease of it. */
+  readonly state: ReadableStore<DocumentState>;
   /**
    * Aborted once the lease is released, or its session closes: what a
    * viewer starts for the document takes it, and stops with it.
@@ -89,6 +148,8 @@ function openEntry(pdfjs: PdfjsLoader, source: PdfSource): Entry {
     users: 0,
     releaseTimer: undefined,
     progress: null,
+    progressQueued: false,
+    state: new Store(OPENING),
     passwordRequest: null,
     passwords: new Set(source.password === undefined ? [] : [source.password]),
     nextPassword: undefined,
@@ -97,6 +158,12 @@ function openEntry(pdfjs: PdfjsLoader, source: PdfSource): Entry {
     onProgress(loaded, total) {
       entry.progress = { loaded, total };
       for (const listener of entry.listeners) listener.onProgress?.(loaded, total);
+      if (entry.progressQueued) return;
+      entry.progressQueued = true;
+      nextFrame(() => {
+        entry.progressQueued = false;
+        if (!entry.controller.signal.aborted) entry.state.set({ progress: entry.progress });
+      });
     },
     password(reason) {
       return new Promise<string | null>((resolve) => {
@@ -118,10 +185,12 @@ function openEntry(pdfjs: PdfjsLoader, source: PdfSource): Entry {
             entry.passwordRequest = null;
             entry.nextPassword = undefined;
             if (password !== null) entry.passwords.add(password);
+            entry.state.set({ status: "loading", passwordReason: null });
             resolve(password);
           },
         };
         entry.passwordRequest = request;
+        entry.state.set({ status: "password", passwordReason: reason });
         for (const listener of [...entry.listeners]) {
           // A listener may answer, or add another viewer that answers, at once.
           if (entry.passwordRequest !== request) break;
@@ -130,6 +199,25 @@ function openEntry(pdfjs: PdfjsLoader, source: PdfSource): Entry {
       });
     },
   });
+  // Ready once the permissions are read too: viewers follow them from their first layout.
+  entry.session.then(
+    async (session) => {
+      const permissions = await session.permissions().catch((error: unknown) => {
+        console.error("reading permissions failed", error);
+        return null;
+      });
+      if (entry.controller.signal.aborted) return;
+      entry.state.set({
+        status: "ready",
+        passwordReason: null,
+        pageCount: session.pageCount,
+        permissions,
+      });
+    },
+    (error: unknown) => {
+      entry.state.set({ status: "error", error: String(error), passwordReason: null });
+    },
+  );
   return entry;
 }
 
@@ -178,6 +266,7 @@ export function acquireSession(
   let released = false;
   return {
     session: held.session,
+    state: held.state,
     signal: lease.signal,
     submitPassword(password) {
       if (!released) held.passwordRequest?.answer(password);

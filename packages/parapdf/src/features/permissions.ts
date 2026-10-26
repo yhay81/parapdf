@@ -24,7 +24,7 @@ const enforcing = new WeakSet<Viewer>();
  * permissions (`enforcePermissions()`).
  */
 export function permits(viewer: Viewer, what: Permission): boolean {
-  return !enforcing.has(viewer) || permitted(viewer.store.get().permissions, what);
+  return !enforcing.has(viewer) || permitted(viewer.permissions, what);
 }
 
 /**
@@ -42,14 +42,9 @@ export function enforcePermissions(viewer: Viewer): () => void {
   const onCopy = (event: ClipboardEvent) => {
     if (!permits(viewer, "copy")) event.preventDefault();
   };
-  let permissions = viewer.store.get().permissions;
-  const unsubscribe = viewer.store.subscribe(() => {
-    const next = viewer.store.get().permissions;
-    if (next === permissions) return;
-    permissions = next;
-    apply();
-  });
   const detachExtension = viewer.extend({
+    // Each document's permissions are known before its pages are laid out.
+    prepare: apply,
     viewport(_scroller, pages, signal) {
       content = pages;
       pages.addEventListener("copy", onCopy, { signal });
@@ -67,7 +62,6 @@ export function enforcePermissions(viewer: Viewer): () => void {
   });
   return () => {
     enforcing.delete(viewer);
-    unsubscribe();
     detachExtension();
     content?.removeEventListener("copy", onCopy);
     content?.removeEventListener("cut", onCopy);

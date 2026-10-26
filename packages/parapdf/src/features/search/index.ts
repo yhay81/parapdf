@@ -1,8 +1,8 @@
 "use client";
 
 import type { DocumentSession } from "../../document/session.ts";
+import { type ReadableStore, Store } from "../../document/store.ts";
 import { linked } from "../../view/signals.ts";
-import { type ReadableStore, Store } from "../../view/state.ts";
 import type { Viewer } from "../../view/viewer.ts";
 import { SearchHighlights } from "./highlights.ts";
 import {
@@ -270,11 +270,11 @@ export function attachSearch(viewer: Viewer): Search {
   };
 }
 
-/** Each viewer's own search, which `usePdfSearch()` shows. */
+/** Each viewer's own search, which `useSearch()` shows. */
 const shared = new WeakMap<Viewer, Search>();
 
 /**
- * `viewer`'s own search, which `usePdfSearch()` shows: attached at the
+ * `viewer`'s own search, which `useSearch()` shows: attached at the
  * first call, and kept until its `detach()`.
  */
 export function searchOf(viewer: Viewer): Search {

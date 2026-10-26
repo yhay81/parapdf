@@ -2,18 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { getSelection, type PdfSelection } from "../features/selection.ts";
-import { usePdfViewer } from "./context.ts";
+import type { Viewer } from "../view/viewer.ts";
 
 const sameSelection = (a: PdfSelection | null, b: PdfSelection | null): boolean =>
   a === b || (a !== null && b !== null && JSON.stringify(a) === JSON.stringify(b));
 
 /**
- * The text selected in the viewer and the rectangles it covers on its pages
+ * The text selected in `viewer` and the rectangles it covers on its pages
  * (see `getSelection()`), null when nothing is selected there. It follows
  * the selection at most once a frame while the reader drags.
  */
-export function usePdfSelection(): PdfSelection | null {
-  const viewer = usePdfViewer();
+export function useSelection(viewer: Viewer): PdfSelection | null {
   const [selection, setSelection] = useState<PdfSelection | null>(null);
   useEffect(() => {
     let frame = 0;

@@ -1,21 +1,21 @@
 import {
   download,
-  getViewState,
   print,
   type ScrollMode,
   type SpreadMode,
-  usePdfAnnotationEditing,
-  usePdfNavigation,
-  usePdfState,
-  usePdfViewer,
-  type ViewState,
+  useAnnotationEditing,
+  useDocumentState,
+  useHistory,
+  usePageLabels,
+  useViewState,
 } from "parapdf";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, Suspense, useEffect, useRef, useState } from "react";
 import { samples } from "../../samples.ts";
 import type { Opened } from "./DemoApp.tsx";
 import { FindBar } from "./FindBar.tsx";
 import { Icon, IconButton, type IconName, modifier } from "./icons.tsx";
 import { closePopover, MenuItem, menuItemRole, Popover } from "./popover.tsx";
+import { useDemoViewer } from "./viewer.ts";
 
 const SCROLL_MODES: readonly [ScrollMode, string, IconName][] = [
   ["vertical", "Vertical", "scrollVertical"],
@@ -48,17 +48,17 @@ export interface ToolbarProps {
   onFindingChange: (finding: boolean) => void;
   /** Whether the annotation tools show. */
   annotating: boolean;
-  /** Shows or hides them; the first time, a viewer that edits annotations opens at `view`. */
-  onAnnotatingChange: (annotating: boolean, view: ViewState | null) => void;
+  /** Shows or hides them; the first time, the viewer starts editing annotations. */
+  onAnnotatingChange: (annotating: boolean) => void;
 }
 
 /** Shows or hides the annotation tools; hiding them puts the pointer back to its default. */
 function useAnnotatingToggle({ annotating, onAnnotatingChange }: ToolbarProps) {
-  const viewer = usePdfViewer();
-  const editing = usePdfAnnotationEditing();
+  const viewer = useDemoViewer();
+  const editing = useAnnotationEditing(viewer);
   return () => {
     if (annotating) void editing?.setTool("none");
-    onAnnotatingChange(!annotating, getViewState(viewer));
+    onAnnotatingChange(!annotating);
   };
 }
 
@@ -70,9 +70,9 @@ function useAnnotatingToggle({ annotating, onAnnotatingChange }: ToolbarProps) {
  */
 export function Toolbar(props: ToolbarProps) {
   const { sidebar, onSidebarChange, finding, onFindingChange, annotating } = props;
-  const viewer = usePdfViewer();
+  const viewer = useDemoViewer();
   const toggleAnnotating = useAnnotatingToggle(props);
-  const ready = usePdfState((state) => state.status === "ready");
+  const ready = useDocumentState((state) => state.status === "ready");
   const findButton = useRef<HTMLButtonElement>(null);
   return (
     <header className="demo-header">
@@ -201,7 +201,8 @@ function DocumentMenu({ opened, onOpen, onOpenFile }: ToolbarProps) {
 
 /** Back and forward through the places links and the outline jumped from. */
 function History() {
-  const { canGoBack: canBack, canGoForward: canForward, back, forward } = usePdfNavigation();
+  const viewer = useDemoViewer();
+  const { canGoBack: canBack, canGoForward: canForward, back, forward } = useHistory(viewer);
   return (
     <div className="demo-group demo-from-xl">
       <IconButton icon="back" label="Back" disabled={!canBack} onClick={back} />
@@ -211,12 +212,22 @@ function History() {
   );
 }
 
+/** The page's label, where the document gives it one other than its number. */
+function PageLabel({ page }: { page: number }) {
+  const label = usePageLabels()?.[page] ?? null;
+  if (!label || label === String(page + 1)) return null;
+  return (
+    <span className="demo-page-label" title="Page label">
+      {label}
+    </span>
+  );
+}
+
 /** The page as a number to type, after the previous and next buttons. */
 function PageNavigation() {
-  const viewer = usePdfViewer();
-  const page = usePdfState((state) => state.currentPage);
-  const pageCount = usePdfState((state) => state.pageCount);
-  const label = usePdfState((state) => state.pageLabels?.[state.currentPage] ?? null);
+  const viewer = useDemoViewer();
+  const page = useViewState(viewer, (state) => state.currentPage);
+  const pageCount = useDocumentState((state) => state.pageCount);
   const [value, setValue] = useState(String(page + 1));
   useEffect(() => setValue(String(page + 1)), [page]);
   return (
@@ -252,11 +263,10 @@ function PageNavigation() {
           onBlur={() => setValue(String(page + 1))}
         />
         <span className="demo-page-count">/ {pageCount > 0 ? pageCount : "–"}</span>
-        {label && label !== String(page + 1) ? (
-          <span className="demo-page-label" title="Page label">
-            {label}
-          </span>
-        ) : null}
+        {/* Labels are read apart from the pages, which never wait for them. */}
+        <Suspense fallback={null}>
+          <PageLabel page={page} />
+        </Suspense>
       </form>
     </div>
   );
@@ -264,9 +274,9 @@ function PageNavigation() {
 
 /** Zoom out and in, and the zoom, whose menu fits the page or picks a share of the printed size. */
 function ZoomControls() {
-  const viewer = usePdfViewer();
-  const percent = usePdfState((state) => Math.round((state.scale * 72 * 100) / 96));
-  const zoomMode = usePdfState((state) => state.zoomMode);
+  const viewer = useDemoViewer();
+  const percent = useViewState(viewer, (state) => Math.round((state.scale * 72 * 100) / 96));
+  const zoomMode = useViewState(viewer, (state) => state.zoomMode);
   return (
     <div className="demo-group">
       <IconButton
@@ -347,14 +357,14 @@ function Tile({
  */
 function MoreMenu(props: ToolbarProps) {
   const { annotating, onOpenFile, onShowInfo } = props;
-  const viewer = usePdfViewer();
+  const viewer = useDemoViewer();
   const toggleAnnotating = useAnnotatingToggle(props);
-  const ready = usePdfState((state) => state.status === "ready");
-  const pageCount = usePdfState((state) => state.pageCount);
-  const scrollMode = usePdfState((state) => state.scrollMode);
-  const spread = usePdfState((state) => state.spread);
-  const tool = usePdfState((state) => state.tool);
-  const { canGoBack: canBack, canGoForward: canForward, back, forward } = usePdfNavigation();
+  const ready = useDocumentState((state) => state.status === "ready");
+  const pageCount = useDocumentState((state) => state.pageCount);
+  const scrollMode = useViewState(viewer, (state) => state.scrollMode);
+  const spread = useViewState(viewer, (state) => state.spread);
+  const tool = useViewState(viewer, (state) => state.tool);
+  const { canGoBack: canBack, canGoForward: canForward, back, forward } = useHistory(viewer);
   return (
     <Popover
       id="demo-more"

@@ -1,4 +1,4 @@
-import { type SearchOptions, usePdfSearch, usePdfState } from "parapdf";
+import { type SearchOptions, useDocumentState, useSearch, type Viewer } from "parapdf";
 import { useEffect, useRef, useState } from "react";
 
 /**
@@ -6,9 +6,9 @@ import { useEffect, useRef, useState } from "react";
  * move between matches; Escape clears; Ctrl/Cmd+F focuses the field because
  * the browser's own find cannot see pages that are not mounted.
  */
-export function SearchBox() {
-  const search = usePdfSearch();
-  const pageCount = usePdfState((state) => state.pageCount);
+export function SearchBox({ viewer }: { viewer: Viewer }) {
+  const search = useSearch(viewer);
+  const pageCount = useDocumentState((state) => state.pageCount);
   const [value, setValue] = useState("");
   const [options, setOptions] = useState<SearchOptions>({});
   const inputRef = useRef<HTMLInputElement>(null);

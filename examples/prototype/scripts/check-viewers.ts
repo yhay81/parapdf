@@ -21,7 +21,7 @@ async function ready(page: Page, index: number) {
   await page.waitForFunction(
     (i) => {
       const viewer = window.__split?.viewers[i];
-      return viewer?.store.get().status === "ready" && viewer.sharpness() > 0.99;
+      return viewer?.store.get().layout != null && viewer.sharpness() > 0.99;
     },
     index,
     { timeout: 60_000 },
@@ -47,7 +47,7 @@ async function checkViews(url: string) {
     const shared = await page.evaluate(() => {
       const [left, right] = window.__split!.viewers;
       return {
-        same: left!.store.get().document === right!.store.get().document,
+        same: left!.session !== null && left!.session === right!.session,
         opens: window.__lifecycle!.stats.opens,
       };
     });
@@ -120,7 +120,7 @@ async function checkViews(url: string) {
     assert.equal(await page.evaluate(() => window.__lifecycle!.stats.opens), 1);
     console.log("PASS viewport detach aborts its lifetime and reattach restores the view");
 
-    // Start long work in both viewers, then remove only the first provider.
+    // Start long work in both viewers, then close only the first.
     await page.evaluate(() => {
       for (const search of window.__split!.searches) search!.search("lorem");
     });
@@ -133,8 +133,8 @@ async function checkViews(url: string) {
     const closed = await page.evaluate(() => {
       const [left, right] = window.__split!.viewers;
       return {
-        left: left!.store.get().status,
-        right: right!.store.get().status,
+        left: left!.store.get().layout === null && left!.session === null ? "idle" : "shown",
+        right: right!.store.get().layout === null ? "idle" : "shown",
         leftAborted: left!.signal.aborted,
         rightAborted: right!.signal.aborted,
         matches: window.__split!.searches[1]!.store.get().matches.length,
@@ -142,7 +142,7 @@ async function checkViews(url: string) {
       };
     });
     assert.equal(closed.left, "idle");
-    assert.equal(closed.right, "ready");
+    assert.equal(closed.right, "shown");
     assert.equal(closed.leftAborted, true);
     assert.equal(closed.rightAborted, false);
     assert.ok(closed.matches > 0);
@@ -152,10 +152,19 @@ async function checkViews(url: string) {
     console.log("PASS closing one viewer stops its work while the other searches and draws");
 
     await page.locator('[data-viewer="1"]').getByRole("button", { name: "Close viewer" }).click();
+    await page.waitForFunction(() => window.__split!.viewers[1]!.session === null);
+    assert.equal(
+      await page.evaluate(() => window.__lifecycle!.stats.destroys),
+      0,
+      "the provider keeps the session without viewers",
+    );
+    await page.getByRole("button", { name: "Close document" }).click();
     await page.waitForFunction(() => window.__lifecycle!.stats.destroys === 1);
     assert.deepEqual(await page.evaluate(() => window.__lifecycle!.unhandled), []);
     assert.deepEqual(errors, []);
-    console.log("PASS the last viewer releases the session without errors");
+    console.log(
+      "PASS closing the viewers and then the provider releases the session without errors",
+    );
   } finally {
     await context.close();
   }
@@ -185,7 +194,7 @@ async function checkSharedEditing(url: string) {
     );
     const editorIds = () =>
       page.evaluate(() => {
-        const proxy = window.__split!.viewers[1]!.store.get().document!.proxy;
+        const proxy = window.__split!.viewers[1]!.session!.proxy;
         const storage = proxy.annotationStorage as unknown as Iterable<[string, unknown]>;
         return [...storage]
           .map(([key]) => key)
@@ -200,9 +209,7 @@ async function checkSharedEditing(url: string) {
     });
     assert.deepEqual(added, [true, true]);
     const shared = await page.evaluate(() => ({
-      same:
-        window.__split!.viewers[0]!.store.get().document ===
-        window.__split!.viewers[1]!.store.get().document,
+      same: window.__split!.viewers[0]!.session === window.__split!.viewers[1]!.session,
       opens: window.__lifecycle!.stats.opens,
       exported: window.__split!.annotations.map((editing) => editing!.export().length),
     }));
@@ -248,7 +255,7 @@ async function checkSharedEditing(url: string) {
     console.log("PASS a hidden viewer's annotations are saved, and shown again once");
 
     await left.getByRole("button", { name: "Close viewer" }).click();
-    await page.waitForFunction(() => window.__split!.viewers[0]!.store.get().status === "idle");
+    await page.waitForFunction(() => window.__split!.viewers[0]!.session === null);
     assert.equal((await editorIds()).length, 1, "closing a viewer removes only its annotations");
     assert.equal(await savedStamps(1), 1);
     assert.equal(await page.evaluate(() => window.__split!.annotations[1]!.export().length), 1);

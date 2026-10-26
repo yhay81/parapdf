@@ -74,7 +74,7 @@ export function getViewState(viewer: Viewer): ViewState | null {
   const state = viewer.store.get();
   const layout = state.layout;
   const scroller = viewer.scroller;
-  if (state.status !== "ready" || !layout || !scroller) return null;
+  if (!layout || !scroller) return null;
   const { scrollLeft, scrollTop, clientWidth, clientHeight } = scroller;
   // The gap above a row belongs to it: a page shown from its top, as
   // `goToPage()` shows it, is the page of the view, not the one above.

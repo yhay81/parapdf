@@ -2,7 +2,8 @@
  * Functional checks for the options an embedding application sets: pages of
  * mixed sizes centered in the viewport, "fit-width" following the viewport's
  * width and the view's rotation, per-canvas and total canvas pixel limits, one
- * render for the first paint of a small page, and inert external links.
+ * render for the first paint of a small page, inert external links, and
+ * `<PdfViewer>`'s props: live options and controlled view state.
  *
  * Usage: pnpm --filter @parapdf/bench corpus && pnpm --filter @parapdf/prototype build &&
  *   pnpm --filter @parapdf/prototype check:options
@@ -198,8 +199,8 @@ const newPage = async (query: string, width = 1000): Promise<Page> => {
   await page.waitForFunction(
     () =>
       (
-        window as unknown as { __viewer?: { store: { get(): { status: string } } } }
-      ).__viewer?.store.get().status === "ready",
+        window as unknown as { __session?: { state: { get(): { status: string } } } }
+      ).__session?.state.get().status === "ready",
     null,
     { timeout: 30_000 },
   );
@@ -213,8 +214,16 @@ try {
   // Hold the size pass until the reader has moved far down an overestimated
   // document. The real browser must clamp the scroll when its size shrinks.
   const refined = await mixed.evaluate(async () => {
-    const Runtime = (window as unknown as { __viewer: Viewer }).__viewer
-      .constructor as typeof Viewer;
+    const { __viewer, __showWith, __attachViewport } = window as unknown as {
+      __viewer: Viewer;
+      __attachViewport: (viewer: Viewer, scroller: HTMLElement, content: HTMLElement) => () => void;
+      __showWith: (
+        viewer: Viewer,
+        source: { url: string },
+        pdfjs: () => Promise<unknown>,
+      ) => () => void;
+    };
+    const Runtime = __viewer.constructor as new (options: object) => Viewer;
     const results = [];
     for (const scrollMode of ["vertical", "horizontal"] as const) {
       let finishSizes = () => {};
@@ -263,22 +272,26 @@ try {
         iconUrls: null,
         workerLocation: "",
       } as unknown as LoadedPdfjs;
-      const viewer = new Runtime({ initialScale: 1, scrollMode }, async () => pdfjs);
+      const viewer = new Runtime({ initialScale: 1, initialScrollMode: scrollMode });
       const scroller = document.createElement("div");
       scroller.style.cssText =
         "position:fixed;inset:0;width:600px;height:600px;overflow:auto;contain:strict";
       const content = document.createElement("div");
       scroller.append(content);
       document.body.append(scroller);
-      const detach = viewer.attachViewport(scroller, content);
+      const detach = __attachViewport(viewer, scroller, content);
       let finishOpen = () => {};
       const ready = new Promise<void>((resolve) => {
         finishOpen = resolve;
       });
       const unsubscribe = viewer.store.subscribe(() => {
-        if (viewer.store.get().status === "ready") finishOpen();
+        if (viewer.store.get().layout) finishOpen();
       });
-      const close = viewer.open({ url: `/delayed-sizes-${scrollMode}.pdf` });
+      const close = __showWith(
+        viewer,
+        { url: `/delayed-sizes-${scrollMode}.pdf` },
+        async () => pdfjs,
+      );
       await ready;
       unsubscribe();
       try {
@@ -653,6 +666,116 @@ try {
     JSON.stringify(loadingParams),
   );
   await passed.context().close();
+
+  // PdfViewer's props are live, and its view state controlled or not (M6).
+  const live = await newPage("file=bill-hr815.pdf&count=1");
+  type Demo = {
+    __viewer: Viewer;
+    __setViewerProps(props: Record<string, unknown>): void;
+    __lifecycle: { stats: { opens: number } };
+    __reported?: { pages: number[]; rotations: number[] };
+  };
+  const frames = (page: Page) =>
+    page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
+  const viewState = (page: Page) =>
+    page.evaluate(() => {
+      const { __viewer: viewer } = window as unknown as Demo;
+      const state = viewer.store.get();
+      return {
+        rotation: state.rotation,
+        scale: state.scale,
+        zoomMode: state.zoomMode,
+        currentPage: state.currentPage,
+        gap: state.layout?.gap ?? null,
+        textLayers: document.querySelectorAll(".parapdf-text-layer").length,
+      };
+    });
+  await live.evaluate(() => (window as unknown as Demo).__viewer.goToPage(4));
+  await settle(live);
+  const opened = await viewState(live);
+  await live.evaluate(() =>
+    (window as unknown as Demo).__setViewerProps({ textLayer: false, gap: 40 }),
+  );
+  await settle(live);
+  const changedOptions = await viewState(live);
+  check(
+    "changed options apply without reopening the document or losing the page",
+    changedOptions.textLayers === 0 &&
+      changedOptions.gap === 40 &&
+      changedOptions.currentPage === opened.currentPage &&
+      (await live.evaluate(() => (window as unknown as Demo).__lifecycle.stats.opens)) === 1,
+    JSON.stringify({ opened, changedOptions }),
+  );
+  await live.evaluate(() => (window as unknown as Demo).__setViewerProps({ textLayer: true }));
+  await settle(live);
+  check(
+    "turning an option back on builds its layers again",
+    (await viewState(live)).textLayers > 0,
+  );
+  await live.evaluate(() => {
+    const demo = window as unknown as Demo;
+    demo.__reported = { pages: [], rotations: [] };
+    demo.__setViewerProps({
+      rotation: 90,
+      onPageChange: (page: number) => demo.__reported?.pages.push(page),
+      onRotationChange: (rotation: number) => demo.__reported?.rotations.push(rotation),
+    });
+  });
+  await settle(live);
+  const controlled = await viewState(live);
+  await live.evaluate(() => (window as unknown as Demo).__viewer.rotate(90));
+  await frames(live);
+  await settle(live);
+  const notTakenUp = await viewState(live);
+  check(
+    "a controlled rotation shows, and returns after a change the application does not take up",
+    controlled.rotation === 90 && notTakenUp.rotation === 90,
+    JSON.stringify({ controlled: controlled.rotation, after: notTakenUp.rotation }),
+  );
+  await live.evaluate(() => {
+    const demo = window as unknown as Demo;
+    demo.__setViewerProps({
+      onRotationChange: (rotation: number) => {
+        demo.__reported?.rotations.push(rotation);
+        demo.__setViewerProps({ rotation });
+      },
+    });
+  });
+  await frames(live);
+  await live.evaluate(() => (window as unknown as Demo).__viewer.rotate(90));
+  await frames(live);
+  await settle(live);
+  const takenUp = await viewState(live);
+  await live.evaluate(() => (window as unknown as Demo).__viewer.goToPage(9));
+  await settle(live);
+  const reported = await live.evaluate(() => (window as unknown as Demo).__reported);
+  check(
+    "a change the application takes up stays, and the callbacks hear the viewer's changes",
+    takenUp.rotation === 180 &&
+      reported?.rotations.includes(180) === true &&
+      reported.pages.at(-1) === 9,
+    JSON.stringify({ rotation: takenUp.rotation, reported }),
+  );
+  await live.evaluate(() =>
+    (window as unknown as Demo).__setViewerProps({ zoom: 1.5, onZoomChange: undefined }),
+  );
+  await settle(live);
+  const controlledZoom = await viewState(live);
+  await live.evaluate(() => (window as unknown as Demo).__viewer.zoomBy(1.25));
+  await frames(live);
+  await settle(live);
+  const zoomBack = await viewState(live);
+  check(
+    "a controlled zoom shows its scale, and returns to it",
+    controlledZoom.scale === 1.5 && controlledZoom.zoomMode === "custom" && zoomBack.scale === 1.5,
+    JSON.stringify({ controlledZoom, zoomBack }),
+  );
+  await live.context().close();
 
   check("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));
 } finally {

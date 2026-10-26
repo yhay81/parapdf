@@ -1,11 +1,11 @@
-import { usePdfState, usePdfViewer } from "parapdf";
+import { useDocumentState, useSession } from "parapdf";
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "./icons.tsx";
 
 /** A bar along the top of the pages while the document downloads: its share, or a sweep. */
 export function LoadingBar() {
-  const status = usePdfState((state) => state.status);
-  const progress = usePdfState((state) => state.progress);
+  const status = useDocumentState((state) => state.status);
+  const progress = useDocumentState((state) => state.progress);
   if (status !== "loading") return null;
   const share = progress?.total ? Math.min(progress.loaded / progress.total, 1) : null;
   return (
@@ -24,8 +24,8 @@ export function LoadingBar() {
 
 /** Why the document did not open, which the viewport itself does not show, and opening it again. */
 export function ErrorNotice({ onRetry }: { onRetry: () => void }) {
-  const status = usePdfState((state) => state.status);
-  const error = usePdfState((state) => state.error);
+  const status = useDocumentState((state) => state.status);
+  const error = useDocumentState((state) => state.error);
   if (status !== "error") return null;
   return (
     <div className="demo-overlay">
@@ -43,10 +43,10 @@ export function ErrorNotice({ onRetry }: { onRetry: () => void }) {
   );
 }
 
-/** Asks for the password of an encrypted document while the viewer waits for one. */
+/** Asks for the password of an encrypted document while its session waits for one. */
 export function PasswordDialog({ title, hint }: { title: string; hint?: string }) {
-  const viewer = usePdfViewer();
-  const reason = usePdfState((state) => state.passwordReason);
+  const session = useSession();
+  const reason = useDocumentState((state) => state.passwordReason);
   const [password, setPassword] = useState("");
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -62,7 +62,7 @@ export function PasswordDialog({ title, hint }: { title: string; hint?: string }
         aria-describedby="demo-password-about"
         onSubmit={(event) => {
           event.preventDefault();
-          viewer.submitPassword(password);
+          session.submitPassword(password);
           setPassword("");
         }}
       >
@@ -96,7 +96,7 @@ export function PasswordDialog({ title, hint }: { title: string; hint?: string }
           <button
             type="button"
             className="demo-secondary"
-            onClick={() => viewer.submitPassword(null)}
+            onClick={() => session.submitPassword(null)}
           >
             Cancel
           </button>
