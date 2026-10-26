@@ -3,23 +3,30 @@ import {
   download,
   historyOf,
   PdfDocument,
-  type PdfDocumentOptions,
   type PdfjsDocumentOptions,
   type PdfPageMode,
   PdfPageRect,
   type PdfSource,
-  PdfViewport,
+  PdfViewer,
+  type Viewer as PdfViewerController,
+  type PdfViewerProps,
   print,
   type ScrollMode,
   type SpreadMode,
   searchOf,
-  usePdfAnnotationEditing,
-  usePdfDocument,
-  usePdfFormChange,
-  usePdfNavigation,
-  usePdfOutline,
-  usePdfState,
-  usePdfViewer,
+  useAnnotationEditing,
+  useAttachments,
+  useDocumentState,
+  useFormChange,
+  useHistory,
+  useInitialView,
+  useLayers,
+  useMetadata,
+  useOutline,
+  usePageLabels,
+  useSession,
+  useViewer,
+  useViewState,
 } from "parapdf";
 import {
   lazy,
@@ -33,6 +40,7 @@ import {
 import { AnnotationToolbar } from "./AnnotationToolbar.tsx";
 import { BenchDriver } from "./BenchDriver.tsx";
 import { configureEngine, type Pdfjs } from "./engines.ts";
+import { showWith } from "./internals.ts";
 import { PasswordPrompt } from "./PasswordPrompt.tsx";
 import { SearchBox } from "./SearchBox.tsx";
 import { Sidebar, type SidebarView } from "./Sidebar.tsx";
@@ -47,7 +55,7 @@ const settings = {
   /** "disabled" leaves links to other documents inert. */
   externalLinks: (params.get("externalLinks") === "disabled"
     ? "disabled"
-    : "new-tab") as PdfDocumentOptions["externalLinks"],
+    : "new-tab") as PdfViewerProps["externalLinks"],
   /** Scripted scroll speed in CSS pixels per second; 0 disables the benchmark driver. */
   autoscroll: Number(params.get("autoscroll") ?? "0"),
   durationMs: Number(params.get("duration") ?? "4000"),
@@ -80,19 +88,19 @@ const settings = {
    */
   initialView: (params.get("view") === "document"
     ? "document"
-    : "options") as PdfDocumentOptions["initialView"],
+    : "options") as PdfViewerProps["initialView"],
   /** "0" keeps the zoom when following links and the outline. */
   destinationZoom: params.get("destinationZoom") !== "0",
   /** "1" follows what the document permits. */
   enforcePermissions: params.get("permissions") === "1",
   /** A view kept from `getViewState()`, as JSON, to open with. */
   viewState: params.has("viewState")
-    ? (JSON.parse(params.get("viewState") ?? "{}") as PdfDocumentOptions["initialViewState"])
+    ? (JSON.parse(params.get("viewState") ?? "{}") as PdfViewerProps["initialViewState"])
     : undefined,
   /** The one-based page shown first. */
   initialPage: Number(params.get("page") ?? "1") - 1,
   /** A scale in CSS pixels per point, "fit-width", or "fit-page". */
-  initialScale: ((value): PdfDocumentOptions["initialScale"] =>
+  initialScale: ((value): PdfViewerProps["defaultZoom"] =>
     value === "fit-page" || value === "fit-width" ? value : value ? Number(value) : undefined)(
     params.get("scale"),
   ),
@@ -102,7 +110,7 @@ const settings = {
   documentOptions: params.has("documentOptions")
     ? (JSON.parse(params.get("documentOptions") ?? "{}") as PdfjsDocumentOptions)
     : undefined,
-  /** Canvas pixel limits (ViewerOptions); the runtime's defaults when absent. */
+  /** Canvas pixel limits (PdfViewer's props); the runtime's defaults when absent. */
   canvasLimits: Object.fromEntries(
     [
       "maxDetailPixels",
@@ -112,7 +120,7 @@ const settings = {
       "maxKeptPixels",
     ].flatMap((name) => (params.has(name) ? [[name, Number(params.get(name))]] : [])),
   ) as Pick<
-    PdfDocumentOptions,
+    PdfViewerProps,
     "maxDetailPixels" | "maxDetailViewports" | "maxBasePixels" | "maxCanvasPixels" | "maxKeptPixels"
   >,
 };
@@ -183,26 +191,25 @@ let bytes: Uint8Array | null = null;
 void bytesPromise.then((loaded) => {
   bytes = loaded;
 });
-const viewerOptions: PdfDocumentOptions = {
+const viewerProps: PdfViewerProps = {
   textLayer: settings.text,
   annotationLayer: settings.links,
   externalLinks: settings.externalLinks,
   forms: settings.forms,
   annotationEditing: settings.annotations,
-  passwordPrompt: settings.passwordPrompt,
   // With the document's initial view, only the arrangement asked for wins over it.
   ...(settings.initialView === "options" || params.has("spread")
-    ? { spread: settings.spread }
+    ? { defaultSpread: settings.spread }
     : {}),
   ...(settings.initialView === "options" || params.has("scroll")
-    ? { scrollMode: settings.scrollMode }
+    ? { defaultScrollMode: settings.scrollMode }
     : {}),
   initialView: settings.initialView,
   destinationZoom: settings.destinationZoom,
   enforcePermissions: settings.enforcePermissions,
   ...(settings.viewState ? { initialViewState: settings.viewState } : {}),
-  ...(settings.initialPage > 0 ? { initialPage: settings.initialPage } : {}),
-  ...(settings.initialScale !== undefined ? { initialScale: settings.initialScale } : {}),
+  ...(settings.initialPage > 0 ? { defaultPage: settings.initialPage } : {}),
+  ...(settings.initialScale !== undefined ? { defaultZoom: settings.initialScale } : {}),
   ...(settings.maxScale ? { maxScale: settings.maxScale } : {}),
   ...settings.canvasLimits,
 };
@@ -223,7 +230,6 @@ const benchLabel = {
 const renderOverlay = (pageIndex: number) =>
   pageIndex === 0 ? (
     <PdfPageRect
-      pageIndex={0}
       x={72}
       y={36}
       width={220}
@@ -253,7 +259,11 @@ export function App() {
   return (
     <Suspense fallback={<div className="status">Loading…</div>}>
       {params.get("split") === "1" ? (
-        <SplitView source={{ url }} options={viewerOptions} />
+        <SplitView
+          source={{ url }}
+          passwordPrompt={settings.passwordPrompt}
+          viewerProps={viewerProps}
+        />
       ) : mounted ? (
         <Viewer key={generation} renders={renders} />
       ) : null}
@@ -266,24 +276,34 @@ function Viewer(_props: { renders: number }) {
   // Only a data source waits for its bytes: suspending for a URL would delay
   // PdfDocument's render, which starts loading pdf.js and the PDF.
   const data = settings.source === "data" ? use(bytesPromise) : null;
+  const viewer = useViewer();
   const [sidebar, setSidebar] = useState<SidebarView | null>(null);
+  // Props a check sets on the viewer while it shows the document.
+  const [changed, setChanged] = useState<Partial<PdfViewerProps>>({});
+  useEffect(() => {
+    window.__setViewerProps = (props) => setChanged((previous) => ({ ...previous, ...props }));
+  }, []);
   // A new object at every render: the document stays open while its URL or
   // its bytes stay the same.
   const password = settings.password !== null ? { password: settings.password } : {};
   const source: PdfSource = data ? { data, ...password } : { url, ...password };
   return (
     <Profiler id="viewer" onRender={countCommit}>
-      <PdfDocument source={source} options={viewerOptions}>
+      <PdfDocument source={source} passwordPrompt={settings.passwordPrompt}>
         <Toolbar
+          viewer={viewer}
           sidebar={sidebar}
           onToggleSidebar={(view) => setSidebar((open) => (open === view ? null : view))}
           onOpenSidebar={setSidebar}
         />
-        <Probes />
-        {settings.annotations ? <AnnotationToolbar file={settings.file} /> : null}
+        <Probes viewer={viewer} />
+        {settings.annotations ? <AnnotationToolbar viewer={viewer} file={settings.file} /> : null}
         <PasswordPrompt />
-        {sidebar ? <Sidebar view={sidebar} id="sidebar" /> : null}
-        <PdfViewport
+        {sidebar ? <Sidebar viewer={viewer} view={sidebar} id="sidebar" /> : null}
+        <PdfViewer
+          {...viewerProps}
+          {...changed}
+          viewer={viewer}
           className={[
             "viewport",
             sidebar ? "with-sidebar" : "",
@@ -296,6 +316,7 @@ function Viewer(_props: { renders: number }) {
         />
         {settings.autoscroll > 0 ? (
           <BenchDriver
+            viewer={viewer}
             speed={settings.autoscroll}
             durationMs={settings.durationMs}
             idle={settings.idle}
@@ -312,6 +333,8 @@ declare global {
   interface Window {
     /** The viewer and its features, for the Playwright checks; not part of the library surface. */
     __viewer?: parapdf.Viewer;
+    /** The session of the viewer's document, whose state the checks read. */
+    __session?: parapdf.PdfSession;
     /** The package's functions, which take the viewer. */
     __parapdf?: typeof parapdf;
     __search?: parapdf.Search;
@@ -319,23 +342,32 @@ declare global {
     __annotations?: parapdf.AnnotationEditing | null;
     /** The escape hatch: pdf.js's own PDFDocumentProxy, for check-rotation.ts. */
     __pdfDocument?: unknown;
-    /** Hears what the reader enters into form fields (`usePdfFormChange()`), for check-document.ts. */
+    /** Hears what the reader enters into form fields (`useFormChange()`), for check-document.ts. */
     __onFormChange?: (change: parapdf.FormChange) => void;
+    /** Shows a document opened with a pdf.js of the check's own, for check-options.ts. */
+    __showWith?: typeof showWith;
+    /** Changes props of the viewer's `<PdfViewer>`, which are live, for check-options.ts. */
+    __setViewerProps?: (props: Partial<PdfViewerProps>) => void;
   }
 }
 
 // The package's functions, for the checks, in the split view too.
 window.__parapdf = parapdf;
+window.__showWith = showWith;
 
 /** Exposes the viewer and its features to the checks: the same the toolbars use. */
-function Probes() {
-  const viewer = usePdfViewer();
+function Probes({ viewer }: { viewer: PdfViewerController }) {
+  const session = useSession();
   window.__viewer = viewer;
+  window.__session = session;
   window.__search = searchOf(viewer);
   window.__history = historyOf(viewer);
-  window.__annotations = usePdfAnnotationEditing();
-  window.__pdfDocument = usePdfDocument() ?? undefined;
-  usePdfFormChange((change) => window.__onFormChange?.(change));
+  window.__annotations = useAnnotationEditing(viewer);
+  // pdf.js's document once ready.
+  window.__pdfDocument = useDocumentState((state) => state.status === "ready" && session.proxy)
+    ? (session.proxy ?? undefined)
+    : undefined;
+  useFormChange(viewer, (change) => window.__onFormChange?.(change));
   return null;
 }
 
@@ -348,20 +380,17 @@ const PAGE_MODE_PANELS: Partial<Record<PdfPageMode, SidebarView>> = {
 };
 
 function Toolbar({
+  viewer,
   sidebar,
   onToggleSidebar,
   onOpenSidebar,
 }: {
+  viewer: PdfViewerController;
   sidebar: SidebarView | null;
   onToggleSidebar: (view: SidebarView) => void;
   onOpenSidebar: (view: SidebarView) => void;
 }) {
-  const viewer = usePdfViewer();
-  const navigation = usePdfNavigation();
-  const outline = usePdfOutline();
-  const hasOutline = outline !== null && outline.length > 0;
-  const hasLayers = usePdfState((state) => (state.layers?.length ?? 0) > 0);
-  const hasAttachments = usePdfState((state) => (state.attachments?.length ?? 0) > 0);
+  const navigation = useHistory(viewer);
   const { back, forward } = navigation;
 
   // Alt+Left returns from a link jump and Alt+Right goes forward again, as
@@ -377,60 +406,54 @@ function Toolbar({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [back, forward]);
-  // The panel the document asks for, once, as it opens.
-  const pageMode = usePdfState((state) => state.documentView?.pageMode ?? null);
-  const askedPanel =
-    settings.initialView === "document" && pageMode ? PAGE_MODE_PANELS[pageMode] : undefined;
-  useEffect(() => {
-    if (askedPanel) onOpenSidebar(askedPanel);
-  }, [askedPanel, onOpenSidebar]);
-  const status = usePdfState((state) => state.status);
-  const error = usePdfState((state) => state.error);
-  const progress = usePdfState((state) => state.progress);
-  const page = usePdfState((state) => state.currentPage);
-  const pageCount = usePdfState((state) => state.pageCount);
-  const label = usePdfState((state) => state.pageLabels?.[state.currentPage] ?? null);
-  const title = usePdfState((state) => state.metadata?.title ?? null);
-  const scale = usePdfState((state) => state.scale);
-  const zoomMode = usePdfState((state) => state.zoomMode);
-  const spread = usePdfState((state) => state.spread);
-  const scrollMode = usePdfState((state) => state.scrollMode);
-  const tool = usePdfState((state) => state.tool);
-  const canPrint = usePdfState((state) => state.permissions?.print ?? true);
-  const sidebarButton = (view: SidebarView, text: string) => (
-    <button
-      type="button"
-      aria-expanded={sidebar === view}
-      aria-controls={sidebar === view ? "sidebar" : undefined}
-      onClick={() => onToggleSidebar(view)}
-    >
-      {text}
-    </button>
+  const status = useDocumentState((state) => state.status);
+  const error = useDocumentState((state) => state.error);
+  // Progress only while it loads: pdf.js may fetch the rest in the background after.
+  const progress = useDocumentState((state) =>
+    state.status === "loading" ? state.progress : null,
   );
+  const pageCount = useDocumentState((state) => state.pageCount);
+  const canPrint = useDocumentState((state) => state.permissions?.print ?? true);
+  const page = useViewState(viewer, (state) => state.currentPage);
+  const scale = useViewState(viewer, (state) => state.scale);
+  const zoomMode = useViewState(viewer, (state) => state.zoomMode);
+  const spread = useViewState(viewer, (state) => state.spread);
+  const scrollMode = useViewState(viewer, (state) => state.scrollMode);
+  const tool = useViewState(viewer, (state) => state.tool);
+  const pageNumbers = `${page + 1} / ${pageCount}`;
   const pageText =
     status === "ready"
-      ? `${label ?? page + 1} (${page + 1} / ${pageCount})`
+      ? pageNumbers
       : status === "loading" && progress
         ? `Loading ${Math.round(progress.loaded / 1024)} KiB${progress.total ? ` of ${Math.round(progress.total / 1024)}` : ""}`
         : (error ?? status);
   return (
     <header className="toolbar">
-      {hasOutline ? sidebarButton("outline", "Outline") : null}
-      {sidebarButton("thumbnails", "Thumbnails")}
-      {hasLayers ? sidebarButton("layers", "Layers") : null}
-      {hasAttachments ? sidebarButton("attachments", "Attachments") : null}
+      {/* The document's data loads apart from the pages, which never wait for it. */}
+      <Suspense fallback={null}>
+        <PanelButtons sidebar={sidebar} onToggleSidebar={onToggleSidebar} />
+        {settings.initialView === "document" ? <AskedPanel onOpenSidebar={onOpenSidebar} /> : null}
+      </Suspense>
       <button type="button" onClick={back} disabled={!navigation.canGoBack}>
         Back
       </button>
       <button type="button" onClick={forward} disabled={!navigation.canGoForward}>
         Forward
       </button>
-      <strong title={title ?? undefined}>ParaPDF prototype</strong>
+      <Suspense fallback={<strong>ParaPDF prototype</strong>}>
+        <Title />
+      </Suspense>
       <span className="engine">{settings.engine}</span>
       <button type="button" onClick={() => viewer.previousPage()} aria-label="Previous page">
         ‹
       </button>
-      <span>{pageText}</span>
+      {status === "ready" ? (
+        <Suspense fallback={<span>{pageText}</span>}>
+          <PageText page={page} numbers={pageNumbers} />
+        </Suspense>
+      ) : (
+        <span>{pageText}</span>
+      )}
       <button type="button" onClick={() => viewer.nextPage()} aria-label="Next page">
         ›
       </button>
@@ -498,7 +521,60 @@ function Toolbar({
       <button type="button" onClick={() => void download(viewer)} disabled={status !== "ready"}>
         Download
       </button>
-      {viewer.textLayer ? <SearchBox /> : null}
+      {settings.text ? <SearchBox viewer={viewer} /> : null}
     </header>
   );
+}
+
+/** The buttons of the panels the document has something to show in. */
+function PanelButtons({
+  sidebar,
+  onToggleSidebar,
+}: {
+  sidebar: SidebarView | null;
+  onToggleSidebar: (view: SidebarView) => void;
+}) {
+  const hasOutline = useOutline().length > 0;
+  const hasLayers = useLayers().length > 0;
+  const hasAttachments = useAttachments().length > 0;
+  const sidebarButton = (view: SidebarView, text: string) => (
+    <button
+      type="button"
+      aria-expanded={sidebar === view}
+      aria-controls={sidebar === view ? "sidebar" : undefined}
+      onClick={() => onToggleSidebar(view)}
+    >
+      {text}
+    </button>
+  );
+  return (
+    <>
+      {hasOutline ? sidebarButton("outline", "Outline") : null}
+      {sidebarButton("thumbnails", "Thumbnails")}
+      {hasLayers ? sidebarButton("layers", "Layers") : null}
+      {hasAttachments ? sidebarButton("attachments", "Attachments") : null}
+    </>
+  );
+}
+
+/** Opens the panel the document asks for, once, as it opens. */
+function AskedPanel({ onOpenSidebar }: { onOpenSidebar: (view: SidebarView) => void }) {
+  const pageMode = useInitialView()?.pageMode ?? null;
+  const asked = pageMode ? PAGE_MODE_PANELS[pageMode] : undefined;
+  useEffect(() => {
+    if (asked) onOpenSidebar(asked);
+  }, [asked, onOpenSidebar]);
+  return null;
+}
+
+/** The demo's name, titled with the document's own. */
+function Title() {
+  const title = useMetadata()?.title ?? null;
+  return <strong title={title ?? undefined}>ParaPDF prototype</strong>;
+}
+
+/** The current page's label, and its number of the pages. */
+function PageText({ page, numbers }: { page: number; numbers: string }) {
+  const label = usePageLabels()?.[page] ?? null;
+  return <span>{`${label ?? page + 1} (${numbers})`}</span>;
 }

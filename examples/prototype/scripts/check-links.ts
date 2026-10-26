@@ -188,23 +188,16 @@ try {
   await rotated.goto(`${baseUrl}?engine=${engine}&file=rotated-destinations.pdf`);
   await rotated.waitForFunction(
     () =>
-      (window as { __viewer?: { store: { get(): { status: string } } } }).__viewer?.store.get()
+      (window as { __session?: { state: { get(): { status: string } } } }).__session?.state.get()
         .status === "ready",
   );
   const destinations = await rotated.evaluate(async () => {
+    // The loaded session, which resolves destinations for the viewer.
     const doc = (
       window as {
-        __viewer?: {
-          store: {
-            get(): {
-              document: {
-                resolveDestination(dest: unknown): Promise<unknown>;
-              };
-            };
-          };
-        };
+        __viewer?: { session: { resolveDestination(dest: unknown): Promise<unknown> } | null };
       }
-    ).__viewer?.store.get().document;
+    ).__viewer?.session;
     // A FitR rectangle, 120–400 by 100–300, gives its top-left corner as the page shows.
     const expected = [
       {

@@ -117,7 +117,7 @@ async function runScenario(scenario: string): Promise<InPageResult> {
     store: {
       get(): {
         layout: { tops: Float64Array } | null;
-        pageCount: number;
+        pageCount?: number;
         currentPage: number;
       };
     };
@@ -204,7 +204,8 @@ async function runScenario(scenario: string): Promise<InPageResult> {
   if (scenario === "flip-back") viewer.setScrollMode("page");
   viewer.goToPage(0);
   await settle();
-  const pageCount = viewer.store.get().pageCount;
+  // The viewer's state has the page count in builds before M6.
+  const pageCount = viewer.store.get().pageCount ?? viewer.store.get().layout?.tops.length ?? 0;
   if (scenario === "jump-back") {
     viewer.goToPage(Math.min(12, pageCount - 1));
     await settle();
@@ -367,10 +368,15 @@ async function measure(
     const query = new URLSearchParams({ engine, file: job.file, ...job.variant.query });
     await page.goto(`${baseUrl}?${query}`);
     await page.waitForFunction(
-      () =>
-        (
-          window as unknown as { __viewer?: { store: { get(): { status: string } } } }
-        ).__viewer?.store.get().status === "ready",
+      () => {
+        const demo = window as unknown as {
+          __session?: { state: { get(): { status: string } } };
+          __viewer?: { store: { get(): { status?: string } } };
+        };
+        // The session publishes the status; in builds before M6, the viewer.
+        const status = demo.__session?.state.get().status ?? demo.__viewer?.store.get().status;
+        return status === "ready";
+      },
       null,
       { timeout: 30_000 },
     );

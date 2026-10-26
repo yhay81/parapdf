@@ -462,10 +462,15 @@ async function measure(
       `${url}?engine=${engine}&file=${file}${query && query !== BEFORE ? `&${query}` : ""}`,
     );
     await page.waitForFunction(
-      () =>
-        (
-          window as unknown as { __viewer?: { store: { get(): { status: string } } } }
-        ).__viewer?.store.get().status === "ready",
+      () => {
+        const demo = window as unknown as {
+          __session?: { state: { get(): { status: string } } };
+          __viewer?: { store: { get(): { status?: string } } };
+        };
+        // The session publishes the status; in builds before M6, the viewer.
+        const status = demo.__session?.state.get().status ?? demo.__viewer?.store.get().status;
+        return status === "ready";
+      },
       null,
       { timeout: 30_000 },
     );

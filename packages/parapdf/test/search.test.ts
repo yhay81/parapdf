@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it, mock } from "node:test";
 import { attachSearch, searchOf } from "../src/features/search/index.ts";
 import { Viewer } from "../src/view/viewer.ts";
-import { fakeDocument, fakePdfjs, LETTER, settle } from "./fake-pdfjs.ts";
+import { fakeDocument, fakePdfjs, LETTER, settle, show } from "./fake-pdfjs.ts";
 
 describe("the search feature", () => {
   const cancelFrame = Object.getOwnPropertyDescriptor(globalThis, "cancelAnimationFrame");
@@ -32,8 +32,8 @@ describe("the search feature", () => {
       texts: [[{ str: "a rose" }], [{ str: "tulip" }], [{ str: "Rose and rose" }]],
     });
     const { loader } = fakePdfjs(async () => document.proxy);
-    const viewers = [new Viewer({}, loader), new Viewer({}, loader)] as const;
-    for (const viewer of viewers) close.push(viewer.open({ url: "/a.pdf" }));
+    const viewers = [new Viewer(), new Viewer()] as const;
+    for (const viewer of viewers) close.push(show(viewer, { url: "/a.pdf" }, loader).close);
     await settle();
     return { viewers, textsRead: document.textsRead };
   }

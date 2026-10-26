@@ -1,10 +1,10 @@
-import { usePdfState, usePdfViewer } from "parapdf";
+import { useDocumentState, useSession } from "parapdf";
 import { useState } from "react";
 
-/** Asks for the password of an encrypted document while the viewer waits for one. */
+/** Asks for the password of an encrypted document while its session waits for one. */
 export function PasswordPrompt() {
-  const viewer = usePdfViewer();
-  const reason = usePdfState((state) => state.passwordReason);
+  const session = useSession();
+  const reason = useDocumentState((state) => state.passwordReason);
   const [password, setPassword] = useState("");
   if (reason === null) return null;
   return (
@@ -13,7 +13,7 @@ export function PasswordPrompt() {
       aria-label="Password"
       onSubmit={(event) => {
         event.preventDefault();
-        viewer.submitPassword(password);
+        session.submitPassword(password);
         setPassword("");
       }}
     >
@@ -30,7 +30,7 @@ export function PasswordPrompt() {
         />
       </label>
       <button type="submit">Open</button>
-      <button type="button" onClick={() => viewer.submitPassword(null)}>
+      <button type="button" onClick={() => session.submitPassword(null)}>
         Cancel
       </button>
     </form>

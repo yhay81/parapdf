@@ -4,7 +4,7 @@ import type { PdfInitialView } from "../src/document/session.ts";
 import { initialViewOpening, openingOf } from "../src/features/initial-view.ts";
 import { toShownView } from "../src/features/view-state.ts";
 import { Viewer } from "../src/view/viewer.ts";
-import { fakeDocument, fakePdfjs, LETTER, settle } from "./fake-pdfjs.ts";
+import { fakeDocument, fakePdfjs, LETTER, settle, show } from "./fake-pdfjs.ts";
 
 const destination = { pageIndex: 2, x: 0, y: 300, view: { fit: "zoom" as const, zoom: 2 } };
 const asked = (view: Partial<PdfInitialView> = {}): PdfInitialView => ({
@@ -75,7 +75,7 @@ describe("the opening", () => {
 
   it("lets the options the application set win", () => {
     assert.deepEqual(
-      openingOf(asked(), 5, { initialView: "document", spread: "none", initialPage: 1 }),
+      openingOf(asked(), 5, { initialView: "document", initialSpread: "none", initialPage: 1 }),
       { scrollMode: "page" },
     );
     const { view: _, ...point } = destination;
@@ -133,11 +133,11 @@ describe("a viewer's opening", () => {
       proxy: { getPageLayout: async () => "TwoColumnRight" },
     });
     const opening = initialViewOpening({ initialView: "document" });
-    const viewer = new Viewer({ opening }, fakePdfjs(async () => document.proxy).loader);
-    close.push(viewer.open({ url: "/a.pdf" }));
+    const viewer = new Viewer({ opening });
+    close.push(show(viewer, { url: "/a.pdf" }, fakePdfjs(async () => document.proxy).loader).close);
     await settle();
     const state = viewer.store.get();
-    assert.equal(state.status, "ready");
+    assert.ok(state.layout);
     assert.equal(state.spread, "even");
     assert.equal(state.scrollMode, "vertical");
     assert.equal(state.layout?.spread, "even");

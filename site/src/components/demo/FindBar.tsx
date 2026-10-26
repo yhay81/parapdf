@@ -1,6 +1,7 @@
-import { type SearchOptions, searchOf, usePdfSearch, usePdfState, usePdfViewer } from "parapdf";
+import { type SearchOptions, searchOf, useDocumentState, useSearch } from "parapdf";
 import { useEffect, useRef, useState } from "react";
 import { Icon, IconButton } from "./icons.tsx";
+import { useDemoViewer } from "./viewer.ts";
 
 const OPTIONS = [
   ["caseSensitive", "Match case"],
@@ -14,9 +15,9 @@ const OPTIONS = [
  * matches, and Escape closes it, which clears the highlights.
  */
 export function FindBar({ onClose }: { onClose: () => void }) {
-  const viewer = usePdfViewer();
-  const search = usePdfSearch();
-  const pageCount = usePdfState((state) => state.pageCount);
+  const viewer = useDemoViewer();
+  const search = useSearch(viewer);
+  const pageCount = useDocumentState((state) => state.pageCount);
   const [value, setValue] = useState("");
   const [options, setOptions] = useState<SearchOptions>({});
   const input = useRef<HTMLInputElement>(null);

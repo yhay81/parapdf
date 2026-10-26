@@ -1,10 +1,4 @@
-import {
-  type AnnotationTool,
-  getText,
-  usePdfAnnotations,
-  usePdfState,
-  usePdfViewer,
-} from "parapdf";
+import { type AnnotationTool, getText, useAnnotations, useViewState, type Viewer } from "parapdf";
 import { useRef, useState } from "react";
 
 const TOOLS: [AnnotationTool, string][] = [
@@ -25,13 +19,12 @@ const storageKey = (file: string) => `parapdf-annotations:${file}`;
  * keeping annotations in localStorage and restoring them, and copying the
  * whole document's text.
  */
-export function AnnotationToolbar({ file }: { file: string }) {
-  const viewer = usePdfViewer();
-  const annotations = usePdfAnnotations();
+export function AnnotationToolbar({ viewer, file }: { viewer: Viewer; file: string }) {
+  const annotations = useAnnotations(viewer);
   const tool = annotations?.tool ?? "none";
   const editing = annotations?.state ?? null;
   const styles = annotations?.styles ?? null;
-  const ready = usePdfState((state) => state.status === "ready") && editing !== null;
+  const ready = useViewState(viewer, (state) => state.layout !== null) && editing !== null;
   const imageRef = useRef<HTMLInputElement>(null);
   const [message, setMessage] = useState("");
 

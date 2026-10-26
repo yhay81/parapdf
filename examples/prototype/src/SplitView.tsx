@@ -1,14 +1,15 @@
 import {
   type AnnotationEditing,
   PdfDocument,
-  type PdfDocumentOptions,
   type PdfSource,
-  PdfViewport,
+  PdfViewer,
+  type PdfViewerProps,
   type Search,
   searchOf,
-  usePdfAnnotationEditing,
-  usePdfState,
-  usePdfViewer,
+  useAnnotationEditing,
+  useDocumentState,
+  useViewer,
+  useViewState,
   type Viewer,
 } from "parapdf";
 import { useEffect, useState } from "react";
@@ -23,64 +24,75 @@ declare global {
   }
 }
 
-/** Separate providers share the session until M6 changes their React API. */
+const probes = () => {
+  window.__split ??= { viewers: [null, null], searches: [null, null], annotations: [null, null] };
+  return window.__split;
+};
+
+/** Two viewers of one document under one provider, each closed or hidden on its own. */
 export default function SplitView({
   source,
-  options,
+  passwordPrompt,
+  viewerProps,
 }: {
   source: PdfSource;
-  options: PdfDocumentOptions;
+  passwordPrompt: boolean;
+  viewerProps: PdfViewerProps;
 }) {
+  const [open, setOpen] = useState(true);
   const [mounted, setMounted] = useState([true, true]);
   return (
-    <main style={{ display: "flex", height: "100dvh", gap: 12 }}>
-      {mounted.map((show, index) => (
-        <div
-          key={index === 0 ? "left" : "right"}
-          data-viewer={index}
-          style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}
-        >
-          <button
-            type="button"
-            onClick={() =>
-              setMounted((values) => values.map((value, i) => (i === index ? !value : value)))
-            }
-          >
-            {show ? "Close viewer" : "Open viewer"}
-          </button>
-          {show ? (
-            <PdfDocument source={source} options={options}>
-              <Pane index={index} />
-            </PdfDocument>
-          ) : null}
-        </div>
-      ))}
+    <main style={{ display: "flex", flexDirection: "column", height: "100dvh" }}>
+      <button type="button" onClick={() => setOpen((value) => !value)}>
+        {open ? "Close document" : "Open document"}
+      </button>
+      {open ? (
+        <PdfDocument source={source} passwordPrompt={passwordPrompt}>
+          <div style={{ display: "flex", flex: 1, minHeight: 0, gap: 12 }}>
+            {mounted.map((show, index) => (
+              <div
+                key={index === 0 ? "left" : "right"}
+                data-viewer={index}
+                style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}
+              >
+                <button
+                  type="button"
+                  onClick={() =>
+                    setMounted((values) => values.map((value, i) => (i === index ? !value : value)))
+                  }
+                >
+                  {show ? "Close viewer" : "Open viewer"}
+                </button>
+                {show ? <Pane index={index} viewerProps={viewerProps} /> : null}
+              </div>
+            ))}
+          </div>
+        </PdfDocument>
+      ) : null}
     </main>
   );
 }
 
-function Pane({ index }: { index: number }) {
-  const viewer = usePdfViewer();
-  const page = usePdfState((state) => state.currentPage);
-  const scale = usePdfState((state) => state.scale);
-  const status = usePdfState((state) => state.status);
+function Pane({ index, viewerProps }: { index: number; viewerProps: PdfViewerProps }) {
+  const viewer = useViewer();
+  const page = useViewState(viewer, (state) => state.currentPage);
+  const scale = useViewState(viewer, (state) => state.scale);
+  const shown = useViewState(viewer, (state) => state.layout !== null);
+  const status = useDocumentState((state) => state.status);
   const [visible, setVisible] = useState(true);
-  const annotations = usePdfAnnotationEditing();
-  window.__split ??= { viewers: [null, null], searches: [null, null], annotations: [null, null] };
-  // For the checks.
-  window.__split.searches[index] = searchOf(viewer);
-  window.__split.annotations[index] = annotations;
+  const annotations = useAnnotationEditing(viewer);
+  // For the checks; a closed pane's viewer stays for the lifecycle probe.
+  probes().searches[index] = searchOf(viewer);
+  probes().annotations[index] = annotations;
   useEffect(() => {
-    window.__split ??= { viewers: [null, null], searches: [null, null], annotations: [null, null] };
-    window.__split.viewers[index] = viewer;
-    // Keep the closed instance available to the lifecycle probe.
+    probes().viewers[index] = viewer;
   }, [index, viewer]);
   return (
     <>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: 6 }}>
         <strong>{index === 0 ? "Left view" : "Right view"}</strong>
         <span aria-live="polite">
-          {status === "ready" ? `Page ${page + 1}, ${Math.round(scale * 75)}%` : status}
+          {shown ? `Page ${page + 1}, ${Math.round(scale * 75)}%` : status}
         </span>
         <button type="button" onClick={() => viewer.previousPage()}>
           Previous
@@ -102,7 +114,9 @@ function Pane({ index }: { index: number }) {
         </button>
       </div>
       {visible ? (
-        <PdfViewport
+        <PdfViewer
+          {...viewerProps}
+          viewer={viewer}
           label={index === 0 ? "Left PDF" : "Right PDF"}
           style={{ flex: 1, minHeight: 0 }}
         />

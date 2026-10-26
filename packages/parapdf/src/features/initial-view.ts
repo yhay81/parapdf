@@ -7,16 +7,17 @@ export interface InitialViewOptions {
   /**
    * "document" opens the document as it asks to be opened: at its
    * /OpenAction destination, with its zoom, and with its pages arranged
-   * as its /PageLayout says, in spreads or one page at a time. Options the
-   * application sets (`initialPage`, `initialScale`, `spread`,
-   * `scrollMode`) win. The default, "options", follows the options alone.
+   * as its /PageLayout says, in spreads or one page at a time. What the
+   * application sets wins: `defaultPage`, the zoom, the spread, and the
+   * scroll mode, controlled or by default. The default, "options", follows
+   * the application alone.
    */
   initialView?: "options" | "document";
   /**
    * The view to open with, kept from `getViewState()`, such as the reader's
-   * last position or one shared in a URL. Its fields win over `initialPage`,
-   * `initialScale`, `spread`, `scrollMode`, and `initialView`; those it
-   * leaves out still apply.
+   * last position or one shared in a URL. Its fields win over the page, the
+   * zoom, the spread, and the scroll mode the application sets, and over
+   * `initialView`; those it leaves out still apply.
    */
   initialViewState?: Partial<ViewState>;
 }
@@ -31,7 +32,10 @@ const PAGE_LAYOUTS: Record<PdfPageLayout, { spread: SpreadMode; scrollMode: Scro
   TwoPageRight: { spread: "even", scrollMode: "page" },
 };
 
-type Explicit = Pick<ViewerOptions, "initialPage" | "initialScale" | "spread" | "scrollMode">;
+type Explicit = Pick<
+  ViewerOptions,
+  "initialPage" | "initialScale" | "initialSpread" | "initialScrollMode"
+>;
 
 /**
  * How a document of `pageCount` pages that asks to open as `view` opens:
@@ -53,8 +57,8 @@ export function openingOf(
     // layout of the document the viewer showed before.
     const arrangement =
       (asked.pageLayout ? PAGE_LAYOUTS[asked.pageLayout] : null) ?? PAGE_LAYOUTS.OneColumn;
-    if (options.spread === undefined) opening.spread = arrangement.spread;
-    if (options.scrollMode === undefined) opening.scrollMode = arrangement.scrollMode;
+    if (options.initialSpread === undefined) opening.spread = arrangement.spread;
+    if (options.initialScrollMode === undefined) opening.scrollMode = arrangement.scrollMode;
     const destination = asked.destination;
     if (
       options.initialPage === undefined &&

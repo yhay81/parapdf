@@ -27,7 +27,7 @@ the code that follows it.
 ## Status
 
 The rebuild runs milestone by milestone on `main`
-(`docs/rebuild/milestones.md`); M0 to M5 are done; M6 is next (#41).
+(`docs/rebuild/milestones.md`); M0 to M6 are done; M7 is next.
 0.x was
 published on npm as `parapdf` 0.1.0 to 0.4.0, from the tags `v0.1.0` to
 `v0.4.0`. The package's README, the documentation site, the root
@@ -94,13 +94,15 @@ rewrites them (decision 0002).
 
 ## Repository layout
 
-As of M5; `target.md` describes where the runtime's code goes.
+As of M6; `target.md` describes where the runtime's code goes.
 
 - `packages/parapdf/` — the runtime, published as `parapdf`: the loader
   that starts pdf.js with the package's worker and files, and how ParaPDF
   draws pages and builds layers with it (`src/pdfjs/`); document sessions,
-  one per open document, shared by its viewers through a registry
-  (`src/document/`); one `Viewer` per viewport, its layout, scrolling,
+  one per open document, shared by its viewers through a registry that
+  publishes each session's document state, and the `PdfSession` a
+  `PdfDocument` holds of it, which applications see (`src/document/`); one
+  `Viewer` per viewport, its layout, scrolling,
   gestures, hot/cold state, the hooks features extend it with
   (`viewer.extend()`), and handing bytes to the browser as a download
   (`files.ts`) (`src/view/`); rendering: the planner, a pure
@@ -111,9 +113,9 @@ As of M5; `target.md` describes where the runtime's code goes.
   tracker the viewer keeps drags in text layers with
   (`src/render/`); the features, each attaching to a
   viewer or a session and imported by nothing in the core (`src/features/`);
-  React bindings, among them `PdfDocument`, which loads the features its
-  options ask for (`src/react/`,
-  `"use client"`); unit tests in Node, which stand in for pdf.js with
+  React bindings: `PdfDocument`, `PdfViewer`, which sets its viewer's live
+  options and loads the features they ask for, `PdfThumbnails`,
+  `useViewer()`, and the hooks (`src/react/`, `"use client"`); unit tests in Node, which stand in for pdf.js with
   `test/fake-pdfjs.ts` and for the elements of a page the renderer builds
   with `test/fake-dom.ts` (`test/`).
   `scripts/pdfjs-files.ts`, run by `pnpm install` and `build`, copies
@@ -126,9 +128,12 @@ As of M5; `target.md` describes where the runtime's code goes.
 - `examples/prototype/` — the Vite demo the functional checks and the
   runtime benchmarks drive (`scripts/check-*.ts`, `scripts/*-bench.ts`,
   results in `results/`). Its query parameters are read in `src/App.tsx`,
-  which exposes the viewer and its features to the checks (`window.__viewer`,
-  `__parapdf`, `__search`, `__history`, `__annotations`). `minimal.html`
-  is the demo without search, forms, annotation editing, and print.
+  which exposes the viewer, its session, and its features to the checks
+  (`window.__viewer`, `__session`, `__parapdf`, `__search`, `__history`,
+  `__annotations`), lets them change `PdfViewer`'s props
+  (`__setViewerProps`), and, through `src/internals.ts`, show a document a
+  pdf.js of their own opens (`__showWith`). `minimal.html` is the demo
+  without search, forms, annotation editing, and print.
 - `bench/` — the engine benchmark (research, decision 0001): an adapter per
   engine (`src/engines/`), the corpus (`corpus/`, sources and licenses in
   its README), the synthetic corpus generator, the Playwright runner,
@@ -160,12 +165,12 @@ As of M5; `target.md` describes where the runtime's code goes.
 - Functional checks, `pnpm --filter @parapdf/prototype check:<name>`, with
   `BROWSER` and `ENGINE`: `text`, `links`, `lifecycle`, `rotation`,
   `options`, `pinch`, `features`, `scroll`, `annotations`, `document`,
-  `viewers`, and `bundle`. `check:viewers` opens two viewers of one session
-  and checks independent view state, closing one while the other works,
-  viewport-only detach/reattach, StrictMode, and two viewers editing
-  annotations in one session. The prototype shows it with `?split=1`;
-  separate `PdfDocument` providers share the session until M6 introduces
-  the new React API. `check:modules` builds the demo with source maps and
+  `viewers`, and `bundle`. `check:viewers` opens two viewers under one
+  `PdfDocument` and checks independent view state, closing one while the
+  other works, viewport-only detach/reattach, the provider releasing the
+  session, StrictMode, and two viewers editing annotations in one session;
+  the prototype shows it with `?split=1`. `check:options` covers
+  `PdfViewer`'s live options and controlled view state. `check:modules` builds the demo with source maps and
   checks which features' modules each page loads: `minimal.html` none of
   search, forms, annotation editing, and print. Each feature has one primary home among
   them; extend that check

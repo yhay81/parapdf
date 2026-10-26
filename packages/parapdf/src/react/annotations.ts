@@ -8,10 +8,10 @@ import type {
   SavedAnnotation,
   SignatureInput,
 } from "../pdfjs/editor.ts";
-import { usePdfViewer } from "./context.ts";
+import type { Viewer } from "../view/viewer.ts";
 import { useLoadedFeature, useStore } from "./features.ts";
 
-export interface PdfAnnotations extends AnnotationEditingStore {
+export interface AnnotationControls extends AnnotationEditingStore {
   setTool(tool: AnnotationTool): Promise<void>;
   setStyle<T extends keyof AnnotationStyles>(tool: T, style: Partial<AnnotationStyles[T]>): void;
   undo(): void;
@@ -34,19 +34,19 @@ const STOPPED: AnnotationEditingStore = { tool: "none", state: null, styles: nul
 const STOPPED_STORE = { get: () => STOPPED, subscribe: () => () => {} };
 
 /**
- * The viewer's annotation editing, whose store reads its state as it is;
+ * `viewer`'s annotation editing, whose store reads its state as it is;
  * null until its code loads, and without the `annotationEditing` option.
  */
-export function usePdfAnnotationEditing(): AnnotationEditing | null {
-  return useLoadedFeature(usePdfViewer(), "annotations");
+export function useAnnotationEditing(viewer: Viewer): AnnotationEditing | null {
+  return useLoadedFeature(viewer, "annotations");
 }
 
 /**
- * The annotations the reader creates in the viewer, and their tools; null
+ * The annotations the reader creates in `viewer`, and their tools; null
  * until the editing code loads, and without the `annotationEditing` option.
  */
-export function usePdfAnnotations(): PdfAnnotations | null {
-  const editing = usePdfAnnotationEditing();
+export function useAnnotations(viewer: Viewer): AnnotationControls | null {
+  const editing = useAnnotationEditing(viewer);
   const state = useStore(editing?.store ?? STOPPED_STORE);
   return useMemo(
     () =>

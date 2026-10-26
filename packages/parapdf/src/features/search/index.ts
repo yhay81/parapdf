@@ -1,8 +1,8 @@
 "use client";
 
 import type { DocumentSession } from "../../document/session.ts";
+import { type ReadableStore, Store } from "../../document/store.ts";
 import { linked } from "../../view/signals.ts";
-import { type ReadableStore, Store } from "../../view/state.ts";
 import type { Viewer } from "../../view/viewer.ts";
 import { SearchHighlights } from "./highlights.ts";
 import {

@@ -865,7 +865,7 @@ try {
       (error: Error) => error.name === "AbortError",
     );
     return {
-      pageCount: viewer.store.get().pageCount,
+      pageCount: viewer.session?.pageCount ?? 0,
       pages: pages.length,
       mounted: document.querySelectorAll("section[data-page]").length,
       separated: pages.every(

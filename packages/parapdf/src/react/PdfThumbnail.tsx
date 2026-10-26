@@ -3,9 +3,12 @@
 import { type CSSProperties, useLayoutEffect, useRef } from "react";
 import { attachThumbnail } from "../features/thumbnails/index.ts";
 import { turnedSize } from "../view/layout.ts";
-import { usePdfState, usePdfViewer } from "./context.ts";
+import type { Viewer } from "../view/viewer.ts";
+import { useSelected } from "./context.ts";
 
 export interface PdfThumbnailProps {
+  /** The viewer whose document, rotation, and drawing slots the thumbnail uses. */
+  viewer: Viewer;
   /** The zero-based page to show. */
   pageIndex: number;
   /** Width in CSS pixels; the height follows the page's shape as the view turns it. */
@@ -18,16 +21,16 @@ export interface PdfThumbnailProps {
 const LETTER_RATIO = 11 / 8.5;
 
 /**
- * A small picture of a page, drawn once it comes near the visible part of
- * its scroll container and released once it leaves, at a lower priority
- * than the pages in the viewport. It is a picture only: wrap it in a button
- * or link labelled with the page, for example to `goToPage()`.
+ * A small picture of a page of `viewer`'s document, drawn once it comes
+ * near the visible part of its scroll container and released once it
+ * leaves, at a lower priority than the viewer's pages. It is a picture
+ * only: wrap it in a button or link labelled with the page, as
+ * `<PdfThumbnails>` does.
  */
-export function PdfThumbnail({ pageIndex, width, className, style }: PdfThumbnailProps) {
-  const runtime = usePdfViewer();
+export function PdfThumbnail({ viewer, pageIndex, width, className, style }: PdfThumbnailProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const size = usePdfState((state) => state.layout?.sizes[pageIndex]);
-  const rotation = usePdfState((state) => state.rotation);
+  const size = useSelected(viewer.store.hot, (state) => state.layout?.sizes[pageIndex]);
+  const rotation = useSelected(viewer.store.cold, (state) => state.rotation);
   const turned = size ? turnedSize(size, rotation) : null;
   const height =
     turned && turned.width > 0 ? (width * turned.height) / turned.width : width * LETTER_RATIO;
@@ -36,8 +39,8 @@ export function PdfThumbnail({ pageIndex, width, className, style }: PdfThumbnai
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    return attachThumbnail(runtime, pageIndex, canvas, width);
-  }, [runtime, pageIndex, width, size, rotation]);
+    return attachThumbnail(viewer, pageIndex, canvas, width);
+  }, [viewer, pageIndex, width, size, rotation]);
 
   return (
     // biome-ignore lint/a11y/noAriaHiddenOnFocusable: the canvas is not focusable; its button or link names the page.

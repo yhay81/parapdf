@@ -1,4 +1,4 @@
-import { type ReadableStore, Store } from "../view/state.ts";
+import { type ReadableStore, Store } from "../document/store.ts";
 import type { Viewer, ViewerPosition } from "../view/viewer.ts";
 
 export interface HistoryState {

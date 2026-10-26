@@ -524,7 +524,10 @@ const dragTwoFingers = (
   page.evaluate(async ({ from, to, half, toHalf, steps, timeout, stacked }) => {
     const viewer = (
       window as unknown as {
-        __viewer: { hasPixels(index: number): boolean; store: { get(): { pageCount: number } } };
+        __viewer: {
+          hasPixels(index: number): boolean;
+          store: { get(): { layout: { tops: Float64Array } | null } };
+        };
       }
     ).__viewer;
     const scroller = document.querySelector(".parapdf-viewport") as HTMLElement;
@@ -545,7 +548,9 @@ const dragTwoFingers = (
       const band = Math.max(
         0,
         first.index === 0 ? 0 : first.rect.top - top,
-        last.index === viewer.store.get().pageCount - 1 ? 0 : bottom - last.rect.bottom,
+        last.index === (viewer.store.get().layout?.tops.length ?? 0) - 1
+          ? 0
+          : bottom - last.rect.bottom,
       );
       const drawn = pages
         .filter(({ rect }) => rect.bottom > top && rect.top < bottom)
@@ -686,8 +691,8 @@ const newPage = async (): Promise<Page> => {
   await page.waitForFunction(
     () =>
       (
-        window as unknown as { __viewer?: { store: { get(): { status: string } } } }
-      ).__viewer?.store.get().status === "ready",
+        window as unknown as { __session?: { state: { get(): { status: string } } } }
+      ).__session?.state.get().status === "ready",
     null,
     { timeout: 30_000 },
   );

@@ -35,6 +35,29 @@ function check(name: string, ok: boolean, detail = ""): void {
 // The demo declares `window.__viewer`, `__parapdf`, and `__search` (src/App.tsx).
 
 const state = (page: Page) => page.evaluate(() => window.__viewer?.store.get());
+/** The document's state, which its session publishes. */
+const documentState = (page: Page) => page.evaluate(() => window.__session?.state.get());
+/** The document's secondary data, as the session reads it for `use()`. */
+const documentData = (page: Page) =>
+  page.evaluate(async () => {
+    const session = window.__session;
+    if (!session) return null;
+    const [pageLabels, metadata, attachments, layers] = await Promise.all([
+      session.pageLabels(),
+      session.metadata(),
+      session.attachments(),
+      session.layers(),
+    ]);
+    return {
+      pageLabels,
+      metadata: metadata && {
+        ...metadata,
+        creationDate: metadata.creationDate?.toISOString() ?? null,
+      },
+      attachments,
+      layers: layers?.layers() ?? null,
+    };
+  });
 
 async function open(browser: Browser, url: string, { ready = true } = {}) {
   const context = await browser.newContext({
@@ -167,22 +190,22 @@ try {
     const { page, errors } = await open(launched.browser, demo("file=synthetic-encrypted.pdf"), {
       ready: false,
     });
-    await page.waitForFunction(() => window.__viewer?.store.get().status === "password");
+    await page.waitForFunction(() => window.__session?.state.get().status === "password");
     check(
       "an encrypted document asks for its password",
-      (await state(page))?.passwordReason === "required",
+      (await documentState(page))?.passwordReason === "required",
     );
     const input = page.getByRole("form", { name: "Password" }).locator("input[type=password]");
     await input.fill("wrong");
     await input.press("Enter");
-    await page.waitForFunction(() => window.__viewer?.store.get().passwordReason === "incorrect");
+    await page.waitForFunction(() => window.__session?.state.get().passwordReason === "incorrect");
     check("a wrong password asks again, saying it was wrong", true);
     await input.fill("parapdf");
     await input.press("Enter");
     await page.waitForFunction(() => window.__viewer?.hasPixels(0) === true, undefined, {
       timeout: 30_000,
     });
-    const unlocked = await state(page);
+    const unlocked = await documentState(page);
     check(
       "the right password opens it",
       unlocked?.status === "ready" && unlocked.pageCount === 3,
@@ -206,7 +229,7 @@ try {
     );
     check(
       "a password in the source opens it without asking",
-      (await state(given.page))?.status === "ready",
+      (await documentState(given.page))?.status === "ready",
     );
     await given.page.context().close();
 
@@ -219,9 +242,9 @@ try {
         { ready: false },
       );
       await failed.page.waitForFunction(() =>
-        ["error", "ready"].includes(window.__viewer?.store.get().status ?? ""),
+        ["error", "ready"].includes(window.__session?.state.get().status ?? ""),
       );
-      const result = await state(failed.page);
+      const result = await documentState(failed.page);
       check(
         `passwordPrompt: false fails the document${query ? " with a wrong password" : ""}`,
         result?.status === "error" && /PasswordException/.test(result.error ?? ""),
@@ -238,16 +261,13 @@ try {
       demo("file=synthetic-features.pdf&forms=1"),
     );
     await settle(page);
-    const loaded = await state(page);
+    const loaded = await documentData(page);
     check(
       "page labels",
       JSON.stringify(loaded?.pageLabels) === JSON.stringify(["i", "ii", "1", "2", "3", "4"]),
       JSON.stringify(loaded?.pageLabels),
     );
-    const metadata = await page.evaluate(() => {
-      const value = window.__viewer?.store.get().metadata;
-      return value ? { ...value, creationDate: value.creationDate?.toISOString() ?? null } : null;
-    });
+    const metadata = loaded?.metadata;
     check(
       "metadata: title, language, and dates",
       metadata?.title === "ParaPDF feature sampler" &&
@@ -322,7 +342,7 @@ try {
     );
     check(
       "the state follows the layers",
-      JSON.stringify((await state(page))?.layers?.map((layer) => layer.visible)) ===
+      JSON.stringify((await documentData(page))?.layers?.map((layer) => layer.visible)) ===
         JSON.stringify([false, true]),
     );
 
@@ -764,7 +784,7 @@ try {
     });
     check(
       "only thumbnails near view hold pixels",
-      near.total === (await state(page))?.pageCount && near.drawn > 0 && near.drawn < 30,
+      near.total === (await documentState(page))?.pageCount && near.drawn > 0 && near.drawn < 30,
       JSON.stringify(near),
     );
     await page.context().close();

@@ -2,7 +2,7 @@
  * Functional checks for view rotation and the document escape hatch: the
  * page box, canvases, text runs, overlays, search highlights, and link jumps
  * follow a quarter turn, turning back restores the layout, and
- * usePdfDocument() hands out pdf.js's own document.
+ * useSession().proxy hands out pdf.js's own document.
  *
  * Usage: pnpm --filter @parapdf/prototype build && pnpm --filter @parapdf/prototype check:rotation
  * Environment: BROWSER (chromium, webkit, or firefox), ENGINE (pdfjs-next).
@@ -245,7 +245,7 @@ try {
     return { pages: doc.numPages, hasInfo: typeof metadata.info === "object" };
   });
   check(
-    "usePdfDocument() exposes pdf.js's PDFDocumentProxy",
+    "useSession().proxy exposes pdf.js's PDFDocumentProxy",
     native?.pages === 110 && native.hasInfo,
     JSON.stringify(native),
   );

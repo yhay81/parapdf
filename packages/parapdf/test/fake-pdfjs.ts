@@ -5,8 +5,11 @@
  * is ParaPDF's own, sessions included; only pdf.js is replaced.
  */
 import type * as Pdfjs from "pdfjs-dist";
-import { DocumentSession, type PageSize } from "../src/document/session.ts";
+import { connectSession, PdfSession } from "../src/document/pdf-session.ts";
+import type { PdfjsLoader } from "../src/document/registry.ts";
+import { DocumentSession, type PageSize, type PdfSource } from "../src/document/session.ts";
 import type { LoadedPdfjs } from "../src/pdfjs/loader.ts";
+import { openViewer, type Viewer } from "../src/view/viewer.ts";
 
 /** A US Letter page. */
 export const LETTER: PageSize = { width: 612, height: 792 };
@@ -362,4 +365,21 @@ export async function openSession(options: FakeDocumentOptions = {}) {
   const controller = new AbortController();
   const session = await DocumentSession.open(loader, { url: "/test.pdf" }, controller);
   return { session, controller, calls, ...document };
+}
+
+/**
+ * Show `source` in `viewer` as a `<PdfDocument>` and its `<PdfViewer>`
+ * would, through the pdf.js `loader` gives: the provider's session, and
+ * `close`, which lets it go as the provider unmounting does.
+ */
+export function show(
+  viewer: Viewer,
+  source: PdfSource,
+  loader: PdfjsLoader,
+  options: { passwordPrompt?: boolean } = {},
+): { session: PdfSession; close: () => void } {
+  const session = new PdfSession(source, options);
+  const close = connectSession(session, loader);
+  openViewer(viewer, session);
+  return { session, close };
 }

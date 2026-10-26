@@ -1,23 +1,12 @@
 "use client";
 
-import { acquireSession, type PdfjsLoader, type SessionLease } from "../document/registry.ts";
-import type {
-  DocumentSession,
-  OutlineNode,
-  PageSize,
-  PasswordReason,
-  PdfAttachment,
-  PdfInitialView,
-  PdfMetadata,
-  PdfPermissions,
-  PdfSource,
-} from "../document/session.ts";
+import { documentOf, type PdfSession } from "../document/pdf-session.ts";
+import type { DocumentSession, PageSize, PdfPermissions } from "../document/session.ts";
 import type { LinkHandlers } from "../pdfjs/annotation-layer.ts";
 import type { Destination, ResolvedDestination } from "../pdfjs/destinations.ts";
 import type { PageColors, Rotation } from "../pdfjs/draw.ts";
 import type { AnnotationEditor } from "../pdfjs/editor.ts";
-import type { LayerState, PdfLayer } from "../pdfjs/layers.ts";
-import { loadPdfjs } from "../pdfjs/loader.ts";
+import type { LayerState } from "../pdfjs/layers.ts";
 import type { TextLayerHandle } from "../pdfjs/text.ts";
 import { Renderer, type RenderStats } from "../render/renderer.ts";
 import { TextSelectionTracker } from "../render/selection.ts";
@@ -58,21 +47,12 @@ import {
 import { linked } from "./signals.ts";
 import { ViewerStore } from "./state.ts";
 
+/**
+ * What a viewer shows: its view of the document, which its store publishes.
+ * The document's own state is its session's (`PdfSession.state`).
+ */
 export interface ViewerState {
-  /**
-   * "password" while an encrypted document waits for `submitPassword()`;
-   * `passwordReason` says whether one is needed or the last one was wrong.
-   */
-  status: "idle" | "loading" | "password" | "ready" | "error";
-  error: string | null;
-  passwordReason: PasswordReason | null;
-  /**
-   * Bytes of the document received so far, and its size when the server
-   * reported it; null before any arrive. pdf.js may keep fetching the rest
-   * of a large document in the background after it is ready.
-   */
-  progress: LoadProgress | null;
-  pageCount: number;
+  /** The pages laid out at the current zoom; null until a document shows. */
   layout: Layout | null;
   /** Mounted page window: visible pages plus overscan. */
   first: number;
@@ -107,46 +87,11 @@ export interface ViewerState {
    * filling the viewport's width, or one page or spread at a time.
    */
   scrollMode: ScrollMode;
-  /**
-   * The open document's session, shared with the other viewers of it: its
-   * `proxy` is pdf.js's document, for its APIs ParaPDF does not wrap. Null
-   * until it loads.
-   */
-  document: DocumentSession | null;
-  /** Document outline; null until loaded, empty when the PDF has none. */
-  outline: readonly OutlineNode[] | null;
-  /**
-   * What the document permits, everything when it is not encrypted; null
-   * until it loads. `enforcePermissions` follows it.
-   */
-  permissions: PdfPermissions | null;
-  /**
-   * How the document asks to be shown when it opens: where, how its pages
-   * are arranged, and which panel shows beside them (`pageMode`), which the
-   * application may open; null until it loads.
-   */
-  documentView: PdfInitialView | null;
-  /** Each page's label, such as "iv"; null while loading and when the PDF defines none. */
-  pageLabels: readonly string[] | null;
-  /** The document's title, author, dates, and so on; null until loaded. */
-  metadata: PdfMetadata | null;
-  /** Files embedded in the document; null until loaded, empty when it has none. */
-  attachments: readonly PdfAttachment[] | null;
-  /**
-   * The document's layers (optional content) in its own order, and which
-   * show; null until loaded, empty when it has none.
-   */
-  layers: readonly PdfLayer[] | null;
 }
 
 export type ZoomMode = "fit-width" | "fit-page" | "custom";
 
 export type PointerTool = "select" | "hand";
-
-export interface LoadProgress {
-  loaded: number;
-  total: number | null;
-}
 
 /**
  * Where a viewer shows its document, to come back to: the page at the
@@ -228,13 +173,20 @@ export interface ViewerExtension {
   layersChanged?(): void;
 }
 
+/**
+ * How a viewer shows documents, set by its `PdfViewer`'s props. They change
+ * while it shows one (`setViewerOptions()`); the initial ones apply as it
+ * opens a document.
+ */
 export interface ViewerOptions {
   /** Space between pages in CSS pixels. */
   gap?: number;
-  /** One page per row (the default), or pairs side by side; see `setSpread()`. */
-  spread?: SpreadMode;
-  /** How pages are arranged and scrolled (default "vertical"); see `setScrollMode()`. */
-  scrollMode?: ScrollMode;
+  /** One page per row (the default), or pairs side by side, at first; see `setSpread()`. */
+  initialSpread?: SpreadMode;
+  /** How pages are arranged and scrolled at first (default "vertical"); see `setScrollMode()`. */
+  initialScrollMode?: ScrollMode;
+  /** The clockwise rotation of every page at first (default 0); see `setRotation()`. */
+  initialRotation?: Rotation;
   /** Pages mounted beyond each edge of the viewport. */
   overscan?: number;
   maxConcurrentRenders?: number;
@@ -269,13 +221,6 @@ export interface ViewerOptions {
    * and, with `forms`, form fields.
    */
   annotationLayer?: boolean;
-  /**
-   * Whether an encrypted document waits for `submitPassword()` (status
-   * "password", the default) or fails at once (status "error") when its
-   * source has no password or a wrong one, for applications that show no
-   * password prompt.
-   */
-  passwordPrompt?: boolean;
   /**
    * Draw pages in these two colors instead of their own, for example
    * `{ background: "Canvas", foreground: "CanvasText" }` in forced-colors mode.
@@ -339,57 +284,69 @@ const clamp = (value: number, min: number, max: number) => Math.min(max, Math.ma
 const whole = (area: PageArea | null): boolean =>
   area !== null && area.minX === 0 && area.minY === 0 && area.maxX === 1 && area.maxY === 1;
 
+/** The options the renderer is built with: changing one builds it again. */
+const RENDERER_OPTIONS = [
+  "textLayer",
+  "annotationLayer",
+  "externalLinks",
+  "pageColors",
+  "maxConcurrentRenders",
+  "maxDetailPixels",
+  "maxDetailViewports",
+  "maxBasePixels",
+  "maxCanvasPixels",
+  "maxKeptPixels",
+] as const satisfies readonly (keyof ViewerOptions)[];
+
+/** Whether two `pageColors` options draw alike: applications pass them inline. */
+const samePageColors = (a: PageColors | undefined, b: PageColors | undefined): boolean =>
+  a === b || (!!a && !!b && a.background === b.background && a.foreground === b.foreground);
+
+/** Opens a session in a viewer; the React bindings' to call (`openViewer()`). */
+let open: (viewer: Viewer, session: PdfSession) => void;
+/** Closes what a viewer shows; see `closeViewer()`. */
+let close: (viewer: Viewer) => void;
+/** Sets a viewer's options; see `setViewerOptions()`. */
+let configure: (viewer: Viewer, options: ViewerOptions) => void;
+
 /**
  * One viewport onto a shared document session: layout, gestures,
  * navigation, and the viewport's lifetime. Features (search, history,
- * forms, annotation editing, and the rest) attach through `extend()`; the
- * renderer moves in M5.
+ * forms, annotation editing, and the rest) attach through `extend()`.
  */
 export class Viewer {
+  static {
+    open = (viewer, session) => viewer.#open(session);
+    close = (viewer) => viewer.#close?.();
+    configure = (viewer, options) => viewer.#configure(options);
+  }
+
   readonly store = new ViewerStore({
-    status: "idle",
-    error: null,
-    passwordReason: null,
-    progress: null,
-    pageCount: 0,
     layout: null,
     first: 0,
     last: -1,
     currentPage: 0,
     scale: 1,
-    zoomMode: "custom",
+    zoomMode: "fit-width",
     tool: "select",
-    outline: null,
-    permissions: null,
-    documentView: null,
     rotation: 0,
     spread: "none",
     scrollMode: "vertical",
-    document: null,
-    pageLabels: null,
-    metadata: null,
-    attachments: null,
-    layers: null,
   });
-  readonly #pdfjs: PdfjsLoader;
-  readonly #gap: number;
-  readonly #overscan: number;
-  readonly #maxConcurrentRenders: number;
-  readonly #initialScale: number | "fit-width" | "fit-page";
-  readonly #initialPage: number;
-  readonly #opening: ViewerOptions["opening"];
-  readonly #destinationZoom: boolean;
-  readonly #minScale: number;
-  readonly #maxScale: number;
-  readonly #textLayer: boolean;
-  readonly #annotationLayer: boolean;
-  readonly #passwordPrompt: boolean;
-  readonly #pageColors: PageColors | undefined;
-  readonly #canvasLimits: Pick<
-    ViewerOptions,
-    "maxDetailPixels" | "maxDetailViewports" | "maxBasePixels" | "maxCanvasPixels" | "maxKeptPixels"
-  >;
-  readonly #links: LinkHandlers;
+  /** The options as set, which the renderer and the next opening read. */
+  #options: ViewerOptions = {};
+  #gap = 12;
+  #overscan = 2;
+  #destinationZoom = true;
+  #minScale = 0.25;
+  #maxScale = 10;
+  readonly #links: LinkHandlers = {
+    navigate: (dest) => void this.goToDestination(dest),
+    namedAction: (action) => this.#namedAction(action),
+    externalLinks: "new-tab",
+    openAttachment: (file) => this.openFile(file),
+    setLayers: (action) => this.#layers?.apply(action),
+  };
   /** What the features attached hear. */
   readonly #extensions = new Set<ViewerExtension>();
   /** Features still loading, which the first layout of a document waits for. */
@@ -404,11 +361,10 @@ export class Viewer {
   /** Which of the open document's layers show, in every viewer of it. */
   #layers: LayerState | null = null;
   /**
-   * The open document's lease, from `open()` until its close: its signal
-   * stops what this viewer started for the document, and a password is
-   * submitted through it.
+   * The session this viewer shows, from `openViewer()` until it closes:
+   * its signal stops what this viewer started for the document.
    */
-  #lease: SessionLease | null = null;
+  #pdf: PdfSession | null = null;
   /** The viewport's lifetime, independent of the document and other viewers. */
   #viewportControl = new AbortController();
   /** Work for this viewport and its document; either ending aborts it. */
@@ -418,16 +374,16 @@ export class Viewer {
   /** The work of the load whose `ready` hooks ran, which `extend()` replays. */
   #ready: AbortSignal | null = null;
 
+  /** Aborted while no viewport is attached. */
   get signal(): AbortSignal {
     return this.#viewportControl.signal;
   }
   /** Closes the open document. */
   #close: (() => void) | null = null;
-  /** Progress waiting to be published at the next animation frame. */
-  #progress: LoadProgress | null = null;
-  #progressFrame = 0;
   /** The open document, once it has loaded. */
   #session: DocumentSession | null = null;
+  /** What the open document permits, once it has loaded. */
+  #permissions: PdfPermissions | null = null;
   /** The file name the open document's URL gives, for download(). */
   #sourceName: string | null = null;
   #renderer: Renderer | null = null;
@@ -463,54 +419,75 @@ export class Viewer {
   /** The hand tool's drag in progress: the pointer and where it last was. */
   #grab: { pointerId: number; x: number; y: number } | null = null;
 
+  constructor(options: ViewerOptions = {}) {
+    this.#configure(options);
+    this.#resetView();
+  }
+
   /**
-   * `pdfjs` loads the pdf.js documents open with: the pdf.js the package
-   * ships, unless a test stands in for it.
+   * Take `options` from now on. Options the renderer is built with build it
+   * again, as a viewport that detaches and attaches again would, keeping
+   * the position and the edits; the initial ones and the opening apply as
+   * the next document opens; the others apply at once.
    */
-  constructor(options: ViewerOptions = {}, pdfjs: PdfjsLoader = loadPdfjs) {
-    this.#pdfjs = pdfjs;
-    this.#gap = options.gap ?? 12;
-    this.#overscan = options.overscan ?? 2;
-    this.#maxConcurrentRenders = options.maxConcurrentRenders ?? 2;
-    this.#initialScale = options.initialScale ?? "fit-width";
-    this.#initialPage = options.initialPage ?? 0;
-    this.#opening = options.opening;
+  #configure(options: ViewerOptions): void {
+    const previous = this.#options;
+    this.#options = options;
+    this.#links.externalLinks = options.externalLinks ?? "new-tab";
     this.#destinationZoom = options.destinationZoom ?? true;
     this.#minScale = options.minScale ?? 0.25;
     this.#maxScale = options.maxScale ?? 10;
-    this.#textLayer = options.textLayer ?? true;
-    this.#annotationLayer = options.annotationLayer ?? true;
-    this.#passwordPrompt = options.passwordPrompt ?? true;
-    this.#pageColors = options.pageColors;
-    this.#links = {
-      navigate: (dest) => void this.goToDestination(dest),
-      namedAction: (action) => this.#namedAction(action),
-      externalLinks: options.externalLinks ?? "new-tab",
-      openAttachment:
-        options.openAttachment ?? (({ filename, content }) => downloadBytes(content, filename)),
-      setLayers: (action) => this.#layers?.apply(action),
-    };
-    this.#canvasLimits = {
-      maxDetailPixels: options.maxDetailPixels,
-      maxDetailViewports: options.maxDetailViewports,
-      maxBasePixels: options.maxBasePixels,
-      maxCanvasPixels: options.maxCanvasPixels,
-      maxKeptPixels: options.maxKeptPixels,
-    };
+    const gap = options.gap ?? 12;
+    const overscan = options.overscan ?? 2;
+    const arranged = gap !== this.#gap || overscan !== this.#overscan;
+    this.#gap = gap;
+    this.#overscan = overscan;
+    const layout = this.store.get().layout;
+    if (!layout) return;
+    const rebuilt = RENDERER_OPTIONS.some((name) =>
+      name === "pageColors"
+        ? !samePageColors(previous.pageColors, options.pageColors)
+        : !Object.is(previous[name], options[name]),
+    );
+    if (rebuilt) {
+      this.#rebuild();
+      return;
+    }
+    if (arranged) {
+      this.#gestures.finish();
+      this.#arrange(this.store.get().currentPage);
+    }
+    const { scale } = this.store.get();
+    if (scale < this.#minScale || scale > this.#maxScale) this.setScale(scale);
+  }
+
+  /** The view a document opens with, before its opening applies. */
+  #resetView(): void {
+    const options = this.#options;
     this.store.set({
+      currentPage: 0,
       zoomMode: this.#initialZoomMode(),
       tool: options.initialTool ?? "select",
-      spread: options.spread ?? "none",
-      scrollMode: options.scrollMode ?? "vertical",
+      rotation: options.initialRotation ?? 0,
+      spread: options.initialSpread ?? "none",
+      scrollMode: options.initialScrollMode ?? "vertical",
     });
   }
 
   get textLayer(): boolean {
-    return this.#textLayer;
+    return this.#options.textLayer ?? true;
   }
 
   get annotationLayer(): boolean {
-    return this.#annotationLayer;
+    return this.#options.annotationLayer ?? true;
+  }
+
+  get #initialScale(): number | "fit-width" | "fit-page" {
+    return this.#options.initialScale ?? "fit-width";
+  }
+
+  get #initialPage(): number {
+    return this.#options.initialPage ?? 0;
   }
 
   get scroller(): HTMLElement | null {
@@ -525,6 +502,15 @@ export class Viewer {
   /** The open document's session, once it has loaded. */
   get session(): DocumentSession | null {
     return this.#session;
+  }
+
+  /**
+   * What the open document permits, everything when it is not encrypted;
+   * null until it has loaded. Read before its first layout, for features
+   * that follow it.
+   */
+  get permissions(): PdfPermissions | null {
+    return this.#permissions;
   }
 
   /**
@@ -553,7 +539,7 @@ export class Viewer {
 
   /** The colors pages are drawn in instead of their own (`pageColors`). */
   get pageColors(): PageColors | undefined {
-    return this.#pageColors;
+    return this.#options.pageColors;
   }
 
   /** The file name the open document's URL gives; null for bytes. */
@@ -639,80 +625,33 @@ export class Viewer {
 
   /** Open an embedded file as activating its annotation does: by default, download it. */
   openFile(file: { filename: string; content: Uint8Array }): void {
-    this.#links.openAttachment?.(file);
+    const { openAttachment } = this.#options;
+    if (openAttachment) openAttachment(file);
+    else downloadBytes(file.content, file.filename);
   }
 
   /**
-   * Open a document and return the function that closes it; a viewer shows
-   * one document at a time, so opening another closes this one. Viewers of
-   * the same source share one session (see document/registry.ts). Closing
-   * aborts the lease's signal, which what this viewer started for the
-   * document takes: drawing, searches, and background work stop with it.
+   * Show `pdf` until it closes, it is closed here (`closeViewer()`), or
+   * another session opens; a viewer shows one document at a time, and
+   * opening the one it shows changes nothing. Closing aborts the work this
+   * viewer started for the document: drawing, searches, and background work
+   * stop with it.
    */
-  open(source: PdfSource): () => void {
+  #open(pdf: PdfSession): void {
+    if (this.#pdf === pdf && !pdf.signal.aborted) return;
     this.#close?.();
-    this.#progress = null;
+    const { source } = pdf;
+    this.#pdf = pdf;
     this.#sourceName = "url" in source ? filenameFromUrl(source.url) : null;
     this.#firstPaintAt = null;
-    this.store.set({
-      status: "loading",
-      error: null,
-      passwordReason: null,
-      progress: null,
-      outline: null,
-      permissions: null,
-      documentView: null,
-      currentPage: 0,
-      rotation: 0,
-      zoomMode: this.#initialZoomMode(),
-      document: null,
-      pageLabels: null,
-      metadata: null,
-      attachments: null,
-      layers: null,
-    });
-    // Acquisition replays a shared document's pending password request
-    // synchronously; initialize first so that request remains visible.
-    // Released leases hear nothing more.
-    const lease = acquireSession(this.#pdfjs, source, {
-      onProgress: (loaded, total) => {
-        this.#progress = { loaded, total };
-        if (this.#viewportControl.signal.aborted) return;
-        // Chunks arrive many times a frame; the store hears of them once a frame.
-        this.#progressFrame ||= requestAnimationFrame(() => {
-          this.#progressFrame = 0;
-          if (!lease.signal.aborted && !this.#viewportControl.signal.aborted && this.#progress) {
-            this.store.set({ progress: this.#progress });
-          }
-        });
-      },
-      onPassword: (reason) => {
-        if (this.#passwordPrompt) {
-          this.store.set({ status: "password", passwordReason: reason });
-          return;
-        }
-        // Fails this viewer only, with pdf.js's own messages: other viewers
-        // of the same document may still answer.
-        const error =
-          reason === "incorrect"
-            ? "PasswordException: Incorrect Password"
-            : "PasswordException: No password given";
-        this.store.set({ status: "error", error, passwordReason: null });
-      },
-    });
-    this.#lease = lease;
-    this.#work = linked(lease.signal, this.#viewportControl.signal);
-    const { signal } = this.#work;
-    this.#load(lease, signal).catch((error: unknown) => {
-      if (!signal.aborted) {
-        this.store.set({ status: "error", error: String(error), passwordReason: null });
-      }
-    });
+    this.#resetView();
 
     let closed = false;
+    const ended = new AbortController();
     const close = () => {
       if (closed) return;
       closed = true;
+      ended.abort();
       // Features let go of the document while its pages are still there,
       // then stop what they started for it with this signal.
       for (const extension of this.#extensions) extension.closed?.();
@@ -720,58 +659,49 @@ export class Viewer {
       this.#ready = null;
       this.#work = null;
       this.#savedPosition = null;
-      this.#lease = null;
+      this.#pdf = null;
       this.#close = null;
-      cancelAnimationFrame(this.#progressFrame);
-      this.#progressFrame = 0;
-      // Aborts the lease's signal, which disposes the renderer and stops
-      // background work. The session closes once no viewer uses it, even if
-      // it is still loading.
-      lease.release();
       this.#selection.clear();
       this.#textPages.clear();
       this.#session = null;
+      this.#permissions = null;
       this.#layers = null;
       this.#renderer = null;
-      this.store.set({
-        status: "idle",
-        passwordReason: null,
-        progress: null,
-        pageCount: 0,
-        layout: null,
-        first: 0,
-        last: -1,
-        outline: null,
-        permissions: null,
-        documentView: null,
-        document: null,
-        pageLabels: null,
-        metadata: null,
-        attachments: null,
-        layers: null,
-      });
+      this.store.set({ layout: null, first: 0, last: -1 });
     };
+    // The session closes when its provider lets it go: so does what shows it,
+    // its features hearing it before the work stops.
+    pdf.signal.addEventListener("abort", close, { once: true, signal: ended.signal });
     this.#close = close;
-    return close;
+    this.#start(pdf);
+  }
+
+  /** Start showing the open session in the attached viewport, or wait for one. */
+  #start(pdf: PdfSession): void {
+    this.#work = linked(pdf.signal, this.#viewportControl.signal);
+    const { signal } = this.#work;
+    this.#load(pdf, signal).catch((error: unknown) => {
+      // A document that fails to open says so in its session's state.
+      if (!signal.aborted && pdf.state.get().status === "ready") {
+        console.error("showing the document failed", error);
+      }
+    });
   }
 
   /**
-   * Show the document `lease` opens once it loads, and load the rest in the
+   * Show the document `pdf` opens once it loads, and load the rest in the
    * background: as it opens (`opening`), or, in a viewport that reattached
    * after it showed, where the last one showed it.
    */
-  async #load(lease: SessionLease, signal: AbortSignal): Promise<void> {
-    const session = await lease.session;
+  async #load(pdf: PdfSession, signal: AbortSignal): Promise<void> {
+    const session = await documentOf(pdf);
     signal.throwIfAborted();
-    const opening = this.#savedPosition ? undefined : this.#opening;
+    const opening = this.#savedPosition ? undefined : this.#options.opening;
     // Fetched beside the first page's size: features read the permissions
     // before the pages are drawn, and the first layout follows the opening.
     const [sizes, permissions, view] = await Promise.all([
       session.pageSizes(),
-      session.permissions().catch((error: unknown) => {
-        console.error("reading permissions failed", error);
-        return null;
-      }),
+      session.permissions().catch(() => null),
       opening
         ? opening(session).catch((error: unknown) => {
             console.error("reading the initial view failed", error);
@@ -782,19 +712,24 @@ export class Viewer {
     ]);
     signal.throwIfAborted();
     this.#session = session;
+    this.#permissions = permissions;
     // Every page has the first one's size until the background pass knows better.
     this.#sizes = [...sizes];
-    this.store.set({ permissions });
     for (const extension of this.#extensions) extension.prepare?.(session, signal);
     signal.throwIfAborted();
+    const options = this.#options;
     const renderer = new Renderer(session, {
-      maxConcurrent: this.#maxConcurrentRenders,
-      textLayer: this.#textLayer,
-      annotationLayer: this.#annotationLayer,
-      ...this.#canvasLimits,
+      maxConcurrent: options.maxConcurrentRenders ?? 2,
+      textLayer: options.textLayer ?? true,
+      annotationLayer: options.annotationLayer ?? true,
+      maxDetailPixels: options.maxDetailPixels,
+      maxDetailViewports: options.maxDetailViewports,
+      maxBasePixels: options.maxBasePixels,
+      maxCanvasPixels: options.maxCanvasPixels,
+      maxKeptPixels: options.maxKeptPixels,
       links: this.#links,
       forms: this.#formLayers,
-      ...(this.#pageColors ? { pageColors: this.#pageColors } : {}),
+      ...(options.pageColors ? { pageColors: options.pageColors } : {}),
       ...(this.#annotationEditor ? { annotationEditor: this.#annotationEditor } : {}),
       selection: this.#selection,
       onPainted: (pageIndex) => {
@@ -820,13 +755,7 @@ export class Viewer {
     if (view?.scrollMode) this.store.set({ scrollMode: view.scrollMode });
     const scale = this.#resolveInitialScale();
     this.#applyLayout(scale);
-    this.store.set({
-      status: "ready",
-      passwordReason: null,
-      pageCount: session.pageCount,
-      scale,
-      document: session,
-    });
+    this.store.set({ scale });
     const saved = this.#savedPosition;
     this.#savedPosition = null;
     if (saved) this.restorePosition(saved);
@@ -837,66 +766,44 @@ export class Viewer {
     this.#ready = signal;
     for (const extension of this.#extensions) extension.ready?.(session, signal);
     this.#background(this.#measurePages(session, signal), "measuring page sizes", signal);
-    // The outline and the rest parse in the worker; each is published when ready.
-    this.#publishLater(signal, session.initialView(), "documentView", null);
-    this.#publishLater(signal, session.outline(), "outline", []);
-    this.#publishLater(signal, session.pageLabels(), "pageLabels", null);
-    this.#publishLater(signal, session.metadata(), "metadata", null);
-    this.#publishLater(signal, session.attachments(), "attachments", []);
     // Until the session's layers arrive, the viewer draws the document's
     // default ones, which they start with: nothing is drawn again, unless
     // another viewer of the session changed them already. Changes any viewer
     // of the session makes are drawn in every one.
-    this.#publishLater(
-      signal,
+    this.#background(
       session.layers().then((layers) => {
-        if (!signal.aborted) {
-          this.#layers = layers;
-          renderer.setLayers(layers);
-          layers.subscribe(this.#onLayersChange, signal);
-          if (layers.changed) this.#onLayersChange();
-        }
-        return layers.layers();
+        if (signal.aborted) return;
+        this.#layers = layers;
+        renderer.setLayers(layers);
+        layers.subscribe(this.#onLayersChange, signal);
+        if (layers.changed) this.#onLayersChange();
       }),
-      "layers",
-      [],
+      "loading layers",
+      signal,
     );
-  }
-
-  /** Publish what `work` loads as `field` until `signal` aborts, or `fallback` if it fails. */
-  #publishLater<K extends keyof ViewerState>(
-    signal: AbortSignal,
-    work: Promise<ViewerState[K]>,
-    field: K,
-    fallback: ViewerState[K],
-  ): void {
-    const publish = (value: ViewerState[K]) => {
-      if (!signal.aborted) this.store.set({ [field]: value } as Partial<ViewerState>);
-    };
-    work.then(publish, (error: unknown) => {
-      if (!signal.aborted) console.error(`loading ${field} failed`, error);
-      publish(fallback);
-    });
   }
 
   /** A viewer of the document showed or hid layers: pages are drawn again. */
   #onLayersChange = (): void => {
-    const layers = this.#layers;
-    if (!layers) return;
-    this.store.set({ layers: layers.layers() });
+    if (!this.#layers) return;
     this.#renderer?.invalidateContent();
     for (const extension of this.#extensions) extension.layersChanged?.();
   };
 
   /**
-   * Try a password for the encrypted document that waits for one (status
-   * "password"); a wrong one asks again with the reason "incorrect". Null
-   * stops opening the document, which then fails.
+   * Build the renderer again with the options it takes, as a viewport that
+   * detaches and attaches again: features hear `detaching`, the position is
+   * kept, and the pages are laid out and drawn again.
    */
-  submitPassword(password: string | null): void {
-    if (this.store.get().status !== "password") return;
-    this.store.set({ status: "loading", passwordReason: null });
-    this.#lease?.submitPassword(password);
+  #rebuild(): void {
+    const pdf = this.#pdf;
+    if (!pdf || !this.#scroller || !this.store.get().layout) return;
+    this.#savedPosition = this.position();
+    for (const extension of this.#extensions) extension.detaching?.();
+    this.#work?.abort();
+    this.#ready = null;
+    this.#renderer = null;
+    this.#start(pdf);
   }
 
   /** Bind the scroll container and its sized content element. */
@@ -908,15 +815,8 @@ export class Viewer {
     const control = this.#viewportControl;
     this.#scroller = scroller;
     this.#content = content;
-    const lease = this.#lease;
-    if (resuming && lease) {
-      this.store.set({ progress: this.#progress });
-      this.#work = linked(lease.signal, control.signal);
-      const { signal } = this.#work;
-      this.#load(lease, signal).catch((error: unknown) => {
-        if (!signal.aborted) this.store.set({ status: "error", error: String(error) });
-      });
-    }
+    const pdf = this.#pdf;
+    if (resuming && pdf) this.#start(pdf);
     this.#renderer?.setKeeping(true);
     const layout = this.store.get().layout;
     if (layout) this.#sizeContent(layout);
@@ -941,13 +841,11 @@ export class Viewer {
       detached = true;
       // A provider may keep the session while its viewport is hidden (Activity).
       // Only viewport work ends; its view and edits return on the next attach.
-      this.#savedPosition = this.store.get().status === "ready" ? this.position() : null;
+      this.#savedPosition = this.store.get().layout ? this.position() : null;
       for (const extension of this.#extensions) extension.detaching?.();
       control.abort();
       this.#renderer = null;
       this.#pageHosts.clear();
-      cancelAnimationFrame(this.#progressFrame);
-      this.#progressFrame = 0;
       clearTimeout(this.#settleTimer);
       this.#settleTimer = 0;
       scroller.removeEventListener("scroll", this.#onScroll);
@@ -1370,7 +1268,7 @@ export class Viewer {
   }
 
   #namedAction(action: string): void {
-    const { pageCount } = this.store.get();
+    const pageCount = this.#sizes.length;
     switch (action) {
       case "NextPage":
         this.nextPage();
@@ -1493,7 +1391,7 @@ export class Viewer {
     this.#zoomTo(requested, anchor);
   }
 
-  /** Back to the zoom the viewer started with (`initialScale`), as Ctrl or ⌘ with 0 does. */
+  /** Back to the zoom the viewer opened with (`initialScale`), as Ctrl or ⌘ with 0 does. */
   resetScale(): void {
     this.setScale(this.#initialScale);
   }
@@ -1778,7 +1676,7 @@ export class Viewer {
         flipped = true;
         break;
       case "End":
-        this.goToPage(this.store.get().pageCount - 1);
+        this.goToPage(this.#sizes.length - 1);
         flipped = true;
         break;
     }
@@ -1945,4 +1843,22 @@ export class Viewer {
       }, SETTLE_DELAY);
     }
   };
+}
+
+/**
+ * Show `session` in `viewer` until it closes or `closeViewer()`: what
+ * `<PdfViewer>` does with the session of its `<PdfDocument>`.
+ */
+export function openViewer(viewer: Viewer, session: PdfSession): void {
+  open(viewer, session);
+}
+
+/** Stop showing the open document, as when its viewer's owner goes. */
+export function closeViewer(viewer: Viewer): void {
+  close(viewer);
+}
+
+/** Take `options` from now on: `<PdfViewer>`'s props. */
+export function setViewerOptions(viewer: Viewer, options: ViewerOptions): void {
+  configure(viewer, options);
 }

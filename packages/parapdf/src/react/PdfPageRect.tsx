@@ -1,10 +1,9 @@
 "use client";
 
-import type { CSSProperties, ReactNode } from "react";
-import { usePdfHotState } from "./context.ts";
+import { type CSSProperties, type ReactNode, use } from "react";
+import { PageContext, useSelected } from "./context.ts";
 
 export interface PdfPageRectProps {
-  pageIndex: number;
   /** Rectangle in PDF points from the page's top-left corner. */
   x: number;
   y: number;
@@ -15,12 +14,16 @@ export interface PdfPageRectProps {
 }
 
 /**
- * Positions children over a page in PDF points. Coordinates become
- * percentages of the page box, so zooming resizes the overlay through layout
- * alone and never needs to re-render it.
+ * Positions children over the page of the overlay it is rendered in
+ * (`renderOverlay`), in PDF points. Coordinates become percentages of the
+ * page box, so zooming resizes the overlay through layout alone and never
+ * needs to render it again.
  */
-export function PdfPageRect({ pageIndex, x, y, width, height, style, children }: PdfPageRectProps) {
-  const size = usePdfHotState((state) => state.layout?.sizes[pageIndex]);
+export function PdfPageRect({ x, y, width, height, style, children }: PdfPageRectProps) {
+  const page = use(PageContext);
+  if (!page) throw new Error("PdfPageRect must be rendered in a <PdfViewer>'s renderOverlay");
+  const { viewer, pageIndex } = page;
+  const size = useSelected(viewer.store.hot, (state) => state.layout?.sizes[pageIndex]);
   if (!size || size.width === 0 || size.height === 0) return null;
   return (
     <div

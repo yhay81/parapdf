@@ -1,6 +1,7 @@
 "use client";
 
 import type { DocumentSession } from "../document/session.ts";
+import { type ReadableStore, Store } from "../document/store.ts";
 import {
   type AnnotationEditingState,
   type AnnotationEditor,
@@ -12,7 +13,6 @@ import {
   type SignatureInput,
 } from "../pdfjs/editor.ts";
 import { linked } from "../view/signals.ts";
-import { type ReadableStore, Store } from "../view/state.ts";
 import type { Viewer } from "../view/viewer.ts";
 import { permits } from "./permissions.ts";
 
@@ -93,6 +93,11 @@ export interface AnnotationEditing {
    * added; 0 until editing starts.
    */
   import(annotations: readonly SavedAnnotation[]): Promise<number>;
+  /**
+   * Name the editor's controls with `labels` from now on: an editor already
+   * started starts again with them, keeping the annotations created.
+   */
+  setLabels(labels: Partial<AnnotationLabels>): void;
   /** Stop editing: the annotations created go, and the pages get no editor layers. */
   detach(): void;
 }
@@ -141,7 +146,7 @@ export function attachAnnotationEditing(
   viewer: Viewer,
   options: AnnotationEditingOptions = {},
 ): AnnotationEditing {
-  const labels = { ...ANNOTATION_LABELS, ...options.labels };
+  let labels = { ...ANNOTATION_LABELS, ...options.labels };
   const store = new Store<AnnotationEditingStore>(STOPPED);
   /** Edits the open document's annotations once the document and the viewport are there. */
   let editor: AnnotationEditor | null = null;
@@ -298,7 +303,8 @@ export function attachAnnotationEditing(
   const editablePage = async (requested: number | undefined): Promise<number | null> => {
     const renderer = viewer.renderer;
     const signal = viewer.workSignal;
-    const { pageCount, currentPage, first, last } = viewer.store.get();
+    const { currentPage, first, last } = viewer.store.get();
+    const pageCount = viewer.session?.pageCount ?? 0;
     const pageIndex = requested ?? currentPage;
     if (!renderer || !signal || !editor || pageIndex < 0 || pageIndex >= pageCount) {
       return null;
@@ -349,6 +355,12 @@ export function attachAnnotationEditing(
     },
     async import(annotations) {
       return (await editor?.import(annotations)) ?? 0;
+    },
+    setLabels(next) {
+      labels = { ...ANNOTATION_LABELS, ...next };
+      if (!editor) return;
+      stop(true);
+      start();
     },
     detach() {
       stop(false);

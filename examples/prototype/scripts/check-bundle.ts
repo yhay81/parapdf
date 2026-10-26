@@ -308,18 +308,17 @@ start();
     join(app, "app.js"),
     `import { createElement as h } from "react";
 import { createRoot } from "react-dom/client";
-import { PdfDocument, PdfViewport, usePdfViewer } from "parapdf";
+import { PdfDocument, PdfViewer, useViewer } from "parapdf";
 
-function Probe() {
-  window.__viewer = usePdfViewer();
-  return null;
+function App({ file }) {
+  const viewer = useViewer();
+  window.__viewer = viewer;
+  return h(PdfDocument, { source: "/" + file }, h(PdfViewer, { viewer, style: { height: "100vh" } }));
 }
 
 export function start() {
   const file = new URLSearchParams(location.search).get("file");
-  createRoot(document.getElementById("root")).render(
-    h(PdfDocument, { source: "/" + file }, h(Probe), h(PdfViewport, { style: { height: "100vh" } })),
-  );
+  createRoot(document.getElementById("root")).render(h(App, { file }));
 }
 `,
   );

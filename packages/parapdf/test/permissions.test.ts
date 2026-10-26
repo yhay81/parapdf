@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import type { PdfPermissions } from "../src/document/session.ts";
 import { enforcePermissions, permits, permitted } from "../src/features/permissions.ts";
 import { Viewer } from "../src/view/viewer.ts";
+import { fakeDocument, fakePdfjs, settle, show } from "./fake-pdfjs.ts";
 
 const restricted: PdfPermissions = {
   restricted: true,
@@ -30,14 +31,22 @@ describe("permissions", () => {
     assert.equal(permitted({ ...restricted, fillForms: false, annotate: true }, "fillForms"), true);
   });
 
-  it("bind a viewer only while it follows them", () => {
+  it("bind a viewer only while it follows them", async (context) => {
+    context.mock.timers.enable({ apis: ["setTimeout"] });
+    // Permitted: filling in forms, copying for accessibility, and assembling.
+    const flags = new Set([0x100, 0x200, 0x400]);
+    const document = fakeDocument({ proxy: { getPermissions: async () => flags } });
     const viewer = new Viewer();
-    viewer.store.set({ permissions: restricted });
+    const { close } = show(viewer, { url: "/a.pdf" }, fakePdfjs(async () => document.proxy).loader);
+    await settle();
     assert.equal(permits(viewer, "print"), true, "a viewer reports them only, by default");
     const stop = enforcePermissions(viewer);
     assert.equal(permits(viewer, "print"), false);
     assert.equal(permits(viewer, "fillForms"), true);
     stop();
     assert.equal(permits(viewer, "print"), true);
+    close();
+    context.mock.timers.tick(1000);
+    await settle();
   });
 });
