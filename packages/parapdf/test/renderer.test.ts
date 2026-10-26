@@ -43,6 +43,13 @@ function input(scale = 1, settled = false): ViewInput {
   };
 }
 
+/**
+ * No text or annotation layers: the renderer builds them in an idle period
+ * once the view settles, 16 ms later in Node, and the fake pdf.js fails them,
+ * so tests that count failed drawings counted them too when a run was slow.
+ */
+const drawingsOnly = { textLayer: false, annotationLayer: false };
+
 describe("Renderer page DOM", () => {
   it("builds the page's canvases and layers before what React rendered in the host", async (t) => {
     const { doc } = await controlledDocument();
@@ -118,7 +125,7 @@ describe("Renderer failures", () => {
   it("tries a base after detail fails, then leaves both failed layers alone", async (t) => {
     t.mock.method(console, "error", () => {});
     const { doc, renders } = await controlledDocument();
-    const renderer = new Renderer(doc);
+    const renderer = new Renderer(doc, drawingsOnly);
     t.after(() => renderer.dispose());
     mount(renderer, 0);
     const view = input(1, true);
@@ -143,7 +150,7 @@ describe("Renderer failures", () => {
     it(`replaces stale detail with a base after a content change${initialBase ? " with an existing base" : ""}`, async (t) => {
       t.mock.method(console, "error", () => {});
       const { doc, renders } = await controlledDocument();
-      const renderer = new Renderer(doc);
+      const renderer = new Renderer(doc, drawingsOnly);
       t.after(() => renderer.dispose());
       const { base, detail, spare } = mount(renderer, 0);
       if (initialBase) {
@@ -188,7 +195,7 @@ describe("Renderer failures", () => {
   it("keeps stale detail if its replacement and base fallback both fail", async (t) => {
     t.mock.method(console, "error", () => {});
     const { doc, renders } = await controlledDocument();
-    const renderer = new Renderer(doc);
+    const renderer = new Renderer(doc, drawingsOnly);
     t.after(() => renderer.dispose());
     const { detail } = mount(renderer, 0);
     const view = input(1, true);
@@ -214,7 +221,7 @@ describe("Renderer failures", () => {
   it("lets other pages draw when a page fails", async (t) => {
     t.mock.method(console, "error", () => {});
     const { doc, renders } = await controlledDocument();
-    const renderer = new Renderer(doc, { maxConcurrent: 1 });
+    const renderer = new Renderer(doc, { ...drawingsOnly, maxConcurrent: 1 });
     t.after(() => renderer.dispose());
     mount(renderer, 0);
     mount(renderer, 1);
@@ -243,7 +250,7 @@ describe("Renderer failures", () => {
   it("retries after zooming or changing the page's drawing", async (t) => {
     t.mock.method(console, "error", () => {});
     const { doc, renders } = await controlledDocument();
-    const renderer = new Renderer(doc);
+    const renderer = new Renderer(doc, drawingsOnly);
     t.after(() => renderer.dispose());
     mount(renderer, 0);
     renderer.update(input());
@@ -269,7 +276,7 @@ describe("Renderer failures", () => {
   it("retries a failed page when it mounts again", async (t) => {
     t.mock.method(console, "error", () => {});
     const { doc, renders } = await controlledDocument();
-    const renderer = new Renderer(doc);
+    const renderer = new Renderer(doc, drawingsOnly);
     t.after(() => renderer.dispose());
     mount(renderer, 0);
     renderer.update(input());
@@ -288,7 +295,7 @@ describe("Renderer failures", () => {
   it("blocks a failed region until scrolling asks for a different region", async (t) => {
     t.mock.method(console, "error", () => {});
     const { doc, renders } = await controlledDocument();
-    const renderer = new Renderer(doc, { maxDetailPixels: 1_000_000 });
+    const renderer = new Renderer(doc, { ...drawingsOnly, maxDetailPixels: 1_000_000 });
     t.after(() => renderer.dispose());
     mount(renderer, 0);
     const view = input(4, true);
@@ -314,7 +321,7 @@ describe("Renderer failures", () => {
 
   it("does not count cancellation as a failed drawing", async (t) => {
     const { doc, renders } = await controlledDocument();
-    const renderer = new Renderer(doc);
+    const renderer = new Renderer(doc, drawingsOnly);
     t.after(() => renderer.dispose());
     mount(renderer, 0);
     renderer.update(input());
