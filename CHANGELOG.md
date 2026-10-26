@@ -4,6 +4,14 @@ Changes to the `parapdf` package. It follows
 [Semantic Versioning](https://semver.org/); until 1.0, a minor release may
 change the API.
 
+## Unreleased
+
+- `PdfDocument` no longer preloads a URL source whose own `httpHeaders` no
+  preload can carry, and preloads one with `withCredentials` in the CORS mode
+  pdf.js fetches it with. Until now the preload followed only
+  `configurePdfjs({ documentOptions })`, so such a source downloaded twice or
+  its preload failed.
+
 ## 0.5.0 — 2026-10-26
 
 ParaPDF is rebuilt (`docs/rebuild/target.md`): pdf.js used directly, document

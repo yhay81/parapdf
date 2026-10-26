@@ -15,8 +15,8 @@ or an `ArrayBuffer`:
 | Field | |
 |---|---|
 | `url` | The document's URL. A string source is `{ url }`. |
-| `httpHeaders` | With `url`: headers for pdf.js's requests. |
-| `withCredentials` | With `url`: send cookies and credentials with cross-origin requests. |
+| `httpHeaders` | With `url`: headers for pdf.js's requests, instead of those of `documentOptions`. A source with headers is not preloaded (see [Server rendering](/setup/server-rendering/)). |
+| `withCredentials` | With `url`: send cookies and credentials with cross-origin requests, instead of following `documentOptions`. |
 | `data` | The document's bytes. ParaPDF copies them before pdf.js transfers them to its worker, so your bytes stay usable. |
 | `password` | The password of an encrypted document, for either kind: it is tried first, and another is asked for only when it is wrong (see [Encrypted documents](/guides/encrypted/)). |
 
