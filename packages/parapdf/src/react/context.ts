@@ -4,7 +4,8 @@ import { createContext, useContext, useSyncExternalStore } from "react";
 import type { PdfSession } from "../document/pdf-session.ts";
 import type { DocumentState } from "../document/registry.ts";
 import type { ReadableStore } from "../document/store.ts";
-import type { Viewer, ViewerState } from "../view/viewer.ts";
+import type { ViewerState } from "../view/state.ts";
+import type { Viewer } from "../view/viewer.ts";
 
 export const SessionContext = createContext<PdfSession | null>(null);
 

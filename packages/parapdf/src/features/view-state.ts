@@ -8,7 +8,8 @@ import {
   turnBox,
   turnedSize,
 } from "../view/layout.ts";
-import type { ShownView, Viewer } from "../view/viewer.ts";
+import type { ShownView } from "../view/options.ts";
+import type { Viewer } from "../view/viewer.ts";
 
 /**
  * Where and how a viewer shows its document, to keep and show again: a
