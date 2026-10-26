@@ -18,8 +18,6 @@ import {
   type LayoutOptions,
   type PageArea,
   pageAtPoint,
-  pageLeft,
-  pageTop,
   rowBounds,
   rowEnd,
   rowStart,
@@ -27,11 +25,19 @@ import {
   type SpreadMode,
   sameRows,
   showPage,
-  turnBox,
   visibleArea,
   visibleRange,
   zoomTarget,
 } from "./layout.ts";
+import {
+  destinationTarget,
+  pageTarget,
+  positionAt,
+  positionTarget,
+  rectTarget,
+  type ScrollTarget,
+  type ViewerPosition,
+} from "./navigation.ts";
 import { rendererChanged, rendererOptions, type ShownView, type ViewerOptions } from "./options.ts";
 import {
   type Edges,
@@ -47,20 +53,6 @@ import {
 import { linked } from "./signals.ts";
 import { type PointerTool, ViewerStore, type ZoomMode } from "./state.ts";
 import { destinationScale, fitScale, refits } from "./zoom.ts";
-
-/**
- * Where a viewer shows its document, to come back to: the page at the
- * viewport's top-left corner, where that corner is as a share of the page,
- * the current page, and the zoom.
- */
-export interface ViewerPosition {
-  pageIndex: number;
-  x: number;
-  y: number;
-  current: number;
-  scale: number;
-  zoomMode: ZoomMode;
-}
 
 /**
  * What a feature hears from a viewer, registered with `extend()`. Every hook
@@ -755,21 +747,7 @@ export class Viewer {
     if (!current || !scroller || current.tops.length === 0) return;
     const target = clamp(index, 0, current.tops.length - 1);
     const layout = this.#show(current, target);
-    const { gap } = layout;
-    const left = pageLeft(layout, target, scroller.clientWidth);
-    const top = pageTop(layout, target, scroller.clientHeight);
-    if (layout.scrollMode === "horizontal") {
-      scroller.scrollLeft = left - gap;
-      scroller.scrollTop = top - gap;
-    } else {
-      // The row's top: a page shorter than its row is centered in it.
-      scroller.scrollTop = top - ((layout.tops[target] ?? 0) - (layout.rowTops[target] ?? 0)) - gap;
-      // A page of a spread wider than the viewport may lie beside it.
-      const right = left + (layout.widths[target] ?? 0);
-      if (left < scroller.scrollLeft || right > scroller.scrollLeft + scroller.clientWidth) {
-        scroller.scrollLeft = left - gap;
-      }
-    }
+    this.#scrollTo(scroller, pageTarget(layout, target, scroller));
     // At once, not at the scroll event: a flip may not scroll at all, and a
     // second flip in the same frame starts from the page this one shows.
     this.store.set({ currentPage: target });
@@ -832,6 +810,12 @@ export class Viewer {
     return next;
   }
 
+  /** Scroll to `target`, read before this write: its top, then its left unless null. */
+  #scrollTo(scroller: HTMLElement, target: ScrollTarget): void {
+    scroller.scrollTop = target.top;
+    if (target.left !== null) scroller.scrollLeft = target.left;
+  }
+
   /**
    * Follow an internal link or outline entry, with the zoom its destination
    * asks for unless `destinationZoom` is false. The history feature keeps
@@ -884,34 +868,7 @@ export class Viewer {
       }
     }
     const layout = this.#show(current, pageIndex);
-    const rect = target.view?.fit === "rect" ? target.view : null;
-    // The point is on the unturned page; a quarter turn makes
-    // its left coordinate the vertical one.
-    const size = layout.sizes[pageIndex] ?? { width: 0, height: 0 };
-    const point = turnBox(
-      { x: target.x ?? 0, y: target.y ?? 0, width: rect?.width ?? 0, height: rect?.height ?? 0 },
-      size,
-      layout.rotation,
-    );
-    const quarter = layout.rotation % 180 !== 0;
-    const hasTop = (quarter ? target.x : target.y) !== null;
-    const hasLeft = (quarter ? target.y : target.x) !== null;
-    const pageX = pageLeft(layout, pageIndex, scroller.clientWidth);
-    const pageY = pageTop(layout, pageIndex, scroller.clientHeight);
-    // An explicit top lands at the top edge of the viewport, as in other PDF
-    // readers, and an explicit left, in "horizontal" mode, at its left edge.
-    const top = hasTop ? pageY + point.y * layout.scale : pageY - layout.gap;
-    const left = hasLeft ? pageX + point.x * layout.scale : pageX - layout.gap;
-    scroller.scrollTop = top;
-    if (
-      layout.scrollMode === "horizontal" ||
-      // A rectangle fills the viewport from its left edge, and a view
-      // state shows the same part of the page again.
-      ((rect || exact) && hasLeft) ||
-      (hasLeft && (left < scroller.scrollLeft || left > scroller.scrollLeft + scroller.clientWidth))
-    ) {
-      scroller.scrollLeft = left;
-    }
+    this.#scrollTo(scroller, destinationTarget(layout, target, scroller, exact));
     this.store.set({ currentPage: pageIndex });
     this.#update();
   }
@@ -970,18 +927,7 @@ export class Viewer {
     const scroller = this.#scroller;
     if (!current || !scroller || pageIndex < 0 || pageIndex >= current.tops.length) return;
     const layout = this.#show(current, pageIndex);
-    const size = layout.sizes[pageIndex] ?? { width: 0, height: 0 };
-    const box = turnBox(rect, size, layout.rotation);
-    const top = pageTop(layout, pageIndex, scroller.clientHeight) + box.y * layout.scale;
-    const left = pageLeft(layout, pageIndex, scroller.clientWidth) + box.x * layout.scale;
-    scroller.scrollTop = top - scroller.clientHeight / 3;
-    if (
-      layout.scrollMode === "horizontal" ||
-      left < scroller.scrollLeft ||
-      left > scroller.scrollLeft + scroller.clientWidth
-    ) {
-      scroller.scrollLeft = left - scroller.clientWidth / 3;
-    }
+    this.#scrollTo(scroller, rectTarget(layout, pageIndex, rect, scroller));
     this.store.set({ currentPage: pageIndex });
     this.#update();
   }
@@ -995,16 +941,7 @@ export class Viewer {
     const layout = this.store.get().layout;
     const scroller = this.#scroller;
     if (!layout || !scroller) return null;
-    const { scrollLeft: x, scrollTop: y, clientWidth, clientHeight } = scroller;
-    const pageIndex = pageAtPoint(layout, x, y, clientWidth);
-    return {
-      pageIndex,
-      x: (x - pageLeft(layout, pageIndex, clientWidth)) / (layout.widths[pageIndex] || 1),
-      y: (y - pageTop(layout, pageIndex, clientHeight)) / (layout.heights[pageIndex] || 1),
-      current: this.store.get().currentPage,
-      scale: layout.scale,
-      zoomMode: this.store.get().zoomMode,
-    };
+    return positionAt(layout, scroller, this.store.get());
   }
 
   /** Show a `position()` again, with its zoom; a fitted zoom fits the viewport as it is now. */
@@ -1027,11 +964,7 @@ export class Viewer {
       this.store.set({ scale });
     }
     const layout = this.#show(current, pageIndex);
-    scroller.scrollTop =
-      pageTop(layout, pageIndex, scroller.clientHeight) +
-      entry.y * (layout.heights[pageIndex] ?? 0);
-    scroller.scrollLeft =
-      pageLeft(layout, pageIndex, scroller.clientWidth) + entry.x * (layout.widths[pageIndex] ?? 0);
+    this.#scrollTo(scroller, positionTarget(layout, entry, scroller));
     this.store.set({ currentPage: entry.current });
     this.#update();
   }

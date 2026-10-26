@@ -1,5 +1,6 @@
 import { type ReadableStore, Store } from "../document/store.ts";
-import type { Viewer, ViewerPosition } from "../view/viewer.ts";
+import type { ViewerPosition } from "../view/navigation.ts";
+import type { Viewer } from "../view/viewer.ts";
 
 export interface HistoryState {
   /** Whether `back()` can return to a position before a link or outline jump. */

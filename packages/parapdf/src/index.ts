@@ -101,6 +101,7 @@ export { type SearchControls, useSearch } from "./react/search.ts";
 export { useSelection } from "./react/selection.ts";
 export type { RenderStats } from "./render/renderer.ts";
 export type { Layout, ScrollMode, SpreadMode } from "./view/layout.ts";
+export type { ViewerPosition } from "./view/navigation.ts";
 export type { Opening, ShownView } from "./view/options.ts";
 export type { PointerTool, ViewerState, ZoomMode } from "./view/state.ts";
-export type { Viewer, ViewerExtension, ViewerPosition } from "./view/viewer.ts";
+export type { Viewer, ViewerExtension } from "./view/viewer.ts";
