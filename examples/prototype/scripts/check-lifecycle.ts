@@ -9,7 +9,9 @@
  * because production React does not double-mount.
  *
  * Usage: pnpm --filter @parapdf/prototype build && pnpm --filter @parapdf/prototype check:lifecycle
- * Environment: BROWSER (chromium, webkit, or firefox), ENGINE (pdfjs-next).
+ * Environment: BROWSER (chromium, webkit, or firefox), ENGINE (pdfjs-next),
+ * DIST (another build of the demo, in a directory of its own; the StrictMode
+ * part runs on the source).
  */
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -145,6 +147,7 @@ try {
     root: exampleDir,
     configFile,
     logLevel: "warn",
+    ...(process.env.DIST ? { build: { outDir: process.env.DIST } } : {}),
     preview: { port: 4184, host: "127.0.0.1", strictPort: false, open: false },
   });
   try {
