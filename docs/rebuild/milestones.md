@@ -185,7 +185,28 @@ Every milestone's "Done when" includes, besides its own items:
   current page; document state is published by the session's own store,
   and the public session surface is settled without exposing internal
   lifecycle ownership to applications.
-- Status: not started.
+- Status: done (2026-10-26), #41. `target.md` settled the names first
+  ("React API"). `useViewer()` and `PdfViewer` show a `PdfDocument`'s
+  session, several viewers to a provider; `PdfViewer`'s props are live
+  options, and its view state is controlled or not; the registry's entry
+  publishes the document's state, which a `PdfSession` shows applications
+  without any method that opens or releases; secondary data reads with
+  `use()`; overlays render through portals; `PdfThumbnails` lists a
+  viewer's pages. Opening viewers, setting their options, attaching
+  viewports and pages, and holding sessions are functions `react/` calls,
+  not exports. The demo, its split view (one provider, two viewers), the
+  site's example components, and the checks moved to it; `check:options`
+  covers live options and controlled state. Every functional check passes
+  in Chromium with `ENGINE=pdfjs`. The scroll benchmark against ff5cba1,
+  three runs in Chromium, WebKit, and Firefox (`results/scroll-m6-*`,
+  `m6-runs.json`), shows React committing exactly at the mounted window's
+  and the current page's changes in both builds, and no regression beyond
+  the runs' spread (decision 0011). Review found a provider held again after
+  its session closed following the closed document, `passwordPrompt`
+  reopening the document, data never settling without a prompt, controlled
+  values echoing, inline `annotationLabels` restarting the editor, and
+  viewport attachment left public; all are corrected, the first with a
+  unit test.
 
 ## M7: finish
 

@@ -51,7 +51,39 @@ The names and the semantics are in `target.md`, "React API" and
 
 ## Evidence
 
-EVIDENCE
+The scroll benchmark ran M6 (this branch) against main as M5 left it
+(ff5cba1), in turn, job by job, on 2026-10-26: Apple M2 Pro, macOS 27.0.0,
+AC power, Playwright's headless Chromium 156.0.8078.4, WebKit 27.2, and
+Firefox 157.0; `synthetic-text-1000.pdf` and `bill-hr815.pdf` at 900 and
+3600 CSS px/s, fit-width, four seconds per job, three runs per cell
+(`examples/prototype/results/scroll-m6-<browser>.{json,md}`; the per-run
+values in [`m6-runs.json`](../../examples/prototype/results/m6-runs.json)).
+One-minute load averages were 4.3 to 5.4; no job waited for or overlapped
+another Playwright browser.
+
+- React committed exactly when the mounted window or the current page
+  changed, in both builds and all three browsers: 4, 24, 4, and 20 commits
+  over four seconds in the four cases, every run alike. The store published
+  as often (2 + 2, 15 + 9, 2 + 2, 13 + 7 window and current-page changes).
+- Every job had zero blank area. Dropped frames stayed at 0 or 1 of 240 to
+  289 in both builds.
+- Blocked main-thread time, M6 [min–max] against main, ms: Chromium
+  2.9–19.3 against 2.1–35.9 over the four cells, WebKit 5.5–61.9 against
+  3.9–56.0, Firefox 39.6–85.0 against 46.9–119.4. The ranges overlap in
+  every cell but two, where M6 was lower: Chromium's `bill-hr815.pdf` at
+  900 px/s (5.3–9.8 against 11.6–17.2) and Firefox's
+  `synthetic-text-1000.pdf` at 900 px/s (39.6–45.0 against 48.3–56.5). A
+  run of an earlier M6 build the same day, under a load average of 9.4,
+  had Chromium's `bill-hr815.pdf` cell the other way round (18 against
+  11 ms medians), so no speed change is claimed either way.
+- First paint medians moved by −30 to +25 ms, within the runs' spread.
+
+`check:options` covers live options (the text layer and the gap change
+without reopening the document or leaving the page) and controlled view
+state (a controlled rotation and zoom shown, returned to after a change not
+taken up, kept after one taken up, and the callbacks hearing the viewer's
+changes); `check:viewers` covers two viewers under one provider; every
+functional check passes in Chromium with `ENGINE=pdfjs`.
 
 ## Consequences
 
