@@ -33,14 +33,14 @@ import {
 /** A toolbar, a viewer, and a note naming the document, as the examples show them. */
 function Example({
   file,
-  options,
+  viewerProps,
   toolbar,
   side,
   note,
   overlay,
 }: {
   file: string;
-  options?: PdfViewerProps;
+  viewerProps?: PdfViewerProps;
   toolbar?: (viewer: Viewer) => ReactNode;
   side?: (viewer: Viewer) => ReactNode;
   note?: ReactNode;
@@ -61,7 +61,7 @@ function Example({
         <div className="example-body">
           {side?.(viewer)}
           <PdfViewer
-            {...options}
+            {...viewerProps}
             viewer={viewer}
             className="example-viewport"
             renderOverlay={overlay}
@@ -151,7 +151,7 @@ export function LayoutExample() {
   return (
     <Example
       file="synthetic-mixed-sizes.pdf"
-      options={{ defaultZoom: "fit-page" }}
+      viewerProps={{ defaultZoom: "fit-page" }}
       toolbar={(viewer) => (
         <>
           <LayoutControls viewer={viewer} />
@@ -326,7 +326,7 @@ export function FormsExample() {
   return (
     <Example
       file="f1040.pdf"
-      options={{ forms: true }}
+      viewerProps={{ forms: true }}
       toolbar={(viewer) => <FormTools viewer={viewer} />}
       note="What you type stays in this page: the download is made in your browser."
     />
@@ -383,7 +383,7 @@ export function AnnotationsExample() {
   return (
     <Example
       file="usrguide.pdf"
-      options={{ annotationEditing: true }}
+      viewerProps={{ annotationEditing: true }}
       toolbar={(viewer) => <AnnotationTools viewer={viewer} />}
       note="Select text with Highlight, click with Text, drag with Draw; the download includes them."
     />

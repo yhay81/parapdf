@@ -40,7 +40,7 @@ import {
 import { AnnotationToolbar } from "./AnnotationToolbar.tsx";
 import { BenchDriver } from "./BenchDriver.tsx";
 import { configureEngine, type Pdfjs } from "./engines.ts";
-import { showWith } from "./internals.ts";
+import { attachViewport, showWith } from "./internals.ts";
 import { PasswordPrompt } from "./PasswordPrompt.tsx";
 import { SearchBox } from "./SearchBox.tsx";
 import { Sidebar, type SidebarView } from "./Sidebar.tsx";
@@ -346,6 +346,8 @@ declare global {
     __onFormChange?: (change: parapdf.FormChange) => void;
     /** Shows a document opened with a pdf.js of the check's own, for check-options.ts. */
     __showWith?: typeof showWith;
+    /** Binds a viewer to elements of the check's own, for check-options.ts. */
+    __attachViewport?: typeof attachViewport;
     /** Changes props of the viewer's `<PdfViewer>`, which are live, for check-options.ts. */
     __setViewerProps?: (props: Partial<PdfViewerProps>) => void;
   }
@@ -354,6 +356,7 @@ declare global {
 // The package's functions, for the checks, in the split view too.
 window.__parapdf = parapdf;
 window.__showWith = showWith;
+window.__attachViewport = attachViewport;
 
 /** Exposes the viewer and its features to the checks: the same the toolbars use. */
 function Probes({ viewer }: { viewer: PdfViewerController }) {

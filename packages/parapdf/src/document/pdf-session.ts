@@ -23,12 +23,16 @@ import type { ReadableStore } from "./store.ts";
  * sees it: a request for a password is the error pdf.js gives without one.
  * Other providers of the same document may still answer the request.
  */
-function withoutPrompt(state: ReadableStore<DocumentState>): ReadableStore<DocumentState> {
+function withoutPrompt(
+  state: ReadableStore<DocumentState>,
+  prompts: () => boolean,
+): ReadableStore<DocumentState> {
   let source: DocumentState | null = null;
   let shown: DocumentState | null = null;
   return {
     get() {
       const current = state.get();
+      if (prompts()) return current;
       if (current !== source || !shown) {
         source = current;
         shown =
@@ -55,6 +59,8 @@ function withoutPrompt(state: ReadableStore<DocumentState>): ReadableStore<Docum
 let connect: (session: PdfSession, pdfjs: PdfjsLoader) => () => void;
 /** The loaded document of a session; see `documentOf()`. */
 let loaded: (session: PdfSession) => Promise<DocumentSession>;
+/** Shows or hides a session's password requests; see `setPasswordPrompt()`. */
+let prompt: (session: PdfSession, passwordPrompt: boolean) => void;
 
 /**
  * One `<PdfDocument>`'s view of the session of its source, shared by the
@@ -68,6 +74,11 @@ export class PdfSession {
   static {
     connect = (session, pdfjs) => session.#connect(pdfjs);
     loaded = (session) => session.#loaded;
+    prompt = (session, passwordPrompt) => {
+      if (session.#prompt === passwordPrompt) return;
+      session.#prompt = passwordPrompt;
+      session.#notify();
+    };
   }
 
   /** The source it shows. */
@@ -82,8 +93,16 @@ export class PdfSession {
   readonly #listeners = new Set<() => void>();
   /** Aborted when the provider lets the session go; the next hold gets another. */
   #control = new AbortController();
-  readonly #loaded: Promise<DocumentSession>;
+  /** The loaded document of the session held, or, before the first hold, its promise. */
+  #loaded: Promise<DocumentSession>;
   #resolveLoaded!: (session: Promise<DocumentSession>) => void;
+  /** The registry's session that `#loaded` follows; null before the first hold. */
+  #held: Promise<DocumentSession> | null = null;
+  /** Whether a password request shows as such, or as the error pdf.js gives without one. */
+  #prompt: boolean;
+  /** Resolves once `state` shows the document failed, which settles what is read from it. */
+  #failed!: Promise<void>;
+  #fail!: () => void;
   readonly #reads = new Map<string, Promise<unknown>>();
   #proxy: Pdfjs.PDFDocumentProxy | null = null;
 
@@ -92,12 +111,10 @@ export class PdfSession {
     this.#loaded = new Promise((resolve) => {
       this.#resolveLoaded = resolve;
     });
-    this.#loaded.then(
-      (session) => {
-        this.#proxy = session.proxy;
-      },
-      () => {},
-    );
+    // A document that fails says so in `state`; its readers handle the failure.
+    this.#loaded.catch(() => {});
+    this.#prompt = passwordPrompt;
+    this.#resetFailure();
     const held: ReadableStore<DocumentState> = {
       get: () => this.#source?.get() ?? OPENING,
       subscribe: (listener) => {
@@ -107,7 +124,19 @@ export class PdfSession {
         };
       },
     };
-    this.state = passwordPrompt ? held : withoutPrompt(held);
+    this.state = withoutPrompt(held, () => this.#prompt);
+  }
+
+  #resetFailure(): void {
+    this.#failed = new Promise((resolve) => {
+      this.#fail = resolve;
+    });
+  }
+
+  /** Tell the state's readers, and settle what is read once the document failed. */
+  #notify(): void {
+    if (this.state.get().status === "error") this.#fail();
+    for (const listener of [...this.#listeners]) listener();
   }
 
   /**
@@ -172,7 +201,10 @@ export class PdfSession {
   #read<T>(what: string, read: (session: DocumentSession) => Promise<T>, fallback: T): Promise<T> {
     let reading = this.#reads.get(what) as Promise<T> | undefined;
     if (!reading) {
-      reading = this.#loaded.then(read).catch((error: unknown) => {
+      // A provider without a prompt shows a password request as an error
+      // while the document still waits: what is read settles then too.
+      const failed = this.#failed.then(() => fallback);
+      reading = Promise.race([this.#loaded.then(read), failed]).catch((error: unknown) => {
         if (this.#source?.get().status === "ready") console.error(`loading ${what} failed`, error);
         return fallback;
       });
@@ -193,12 +225,26 @@ export class PdfSession {
     });
     this.#lease = lease;
     this.#source = lease.state;
-    this.#resolveLoaded(lease.session);
-    const notify = () => {
-      for (const listener of [...this.#listeners]) listener();
-    };
-    this.#unsubscribe = lease.state.subscribe(notify);
-    notify();
+    if (this.#held !== lease.session) {
+      // The first hold, or one after the session closed, which opens it again.
+      const held = lease.session;
+      if (this.#held === null) this.#resolveLoaded(held);
+      else {
+        this.#loaded = held;
+        this.#reads.clear();
+        this.#proxy = null;
+        this.#resetFailure();
+      }
+      this.#held = held;
+      held.then(
+        (session) => {
+          if (this.#held === held) this.#proxy = session.proxy;
+        },
+        () => {},
+      );
+    }
+    this.#unsubscribe = lease.state.subscribe(() => this.#notify());
+    this.#notify();
     let released = false;
     return () => {
       if (released) return;
@@ -228,4 +274,13 @@ export function connectSession(session: PdfSession, pdfjs: PdfjsLoader = loadPdf
  */
 export function documentOf(session: PdfSession): Promise<DocumentSession> {
   return loaded(session);
+}
+
+/**
+ * Show `session`'s password requests as such, or, without a prompt, as the
+ * error pdf.js gives without one: `<PdfDocument>`'s `passwordPrompt`, which
+ * changes without opening the document again.
+ */
+export function setPasswordPrompt(session: PdfSession, passwordPrompt: boolean): void {
+  prompt(session, passwordPrompt);
 }

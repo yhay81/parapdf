@@ -320,7 +320,7 @@ export interface Viewport {
  * row is centered in the viewport, as in pdf.js's viewer, and one wider
  * than the viewport starts at the gap. Centering every row in the widest
  * row's width instead pushed narrower pages off the viewport's right edge.
- * `<PdfViewport>` places pages by the same rule in CSS.
+ * `<PdfViewer>` places pages by the same rule in CSS.
  */
 export function pageLeft(layout: Layout, index: number, viewportWidth: number): number {
   return (
@@ -333,7 +333,7 @@ export function pageLeft(layout: Layout, index: number, viewportWidth: number): 
  * Where a page's top edge sits in the scrolled content, in CSS pixels. In
  * "horizontal" and "page" mode, the row is centered in the viewport's height,
  * and one taller than the viewport starts at the gap, as pageLeft centers
- * rows in its width. `<PdfViewport>` places pages by the same rule in CSS.
+ * rows in its width. `<PdfViewer>` places pages by the same rule in CSS.
  */
 export function pageTop(layout: Layout, index: number, viewportHeight: number): number {
   const top = layout.tops[index] ?? 0;

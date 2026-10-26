@@ -2,7 +2,7 @@
 
 import { type ReactNode, useEffect, useState } from "react";
 import { preload } from "react-dom";
-import { connectSession, PdfSession } from "../document/pdf-session.ts";
+import { connectSession, PdfSession, setPasswordPrompt } from "../document/pdf-session.ts";
 import { sourceKey } from "../document/registry.ts";
 import type { PdfSource } from "../document/session.ts";
 import { documentRequestMode, preloadPdfjs } from "../pdfjs/loader.ts";
@@ -30,7 +30,6 @@ export interface PdfDocumentProps {
 interface Held {
   readonly key: unknown;
   readonly password: string | undefined;
-  readonly passwordPrompt: boolean;
   readonly session: PdfSession;
 }
 
@@ -59,12 +58,11 @@ export function PdfDocument({ source, passwordPrompt = true, children }: PdfDocu
   const create = (): Held => ({
     key,
     password,
-    passwordPrompt,
     session: new PdfSession(resolved, { passwordPrompt }),
   });
   const [held, setHeld] = useState(create);
   let current = held;
-  if (held.key !== key || held.password !== password || held.passwordPrompt !== passwordPrompt) {
+  if (held.key !== key || held.password !== password) {
     // Another source: its session renders at once, as the first did.
     current = create();
     setHeld(current);
@@ -74,5 +72,7 @@ export function PdfDocument({ source, passwordPrompt = true, children }: PdfDocu
   // mount-unmount-mount cycle and quick remounts reuse the open document
   // instead of opening it again (document/registry.ts).
   useEffect(() => connectSession(session), [session]);
+  // The prompt changes what the session shows, not the document.
+  useEffect(() => setPasswordPrompt(session, passwordPrompt), [session, passwordPrompt]);
   return <SessionContext value={session}>{children}</SessionContext>;
 }

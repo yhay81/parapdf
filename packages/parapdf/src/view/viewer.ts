@@ -308,6 +308,10 @@ let open: (viewer: Viewer, session: PdfSession) => void;
 let close: (viewer: Viewer) => void;
 /** Sets a viewer's options; see `setViewerOptions()`. */
 let configure: (viewer: Viewer, options: ViewerOptions) => void;
+/** Binds a viewport; see `attachViewport()`. */
+let bindViewport: (viewer: Viewer, scroller: HTMLElement, content: HTMLElement) => () => void;
+/** Registers a page's host; see `attachPage()`. */
+let bindPage: (viewer: Viewer, index: number, host: HTMLElement) => () => void;
 
 /**
  * One viewport onto a shared document session: layout, gestures,
@@ -319,6 +323,8 @@ export class Viewer {
     open = (viewer, session) => viewer.#open(session);
     close = (viewer) => viewer.#close?.();
     configure = (viewer, options) => viewer.#configure(options);
+    bindViewport = (viewer, scroller, content) => viewer.#attachViewport(scroller, content);
+    bindPage = (viewer, index, host) => viewer.#attachPage(index, host);
   }
 
   readonly store = new ViewerStore({
@@ -753,11 +759,16 @@ export class Viewer {
     for (const [index, host] of this.#pageHosts) renderer.attach(index, host);
     if (view?.spread) this.store.set({ spread: view.spread });
     if (view?.scrollMode) this.store.set({ scrollMode: view.scrollMode });
-    const scale = this.#resolveInitialScale();
-    this.#applyLayout(scale);
-    this.store.set({ scale });
+    // Where a viewport showed the document, it shows it again at once.
     const saved = this.#savedPosition;
     this.#savedPosition = null;
+    const scale = saved
+      ? saved.zoomMode === "custom"
+        ? saved.scale
+        : (this.#fitScale(saved.current, saved.zoomMode) ?? saved.scale)
+      : this.#resolveInitialScale();
+    this.#applyLayout(scale);
+    this.store.set({ scale });
     if (saved) this.restorePosition(saved);
     else if (view?.view) this.show(view.view);
     else if (this.#initialPage > 0) this.goToPage(this.#initialPage);
@@ -807,7 +818,7 @@ export class Viewer {
   }
 
   /** Bind the scroll container and its sized content element. */
-  attachViewport(scroller: HTMLElement, content: HTMLElement): () => void {
+  #attachViewport(scroller: HTMLElement, content: HTMLElement): () => void {
     if (this.#scroller)
       throw new Error("A Viewer owns one viewport; create another Viewer for a second viewport");
     const resuming = this.#viewportControl.signal.aborted;
@@ -876,7 +887,7 @@ export class Viewer {
    * page's canvases and layers at the start of the host, before what React
    * renders there.
    */
-  attachPage(index: number, host: HTMLElement): () => void {
+  #attachPage(index: number, host: HTMLElement): () => void {
     this.#renderer?.attach(index, host);
     this.#pageHosts.set(index, host);
     return () => {
@@ -1861,4 +1872,26 @@ export function closeViewer(viewer: Viewer): void {
 /** Take `options` from now on: `<PdfViewer>`'s props. */
 export function setViewerOptions(viewer: Viewer, options: ViewerOptions): void {
   configure(viewer, options);
+}
+
+/**
+ * Bind `viewer` to its scroll container and the sized element that holds
+ * its pages; returns the function that detaches them: what `<PdfViewer>`
+ * does with the elements it renders.
+ */
+export function attachViewport(
+  viewer: Viewer,
+  scroller: HTMLElement,
+  content: HTMLElement,
+): () => void {
+  return bindViewport(viewer, scroller, content);
+}
+
+/**
+ * Register the host React places for page `index` of `viewer`; returns the
+ * function that releases it. The renderer builds the page's canvases and
+ * layers at the start of the host.
+ */
+export function attachPage(viewer: Viewer, index: number, host: HTMLElement): () => void {
+  return bindPage(viewer, index, host);
 }

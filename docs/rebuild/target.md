@@ -88,20 +88,27 @@ The session's state and its public surface (M6):
   an animation frame), and, once ready, the page count and permissions,
   which it reads before it says so. Every viewer of the session reads that
   one store; viewers keep only view state.
-- Applications see a `PdfSession`, one per `PdfDocument`: its `state`, a
-  `submitPassword()` that answers the request any viewer of the document
-  may answer, pdf.js's `proxy` once ready, and the promises of its
+- Applications see a `PdfSession`, one per `PdfDocument`: its `source`,
+  its `state`, a `submitPassword()` that answers the request any viewer of
+  the document may answer, pdf.js's `proxy` once ready, a `signal` that
+  aborts when the provider lets the session go, and the promises of its
   secondary data (outline, page labels, metadata, attachments, layers,
   form fields, the initial view), each read once and settled with an empty
-  value when the read or the document fails. A `PdfSession` has no method
+  value when the read or the document fails (or, without a prompt, once
+  the state shows the request as an error). The provider creates it as it
+  renders and holds the registry's session for it while mounted; held again
+  after the registry closed that session, it follows the one opened anew.
+  A `PdfSession` has no method
   that opens, closes, or releases anything: `PdfDocument` holds its lease
   and gives it back, and a viewer that shows it stops when it closes.
 - `passwordPrompt={false}` on a `PdfDocument` shows a password request as
   the error pdf.js gives without one, to that provider only: other
-  providers of the same document may still answer.
+  providers of the same document may still answer. Changing it changes
+  what the session shows, without opening the document again.
 - `DocumentSession`, the loaded document described above, stays what
-  viewers, the renderer, and features work with; applications reach it
-  only through features' hooks.
+  viewers, the renderer, and features work with; it reaches applications
+  as the viewer's `session` and in the hooks of `viewer.extend()`, the
+  surface features are built on.
 
 ### view/
 
@@ -127,7 +134,9 @@ and since M6 a viewer's store holds view state only (the session's holds the
 document's); its combined snapshot is the two together.
 
 A viewer is created by `useViewer()` and lives as long as the component
-that called it. It shows the session of the `PdfViewer` it is given to,
+that called it; a `PdfViewer` given no viewer creates its own, which goes
+when it unmounts, inside a hidden `Activity` too: an application that
+keeps a view while its viewport is hidden holds the viewer above it. It shows the session of the `PdfViewer` it is given to,
 until that session closes (its `PdfDocument` unmounts or opens another
 source), it is given to a viewer of another session, or the component that
 created it unmounts. Its options are set by that `PdfViewer`'s props and
@@ -328,8 +337,15 @@ Hooks, named without a `Pdf` prefix:
 
 Functions keep taking the viewer they act through (`print(viewer)`,
 `download(viewer)`, `getText(viewer)`, `getViewState(viewer)`, …).
-Opening a viewer's document, attaching its viewport, and releasing a session
-are not part of the public API.
+Opening a viewer's document, setting its options, attaching its viewport
+and pages, and holding or releasing a session are not part of the public
+API: they are functions of `view/viewer.ts` and `document/pdf-session.ts`
+that `react/` calls, absent from the package's exports. A `Viewer` gives
+applications its store, its navigation and view methods (`goToPage()`,
+`goToDestination()`, `setScale()`, `zoomBy()`, `rotate()`, `setSpread()`,
+`setScrollMode()`, `setTool()`, `show()`, `position()`, …), and the surface
+features extend it through (`extend()`, `defer()`, `session`, `renderer`,
+`layers`, `permissions`, `workSignal`, and the methods features call).
 
 Server rendering stays as in 0.x: modules declare `"use client"`, the
 viewer renders an empty viewport on the server, and a URL source's preload

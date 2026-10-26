@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import { type CSSProperties, memo, useCallback } from "react";
 import type { Viewer } from "../view/viewer.ts";
 import { useSelected } from "./context.ts";
 import { PdfThumbnail } from "./PdfThumbnail.tsx";
@@ -43,7 +43,11 @@ export function PdfThumbnails({
 }: PdfThumbnailsProps) {
   const pageCount = useSelected(viewer.store.hot, (state) => state.layout?.sizes.length ?? 0);
   const currentPage = useSelected(viewer.store.hot, (state) => state.currentPage);
-  const select = onSelect ?? ((pageIndex: number) => viewer.goToPage(pageIndex));
+  // Stable while the props are, so that a new current page renders two items again, not all.
+  const select = useCallback(
+    (pageIndex: number) => (onSelect ? onSelect(pageIndex) : viewer.goToPage(pageIndex)),
+    [onSelect, viewer],
+  );
   return (
     <nav
       className={className ? `parapdf-thumbnails ${className}` : "parapdf-thumbnails"}
@@ -52,20 +56,43 @@ export function PdfThumbnails({
     >
       <ol>
         {Array.from({ length: pageCount }, (_, pageIndex) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: pages are identified by their index.
-          <li key={pageIndex}>
-            <button
-              type="button"
-              aria-label={pageLabel(pageIndex + 1, pageCount)}
-              aria-current={pageIndex === currentPage ? "page" : undefined}
-              onClick={() => select(pageIndex)}
-            >
-              <PdfThumbnail viewer={viewer} pageIndex={pageIndex} width={width} />
-              <span aria-hidden="true">{pageIndex + 1}</span>
-            </button>
-          </li>
+          <Item
+            // biome-ignore lint/suspicious/noArrayIndexKey: pages are identified by their index.
+            key={pageIndex}
+            viewer={viewer}
+            pageIndex={pageIndex}
+            width={width}
+            label={pageLabel(pageIndex + 1, pageCount)}
+            current={pageIndex === currentPage}
+            select={select}
+          />
         ))}
       </ol>
     </nav>
   );
 }
+
+interface ItemProps {
+  viewer: Viewer;
+  pageIndex: number;
+  width: number;
+  label: string;
+  current: boolean;
+  select: (pageIndex: number) => void;
+}
+
+const Item = memo(function Item({ viewer, pageIndex, width, label, current, select }: ItemProps) {
+  return (
+    <li>
+      <button
+        type="button"
+        aria-label={label}
+        aria-current={current ? "page" : undefined}
+        onClick={() => select(pageIndex)}
+      >
+        <PdfThumbnail viewer={viewer} pageIndex={pageIndex} width={width} />
+        <span aria-hidden="true">{pageIndex + 1}</span>
+      </button>
+    </li>
+  );
+});

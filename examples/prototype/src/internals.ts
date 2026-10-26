@@ -6,7 +6,13 @@
 import { connectSession, PdfSession } from "../../../packages/parapdf/src/document/pdf-session.ts";
 import type { PdfjsLoader } from "../../../packages/parapdf/src/document/registry.ts";
 import type { PdfSource } from "../../../packages/parapdf/src/document/session.ts";
-import { openViewer, type Viewer } from "../../../packages/parapdf/src/view/viewer.ts";
+import {
+  attachViewport,
+  openViewer,
+  type Viewer,
+} from "../../../packages/parapdf/src/view/viewer.ts";
+
+export { attachViewport };
 
 /** Show `source`, opened with `pdfjs`, in `viewer`; returns what closes it. */
 export function showWith(viewer: Viewer, source: PdfSource, pdfjs: PdfjsLoader): () => void {

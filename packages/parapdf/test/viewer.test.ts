@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it, mock } from "node:test";
-import { connectSession, PdfSession } from "../src/document/pdf-session.ts";
+import {
+  connectSession,
+  documentOf,
+  PdfSession,
+  setPasswordPrompt,
+} from "../src/document/pdf-session.ts";
 import type { PdfjsLoader } from "../src/document/registry.ts";
 import type { PdfSource } from "../src/document/session.ts";
 import { attachSearch } from "../src/features/search/index.ts";
@@ -122,6 +127,19 @@ describe("a session's document state", () => {
     assert.equal(second.state.get().error, "PasswordException: Incorrect Password");
   });
 
+  it("settles its data without a prompt, and shows the prompt again once asked to", async () => {
+    const pdfjs = lockedPdfjs();
+    const session = provide({ url: "/locked.pdf" }, pdfjs, false);
+    await settle();
+    assert.equal(session.state.get().status, "error");
+    assert.deepEqual(await session.outline(), [], "data settles while the document waits");
+    let heard = 0;
+    session.state.subscribe(() => heard++);
+    setPasswordPrompt(session, true);
+    assert.equal(session.state.get().status, "password", "the same session, now with its prompt");
+    assert.equal(heard, 1);
+  });
+
   it("opens with a changed source password without replaying the old error", async () => {
     const { loader, calls } = fakePdfjs(async (task, { password: given }) => {
       let password = given;
@@ -149,6 +167,25 @@ describe("a session's document state", () => {
     assert.equal(right.state.get().error, null);
     assert.equal(calls.opens, 1);
     assert.equal(statuses.includes("error"), false);
+  });
+
+  it("follows the session opened again after a hold that outlived it", async () => {
+    const { loader, calls } = fakePdfjs();
+    const session = new PdfSession({ url: "/a.pdf" });
+    const release = connectSession(session, loader);
+    const first = await documentOf(session);
+    const outline = session.outline();
+    release();
+    mock.timers.tick(1000);
+    await settle();
+    assert.equal(first.signal.aborted, true, "the registry closed the first session");
+    close.push(connectSession(session, loader));
+    const second = await documentOf(session);
+    assert.notEqual(second, first);
+    assert.equal(second.signal.aborted, false);
+    assert.notEqual(session.outline(), outline, "its data is read from the new session");
+    assert.equal(session.proxy, second.proxy);
+    assert.equal(calls.opens, 2);
   });
 
   it("reads secondary data once, and settles it empty when the document fails", async (context) => {

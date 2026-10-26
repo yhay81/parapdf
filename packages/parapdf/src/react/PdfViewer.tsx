@@ -19,6 +19,8 @@ import type { PageColors, Rotation } from "../pdfjs/draw.ts";
 import type { AnnotationLabels } from "../pdfjs/editor.ts";
 import type { ScrollMode, SpreadMode } from "../view/layout.ts";
 import {
+  attachPage,
+  attachViewport,
   openViewer,
   type PointerTool,
   setViewerOptions,
@@ -354,6 +356,8 @@ function ViewerViewport({
     page: onPageChange,
   };
   const latest = useRef({ controlled, callbacks });
+  /** The view as last reported, or as the application set it: it hears no echo of its own values. */
+  const reported = useRef<ViewValues | null>(null);
   // A change the application did not take up renders this again, which
   // returns the viewer to the controlled value.
   const [, reconcile] = useReducer((count: number) => count + 1, 0);
@@ -365,12 +369,13 @@ function ViewerViewport({
     setViewerOptions(viewer, options);
     setFeatureOptions(viewer, { forms, annotationEditing, annotationLabels, enforcePermissions });
     latest.current = { controlled, callbacks };
+    reported.current = { ...(reported.current ?? viewOf(viewer.store.get())), ...controlled };
     applyControlled(viewer, controlled);
   });
 
   // The viewer's own changes are reported from its store, not React state.
   useEffect(() => {
-    let reported = viewOf(viewer.store.get());
+    reported.current ??= viewOf(viewer.store.get());
     let page = viewer.store.get().currentPage;
     let laidOut = viewer.store.get().layout !== null;
     return viewer.store.subscribe(() => {
@@ -380,12 +385,13 @@ function ViewerViewport({
       // The first layout of a document may come after a controlled value changed.
       let differs = !laidOut && state.layout !== null;
       laidOut = state.layout !== null;
+      const last = reported.current ?? view;
       for (const key of VIEW_KEYS) {
-        if (Object.is(view[key], reported[key])) continue;
+        if (Object.is(view[key], last[key])) continue;
         (callbacks[key] as ((value: unknown) => void) | undefined)?.(view[key]);
         if (controlled[key] !== undefined) differs = true;
       }
-      reported = view;
+      reported.current = view;
       if (state.currentPage !== page) {
         page = state.currentPage;
         callbacks.page?.(page);
@@ -398,7 +404,7 @@ function ViewerViewport({
     const scroller = scrollerRef.current;
     const content = contentRef.current;
     if (!scroller || !content) return;
-    return viewer.attachViewport(scroller, content);
+    return attachViewport(viewer, scroller, content);
   }, [viewer]);
 
   // The viewer shows the session until it closes, also while this unmounts.
@@ -529,7 +535,7 @@ const PdfPage = memo(function PdfPage({
   useLayoutEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    return viewer.attachPage(index, host);
+    return attachPage(viewer, index, host);
   }, [viewer, index]);
   useLayoutEffect(() => {
     const host = hostRef.current;

@@ -45,6 +45,18 @@ interface Attached {
 
 const attached = new WeakMap<Viewer, Attached>();
 
+/** Whether two `annotationLabels` name the controls alike: applications pass them inline. */
+function sameLabels(
+  a: Partial<AnnotationLabels> | undefined,
+  b: Partial<AnnotationLabels> | undefined,
+): boolean {
+  if (a === b) return true;
+  const keys = new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})]);
+  return [...keys].every(
+    (key) => a?.[key as keyof AnnotationLabels] === b?.[key as keyof AnnotationLabels],
+  );
+}
+
 function attachedTo(viewer: Viewer): Attached {
   let entry = attached.get(viewer);
   if (!entry) {
@@ -107,7 +119,7 @@ export function setFeatureOptions(viewer: Viewer, options: FeatureOptions): void
         }),
       );
     }
-  } else if (options.annotationLabels !== previous.annotationLabels) {
+  } else if (!sameLabels(options.annotationLabels, previous.annotationLabels)) {
     entry.loaded.get().annotations?.setLabels(options.annotationLabels ?? {});
   }
 }

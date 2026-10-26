@@ -214,8 +214,9 @@ try {
   // Hold the size pass until the reader has moved far down an overestimated
   // document. The real browser must clamp the scroll when its size shrinks.
   const refined = await mixed.evaluate(async () => {
-    const { __viewer, __showWith } = window as unknown as {
+    const { __viewer, __showWith, __attachViewport } = window as unknown as {
       __viewer: Viewer;
+      __attachViewport: (viewer: Viewer, scroller: HTMLElement, content: HTMLElement) => () => void;
       __showWith: (
         viewer: Viewer,
         source: { url: string },
@@ -278,7 +279,7 @@ try {
       const content = document.createElement("div");
       scroller.append(content);
       document.body.append(scroller);
-      const detach = viewer.attachViewport(scroller, content);
+      const detach = __attachViewport(viewer, scroller, content);
       let finishOpen = () => {};
       const ready = new Promise<void>((resolve) => {
         finishOpen = resolve;
