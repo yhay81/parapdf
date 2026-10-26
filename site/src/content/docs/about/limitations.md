@@ -13,10 +13,15 @@ description: What ParaPDF does not do yet, and what has not been verified.
 - Form scripts (calculations, validation, and button actions), and XFA forms.
 - Right-to-left page order (`/ViewerPreferences /Direction`).
 - Text layers for pages outside the mounted window, so the browser's own find
-  and selection see only mounted pages; use `usePdfSearch` and `getText()`.
+  and assistive technology see only mounted pages; use `useSearch()` and
+  `getText()` for the whole document.
 - A highlight fallback for browsers without the CSS Custom Highlight API,
   which find and scroll to matches without painting them.
-- More than one `PdfViewport` per `PdfDocument`.
+- Seeing other viewers' annotations while they edit. Viewers of one
+  document that edit annotations each show those they created; `save()` and
+  `print()` from any of them include every viewer's.
+- A controlled current page: `onPageChange` reports it and
+  `viewer.goToPage()` sets it.
 
 ## Drawing on the main thread
 
@@ -28,8 +33,12 @@ builds so far.
 ## Not verified yet
 
 - ParaPDF is tested in Playwright's builds of Chromium, WebKit, and Firefox,
-  and by hand in Safari in the iPadOS simulator. Safari on macOS and real iOS
-  and iPadOS devices are not verified yet.
+  and by hand in Safari in the iPadOS simulator. Playwright's WebKit is not
+  Safari: Safari on macOS and real iOS and iPadOS devices are not verified
+  yet.
+- Whether iOS Safari counts the canvases pages keep when they unmount
+  (`maxKeptPixels`) toward its canvas memory cap is not verified; it needs a
+  device.
 - Chromium and Firefox give pdf.js the PDF's preloaded download. Whether
   Safari does is not verified; where a browser does not, the PDF downloads
   twice.

@@ -6,7 +6,7 @@ head:
     content: ParaPDF, a fast PDF viewer for React
 template: splash
 hero:
-  tagline: A fast PDF viewer for React, built on pdf.js. Scrolling and zooming never wait for React, and only the pages near the viewport exist.
+  tagline: A fast PDF viewer for React, built on pdf.js. Scrolling and zooming never wait for React, only the pages near the viewport exist, and pages you come back to show at once.
   actions:
     - text: Get started
       link: /getting-started/
@@ -30,12 +30,12 @@ npm install parapdf
 ```
 
 ```tsx
-import { PdfDocument, PdfViewport } from "parapdf";
+import { PdfDocument, PdfViewer } from "parapdf";
 
 export function App() {
   return (
     <PdfDocument source="/manual.pdf">
-      <PdfViewport style={{ height: "100vh" }} />
+      <PdfViewer style={{ height: "100vh" }} />
     </PdfDocument>
   );
 }
@@ -47,27 +47,29 @@ loads on demand, and your bundler serves them from your application's origin.
 <CardGrid>
   <Card title="React stays out of the hot path" icon="rocket">
     Scrolling and zooming commit no React state per frame. React renders only
-    when the set of mounted pages or the current page changes, and pixels reach
-    canvases through refs.
+    when the set of mounted pages or the current page changes, and pixels
+    never go through React: the renderer owns each page's canvases.
   </Card>
   <Card title="Only what is near the viewport exists" icon="document">
-    Pages outside a small window unmount and give their canvas memory back.
-    Each page draws a quick base first and full resolution once scrolling
-    settles, within pixel budgets you can set.
+    Pages outside a small window unmount. Each page draws a quick base first
+    and full resolution once scrolling settles, within pixel budgets you can
+    set, and a page you come back to shows the canvases it kept.
   </Card>
-  <Card title="A real document" icon="magnifier">
-    Selectable text that screen readers read, in the structure a tagged PDF
-    gives it; whole-document search, CJK text included; links, the outline,
-    and back and forward.
+  <Card title="One document, many views" icon="open-book">
+    A `PdfDocument` opens a document once; any number of `PdfViewer`s and
+    thumbnail lists show it, each with its own scroll position, zoom,
+    rotation, and layout.
   </Card>
   <Card title="What a document viewer does" icon="pencil">
-    Fillable forms that save into the PDF, annotations, layers, attachments,
-    thumbnails, printing, spreads, scroll modes, encrypted documents, and
-    selections in PDF coordinates.
+    Selectable text in a tagged PDF's structure, whole-document search, links
+    and the outline with back and forward, fillable forms, annotations,
+    layers, attachments, printing, and encrypted documents. Features load
+    only when you use them.
   </Card>
 </CardGrid>
 
-ParaPDF is at 0.x: its API may change in any minor release until 1.0. The
+ParaPDF is at 0.x: its API may change in any minor release until 1.0, and
+0.5 changed all of it. The
 [changelog](https://github.com/yhay81/parapdf/blob/main/CHANGELOG.md) lists
 every release, and [Performance](/about/performance/) the measurements
 behind the design, losses included.

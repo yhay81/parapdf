@@ -4,12 +4,23 @@ Changes to the `parapdf` package. It follows
 [Semantic Versioning](https://semver.org/); until 1.0, a minor release may
 change the API.
 
-## Unreleased
+## 0.5.0 — 2026-10-26
 
-ParaPDF is being rebuilt on `main` toward `docs/rebuild/target.md`, one
-milestone at a time (`docs/rebuild/milestones.md`). APIs change without
-deprecations (`docs/decisions/0002-no-compatibility.md`); each merged
-milestone gets an entry here, and the release lists every break from 0.x.
+ParaPDF is rebuilt (`docs/rebuild/target.md`): pdf.js used directly, document
+sessions that several viewers share, a pure planner that decides what each
+page draws, a renderer that owns the page DOM, features as modules the viewer
+does not import, and a new React API. Nothing of 0.x is kept for
+compatibility (`docs/decisions/0002-no-compatibility.md`). The sections below,
+one per milestone of the rebuild, list every break from 0.4.0.
+
+### Rebuild M7: release (2026-10-26)
+
+- The package's README, the documentation site, the root README,
+  `CONTRIBUTING.md`, and `SECURITY.md` describe the rebuilt package.
+- Only the latest release gets security fixes; 0.4.x and earlier no longer
+  do.
+- `initialViewOpening()` is no longer exported: `PdfViewer` makes the
+  opening of `initialView` and `initialViewState`, which stays internal.
 
 ### Rebuild M6: React API (2026-10-26)
 
@@ -41,6 +52,8 @@ milestone gets an entry here, and the release lists every break from 0.x.
   `usePageLabels()`, `useMetadata()`, `useAttachments()`, `useLayers()`,
   `useFormFields()`, and `useInitialView()`; the viewer state's fields for
   them are gone.
+- The types `PdfSearch` and `PdfNavigation` are gone: `useSearch()`
+  returns `SearchControls`, and `useHistory()` `HistoryControls`.
 - Hooks lose their `Pdf` prefix and take the viewer: `useSearch(viewer)`,
   `useHistory(viewer)` (back and forward, for `usePdfNavigation()`, whose
   `goToPage()` and `goToDestination()` are the viewer's),

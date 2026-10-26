@@ -5,42 +5,45 @@ description: Let the reader fill in the PDF's form, then save, download, or prin
 
 import { FormsExample } from "../../../components/examples.tsx";
 
-With `options={{ forms: true }}`, form fields become inputs, check boxes,
+With `<PdfViewer forms />`, form fields become inputs, check boxes,
 radio buttons, and lists the reader can fill in; without it, they show as the
-PDF draws them. What the reader types belongs to the document, and a page
-keeps its values when it unmounts and mounts again.
+PDF draws them. The option is live: turning it on or off needs no remount,
+and the forms code loads only when it is set. What the reader types belongs
+to the document, shared by its viewers, and a page keeps its values when it
+unmounts and mounts again.
 
 <FormsExample client:visible />
 
 ## Saving and printing
 
-- `viewer.save()` resolves to the PDF's bytes with the values written in, and
-  `viewer.download(filename?)` hands them to the browser as a download, named
-  after the document's URL by default.
-- `viewer.print({ resolution, onProgress, signal })` draws every page for
-  printing, the typed values included, at 150 dpi by default, and opens the
+- `save(viewer)` resolves to the PDF's bytes with the values and the
+  annotations created written in, and `download(viewer, filename?)` hands
+  them to the browser as a download, named after the document's URL by
+  default.
+- `print(viewer, { resolution, onProgress, signal })` draws every page for
+  printing, the typed values and the annotations created included, with the
+  layers the viewer shows, at 150 dpi by default, and opens the
   browser's print dialog with only those pages. A new print request stops the
   previous job; that job resolves without opening another dialog.
 
 ## Reading and filling the form
 
 ```tsx
-import { usePdfFormChange, usePdfViewer } from "parapdf";
+import { getFormFields, setFormValues, useFormChange, type Viewer } from "parapdf";
 
-function FormSync({ onChange }: { onChange: (name: string, value: unknown) => void }) {
-  const viewer = usePdfViewer();
+function FormSync({ viewer, onChange }: { viewer: Viewer; onChange: (name: string, value: unknown) => void }) {
   // Each value the reader enters, as they type.
-  usePdfFormChange(({ name, value }) => onChange(name, value));
+  useFormChange(viewer, ({ name, value }) => onChange(name, value));
   const fill = async () => {
-    const fields = await viewer.getFormFields();
+    const fields = await getFormFields(viewer);
     console.log(fields.map(({ name, type, value }) => [name, type, value]));
-    await viewer.setFormValues({ name: "Ada Lovelace", agree: true, size: "large" });
+    await setFormValues(viewer, { name: "Ada Lovelace", agree: true, size: "large" });
   };
   return <button type="button" onClick={fill}>Fill in</button>;
 }
 ```
 
-- `viewer.getFormFields()` resolves to every field (`FormField`): its
+- `getFormFields(viewer)` resolves to every field (`FormField`): its
   qualified `name`, `type` (`"text"`, `"checkbox"`, `"radio"`, `"combobox"`,
   `"listbox"`, `"button"`, or `"signature"`), current `value`,
   `defaultValue`, `readOnly`, `required`, `multiple`, the `options` of a
@@ -48,13 +51,16 @@ function FormSync({ onChange }: { onChange: (name: string, value: unknown) => vo
   page and a rectangle in PDF points. A value is text, the export value of
   the checked box or radio button (`"Off"` for none), or the selected
   options' export values, an array for a list that takes several.
-- `viewer.setFormValues(values)` sets fields by name, `true` and `false`
+- `setFormValues(viewer, values)` sets fields by name, `true` and `false`
   checking the first box or none, and resolves to the names it set. The
   fields shown show the values, and `save()` and `print()` include them; it
   is not heard as the reader's input.
-- `usePdfFormChange(listener)`, or `viewer.onFormChange(listener)`, which
-  returns the function that stops it, hears `{ name, value }` for each value
+- `useFormChange(viewer, listener)` hears `{ name, value }` for each value
   the reader enters, with `forms` on.
+- `useFormFields()` gives the fields of the nearest `PdfDocument`'s document
+  with their values as first read. It suspends until they are read, so
+  render it under a Suspense boundary of your own; `getFormFields()` reads
+  the values again.
 
 Form scripts (JavaScript actions: calculations, validation, and button
 actions) do not run, and XFA forms are not supported.

@@ -7,9 +7,9 @@ import { LinkCard, CardGrid, TabItem, Tabs } from "@astrojs/starlight/components
 import { QuickStartExample } from "../../components/examples.tsx";
 
 :::caution[0.x, experimental]
-The API may change in any minor release until 1.0. The
-[changelog](https://github.com/yhay81/parapdf/blob/main/CHANGELOG.md) says
-what each release changes.
+The API may change in any minor release until 1.0; 0.5 replaced all of
+0.4's. The [changelog](https://github.com/yhay81/parapdf/blob/main/CHANGELOG.md)
+says what each release changes.
 :::
 
 ## Install
@@ -38,12 +38,12 @@ because it ships that version's worker and files.
 ## Show a PDF
 
 ```tsx
-import { PdfDocument, PdfViewport } from "parapdf";
+import { PdfDocument, PdfViewer } from "parapdf";
 
 export function App() {
   return (
     <PdfDocument source="/manual.pdf">
-      <PdfViewport style={{ height: "100vh" }} />
+      <PdfViewer style={{ height: "100vh" }} />
     </PdfDocument>
   );
 }
@@ -51,9 +51,11 @@ export function App() {
 
 <QuickStartExample client:visible />
 
-- `PdfViewport` is the scroll container. Give it a definite height, as above
-  or through a flex or grid layout: it contains its own layout and does not
-  grow with the document.
+- `PdfDocument` opens the document and renders its children at once;
+  nothing suspends before the first page draws.
+- `PdfViewer` is a viewport onto it, the scroll container. Give it a
+  definite height, as above or through a flex or grid layout: it contains
+  its own layout and does not grow with the document.
 - The first `PdfDocument` to render loads pdf.js and starts its worker, and
   each one starts downloading its PDF while it renders, from the page's head
   when the page is rendered on the server. pdf.js takes the preloaded
@@ -65,6 +67,42 @@ export function App() {
 
 A source can also be `{ url, httpHeaders, withCredentials }` or `{ data }`
 with the PDF's bytes: see [Sources](/reference/sources/).
+
+## Add controls
+
+A toolbar acts through a viewer: create one with `useViewer()` and give it
+to the `PdfViewer` and to the hooks and functions you use.
+
+```tsx
+import { PdfDocument, PdfViewer, useViewer, useViewState, type Viewer } from "parapdf";
+
+function PageNumber({ viewer }: { viewer: Viewer }) {
+  const page = useViewState(viewer, (state) => state.currentPage);
+  const count = useViewState(viewer, (state) => state.layout?.sizes.length ?? 0);
+  return (
+    <span>
+      <button type="button" onClick={() => viewer.previousPage()}>Previous</button>
+      {page + 1} / {count}
+      <button type="button" onClick={() => viewer.nextPage()}>Next</button>
+    </span>
+  );
+}
+
+export function App() {
+  const viewer = useViewer();
+  return (
+    <PdfDocument source="/manual.pdf">
+      <PageNumber viewer={viewer} />
+      <PdfViewer viewer={viewer} style={{ height: "90vh" }} />
+    </PdfDocument>
+  );
+}
+```
+
+`useViewState()` renders its component again only when the selected value
+changes: scrolling through a page renders `PageNumber` once, when the
+current page changes. The document's own state, loading, errors, and
+password requests, is `useDocumentState()`'s: see [State](/reference/state/).
 
 ## Next
 
@@ -81,8 +119,8 @@ with the PDF's bytes: see [Sources](/reference/sources/).
   />
   <LinkCard title="Search" description="Find text in the whole document." href="/guides/search/" />
   <LinkCard
-    title="Options"
-    description="Everything PdfDocument takes."
-    href="/reference/options/"
+    title="Components and hooks"
+    description="Everything PdfDocument and PdfViewer take."
+    href="/reference/components/"
   />
 </CardGrid>
