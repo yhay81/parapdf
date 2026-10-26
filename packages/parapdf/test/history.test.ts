@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { attachHistory, HISTORY_LIMIT, historyOf, Positions } from "../src/features/history.ts";
+import type { ViewerExtension } from "../src/view/extensions.ts";
 import type { ViewerPosition } from "../src/view/navigation.ts";
-import type { Viewer, ViewerExtension } from "../src/view/viewer.ts";
+import type { Viewer } from "../src/view/viewer.ts";
 
 const at = (pageIndex: number): ViewerPosition => ({
   pageIndex,
