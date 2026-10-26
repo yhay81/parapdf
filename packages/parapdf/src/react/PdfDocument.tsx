@@ -44,8 +44,9 @@ export function PdfDocument({ source, passwordPrompt = true, children }: PdfDocu
   if ("url" in resolved) {
     // The download starts now, and with server rendering as soon as the
     // browser reads the page's head, not once pdf.js has loaded: pdf.js's
-    // request has this CORS mode and takes the preloaded response.
-    const mode = documentRequestMode();
+    // request has this CORS mode and takes the preloaded response. A source
+    // with headers has no preload: none can carry them.
+    const mode = documentRequestMode(resolved);
     if (mode) preload(resolved.url, { as: "fetch", crossOrigin: mode });
   }
   // pdf.js and its worker load while React renders and commits.

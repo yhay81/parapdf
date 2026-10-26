@@ -13,7 +13,10 @@ or an `ArrayBuffer`:
 ```
 
 - A URL source may add `httpHeaders` and `withCredentials` for its request,
-  and either kind the `password` of an encrypted document.
+  and either kind the `password` of an encrypted document. A source's own
+  headers and credentials replace those of `documentOptions`, and one with
+  headers is not preloaded while the page renders (see
+  [Server rendering](/setup/server-rendering/)).
 - Viewers of the same URL (with the same headers and credentials), or of the
   same bytes, share one loaded document, and React's StrictMode or a quick
   remount reuses it instead of loading it again.

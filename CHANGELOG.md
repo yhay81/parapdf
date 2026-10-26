@@ -11,6 +11,14 @@ milestone at a time (`docs/rebuild/milestones.md`). APIs change without
 deprecations (`docs/decisions/0002-no-compatibility.md`); each merged
 milestone gets an entry here, and the release lists every break from 0.x.
 
+### Fixes
+
+- `PdfDocument` no longer preloads a URL source whose own `httpHeaders` no
+  preload can carry, and preloads one with `withCredentials` in the CORS mode
+  pdf.js fetches it with. Until now the preload followed only
+  `configurePdfjs({ documentOptions })`, so such a source downloaded twice or
+  its preload failed.
+
 ### Rebuild M6: React API (2026-10-26)
 
 - `useViewer()` creates a viewer, one viewport's controller and state, for

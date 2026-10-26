@@ -730,8 +730,8 @@ origin than the page, such as a CDN, pdf.js starts its worker from a
 
 A source is a URL, `{ url }`, or `{ data }`, where `data` is a `Uint8Array`
 or an `ArrayBuffer`. A URL source may add `httpHeaders` and `withCredentials`
-for its request, and either kind the `password` of an encrypted document.
-Viewers of the same URL (with the same headers and credentials), or of the
+for its request, and either kind the `password` of an encrypted document;
+its own headers and credentials replace those of `documentOptions`. Viewers of the same URL (with the same headers and credentials), or of the
 same bytes, share one loaded document, and React's StrictMode or a quick
 remount reuses it instead of loading it again. A document is closed a
 second after its last viewer unmounts; one still loading or waiting for a
@@ -764,6 +764,11 @@ ParaPDF's React modules declare `"use client"`, and its components render on
 the server as an empty viewport, with a preload of the PDF in the page's
 head. pdf.js loads only in the browser, so components that render
 `PdfDocument` need no `next/dynamic` or other browser-only wrapper.
+
+The preload matches the CORS mode pdf.js fetches with, including a source's
+`withCredentials`, so pdf.js takes the response. There is no preload when the
+request has `httpHeaders`, which no preload can carry, whether the source or
+`configurePdfjs({ documentOptions })` sets them, or with `disableStream`.
 
 ## Accessibility
 

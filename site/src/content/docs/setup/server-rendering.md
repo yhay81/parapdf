@@ -21,10 +21,11 @@ export default function Page() {
 }
 ```
 
-The preload matches the CORS mode pdf.js fetches with, so pdf.js takes the
-response and the PDF downloads once. A source with `httpHeaders`, which no
-preload can carry, skips it, and so does the `disableStream` getDocument
-parameter.
+The preload matches the CORS mode pdf.js fetches with, including a source's
+`withCredentials`, so pdf.js takes the response and the PDF downloads once.
+There is no preload when the request has `httpHeaders`, which no preload can
+carry, whether the source or `configurePdfjs({ documentOptions })` sets them,
+or with `disableStream`, with which pdf.js reads only the ranges it needs.
 
 Hooks such as `usePdfViewer` and `usePdfState` belong in Client Components:
 put the toolbar and other controls in a file that starts with
