@@ -26,7 +26,10 @@ milestone gets an entry here, and the release lists every break from 0.x.
   while an annotation editor is set.
 - The canvases a page keeps when it unmounts move into its next host
   instead of being copied into new canvases: `drawKept()` and the loader's
-  `contextOptions` are gone.
+  `contextOptions` are gone. Firefox comes back to pages sooner; the other
+  measurements stay within their spread (decision 0010).
+- A page's new canvases hold no pixels until drawn, where React's were
+  300 × 150 and counted within `maxCanvasPixels`.
 - `viewer.scheduler` is `viewer.renderer`; `SchedulerStats` is
   `RenderStats`, with the same counters (`kept` counts the layers shown
   again from kept canvases).
