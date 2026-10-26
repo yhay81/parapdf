@@ -30,12 +30,8 @@
       "durationMs": 4000,
       "latencyMs": 0,
       "bandwidthMbps": 0,
-      "scrollModes": [
-        "vertical"
-      ],
-      "scales": [
-        "fit-width"
-      ],
+      "scrollModes": ["vertical"],
+      "scales": ["fit-width"],
       "viewport": "1280x900",
       "devicePixelRatio": 2
     }
