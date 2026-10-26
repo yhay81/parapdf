@@ -101,8 +101,10 @@ when the choice matters for performance or direction.
   one per open document, shared by its viewers through a registry that
   publishes each session's document state, and the `PdfSession` a
   `PdfDocument` holds of it, which applications see (`src/document/`); one
-  `Viewer` per viewport, its layout, scrolling,
-  gestures, hot/cold state, the hooks features extend it with
+  `Viewer` per viewport, its options (`options.ts`), layout, scrolling,
+  gestures, hot/cold state (`state.ts`), the pure rules of its zoom
+  (`zoom.ts`) and navigation (`navigation.ts`), which the viewer asks
+  outside the frame and gesture paths, the hooks features extend it with
   (`viewer.extend()`), and handing bytes to the browser as a download
   (`files.ts`) (`src/view/`); rendering: the planner, a pure
   function that decides what each page draws (`planner.ts`), and the

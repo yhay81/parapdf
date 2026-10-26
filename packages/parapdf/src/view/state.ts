@@ -1,5 +1,52 @@
 import { type ReadableStore, Store } from "../document/store.ts";
-import type { ViewerState } from "./viewer.ts";
+import type { Rotation } from "../pdfjs/draw.ts";
+import type { Layout, ScrollMode, SpreadMode } from "./layout.ts";
+
+/**
+ * What a viewer shows: its view of the document, which its store publishes.
+ * The document's own state is its session's (`PdfSession.state`).
+ */
+export interface ViewerState {
+  /** The pages laid out at the current zoom; null until a document shows. */
+  layout: Layout | null;
+  /** Mounted page window: visible pages plus overscan. */
+  first: number;
+  last: number;
+  /**
+   * The page being read: the page nearest the viewport's center, except that
+   * the current page stays current while all of it is in view, as in pdf.js.
+   * `goToPage()`, links, `back()`, and search make the page they show
+   * current, which then stays so even when it is too small to reach the
+   * center, as the first page at the start of a row of pages is.
+   */
+  currentPage: number;
+  /** CSS pixels per PDF point. */
+  scale: number;
+  /**
+   * "fit-width" keeps fitting the width of the current page as the viewport
+   * resizes or the view turns, "fit-page" all of that page; "custom" keeps
+   * `scale`.
+   */
+  zoomMode: ZoomMode;
+  /**
+   * What a mouse drag does: "select" selects text, "hand" scrolls the
+   * document like grabbing paper.
+   */
+  tool: PointerTool;
+  /** Clockwise view rotation of every page. */
+  rotation: Rotation;
+  /** Whether pages show one per row or side by side in pairs. */
+  spread: SpreadMode;
+  /**
+   * How pages are arranged and scrolled: in a column, in a row, in rows
+   * filling the viewport's width, or one page or spread at a time.
+   */
+  scrollMode: ScrollMode;
+}
+
+export type ZoomMode = "fit-width" | "fit-page" | "custom";
+
+export type PointerTool = "select" | "hand";
 
 export type HotViewState = Pick<
   ViewerState,

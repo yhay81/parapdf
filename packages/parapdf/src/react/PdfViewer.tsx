@@ -18,15 +18,14 @@ import { type InitialViewOptions, initialViewOpening } from "../features/initial
 import type { PageColors, Rotation } from "../pdfjs/draw.ts";
 import type { AnnotationLabels } from "../pdfjs/editor.ts";
 import type { ScrollMode, SpreadMode } from "../view/layout.ts";
+import type { ViewerOptions } from "../view/options.ts";
+import type { PointerTool, ViewerState } from "../view/state.ts";
 import {
   attachPage,
   attachViewport,
   openViewer,
-  type PointerTool,
   setViewerOptions,
   type Viewer,
-  type ViewerOptions,
-  type ViewerState,
 } from "../view/viewer.ts";
 import { PageContext, useSelected, useSession } from "./context.ts";
 import { setFeatureOptions, useViewer } from "./features.ts";

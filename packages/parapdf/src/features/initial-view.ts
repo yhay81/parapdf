@@ -1,6 +1,6 @@
 import type { DocumentSession, PdfInitialView, PdfPageLayout } from "../document/session.ts";
 import type { ScrollMode, SpreadMode } from "../view/layout.ts";
-import type { Opening, ViewerOptions } from "../view/viewer.ts";
+import type { Opening, ViewerOptions } from "../view/options.ts";
 import { toShownView, type ViewState } from "./view-state.ts";
 
 export interface InitialViewOptions {

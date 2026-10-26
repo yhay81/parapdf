@@ -18,8 +18,6 @@ import {
   type LayoutOptions,
   type PageArea,
   pageAtPoint,
-  pageLeft,
-  pageTop,
   rowBounds,
   rowEnd,
   rowStart,
@@ -27,12 +25,20 @@ import {
   type SpreadMode,
   sameRows,
   showPage,
-  turnBox,
-  turnedSize,
   visibleArea,
   visibleRange,
   zoomTarget,
 } from "./layout.ts";
+import {
+  destinationTarget,
+  pageTarget,
+  positionAt,
+  positionTarget,
+  rectTarget,
+  type ScrollTarget,
+  type ViewerPosition,
+} from "./navigation.ts";
+import { rendererChanged, rendererOptions, type ShownView, type ViewerOptions } from "./options.ts";
 import {
   type Edges,
   type Motion,
@@ -45,94 +51,8 @@ import {
   viewportOf,
 } from "./scrolling.ts";
 import { linked } from "./signals.ts";
-import { ViewerStore } from "./state.ts";
-
-/**
- * What a viewer shows: its view of the document, which its store publishes.
- * The document's own state is its session's (`PdfSession.state`).
- */
-export interface ViewerState {
-  /** The pages laid out at the current zoom; null until a document shows. */
-  layout: Layout | null;
-  /** Mounted page window: visible pages plus overscan. */
-  first: number;
-  last: number;
-  /**
-   * The page being read: the page nearest the viewport's center, except that
-   * the current page stays current while all of it is in view, as in pdf.js.
-   * `goToPage()`, links, `back()`, and search make the page they show
-   * current, which then stays so even when it is too small to reach the
-   * center, as the first page at the start of a row of pages is.
-   */
-  currentPage: number;
-  /** CSS pixels per PDF point. */
-  scale: number;
-  /**
-   * "fit-width" keeps fitting the width of the current page as the viewport
-   * resizes or the view turns, "fit-page" all of that page; "custom" keeps
-   * `scale`.
-   */
-  zoomMode: ZoomMode;
-  /**
-   * What a mouse drag does: "select" selects text, "hand" scrolls the
-   * document like grabbing paper.
-   */
-  tool: PointerTool;
-  /** Clockwise view rotation of every page. */
-  rotation: Rotation;
-  /** Whether pages show one per row or side by side in pairs. */
-  spread: SpreadMode;
-  /**
-   * How pages are arranged and scrolled: in a column, in a row, in rows
-   * filling the viewport's width, or one page or spread at a time.
-   */
-  scrollMode: ScrollMode;
-}
-
-export type ZoomMode = "fit-width" | "fit-page" | "custom";
-
-export type PointerTool = "select" | "hand";
-
-/**
- * Where a viewer shows its document, to come back to: the page at the
- * viewport's top-left corner, where that corner is as a share of the page,
- * the current page, and the zoom.
- */
-export interface ViewerPosition {
-  pageIndex: number;
-  x: number;
-  y: number;
-  current: number;
-  scale: number;
-  zoomMode: ZoomMode;
-}
-
-/** A view for `show()`: what it leaves out stays as the viewer shows it. */
-export interface ShownView {
-  rotation?: Rotation;
-  spread?: SpreadMode;
-  scrollMode?: ScrollMode;
-  /** CSS pixels per PDF point, or the fit that keeps the zoom. */
-  scale?: number | "fit-width" | "fit-page";
-  /**
-   * The point of a page to show at the viewport's top-left corner, in PDF
-   * points from its unturned top-left corner, with the zoom its `view` asks
-   * for when `scale` is left out (and `destinationZoom` is on). Without a
-   * point, the page shows from its top; without a target, the current page.
-   */
-  target?: ResolvedDestination;
-}
-
-/** How a document opens in a viewer; see `ViewerOptions.opening`. */
-export interface Opening {
-  /** The arrangement of the first layout. */
-  spread?: SpreadMode;
-  scrollMode?: ScrollMode;
-  /** A view to show, which wins over `initialPage` and `destination`. */
-  view?: ShownView;
-  /** Where to open, with the zoom it asks for, unless `initialPage` is set. */
-  destination?: ResolvedDestination;
-}
+import { type PointerTool, ViewerStore, type ZoomMode } from "./state.ts";
+import { destinationScale, fitScale, refits } from "./zoom.ts";
 
 /**
  * What a feature hears from a viewer, registered with `extend()`. Every hook
@@ -173,108 +93,6 @@ export interface ViewerExtension {
   layersChanged?(): void;
 }
 
-/**
- * How a viewer shows documents, set by its `PdfViewer`'s props. They change
- * while it shows one (`setViewerOptions()`); the initial ones apply as it
- * opens a document.
- */
-export interface ViewerOptions {
-  /** Space between pages in CSS pixels. */
-  gap?: number;
-  /** One page per row (the default), or pairs side by side, at first; see `setSpread()`. */
-  initialSpread?: SpreadMode;
-  /** How pages are arranged and scrolled at first (default "vertical"); see `setScrollMode()`. */
-  initialScrollMode?: ScrollMode;
-  /** The clockwise rotation of every page at first (default 0); see `setRotation()`. */
-  initialRotation?: Rotation;
-  /** Pages mounted beyond each edge of the viewport. */
-  overscan?: number;
-  maxConcurrentRenders?: number;
-  /**
-   * A scale in CSS pixels per point, "fit-width" (the default) to keep
-   * fitting the page width, or "fit-page" to keep fitting the whole page.
-   */
-  initialScale?: number | "fit-width" | "fit-page";
-  /** The zero-based page shown first, at the top of the viewport (default 0). */
-  initialPage?: number;
-  /** What a mouse drag does at first (default "select"); see `setTool()`. */
-  initialTool?: PointerTool;
-  /**
-   * How each document opens, read beside its first page's size: the
-   * initial view feature makes it from `initialView` and `initialViewState`.
-   * A viewport that reattaches returns to where it was instead.
-   */
-  opening?: (session: DocumentSession) => Promise<Opening | null>;
-  /**
-   * Whether links and the outline take the zoom their destination asks for
-   * (default true), as in pdf.js: a factor, the page's width or height, the
-   * whole page, or a rectangle that fills the viewport. With false, they
-   * keep the zoom and only scroll.
-   */
-  destinationZoom?: boolean;
-  minScale?: number;
-  maxScale?: number;
-  /** Build selectable, searchable text layers (default true). */
-  textLayer?: boolean;
-  /**
-   * Build annotation layers (default true): focusable links, comment popups,
-   * and, with `forms`, form fields.
-   */
-  annotationLayer?: boolean;
-  /**
-   * Draw pages in these two colors instead of their own, for example
-   * `{ background: "Canvas", foreground: "CanvasText" }` in forced-colors mode.
-   */
-  pageColors?: PageColors;
-  /**
-   * What links to other documents do: open in a new tab (the default), or
-   * nothing, for apps that must not lead away from the document. Internal
-   * links and the outline keep working.
-   */
-  externalLinks?: "new-tab" | "disabled";
-  /**
-   * Called when the reader opens a file attachment annotation or a link to
-   * an embedded file. By default the browser downloads the file.
-   */
-  openAttachment?: (attachment: { filename: string; content: Uint8Array }) => void;
-  /**
-   * The most pixels one page's detail canvas holds (default 16 777 216, the
-   * canvas area limit of iOS). A page larger at full resolution gets detail
-   * only for its visible area plus a margin, still at full resolution.
-   */
-  maxDetailPixels?: number;
-  /**
-   * The most pixels one page's detail canvas holds, as a multiple of the
-   * viewport's device pixels (default unlimited): the margin drawn around the
-   * visible area then follows the viewport's size, small on a phone and large
-   * on a wide desktop panel. maxDetailPixels still caps it. At 1 the detail
-   * holds just the viewport; below 1 the visible area loses resolution.
-   */
-  maxDetailViewports?: number;
-  /** The most pixels one page's base canvas holds (default 2 097 152). */
-  maxBasePixels?: number;
-  /**
-   * The most pixels all of this viewer's canvases hold together (default
-   * unlimited), for memory-capped browsers such as iOS Safari. Visible pages
-   * come first: after their bases, each visible page's detail gets a share of
-   * the rest by visible area, losing its margin first and then resolution, in
-   * quarter-octave steps down to its base's. Pages outside the viewport
-   * render only within what is left and give their pixels back, farthest
-   * first and detail before base. Visible bases are never given back, so a
-   * visible page never goes blank, and a budget smaller than they are is
-   * exceeded by them.
-   */
-  maxCanvasPixels?: number;
-  /**
-   * The most pixels kept of the canvases of pages that leave the mounted
-   * window, so that a page the reader comes back to, by a link's back, by
-   * scrolling back, or by flipping back, shows at once instead of being
-   * drawn again (default six viewports' worth of device pixels; 0 keeps
-   * none). Within `maxCanvasPixels`, they count as canvases and go first.
-   */
-  maxKeptPixels?: number;
-}
-
 /** What Ctrl or ⌘ with + and - zooms by. */
 const ZOOM_STEP = 1.25;
 
@@ -283,24 +101,6 @@ const clamp = (value: number, min: number, max: number) => Math.min(max, Math.ma
 /** Whether a visible area is all of its page. */
 const whole = (area: PageArea | null): boolean =>
   area !== null && area.minX === 0 && area.minY === 0 && area.maxX === 1 && area.maxY === 1;
-
-/** The options the renderer is built with: changing one builds it again. */
-const RENDERER_OPTIONS = [
-  "textLayer",
-  "annotationLayer",
-  "externalLinks",
-  "pageColors",
-  "maxConcurrentRenders",
-  "maxDetailPixels",
-  "maxDetailViewports",
-  "maxBasePixels",
-  "maxCanvasPixels",
-  "maxKeptPixels",
-] as const satisfies readonly (keyof ViewerOptions)[];
-
-/** Whether two `pageColors` options draw alike: applications pass them inline. */
-const samePageColors = (a: PageColors | undefined, b: PageColors | undefined): boolean =>
-  a === b || (!!a && !!b && a.background === b.background && a.foreground === b.foreground);
 
 /** Opens a session in a viewer; the React bindings' to call (`openViewer()`). */
 let open: (viewer: Viewer, session: PdfSession) => void;
@@ -450,12 +250,7 @@ export class Viewer {
     this.#overscan = overscan;
     const layout = this.store.get().layout;
     if (!layout) return;
-    const rebuilt = RENDERER_OPTIONS.some((name) =>
-      name === "pageColors"
-        ? !samePageColors(previous.pageColors, options.pageColors)
-        : !Object.is(previous[name], options[name]),
-    );
-    if (rebuilt) {
+    if (rendererChanged(previous, options)) {
       this.#rebuild();
       return;
     }
@@ -723,19 +518,10 @@ export class Viewer {
     this.#sizes = [...sizes];
     for (const extension of this.#extensions) extension.prepare?.(session, signal);
     signal.throwIfAborted();
-    const options = this.#options;
     const renderer = new Renderer(session, {
-      maxConcurrent: options.maxConcurrentRenders ?? 2,
-      textLayer: options.textLayer ?? true,
-      annotationLayer: options.annotationLayer ?? true,
-      maxDetailPixels: options.maxDetailPixels,
-      maxDetailViewports: options.maxDetailViewports,
-      maxBasePixels: options.maxBasePixels,
-      maxCanvasPixels: options.maxCanvasPixels,
-      maxKeptPixels: options.maxKeptPixels,
+      ...rendererOptions(this.#options),
       links: this.#links,
       forms: this.#formLayers,
-      ...(options.pageColors ? { pageColors: options.pageColors } : {}),
       ...(this.#annotationEditor ? { annotationEditor: this.#annotationEditor } : {}),
       selection: this.#selection,
       onPainted: (pageIndex) => {
@@ -961,21 +747,7 @@ export class Viewer {
     if (!current || !scroller || current.tops.length === 0) return;
     const target = clamp(index, 0, current.tops.length - 1);
     const layout = this.#show(current, target);
-    const { gap } = layout;
-    const left = pageLeft(layout, target, scroller.clientWidth);
-    const top = pageTop(layout, target, scroller.clientHeight);
-    if (layout.scrollMode === "horizontal") {
-      scroller.scrollLeft = left - gap;
-      scroller.scrollTop = top - gap;
-    } else {
-      // The row's top: a page shorter than its row is centered in it.
-      scroller.scrollTop = top - ((layout.tops[target] ?? 0) - (layout.rowTops[target] ?? 0)) - gap;
-      // A page of a spread wider than the viewport may lie beside it.
-      const right = left + (layout.widths[target] ?? 0);
-      if (left < scroller.scrollLeft || right > scroller.scrollLeft + scroller.clientWidth) {
-        scroller.scrollLeft = left - gap;
-      }
-    }
+    this.#scrollTo(scroller, pageTarget(layout, target, scroller));
     // At once, not at the scroll event: a flip may not scroll at all, and a
     // second flip in the same frame starts from the page this one shows.
     this.store.set({ currentPage: target });
@@ -1038,6 +810,12 @@ export class Viewer {
     return next;
   }
 
+  /** Scroll to `target`, read before this write: its top, then its left unless null. */
+  #scrollTo(scroller: HTMLElement, target: ScrollTarget): void {
+    scroller.scrollTop = target.top;
+    if (target.left !== null) scroller.scrollLeft = target.left;
+  }
+
   /**
    * Follow an internal link or outline entry, with the zoom its destination
    * asks for unless `destinationZoom` is false. The history feature keeps
@@ -1068,12 +846,21 @@ export class Viewer {
     const scroller = this.#scroller;
     if (!current || !scroller) return;
     const { pageIndex } = target;
-    const fitted = zoom ? this.#destinationScale(target) : null;
+    const fitted = zoom
+      ? destinationScale(
+          this.#sizes,
+          this.store.get(),
+          target,
+          scroller,
+          this.#gap,
+          this.#minScale,
+          this.#maxScale,
+        )
+      : null;
     if (fitted) {
       this.store.set({ zoomMode: fitted.mode, currentPage: pageIndex });
       if (fitted.mode !== "custom") {
-        this.#fittedWidth = scroller.clientWidth;
-        this.#fittedHeight = scroller.clientHeight;
+        this.#markFitted(scroller);
       }
       if (Math.abs(fitted.scale - current.scale) > 1e-4) {
         current = this.#applyLayout(fitted.scale, pageIndex);
@@ -1081,74 +868,9 @@ export class Viewer {
       }
     }
     const layout = this.#show(current, pageIndex);
-    const rect = target.view?.fit === "rect" ? target.view : null;
-    // The point is on the unturned page; a quarter turn makes
-    // its left coordinate the vertical one.
-    const size = layout.sizes[pageIndex] ?? { width: 0, height: 0 };
-    const point = turnBox(
-      { x: target.x ?? 0, y: target.y ?? 0, width: rect?.width ?? 0, height: rect?.height ?? 0 },
-      size,
-      layout.rotation,
-    );
-    const quarter = layout.rotation % 180 !== 0;
-    const hasTop = (quarter ? target.x : target.y) !== null;
-    const hasLeft = (quarter ? target.y : target.x) !== null;
-    const pageX = pageLeft(layout, pageIndex, scroller.clientWidth);
-    const pageY = pageTop(layout, pageIndex, scroller.clientHeight);
-    // An explicit top lands at the top edge of the viewport, as in other PDF
-    // readers, and an explicit left, in "horizontal" mode, at its left edge.
-    const top = hasTop ? pageY + point.y * layout.scale : pageY - layout.gap;
-    const left = hasLeft ? pageX + point.x * layout.scale : pageX - layout.gap;
-    scroller.scrollTop = top;
-    if (
-      layout.scrollMode === "horizontal" ||
-      // A rectangle fills the viewport from its left edge, and a view
-      // state shows the same part of the page again.
-      ((rect || exact) && hasLeft) ||
-      (hasLeft && (left < scroller.scrollLeft || left > scroller.scrollLeft + scroller.clientWidth))
-    ) {
-      scroller.scrollLeft = left;
-    }
+    this.#scrollTo(scroller, destinationTarget(layout, target, scroller, exact));
     this.store.set({ currentPage: pageIndex });
     this.#update();
-  }
-
-  /**
-   * The zoom a destination asks for on page `target.pageIndex`, and the
-   * zoom mode that keeps it; null to keep the zoom.
-   */
-  #destinationScale(target: ResolvedDestination): { scale: number; mode: ZoomMode } | null {
-    const view = target.view;
-    const scroller = this.#scroller;
-    const size = this.#sizes[target.pageIndex];
-    if (!view || !scroller || !size) return null;
-    const scaled = (scale: number) =>
-      Number.isFinite(scale) && scale > 0
-        ? { scale: clamp(scale, this.#minScale, this.#maxScale), mode: "custom" as const }
-        : null;
-    const quarter = this.store.get().rotation % 180 !== 0;
-    switch (view.fit) {
-      case "zoom":
-        // A zoom of 1 shows the page at its printed size, 96 CSS pixels an inch.
-        return view.zoom === null ? null : scaled((view.zoom * 96) / 72);
-      case "page":
-      case "width": {
-        const mode = view.fit === "page" ? "fit-page" : "fit-width";
-        const scale = this.#fitScale(target.pageIndex, mode);
-        return scale === null ? null : { scale, mode };
-      }
-      case "height":
-        return scaled(
-          (scroller.clientHeight - 2 * this.#gap) / (quarter ? size.width : size.height),
-        );
-      case "rect":
-        return scaled(
-          Math.min(
-            scroller.clientWidth / (quarter ? view.height : view.width),
-            scroller.clientHeight / (quarter ? view.width : view.height),
-          ),
-        );
-    }
   }
 
   /**
@@ -1181,8 +903,7 @@ export class Viewer {
     }
     if (mode !== "custom") {
       scale = this.#fitScale(page, mode) ?? scale;
-      this.#fittedWidth = scroller.clientWidth;
-      this.#fittedHeight = scroller.clientHeight;
+      this.#markFitted(scroller);
     }
     this.store.set({ zoomMode: mode, scale });
     this.#applyLayout(scale, page);
@@ -1206,18 +927,7 @@ export class Viewer {
     const scroller = this.#scroller;
     if (!current || !scroller || pageIndex < 0 || pageIndex >= current.tops.length) return;
     const layout = this.#show(current, pageIndex);
-    const size = layout.sizes[pageIndex] ?? { width: 0, height: 0 };
-    const box = turnBox(rect, size, layout.rotation);
-    const top = pageTop(layout, pageIndex, scroller.clientHeight) + box.y * layout.scale;
-    const left = pageLeft(layout, pageIndex, scroller.clientWidth) + box.x * layout.scale;
-    scroller.scrollTop = top - scroller.clientHeight / 3;
-    if (
-      layout.scrollMode === "horizontal" ||
-      left < scroller.scrollLeft ||
-      left > scroller.scrollLeft + scroller.clientWidth
-    ) {
-      scroller.scrollLeft = left - scroller.clientWidth / 3;
-    }
+    this.#scrollTo(scroller, rectTarget(layout, pageIndex, rect, scroller));
     this.store.set({ currentPage: pageIndex });
     this.#update();
   }
@@ -1231,16 +941,7 @@ export class Viewer {
     const layout = this.store.get().layout;
     const scroller = this.#scroller;
     if (!layout || !scroller) return null;
-    const { scrollLeft: x, scrollTop: y, clientWidth, clientHeight } = scroller;
-    const pageIndex = pageAtPoint(layout, x, y, clientWidth);
-    return {
-      pageIndex,
-      x: (x - pageLeft(layout, pageIndex, clientWidth)) / (layout.widths[pageIndex] || 1),
-      y: (y - pageTop(layout, pageIndex, clientHeight)) / (layout.heights[pageIndex] || 1),
-      current: this.store.get().currentPage,
-      scale: layout.scale,
-      zoomMode: this.store.get().zoomMode,
-    };
+    return positionAt(layout, scroller, this.store.get());
   }
 
   /** Show a `position()` again, with its zoom; a fitted zoom fits the viewport as it is now. */
@@ -1257,18 +958,13 @@ export class Viewer {
     this.store.set({ zoomMode, currentPage: entry.current });
     if (Math.abs(scale - current.scale) > 1e-4) {
       if (zoomMode !== "custom") {
-        this.#fittedWidth = scroller.clientWidth;
-        this.#fittedHeight = scroller.clientHeight;
+        this.#markFitted(scroller);
       }
       current = this.#applyLayout(scale, pageIndex);
       this.store.set({ scale });
     }
     const layout = this.#show(current, pageIndex);
-    scroller.scrollTop =
-      pageTop(layout, pageIndex, scroller.clientHeight) +
-      entry.y * (layout.heights[pageIndex] ?? 0);
-    scroller.scrollLeft =
-      pageLeft(layout, pageIndex, scroller.clientWidth) + entry.x * (layout.widths[pageIndex] ?? 0);
+    this.#scrollTo(scroller, positionTarget(layout, entry, scroller));
     this.store.set({ currentPage: entry.current });
     this.#update();
   }
@@ -1375,8 +1071,7 @@ export class Viewer {
       const fitted = this.#fitScale(page, state.zoomMode);
       if (fitted !== null) {
         scale = fitted;
-        this.#fittedWidth = scroller.clientWidth;
-        this.#fittedHeight = scroller.clientHeight;
+        this.#markFitted(scroller);
       }
     }
     this.#applyLayout(scale, page);
@@ -1430,46 +1125,29 @@ export class Viewer {
     const page = state.currentPage;
     const scale = this.#fitScale(page, mode);
     if (scale === null) return;
-    this.#fittedWidth = scroller.clientWidth;
-    this.#fittedHeight = scroller.clientHeight;
+    this.#markFitted(scroller);
     this.#zoomTo(scale);
     if (mode === "fit-page") this.goToPage(page);
   }
 
-  /**
-   * The scale that fits the row of page `index`, the page or its spread, to
-   * the viewport in `mode`; null while the pages' sizes are unknown. In a
-   * spread mode, a page alone in its row, such as a cover, counts twice, as
-   * in pdf.js: the zoom then stays the same from row to row. In "horizontal"
-   * mode, where all pages share one row, the page alone fits.
-   */
+  /** `fitScale()` for this viewer's pages, arrangement, viewport, and limits. */
   #fitScale(index: number, mode: "fit-width" | "fit-page"): number | null {
-    const { rotation, scrollMode } = this.store.get();
-    // Pages that share one row side by side fit one by one, as in pdf.js.
-    const spread = scrollMode === "horizontal" ? "none" : this.store.get().spread;
-    const { first, last } = rowBounds(spread, index, this.#sizes.length);
-    let width = 0;
-    let height = 0;
-    for (let page = first; page <= last; page++) {
-      const size = this.#sizes[page];
-      if (!size) return null;
-      const turned = turnedSize(size, rotation);
-      width += turned.width;
-      height = Math.max(height, turned.height);
-    }
-    const pages = spread === "none" ? 1 : 2;
-    if (last === first) width *= pages;
-    if (width === 0 || height === 0) return null;
-    const scroller = this.#scroller;
-    // The gaps around the row and between its pages stay the same at every zoom.
-    const room = (scroller?.clientWidth ?? 0) - (1 + pages) * this.#gap;
-    const roomHeight = (scroller?.clientHeight ?? 0) - 2 * this.#gap;
-    const scale = room / width;
-    return clamp(
-      mode === "fit-page" && roomHeight > 0 ? Math.min(scale, roomHeight / height) : scale,
+    return fitScale(
+      this.#sizes,
+      this.store.get(),
+      index,
+      mode,
+      this.#scroller,
+      this.#gap,
       this.#minScale,
       this.#maxScale,
     );
+  }
+
+  /** The zoom was fitted to the viewport as it is now: a resize to another size fits it again. */
+  #markFitted(scroller: HTMLElement): void {
+    this.#fittedWidth = scroller.clientWidth;
+    this.#fittedHeight = scroller.clientHeight;
   }
 
   /**
@@ -1518,8 +1196,7 @@ export class Viewer {
       this.#initialScale,
     );
     if (scale === null) return 1;
-    this.#fittedWidth = scroller.clientWidth;
-    this.#fittedHeight = scroller.clientHeight;
+    this.#markFitted(scroller);
     return scale;
   }
 
@@ -1608,13 +1285,7 @@ export class Viewer {
   #onResize = (): void => {
     const scroller = this.#scroller;
     const mode = this.store.get().zoomMode;
-    if (
-      scroller &&
-      ((mode === "fit-width" && scroller.clientWidth !== this.#fittedWidth) ||
-        (mode === "fit-page" &&
-          (scroller.clientWidth !== this.#fittedWidth ||
-            scroller.clientHeight !== this.#fittedHeight)))
-    ) {
+    if (scroller && refits(mode, scroller, this.#fittedWidth, this.#fittedHeight)) {
       this.#gestures.finish();
       this.#fit();
     }
