@@ -31,26 +31,6 @@ export interface Drawing {
   cancellations: number;
 }
 
-/**
- * A canvas as the drawing code uses one, without a DOM. Drawing a kept
- * canvas back into it is recorded in `drawnBack`.
- */
-export function fakeCanvas(
-  drawnBack: { into: HTMLCanvasElement; from: HTMLCanvasElement }[] = [],
-): HTMLCanvasElement {
-  const canvas = {
-    width: 0,
-    height: 0,
-    style: {},
-    getContext: () => ({
-      drawImage(from: HTMLCanvasElement) {
-        drawnBack.push({ into: canvas, from });
-      },
-    }),
-  } as unknown as HTMLCanvasElement;
-  return canvas;
-}
-
 /** A text item as pdf.js's text content gives it. */
 export interface FakeTextItem {
   str: string;
@@ -365,7 +345,6 @@ export function fakePdfjs(
     pdfjs,
     worker: {},
     documentParameters: { enableHWA: true },
-    contextOptions: { alpha: false, willReadFrequently: false },
     imageResourcesPath: "/images/",
     iconUrls: null,
     workerLocation: "/pdf.worker.js",

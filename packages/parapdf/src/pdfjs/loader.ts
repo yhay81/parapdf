@@ -90,11 +90,6 @@ export interface LoadedPdfjs {
    */
   readonly documentParameters: PdfjsDocumentOptions;
   /**
-   * The 2D context pdf.js draws pages with, which kept drawings are drawn
-   * back with too, so that later drawings into the same canvas get it.
-   */
-  readonly contextOptions: CanvasRenderingContext2DSettings;
-  /**
    * Base URL of pdf.js's annotation icons, ending with a slash or, without
    * one, a transparent image that `iconUrls` replaces.
    */
@@ -279,10 +274,6 @@ async function load(options: PdfjsConfig): Promise<LoadedPdfjs> {
           }
         : {}),
       ...documentOptions,
-    },
-    contextOptions: {
-      alpha: false,
-      willReadFrequently: !(documentOptions.enableHWA ?? options.enableHWA ?? true),
     },
     imageResourcesPath,
     iconUrls:

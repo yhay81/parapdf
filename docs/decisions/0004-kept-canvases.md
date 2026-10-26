@@ -2,7 +2,8 @@
 
 - Status: adopted
 - Date: 2026-10-24
-- Implemented in M1
+- Implemented in M1; since M5 the kept canvases move into the page's new
+  host instead of being copied into new ones (decision 0010)
 
 ## Context
 

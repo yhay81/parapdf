@@ -11,6 +11,29 @@ milestone at a time (`docs/rebuild/milestones.md`). APIs change without
 deprecations (`docs/decisions/0002-no-compatibility.md`); each merged
 milestone gets an entry here, and the release lists every break from 0.x.
 
+### Rebuild M5: rendering (2026-10-26)
+
+- What each page draws is decided by a planner, pure functions of the
+  view, the budgets, and what pages show and draw (`src/render/planner.ts`),
+  with the 0.x heuristics unchanged and unit tests of their invariants: a
+  visible page never stays blank, the budgets hold except for visible
+  bases, and no base is drawn under a whole-page detail.
+- The renderer (`Renderer`, which replaces `RenderScheduler`) builds each
+  page's canvases and the containers of its text, annotation, editor, and
+  structure layers inside the page's host, before what React renders there.
+  `Viewer.attachPage(index, host)` takes the host alone; `PdfViewport`'s
+  pages render only the host and the overlay. The editor layer exists
+  while an annotation editor is set.
+- The canvases a page keeps when it unmounts move into its next host
+  instead of being copied into new canvases: `drawKept()` and the loader's
+  `contextOptions` are gone. Firefox comes back to pages sooner; the other
+  measurements stay within their spread (decision 0010).
+- A page's new canvases hold no pixels until drawn, where React's were
+  300 × 150 and counted within `maxCanvasPixels`.
+- `viewer.scheduler` is `viewer.renderer`; `SchedulerStats` is
+  `RenderStats`, with the same counters (`kept` counts the layers shown
+  again from kept canvases).
+
 ### Rebuild M4: features as modules (2026-10-26)
 
 - The viewer keeps its core: layout, scrolling, zoom, navigation, and the

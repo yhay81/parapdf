@@ -24,7 +24,7 @@ export function attachThumbnail(
   let entry = renderers.get(viewer);
   if (!entry) {
     const renderer = new ThumbnailRenderer({
-      scheduler: () => viewer.scheduler,
+      renderer: () => viewer.renderer,
       pageSize: (index) => viewer.store.get().layout?.sizes[index],
       rotation: () => viewer.store.get().rotation,
       layers: () => viewer.layers,

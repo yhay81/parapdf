@@ -155,19 +155,3 @@ export function drawPage(
     },
   };
 }
-
-/**
- * Draw `source`, a drawing kept from another canvas of a page, into
- * `canvas`, sized to it, with the context pdf.js draws with, so that the
- * page shows it at once and later drawings draw over it.
- */
-export function drawKept(
-  { contextOptions }: LoadedPdfjs,
-  canvas: HTMLCanvasElement,
-  source: HTMLCanvasElement,
-): void {
-  canvas.width = source.width;
-  canvas.height = source.height;
-  const context = canvas.getContext("2d", contextOptions) as CanvasRenderingContext2D | null;
-  context?.drawImage(source, 0, 0);
-}

@@ -1,13 +1,13 @@
 import type { PageSize } from "../../document/session.ts";
 import type { Rotation } from "../../pdfjs/draw.ts";
 import type { LayerState } from "../../pdfjs/layers.ts";
-import type { RenderScheduler } from "../../runtime/scheduler.ts";
+import type { Renderer } from "../../render/renderer.ts";
 import { turnedSize } from "../../view/layout.ts";
 
 /** What thumbnails need from the viewer. */
 export interface ThumbnailHost {
-  /** The open document's scheduler; null until it loads. */
-  scheduler(): RenderScheduler | null;
+  /** The open document's renderer; null until it loads. */
+  renderer(): Renderer | null;
   /** A page's size in PDF points, unturned by the view. */
   pageSize(pageIndex: number): PageSize | undefined;
   rotation(): Rotation;
@@ -29,7 +29,7 @@ interface Thumbnail {
 
 /**
  * Thumbnails share the viewer's render slots but only take what the pages in
- * view leave (`RenderScheduler.enqueue`), and copy a page's drawing instead
+ * view leave (`Renderer.enqueue`), and copy a page's drawing instead
  * of rendering when the viewer already has one large enough. Only those near
  * the visible part of their scroller hold pixels: a long list of them would
  * otherwise hold canvas memory for every page, past what iOS allows.
@@ -105,9 +105,9 @@ export class ThumbnailRenderer {
   }
 
   #draw(thumbnail: Thumbnail): void {
-    const scheduler = this.#host.scheduler();
+    const renderer = this.#host.renderer();
     const size = this.#host.pageSize(thumbnail.pageIndex);
-    if (!thumbnail.near || !scheduler || !size || size.width === 0 || size.height === 0) return;
+    if (!thumbnail.near || !renderer || !size || size.width === 0 || size.height === 0) return;
     const rotation = this.#host.rotation();
     const turned = turnedSize(size, rotation);
     const width = Math.max(1, Math.round(thumbnail.width * (window.devicePixelRatio || 1)));
@@ -119,12 +119,12 @@ export class ThumbnailRenderer {
     // size whether it is copied from the page or drawn: in CI's Chromium a
     // drawn one came out 1 px shorter than a copied one.
     canvas.height = Math.max(1, Math.floor((width * turned.height) / turned.width + 1e-6));
-    if (scheduler.copyPage(thumbnail.pageIndex, canvas, rotation)) {
+    if (renderer.copyPage(thumbnail.pageIndex, canvas, rotation)) {
       thumbnail.drawn = key;
       return;
     }
     const layers = this.#host.layers();
-    thumbnail.cancel = scheduler.enqueue(
+    thumbnail.cancel = renderer.enqueue(
       thumbnail.pageIndex,
       {
         scale: width / turned.width,
@@ -134,7 +134,7 @@ export class ThumbnailRenderer {
       },
       (error) => {
         thumbnail.cancel = null;
-        // A failed page stays blank; the scheduler has logged the failure.
+        // A failed page stays blank; the renderer has logged the failure.
         if (error === null) thumbnail.drawn = key;
       },
     );

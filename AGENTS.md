@@ -27,7 +27,7 @@ the code that follows it.
 ## Status
 
 The rebuild runs milestone by milestone on `main`
-(`docs/rebuild/milestones.md`); M0 to M4 are done; M5 is next (#40).
+(`docs/rebuild/milestones.md`); M0 to M5 are done; M6 is next (#41).
 0.x was
 published on npm as `parapdf` 0.1.0 to 0.4.0, from the tags `v0.1.0` to
 `v0.4.0`. The package's README, the documentation site, the root
@@ -94,21 +94,28 @@ rewrites them (decision 0002).
 
 ## Repository layout
 
-As of M4; `target.md` describes where the runtime's code goes.
+As of M5; `target.md` describes where the runtime's code goes.
 
 - `packages/parapdf/` — the runtime, published as `parapdf`: the loader
   that starts pdf.js with the package's worker and files, and how ParaPDF
   draws pages and builds layers with it (`src/pdfjs/`); document sessions,
   one per open document, shared by its viewers through a registry
   (`src/document/`); one `Viewer` per viewport, its layout, scrolling,
-  gestures, hot/cold state, and the hooks features extend it with
-  (`viewer.extend()`, `src/view/`); the scheduler and the text selection
-  tracker until M5 (`src/runtime/`); the features, each attaching to a
+  gestures, hot/cold state, the hooks features extend it with
+  (`viewer.extend()`), and handing bytes to the browser as a download
+  (`files.ts`) (`src/view/`); rendering: the planner, a pure
+  function that decides what each page draws (`planner.ts`), and the
+  renderer, which builds each page's canvases and layer containers inside
+  the host React places, carries out the plans, keeps the canvases of pages
+  that unmount, and builds the DOM layers; with them, the text selection
+  tracker the viewer keeps drags in text layers with
+  (`src/render/`); the features, each attaching to a
   viewer or a session and imported by nothing in the core (`src/features/`);
   React bindings, among them `PdfDocument`, which loads the features its
   options ask for (`src/react/`,
-  `"use client"`); unit tests of the modules that need no DOM, which stand
-  in for pdf.js with `test/fake-pdfjs.ts` (`test/`).
+  `"use client"`); unit tests in Node, which stand in for pdf.js with
+  `test/fake-pdfjs.ts` and for the elements of a page the renderer builds
+  with `test/fake-dom.ts` (`test/`).
   `scripts/pdfjs-files.ts`, run by `pnpm install` and `build`, copies
   pdf.js's worker behind ParaPDF's prelude (`scripts/worker-prelude.js`) and
   the files it loads on demand into `pdfjs/` (not committed), and writes

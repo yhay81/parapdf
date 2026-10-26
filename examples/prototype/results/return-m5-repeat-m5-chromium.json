@@ -1,0 +1,82 @@
+{
+  "environment": {
+    "runAt": "2026-10-26T00:05:12.778Z",
+    "os": "darwin 27.0.0 arm64",
+    "cpu": "Apple M2 Pro (12 logical cores)",
+    "browser": "Chromium 156.0.8078.4",
+    "engine": "pdfjs",
+    "power": {
+      "source": "ac",
+      "lowPowerMode": false
+    },
+    "loadAverage": {
+      "start": 4.6,
+      "end": 3.92
+    },
+    "turnTaking": {
+      "waits": 0,
+      "waitedMs": 0,
+      "repeatedJobs": 0
+    },
+    "before": "M4 6325a81",
+    "settings": {
+      "files": "bill-hr815.pdf",
+      "runs": 5,
+      "viewport": {
+        "width": 820,
+        "height": 1000
+      },
+      "deviceScaleFactor": 2
+    }
+  },
+  "summaries": [
+    {
+      "file": "bill-hr815.pdf",
+      "scenario": "jump-back",
+      "variant": "before",
+      "runs": 5,
+      "errors": [],
+      "pixelsMs": 3.04,
+      "sharpMs": 3.04,
+      "blankFrames": 0,
+      "blankMeanPct": null,
+      "sharpMean": null,
+      "flipSharpMedianMs": null,
+      "flipSharpMaxMs": null,
+      "baseRenders": 0,
+      "detailRenders": 0,
+      "cancelled": 0,
+      "cached": 3,
+      "blockedMs": 2.44,
+      "lagMaxMs": 3.79,
+      "droppedFrames": 0,
+      "frames": 20,
+      "peakCanvasMiB": 44.02,
+      "peakCacheMiB": 58.01
+    },
+    {
+      "file": "bill-hr815.pdf",
+      "scenario": "jump-back",
+      "variant": "kept",
+      "runs": 5,
+      "errors": [],
+      "pixelsMs": 3.18,
+      "sharpMs": 3.18,
+      "blankFrames": 0,
+      "blankMeanPct": null,
+      "sharpMean": null,
+      "flipSharpMedianMs": null,
+      "flipSharpMaxMs": null,
+      "baseRenders": 0,
+      "detailRenders": 0,
+      "cancelled": 0,
+      "cached": 3,
+      "blockedMs": 2.11,
+      "lagMaxMs": 4.11,
+      "droppedFrames": 0,
+      "frames": 20,
+      "peakCanvasMiB": 43.51,
+      "peakCacheMiB": 58.01
+    }
+  ]
+}

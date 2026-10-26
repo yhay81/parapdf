@@ -296,15 +296,15 @@ export function attachAnnotationEditing(
 
   /** Page `requested`, or the current one, once its annotations can be edited; null if never. */
   const editablePage = async (requested: number | undefined): Promise<number | null> => {
-    const scheduler = viewer.scheduler;
+    const renderer = viewer.renderer;
     const signal = viewer.workSignal;
     const { pageCount, currentPage, first, last } = viewer.store.get();
     const pageIndex = requested ?? currentPage;
-    if (!scheduler || !signal || !editor || pageIndex < 0 || pageIndex >= pageCount) {
+    if (!renderer || !signal || !editor || pageIndex < 0 || pageIndex >= pageCount) {
       return null;
     }
     if (pageIndex < first || pageIndex > last) viewer.goToPage(pageIndex);
-    return (await scheduler.whenEditable(pageIndex)) && !signal.aborted ? pageIndex : null;
+    return (await renderer.whenEditable(pageIndex)) && !signal.aborted ? pageIndex : null;
   };
 
   return {

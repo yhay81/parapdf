@@ -1,0 +1,130 @@
+{
+  "environment": {
+    "runAt": "2026-10-25T23:58:01.014Z",
+    "os": "darwin 27.0.0 arm64",
+    "cpu": "Apple M2 Pro (12 logical cores)",
+    "browser": "Firefox 157.0",
+    "engine": "pdfjs",
+    "power": {
+      "source": "ac",
+      "lowPowerMode": false
+    },
+    "loadAverage": {
+      "start": 12.92,
+      "end": 7.39
+    },
+    "turnTaking": {
+      "waits": 0,
+      "waitedMs": 0,
+      "repeatedJobs": 0
+    },
+    "before": "M4 6325a81",
+    "settings": {
+      "files": "bill-hr815.pdf",
+      "runs": 5,
+      "viewport": {
+        "width": 820,
+        "height": 1000
+      },
+      "deviceScaleFactor": 2
+    }
+  },
+  "summaries": [
+    {
+      "file": "bill-hr815.pdf",
+      "scenario": "scroll-back",
+      "variant": "before",
+      "runs": 5,
+      "errors": [],
+      "pixelsMs": 0.28,
+      "sharpMs": 3665.72,
+      "blankFrames": 0,
+      "blankMeanPct": 0,
+      "sharpMean": 0.51,
+      "flipSharpMedianMs": null,
+      "flipSharpMaxMs": null,
+      "baseRenders": 3,
+      "detailRenders": 4,
+      "cancelled": 0,
+      "cached": 5,
+      "blockedMs": 36.16,
+      "lagMaxMs": 13.74,
+      "droppedFrames": 0,
+      "frames": 239,
+      "peakCanvasMiB": 92.45,
+      "peakCacheMiB": 61.63
+    },
+    {
+      "file": "bill-hr815.pdf",
+      "scenario": "scroll-back",
+      "variant": "kept",
+      "runs": 5,
+      "errors": [],
+      "pixelsMs": 0.24,
+      "sharpMs": 3667.82,
+      "blankFrames": 0,
+      "blankMeanPct": 0,
+      "sharpMean": 0.51,
+      "flipSharpMedianMs": null,
+      "flipSharpMaxMs": null,
+      "baseRenders": 3,
+      "detailRenders": 4,
+      "cancelled": 0,
+      "cached": 5,
+      "blockedMs": 42.66,
+      "lagMaxMs": 14.66,
+      "droppedFrames": 0,
+      "frames": 239,
+      "peakCanvasMiB": 92.45,
+      "peakCacheMiB": 61.63
+    },
+    {
+      "file": "bill-hr815.pdf",
+      "scenario": "flip-back",
+      "variant": "before",
+      "runs": 5,
+      "errors": [],
+      "pixelsMs": 13.76,
+      "sharpMs": 13.76,
+      "blankFrames": 0,
+      "blankMeanPct": 0,
+      "sharpMean": 1,
+      "flipSharpMedianMs": 14.69,
+      "flipSharpMaxMs": 23.18,
+      "baseRenders": 0,
+      "detailRenders": 2,
+      "cancelled": 0,
+      "cached": 4,
+      "blockedMs": 44.02,
+      "lagMaxMs": 15.36,
+      "droppedFrames": 0,
+      "frames": 41,
+      "peakCanvasMiB": 73.37,
+      "peakCacheMiB": 58.01
+    },
+    {
+      "file": "bill-hr815.pdf",
+      "scenario": "flip-back",
+      "variant": "kept",
+      "runs": 5,
+      "errors": [],
+      "pixelsMs": 5.6,
+      "sharpMs": 5.6,
+      "blankFrames": 0,
+      "blankMeanPct": 0,
+      "sharpMean": 1,
+      "flipSharpMedianMs": 13.74,
+      "flipSharpMaxMs": 22.66,
+      "baseRenders": 0,
+      "detailRenders": 2,
+      "cancelled": 0,
+      "cached": 4,
+      "blockedMs": 29.2,
+      "lagMaxMs": 9.16,
+      "droppedFrames": 0,
+      "frames": 42,
+      "peakCanvasMiB": 72.51,
+      "peakCacheMiB": 58.01
+    }
+  ]
+}

@@ -18,6 +18,7 @@ for the direction of the rebuild gets a new record, numbered next.
 | [0007](0007-keep-parsed-pages.md) | Keeping unmounted pages' parsed content | rejected |
 | [0008](0008-demote-whole-page-detail.md) | A whole-page detail becomes the base when zooming past its budget | rejected |
 | [0009](0009-viewer-lifetimes.md) | Each viewport owns its viewer work; separate hot and cold snapshots | adopted |
+| [0010](0010-renderer-owns-page-dom.md) | The renderer owns each page's DOM, and kept canvases move | adopted |
 
 ## Template
 

@@ -152,7 +152,25 @@ Every milestone's "Done when" includes, besides its own items:
   `check:scroll`, `check:options`, and `check:features` pass in Chromium,
   WebKit, and Firefox; the commit, return, zoom, and scroll benchmarks show
   no regression.
-- Status: not started.
+- Status: done (2026-10-26), #40. `src/render/` holds the planner, pure
+  functions with the 0.x heuristics unchanged (`planner.ts`), the renderer
+  that carries its plans out and builds each page's canvases and layer
+  containers in the host React places (`renderer.ts`, `page.ts`), the DOM
+  layers (`dom-layers.ts`), and the text selection tracker; `src/runtime/`
+  is gone. Node tests check the planner's invariants over 300 generated
+  views (a visible page never blank, budgets kept except by visible bases,
+  no base under a whole-page detail, no drawing given back as it starts)
+  and the renderer's page DOM and kept canvases with `test/fake-dom.ts`.
+  Kept canvases move into the page's new host (decision 0010). Every
+  functional check passes in Chromium with `ENGINE=pdfjs`, and
+  `check:pinch`, `check:scroll`, `check:options`, and `check:features` in
+  WebKit and Firefox too. The commit, return, zoom, and scroll benchmarks
+  against 6325a81, three runs in each browser (`results/*-m5-*`), and five
+  runs in each order of the cells that differed most (`*-m5-repeat-*`),
+  show no regression; Firefox comes back to pages sooner without the
+  copies. Review found the planner reading the renderer's pages through a
+  spread, which dropped their pixel getters; it copies them field by field
+  and a test feeds it such pages.
 
 ## M6: React API
 

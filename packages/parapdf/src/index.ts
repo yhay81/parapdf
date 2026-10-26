@@ -91,7 +91,7 @@ export { PdfThumbnail, type PdfThumbnailProps } from "./react/PdfThumbnail.tsx";
 export { PdfViewport, type PdfViewportProps } from "./react/PdfViewport.tsx";
 export { type PdfSearch, usePdfSearch } from "./react/search.ts";
 export { usePdfSelection } from "./react/selection.ts";
-export type { SchedulerStats } from "./runtime/scheduler.ts";
+export type { RenderStats } from "./render/renderer.ts";
 export type { Layout, ScrollMode, SpreadMode } from "./view/layout.ts";
 export type {
   LoadProgress,
