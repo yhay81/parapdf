@@ -33,7 +33,7 @@ export {
   type HistoryState,
   historyOf,
 } from "./features/history.ts";
-export { type InitialViewOptions, initialViewOpening } from "./features/initial-view.ts";
+export type { InitialViewOptions } from "./features/initial-view.ts";
 export { setLayerVisible } from "./features/layers.ts";
 export { enforcePermissions, type Permission, permits } from "./features/permissions.ts";
 export { type PrintOptions, print } from "./features/print/index.ts";

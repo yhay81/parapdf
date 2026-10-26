@@ -217,4 +217,21 @@ Every milestone's "Done when" includes, besides its own items:
   their results; the release process in `AGENTS.md`; release.
 - Done when: the release is published and its CHANGELOG entry lists every
   break from 0.x.
-- Status: not started.
+- Status: done (2026-10-26), released as 0.5.0. The package's README, the
+  site, the root `README.md`, `CONTRIBUTING.md`, and `SECURITY.md` describe
+  the rebuilt package; `AGENTS.md` has the release process; the 0.5.0 entry
+  of `CHANGELOG.md` gathers the milestones' breaks, and the review added the
+  types `PdfSearch` and `PdfNavigation` to them. Every functional check
+  passes in Chromium, WebKit, and Firefox with `ENGINE=pdfjs`, after two
+  checks first run outside Chromium were corrected: `check:viewers` reports
+  WebKit's refusal of cached module workers under COEP as a note, as
+  `check-lifecycle.ts` does, and `check:features` scrolls the first
+  thumbnail into view, which Firefox had scrolled away after the earlier
+  steps (a fresh page opens the panel at its top). The scroll, commit,
+  zoom, and return benchmarks ran on the release build in the three
+  browsers, and the main-thread benchmark in Chromium
+  (`examples/prototype/results/*-0.5.0-*`); M7 changes no runtime code but
+  one export, so they record the release rather than compare it: no blank
+  area in any scroll job, and React commits exactly at the mounted window's
+  and the current page's changes. Review found `initialViewOpening()` still
+  exported, which M6 had made internal; it is no longer.

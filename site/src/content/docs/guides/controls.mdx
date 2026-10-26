@@ -5,17 +5,18 @@ description: Read the viewer's state and change the view from your own component
 
 import { ControlsExample } from "../../../components/examples.tsx";
 
-Components inside `<PdfDocument>` reach the viewer with hooks:
+`useViewer()` creates a viewer, one viewport's controller and state. Give it
+to the `<PdfViewer>` that shows it and to your own components, which read
+its state with hooks and change the view with its methods:
 
 ```tsx
-import { usePdfState, usePdfViewer } from "parapdf";
+import { PdfDocument, PdfViewer, useDocumentState, useViewer, useViewState, type Viewer } from "parapdf";
 
-function Toolbar() {
-  const viewer = usePdfViewer();
-  const page = usePdfState((state) => state.currentPage);
-  const pageCount = usePdfState((state) => state.pageCount);
+function Toolbar({ viewer }: { viewer: Viewer }) {
+  const page = useViewState(viewer, (state) => state.currentPage);
+  const pageCount = useDocumentState((state) => state.pageCount);
   // CSS pixels per PDF point; 96 / 72 shows a page at its printed size.
-  const scale = usePdfState((state) => state.scale);
+  const scale = useViewState(viewer, (state) => state.scale);
   return (
     <div role="toolbar" aria-label="PDF controls">
       <button type="button" onClick={() => viewer.previousPage()}>Previous</button>
@@ -31,10 +32,11 @@ function Toolbar() {
 }
 
 export function App() {
+  const viewer = useViewer();
   return (
     <PdfDocument source="/manual.pdf">
-      <Toolbar />
-      <PdfViewport style={{ height: "80vh" }} />
+      <Toolbar viewer={viewer} />
+      <PdfViewer viewer={viewer} style={{ height: "80vh" }} />
     </PdfDocument>
   );
 }
@@ -42,27 +44,41 @@ export function App() {
 
 <ControlsExample client:visible />
 
+The viewer lives as long as the component that called `useViewer()`: it
+keeps its view and edits while its `<PdfViewer>` unmounts, and closes the
+document once that component unmounts. Several viewers can show one
+`PdfDocument`'s document, each with a view of its own.
+
 ## Reading state
 
-`usePdfState(selector)` re-renders its component only when the selected value
-changes. Return a primitive or an object the state already holds, not a new
-object or array: select each value with a selector of its own instead.
+Two hooks read state, and re-render their component only when the selected
+value changes:
 
-The store publishes when the mounted pages, the current page, or the zoom
-change, not at every scrolled frame, so a toolbar costs nothing while the
-reader scrolls. [The state reference](/reference/state/) lists every field:
-the status and load progress, page count and labels, scale, rotation, scroll
-mode, search, outline, permissions, metadata, layers, attachments, and the
-annotation editor's state.
+- `useViewState(viewer, selector)` reads the viewer's view: its layout, the
+  mounted pages, `currentPage`, `scale`, `zoomMode`, `rotation`, `spread`,
+  `scrollMode`, and `tool`.
+- `useDocumentState(selector)` reads the nearest `PdfDocument`'s document,
+  shared by its viewers: `status`, `error`, `passwordReason`, `progress`,
+  `pageCount`, and `permissions`.
+
+Return a primitive or an object the state already holds, not a new object
+or array: select each value with a selector of its own instead.
+
+The viewer's store publishes when the mounted pages, the current page, or
+the zoom change, not at every scrolled frame, so a toolbar costs nothing
+while the reader scrolls. The outline, page labels, metadata, attachments,
+and layers are read with hooks of their own that suspend (see [Layers and
+attachments](/guides/layers-attachments/)). [The state
+reference](/reference/state/) lists every field.
 
 ## Changing the view
 
-`usePdfViewer()` returns the viewer runtime, whose methods change the view:
+The viewer's methods change the view:
 
 - `goToPage(index)`, and `nextPage()` and `previousPage()`, which move by a
   whole spread or row.
 - `zoomBy(factor)`, `setScale(scale | "fit-width" | "fit-page")`, and
-  `resetScale()`, back to `initialScale`.
+  `resetScale()`, back to the zoom the viewer opened with.
 - `rotate(degrees)` and `setRotation(rotation)`, clockwise in quarter turns.
 - `setSpread(spread)` and `setScrollMode(mode)`: see [Scroll modes and
   spreads](/guides/layout/).
@@ -71,11 +87,30 @@ annotation editor's state.
 
 [The viewer reference](/reference/viewer/) lists the others.
 
+## Controlled view state
+
+`PdfViewer` takes the zoom, rotation, spread, scroll mode, and tool either
+uncontrolled, by their defaults (`defaultZoom`, `defaultRotation`,
+`defaultSpread`, `defaultScrollMode`, `defaultTool`), which apply as the
+viewer opens a document, or controlled, by their value and change callback:
+
+```tsx
+const [zoom, setZoom] = useState<Zoom>("fit-width");
+<PdfViewer viewer={viewer} zoom={zoom} onZoomChange={setZoom} />;
+```
+
+A controlled value is what the viewer shows. The viewer reports each change
+of its own, from the reader's gestures and keys or its methods, through the
+callback, and returns to the value once React renders without taking the
+change up. The current page is never controlled: `defaultPage` opens the
+document there, `onPageChange` hears it change, and `viewer.goToPage()`
+sets it.
+
 ## Keyboard and gestures
 
 The viewport is focusable. The arrow keys, Page Up, Page Down, Home, End, and
 space scroll it, or turn pages in `"page"` mode, and Ctrl or ⌘ with +, -, and
-0 zoom in, out, and back to `initialScale`.
+0 zoom in, out, and back to the zoom the viewer opened with.
 
 Ctrl or ⌘ with the wheel, trackpad pinches, touch pinches, and Safari's
 gesture events zoom the document around the pointer or the fingers instead of

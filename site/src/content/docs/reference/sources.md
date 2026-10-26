@@ -12,38 +12,51 @@ or an `ArrayBuffer`:
 <PdfDocument source={{ data: bytes, password: "secret" }} />
 ```
 
-- A URL source may add `httpHeaders` and `withCredentials` for its request,
-  and either kind the `password` of an encrypted document. A source's own
-  headers and credentials replace those of `documentOptions`, and one with
-  headers is not preloaded while the page renders (see
-  [Server rendering](/setup/server-rendering/)).
-- Viewers of the same URL (with the same headers and credentials), or of the
-  same bytes, share one loaded document, and React's StrictMode or a quick
-  remount reuses it instead of loading it again.
-- A document is closed a second after its last viewer unmounts; one still
-  loading or waiting for a password stops loading.
-- A new source object with the same URL keeps the open document, so
-  `source={{ url }}` inline is fine.
-- ParaPDF copies `data` before pdf.js transfers it to its worker, so your
-  bytes stay usable.
+| Field | |
+|---|---|
+| `url` | The document's URL. A string source is `{ url }`. |
+| `httpHeaders` | With `url`: headers for pdf.js's requests, instead of those of `documentOptions`. A source with headers is not preloaded (see [Server rendering](/setup/server-rendering/)). |
+| `withCredentials` | With `url`: send cookies and credentials with cross-origin requests, instead of following `documentOptions`. |
+| `data` | The document's bytes. ParaPDF copies them before pdf.js transfers them to its worker, so your bytes stay usable. |
+| `password` | The password of an encrypted document, for either kind: it is tried first, and another is asked for only when it is wrong (see [Encrypted documents](/guides/encrypted/)). |
 
-A viewer with `annotationEditing` opens its own copy of the document instead
-of sharing one: annotations live in the document, and another viewer of it
-would save them too.
+## Sessions
+
+- One open document is a session, which every `PdfDocument` of the same
+  source joins: the same URL with the same headers and credentials mode, or
+  the same bytes object. Its viewers share pdf.js's document, its pages'
+  sizes and text, its outline and other data, and which layers show.
+- A new source object with the same URL keeps the open document, so
+  `source={{ url }}` inline is fine. A changed URL, headers, credentials
+  mode, or password, or another bytes object, opens another; a new password
+  for the same source tries it on the shared document, as after a wrong one.
+- A document is closed a second after the last `PdfDocument` of it
+  unmounts, so React's StrictMode and a quick remount reuse it instead of
+  loading it again; one still loading or waiting for a password stops
+  loading. Closing it stops everything started for it: drawing, searches,
+  background reads, the annotation editor, and printing.
+- Under one `PdfDocument`, any number of `PdfViewer`s and `PdfThumbnails`
+  show the document, each viewer with its own view. Viewers that edit
+  annotations share the document too: `save()` and `print()` from any of
+  them include what every one created, while each shows the annotations it
+  created itself.
 
 ## pdf.js's own API
 
-`usePdfDocument()` returns pdf.js's `PDFDocumentProxy` of the open document,
+`useSession().proxy` is pdf.js's `PDFDocumentProxy` of the open document,
 or null before it opens, for what ParaPDF does not wrap:
 
 ```tsx
-import { usePdfDocument } from "parapdf";
+import { useDocumentState, useSession } from "parapdf";
 
 /** The document's own ID, to keep views and annotations by, whatever its URL. */
 function useDocumentId(): string | null {
-  const proxy = usePdfDocument();
-  return proxy?.fingerprints[0] ?? null;
+  const session = useSession();
+  // Renders again once the document is ready, when the proxy is set.
+  const ready = useDocumentState((state) => state.status === "ready");
+  return ready ? (session.proxy?.fingerprints[0] ?? null) : null;
 }
 ```
 
-The proxy belongs to the viewer: do not destroy it.
+The proxy belongs to the session, which every viewer of the document
+shares: do not destroy it. `viewer.session?.proxy` is the same document.

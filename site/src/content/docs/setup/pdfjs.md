@@ -4,7 +4,9 @@ description: Change how ParaPDF loads pdf.js, its worker, and its files.
 ---
 
 Most applications configure nothing. `configurePdfjs()`, called once before
-the first `PdfDocument` renders, changes how ParaPDF loads pdf.js:
+the first `PdfDocument` renders, changes how ParaPDF loads pdf.js. Once
+pdf.js has loaded, a different configuration is ignored with a warning, and
+the same one, as hot module replacement passes it again, silently.
 
 ```tsx
 import { configurePdfjs } from "parapdf";
@@ -19,9 +21,9 @@ configurePdfjs({ documentOptions: { withCredentials: true } });
 | `workerSrc` | URL of pdf.js's worker script, when it is not `${assetBase}pdf.worker.js`. |
 | `build` | `legacyBuild` from `parapdf/legacy`: pdf.js's legacy build for older browsers, with its worker and files from the package like the modern build's. |
 | `pdfjs` | Loads another build of the same pdf.js version, with its worker as `workerSrc` and its files as `assetBase`. |
-| `enableHWA` | GPU-backed canvases, `true` by default; `false` asks pdf.js for CPU-backed ones, which block the main thread for longer in Chromium and drop more frames in WebKit, though WebKit holds less memory with them. |
-| `documentOptions` | More pdf.js `getDocument` parameters for every document, such as `withCredentials`, `httpHeaders`, or `password`. |
-| `rendererSrc` | pdf.js's renderer worker, which draws pages off the main thread; it is only in unreleased pdf.js builds so far. |
+| `enableHWA` | GPU-backed canvases, `true` by default; `false` asks pdf.js for CPU-backed ones, which in the [engine benchmark](/about/performance/#the-engine) blocked Chromium's main thread for 21 ms instead of 4 while drawing ten pages. |
+| `documentOptions` | More pdf.js `getDocument` parameters for every document, such as `withCredentials`, `httpHeaders`, `disableAutoFetch`, or `maxImageSize`; they override ParaPDF's own. ParaPDF sets the source and the worker. |
+| `rendererSrc` | pdf.js's renderer worker, which draws pages into an OffscreenCanvas on a thread of its own; it is only in unreleased pdf.js builds so far. |
 
 ## Loading early
 
@@ -41,9 +43,9 @@ import { legacyBuild } from "parapdf/legacy";
 configurePdfjs({ build: legacyBuild });
 ```
 
-Only applications that import `parapdf/legacy` emit the legacy worker, but
-the modern worker, about 1.3 MB, is emitted either way: the build output
-grows, the browser fetches only the worker it uses.
+Only applications that import `parapdf/legacy` emit the legacy worker,
+about 1.3 MB, but the modern worker, about 1.2 MB, is emitted either way:
+the build output grows, the browser fetches only the worker it uses.
 
 ## The version
 

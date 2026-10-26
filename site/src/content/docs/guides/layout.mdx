@@ -9,8 +9,9 @@ import { LayoutExample } from "../../../components/examples.tsx";
 
 ## Scroll modes
 
-`viewer.setScrollMode(mode)`, or the `scrollMode` option, arranges pages as
-pdf.js's viewer does:
+`viewer.setScrollMode(mode)`, or `PdfViewer`'s `scrollMode` (controlled,
+with `onScrollModeChange`) or `defaultScrollMode`, arranges pages as pdf.js's
+viewer does:
 
 | Mode | |
 |---|---|
@@ -35,18 +36,20 @@ The current page stays in view when the mode changes.
 
 ## Spreads
 
-`viewer.setSpread("odd")`, or the `spread` option, shows pages side by side
-in pairs, 1–2, 3–4; `"even"` shows page 1 alone and pairs 2–3, 4–5, like a
-book with its cover; `"none"` goes back to one page per row. Pairs stay
-together in every scroll mode: in a wrapped row and when `"page"` mode turns.
+`viewer.setSpread("odd")`, or the `spread` or `defaultSpread` prop, shows
+pages side by side in pairs, 1–2, 3–4; `"even"` shows page 1 alone and pairs
+2–3, 4–5, like a book with its cover; `"none"` goes back to one page per
+row. Pairs stay together in every scroll mode: in a wrapped row and when
+`"page"` mode turns.
 
 ## Fitting
 
-`setScale("fit-width")`, the default `initialScale`, fits the current page to
-the viewport's width, and `setScale("fit-page")` fits all of it; both keep
-fitting as the viewport resizes, the view turns, or the page's real size
-arrives. The state's `zoomMode` says which one holds; a numeric scale, a
-zoom step, or a pinch makes it `"custom"`.
+`setScale("fit-width")`, or `"fit-width"` as `PdfViewer`'s `zoom` or
+`defaultZoom`, the default, fits the current page to the viewport's width,
+and `"fit-page"` fits all of it; both keep fitting as the viewport resizes,
+the view turns, or the page's real size arrives. The view state's
+`zoomMode` says which one holds; a numeric scale, a zoom step, or a pinch
+makes it `"custom"`, and `onZoomChange` then hears the scale.
 
 In a spread mode, fitting counts two pages, so the zoom stays the same from
 row to row, as in pdf.js. In `"horizontal"` mode, where all pages share one

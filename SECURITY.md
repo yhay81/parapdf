@@ -11,8 +11,8 @@ release rather than as a backport to older ones.
 
 | Version | Supported |
 |---|---|
-| The latest 0.x release | Yes |
-| Earlier releases | No |
+| The latest release | Yes |
+| Earlier releases, including 0.4.x and older | No |
 
 The scope is the `parapdf` package (`packages/parapdf/`). The benchmark
 (`bench/`) and the demo (`examples/`) are not published.

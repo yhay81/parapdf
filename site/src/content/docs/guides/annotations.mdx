@@ -5,14 +5,17 @@ description: Let the reader create highlights, text, drawings, images, and signa
 
 import { AnnotationsExample } from "../../../components/examples.tsx";
 
-With `options={{ annotationEditing: true }}`, the reader can create
-highlights, text, drawings, images, and signatures, with pdf.js's editors.
+With `<PdfViewer annotationEditing />`, the reader can create highlights,
+text, drawings, images, and signatures, with pdf.js's editors.
+`useAnnotations(viewer)` gives the editing state, the current tool and each
+tool's style, with the methods below; it is null until the editor's code
+loads, and without the option.
 
 <AnnotationsExample client:visible />
 
 ## Tools
 
-`viewer.setAnnotationTool(tool)` chooses what a pointer does on the pages:
+`annotations.setTool(tool)` chooses what a pointer does on the pages:
 
 | Tool | |
 |---|---|
@@ -28,23 +31,28 @@ color and a delete button. Ctrl or ⌘ with Z undoes, and the arrow keys move
 what is selected.
 
 ```tsx
-function AnnotationTools() {
-  const viewer = usePdfViewer();
-  const tool = usePdfState((state) => state.annotationTool);
-  const canUndo = usePdfState((state) => state.annotationState?.canUndo ?? false);
-  const ink = usePdfState((state) => state.annotationStyles?.ink);
+import { useAnnotations, type Viewer } from "parapdf";
+
+function AnnotationTools({ viewer }: { viewer: Viewer }) {
+  const annotations = useAnnotations(viewer);
+  if (!annotations) return null;
+  const ink = annotations.styles?.ink;
   return (
     <div role="toolbar" aria-label="Annotations">
-      <button type="button" aria-pressed={tool === "ink"} onClick={() => viewer.setAnnotationTool("ink")}>
+      <button
+        type="button"
+        aria-pressed={annotations.tool === "ink"}
+        onClick={() => annotations.setTool("ink")}
+      >
         Draw
       </button>
       <input
         type="color"
         aria-label="Line color"
         value={ink?.color.toLowerCase() ?? "#000000"}
-        onChange={(event) => viewer.setAnnotationStyle("ink", { color: event.target.value })}
+        onChange={(event) => annotations.setStyle("ink", { color: event.target.value })}
       />
-      <button type="button" disabled={!canUndo} onClick={() => viewer.undoAnnotation()}>
+      <button type="button" disabled={!annotations.state?.canUndo} onClick={annotations.undo}>
         Undo
       </button>
     </div>
@@ -54,15 +62,15 @@ function AnnotationTools() {
 
 ## Styles, undo, and selection
 
-- `setAnnotationStyle(tool, style)` restyles the selected annotations, or,
-  with none selected, the next ones `tool` creates: `color` for each tool,
-  `thickness` for `"ink"` and freehand highlights, `opacity` for `"ink"`, and
-  `fontSize` for `"freetext"`, in PDF points. `annotationStyles` shows each
-  tool's style, or the selected annotation's.
-- `undoAnnotation()`, `redoAnnotation()`, `deleteSelectedAnnotations()`, and
-  `selectAllAnnotations()`; `annotationState` says whether there is
-  something to undo or redo (`canUndo`, `canRedo`), whether annotations are
-  selected (`hasSelection`), and whether there are any (`isEmpty`).
+- `setStyle(tool, style)` restyles the selected annotations, or, with none
+  selected, the next ones `tool` creates: `color` for each tool, `thickness`
+  for `"ink"` and freehand highlights, `opacity` for `"ink"`, and `fontSize`
+  for `"freetext"`, in PDF points. `styles` shows each tool's style, or the
+  selected annotation's.
+- `undo()`, `redo()`, `deleteSelected()`, and `selectAll()`; `state` says
+  whether there is something to undo or redo (`canUndo`, `canRedo`), whether
+  annotations are selected (`hasSelection`), and whether there are any
+  (`isEmpty`). `state` and `styles` are null until editing starts.
 
 ## Images and signatures
 
@@ -86,16 +94,17 @@ adding an annotation or undo step.
 
 ## Saving and keeping annotations
 
-Annotations go into the document's bytes that `save()`, `download()`, and
-`print()` use. To keep them apart from the PDF, say on a server,
-`exportAnnotations()` returns them as JSON-compatible data, and
-`importAnnotations(annotations)` adds them again where they were, after the
-same document opens again, without an undo step:
+Annotations go into the document's bytes that `save(viewer)`,
+`download(viewer)`, and `print(viewer)` use. To keep them apart from the
+PDF, say on a server, `annotations.export()` returns them as
+JSON-compatible data, and `annotations.import(saved)` adds them again where
+they were, after the same document opens again, without an undo step, and
+resolves to how many it added:
 
 ```ts
-localStorage.setItem("annotations", JSON.stringify(viewer.exportAnnotations()));
+localStorage.setItem("annotations", JSON.stringify(annotations.export()));
 // Later, once the document is open (status "ready"):
-await viewer.importAnnotations(JSON.parse(localStorage.getItem("annotations") ?? "[]"));
+await annotations.import(JSON.parse(localStorage.getItem("annotations") ?? "[]"));
 ```
 
 Each exported annotation has `pageIndex`, `type` (the tool that made it), and
@@ -103,20 +112,32 @@ Each exported annotation has `pageIndex`, `type` (the tool that made it), and
 pdf.js pastes copies in, which may change when ParaPDF moves to another
 pdf.js; the changelog says when. Text being typed counts once it is
 committed, when the reader clicks elsewhere or another tool is chosen.
-Annotations belong to the open document: they are gone once the viewer
-closes it, so export or save them before.
+
+Annotations belong to the viewer that created them: they stay while its
+`PdfViewer` unmounts and mounts again, and are gone once the component that
+called `useViewer()` unmounts or `annotationEditing` turns off, so export or
+save them before.
+
+## Several viewers
+
+Viewers of one `PdfDocument` that edit annotations share its document.
+`save()`, `download()`, and `print()` from any of them include every
+viewer's annotations, those of a viewer whose `PdfViewer` is unmounted too,
+and what is being typed in any of them. Each viewer shows the annotations it
+created.
 
 ## Costs and limits
 
-The editor's code and styles load when a viewer with `annotationEditing`
-opens a document, so applications that do not edit annotations do not
-download them; `annotationState` is null until then. A viewer that edits
-annotations opens its own copy of the document instead of sharing one with
-other viewers of the same source. Thumbnails show pages without the
-annotations created, as pdf.js's do.
+The editor's code and styles load only once `annotationEditing` is set, so
+applications that do not edit annotations do not download them;
+`useAnnotations()` is null until then. The option is live: setting it needs
+no remount. `useAnnotationEditing(viewer)` gives the feature itself, whose
+`store` reads its state as it is, without waiting for React to render. Thumbnails show
+pages without the annotations created, as pdf.js's do.
 
 Label the editor's controls in the application's language with
-`annotationLabels`; the defaults are pdf.js's English names.
+`annotationLabels`; the defaults are pdf.js's English names. New labels
+apply without losing the annotations created.
 
 Annotations the PDF already holds stay as they are drawn: they cannot be
 edited yet, and comments on created annotations are not shown.

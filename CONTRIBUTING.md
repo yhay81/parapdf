@@ -6,15 +6,19 @@ first: it may not fit what ParaPDF is for, or it may need a measurement
 before code.
 
 [`AGENTS.md`](AGENTS.md) is the full development context: the layout of the
-repository, every command, how the runtime works, and how the benchmarks
-measure. This file is the short version for people.
+repository, every command, and how the benchmarks measure.
+[`docs/rebuild/target.md`](docs/rebuild/target.md) describes how the runtime
+is built, and [`docs/decisions/`](docs/decisions) records why, with the
+measurements. This file is the short version for people.
 
 ## What ParaPDF is for
 
 - **React-first.** The runtime is designed around React semantics, and
   React stays out of the hot path: scrolling and zooming commit no React
-  state per frame, and pixels reach canvases through refs.
-- **pdf.js through its core display API.** `getDocument`, page rendering,
+  state per frame, pixels never go through React state, and drawing leaves
+  the main thread wherever pdf.js allows it.
+- **pdf.js through its core display API.** pdf.js is the only engine, used
+  directly, with no engine abstraction: `getDocument`, page rendering,
   `TextLayer`, and `AnnotationLayer`; not the viewer components in
   `pdfjs-dist/web/`. ParaPDF does not fork or patch pdf.js: changes it needs
   go upstream. Code ported from pdf.js's viewer needs Apache-2.0
@@ -38,7 +42,8 @@ pnpm --filter @parapdf/prototype dev
 ```
 
 The last command runs the demo. Its query parameters, which choose the file,
-scroll mode, zoom, and more, are listed under "Commands" in `AGENTS.md`.
+scroll mode, zoom, and more, are read in
+[`examples/prototype/src/App.tsx`](examples/prototype/src/App.tsx).
 
 ## Before you open a pull request
 

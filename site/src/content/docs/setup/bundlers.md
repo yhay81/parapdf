@@ -21,13 +21,17 @@ profile shows rgb(255 46 23).
 
 ## Bundlers that work as they are
 
-These were tested and need no setup:
+These need no setup:
 
-- Vite 8, its development server and its builds (this site is built with
+- Vite 8, its development server and its builds, which the repository's
+  bundle check runs against the packed package (this site is built with
   Astro on Vite)
 - webpack 5
 - Rsbuild 2
 - Next.js 16, with Turbopack and with webpack
+
+webpack, Rsbuild, and Next.js were tested with 0.4, whose handling of
+pdf.js's files 0.5 keeps unchanged.
 
 ## Bundlers that need a copy
 

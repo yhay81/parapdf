@@ -571,7 +571,12 @@ try {
     );
     await settle(page);
     const thumbnailColor = await (async () => {
-      const box = await thumbnails.locator(".parapdf-thumbnail").first().boundingBox();
+      // After the earlier steps Firefox opens the panel scrolled to its end, which a
+      // fresh page does not; the first thumbnail is shown, and drawn again if released.
+      const first = thumbnails.locator(".parapdf-thumbnail").first();
+      await first.scrollIntoViewIfNeeded();
+      await settle(page);
+      const box = await first.boundingBox();
       if (!box) return "none";
       // The blue square of Layer B, which the layer change shows, at 300 × 252 points.
       const clip = {

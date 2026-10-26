@@ -5,29 +5,33 @@ description: Show every page as a small picture that costs little.
 
 import { ThumbnailsExample } from "../../../components/examples.tsx";
 
-`PdfThumbnail` draws a page `width` CSS pixels wide; its height follows the
-page's shape as the view turns it. It is a picture only: wrap it in a button
-or a link labelled with the page.
+`PdfThumbnails` lists the pages of a viewer's document as buttons, each with
+a thumbnail and the page's number, marks the current page, and goes to a
+page when the reader chooses it:
 
 ```tsx
-import { PdfThumbnail, usePdfState, usePdfViewer } from "parapdf";
+import { PdfDocument, PdfThumbnails, PdfViewer, useViewer } from "parapdf";
 
-function Thumbnails() {
-  const viewer = usePdfViewer();
-  const pageCount = usePdfState((state) => state.pageCount);
-  const labels = usePdfState((state) => state.pageLabels);
+function Reader() {
+  const viewer = useViewer();
   return (
-    <nav aria-label="Pages" style={{ overflow: "auto" }}>
-      {Array.from({ length: pageCount }, (_, index) => (
-        <button key={index} type="button" onClick={() => viewer.goToPage(index)}>
-          <PdfThumbnail pageIndex={index} width={120} />
-          {labels?.[index] ?? index + 1}
-        </button>
-      ))}
-    </nav>
+    <PdfDocument source="/manual.pdf">
+      <PdfThumbnails viewer={viewer} width={120} style={{ overflow: "auto" }} />
+      <PdfViewer viewer={viewer} />
+    </PdfDocument>
   );
 }
 ```
+
+`onSelect(pageIndex)` replaces going to the page; `label` names the list
+and `pageLabel(pageNumber, pageCount)` each button, in the application's
+language. Thumbnails follow the viewer's rotation and draw with its drawing
+slots, so they need the viewer whose pages they list.
+
+For a list of your own, `PdfThumbnail` (`viewer`, `pageIndex`, `width`) draws
+one page `width` CSS pixels wide; its height follows the page's shape as the
+view turns it. It is a picture only: wrap it in a button or a link labelled
+with the page.
 
 <ThumbnailsExample client:visible />
 

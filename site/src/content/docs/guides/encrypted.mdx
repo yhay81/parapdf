@@ -7,17 +7,21 @@ import { PasswordExample } from "../../../components/examples.tsx";
 
 An encrypted document waits for its password with `status` `"password"`;
 `passwordReason` says whether one is `"required"` or the last one was
-`"incorrect"`. Answer with `viewer.submitPassword(password)`, or
-`submitPassword(null)` to give up, which fails the document:
+`"incorrect"`. Both are the document's state, which `useDocumentState()`
+reads. Answer with `submitPassword(password)` of the session `useSession()`
+gives, or `submitPassword(null)` to give up, which fails the document:
 
 ```tsx
+import { useDocumentState, useSession } from "parapdf";
+import { useState } from "react";
+
 function PasswordPrompt() {
-  const viewer = usePdfViewer();
-  const reason = usePdfState((state) => state.passwordReason);
+  const session = useSession();
+  const reason = useDocumentState((state) => state.passwordReason);
   const [password, setPassword] = useState("");
   if (!reason) return null;
   return (
-    <form onSubmit={(event) => { event.preventDefault(); viewer.submitPassword(password); }}>
+    <form onSubmit={(event) => { event.preventDefault(); session.submitPassword(password); }}>
       <label>
         {reason === "incorrect" ? "Wrong password, try again" : "Password"}
         <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
@@ -28,15 +32,18 @@ function PasswordPrompt() {
 }
 ```
 
+Render it inside the `PdfDocument`, beside the viewer: every viewer of the
+document waits for the same answer.
+
 <PasswordExample client:visible />
 
 A source can carry the password too (see [Sources](/reference/sources/)); the
-viewer asks only when it is wrong. Changing `source.password` tries the new
+document asks only when it is wrong. Changing `source.password` tries the new
 value on the shared document still loading, even before its password request
-arrives. This also works with `passwordPrompt: false`.
+arrives. This also works with `passwordPrompt={false}`.
 
-An application without such a prompt passes `passwordPrompt: false` in
-`options`: an encrypted document then fails at once with `status` `"error"`
+An application without such a prompt passes `passwordPrompt={false}` to
+`PdfDocument`: an encrypted document then fails at once with `status` `"error"`
 instead of waiting for a password no one can type.
 
 What an encrypted document permits is in [Permissions](/guides/permissions/).

@@ -7,31 +7,67 @@ description: Show and hide a PDF's layers, and open the files embedded in it.
 layers, an embedded file, page labels, a comment, and form fields: its
 sidebar lists the layers and the file.
 
+These hooks read the document of the nearest `PdfDocument` with React's
+`use()`: each suspends until its data is read, so render it under a
+Suspense boundary of your own, apart from the viewer, which never waits for
+them.
+
+```tsx
+import { setLayerVisible, useLayers, type Viewer } from "parapdf";
+
+function Layers({ viewer }: { viewer: Viewer }) {
+  const layers = useLayers();
+  return (
+    <ul>
+      {layers.map(({ id, name, visible }) =>
+        id === null ? null : (
+          <li key={id}>
+            <label>
+              <input
+                type="checkbox"
+                checked={visible}
+                onChange={(event) => setLayerVisible(viewer, id, event.target.checked)}
+              />
+              {name}
+            </label>
+          </li>
+        ),
+      )}
+    </ul>
+  );
+}
+
+<Suspense fallback={null}>
+  <Layers viewer={viewer} />
+</Suspense>;
+```
+
 ## Layers
 
-The state's `layers` lists the document's layers (optional content) in its
-own order, null while they load: `{ id, name, visible, children }`, where a
-heading that only groups others has a null `id`.
+`useLayers()` lists the document's layers (optional content) in its own
+order, empty when it has none: `{ id, name, visible, children }`, where a
+heading that only groups others has a null `id`. It follows their
+visibility as it changes.
 
-`viewer.setLayerVisible(id, visible)` shows or hides one in this viewer, its
-thumbnails, and its printouts; showing one of a set of exclusive layers hides
-the others, and links in the document that switch layers work too. Pages
-keep their old pixels while they are drawn again.
+`setLayerVisible(viewer, id, visible)` shows or hides one in every viewer of
+the document, their thumbnails, and their printouts; showing one of a set
+of exclusive layers hides the others, and links in the document that switch
+layers work too. Pages keep their old pixels while they are drawn again.
 
 ## Attachments
 
-The state's `attachments` lists the embedded files as
-`{ id, filename, description }`, null while they load.
+`useAttachments()` lists the embedded files as
+`{ id, filename, description }`, empty when there are none.
 
-- `viewer.getAttachmentContent(id)` resolves to a file's bytes.
-- `viewer.openAttachment(attachment)` does what activating a file attachment
-  annotation does: by default, the browser downloads the file.
-- The `openAttachment` option, `({ filename, content }) => void`, replaces
-  that, for both.
+- `getAttachmentContent(viewer, id)` resolves to a file's bytes, or null.
+- `openAttachment(viewer, attachment)` does what activating a file
+  attachment annotation does: by default, the browser downloads the file.
+- `PdfViewer`'s `openAttachment` prop, `({ filename, content }) => void`,
+  replaces that, for both.
 
 ## Page labels and metadata
 
-The state's `pageLabels` holds each page's label, such as `"iv"` or `"A-3"`,
-when the PDF defines them, and null otherwise. `metadata` holds the title,
+`usePageLabels()` gives each page's label, such as `"iv"` or `"A-3"`, when
+the PDF defines them, and null otherwise. `useMetadata()` gives the title,
 author, subject, keywords, creator, producer, creation and modification
-dates, PDF version, and language, null while it loads.
+dates, PDF version, and language, or null when they cannot be read.
