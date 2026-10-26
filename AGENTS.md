@@ -26,13 +26,12 @@ the code that follows it.
 
 ## Status
 
-The rebuild runs milestone by milestone on `main`
-(`docs/rebuild/milestones.md`); M0 to M6 are done; M7 is next.
-0.x was
-published on npm as `parapdf` 0.1.0 to 0.4.0, from the tags `v0.1.0` to
-`v0.4.0`. The package's README, the documentation site, the root
-`README.md`, `CONTRIBUTING.md`, and `SECURITY.md` describe 0.x until M7
-rewrites them (decision 0002).
+The rebuild ran milestone by milestone on `main`
+(`docs/rebuild/milestones.md`); M0 to M7 are done, and 0.5.0 is its first
+release. 0.x was published on npm as `parapdf` 0.1.0 to 0.4.0, from the tags
+`v0.1.0` to `v0.4.0`, and is no longer supported. New work follows the same
+rules: `target.md` first when the destination changes, and a decision record
+when the choice matters for performance or direction.
 
 ## Rules
 
@@ -94,7 +93,7 @@ rewrites them (decision 0002).
 
 ## Repository layout
 
-As of M6; `target.md` describes where the runtime's code goes.
+`target.md` describes where the runtime's code goes.
 
 - `packages/parapdf/` — the runtime, published as `parapdf`: the loader
   that starts pdf.js with the package's worker and files, and how ParaPDF
@@ -140,8 +139,8 @@ As of M6; `target.md` describes where the runtime's code goes.
   reports, and `bench/scripts/browsers.ts`, the launcher every Playwright
   script shares. Results in `results/`.
 - `site/` — the documentation site (Astro with Starlight), deployed by
-  `.github/workflows/site.yml` to https://parapdf.yhay81.com. Describes 0.x
-  until M7.
+  `.github/workflows/site.yml` to https://parapdf.yhay81.com from release
+  tags.
 - `docs/` — `rebuild/` (target and milestones), `decisions/`, and
   `history/`.
 - `.github/` — CI, issue forms, the pull request template, and Dependabot.
@@ -237,8 +236,21 @@ As of M6; `target.md` describes where the runtime's code goes.
 
 ## Releasing
 
-Nothing is released before M7, which writes the release process for the
-rebuilt package here. A pdfjs-dist security fix is released promptly for
-0.x, as `SECURITY.md` promises, from a branch cut from the tag `v0.4.0`
-(`docs/history/AGENTS-v0.md`, "Releasing"), and `main` moves to the same
-pdfjs-dist.
+1. On a branch, set `version` in `packages/parapdf/package.json` and turn
+   the changes since the last release in `CHANGELOG.md` into the release's
+   entry, which lists every break.
+2. Run `pnpm check`, `pnpm typecheck`, `pnpm test`, `pnpm --filter parapdf
+   check:package`, and every functional check in Chromium, WebKit, and
+   Firefox with `ENGINE=pdfjs`; merge the pull request once CI passes.
+3. Tag the merge commit on `main` `vX.Y.Z` and push the tag, which deploys
+   the documentation site (`.github/workflows/site.yml`).
+4. Run `pnpm --filter parapdf publish` from that commit, in a checkout with
+   no uncommitted or untracked files (pnpm refuses otherwise). pnpm applies
+   `publishConfig` and runs `prepack`, which builds and copies the license
+   and notices in. npm asks the maintainer to approve the login and the
+   publish in the browser.
+5. Create the GitHub release for the tag from its `CHANGELOG.md` entry.
+
+When pdfjs-dist publishes a security fix, release on it soon, and say so in
+the release's entry: `SECURITY.md` promises it, because the package ships
+pdf.js's worker and applications cannot move to another pdf.js themselves.

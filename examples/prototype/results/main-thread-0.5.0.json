@@ -1,0 +1,143 @@
+{
+  "environment": {
+    "runAt": "2026-10-26T10:00:35.532Z",
+    "os": "darwin 27.0.0 arm64",
+    "cpu": "Apple M2 Pro (12 logical cores)",
+    "browser": "Chromium 156.0.8078.4",
+    "power": {
+      "source": "ac",
+      "lowPowerMode": false
+    },
+    "loadAverage": {
+      "start": 3.5,
+      "end": 3.2
+    },
+    "turnTaking": {
+      "waits": 0,
+      "waitedMs": 0,
+      "repeatedJobs": 0
+    },
+    "code": null,
+    "settings": {
+      "file": "bill-hr815.pdf",
+      "dpr": 2,
+      "startScale": null,
+      "scrollModes": ["vertical"],
+      "zoom": "1.25,1.25,1.25,1.25",
+      "speed": 900,
+      "durationMs": 4000,
+      "runs": 3
+    }
+  },
+  "summaries": [
+    {
+      "scenario": "zoom",
+      "variant": "pdfjs-hwa",
+      "runs": 3,
+      "taskMs": 182.5,
+      "scriptMs": 127.7,
+      "layoutMs": 2.4,
+      "styleMs": 3.6,
+      "renders": {
+        "base": 2,
+        "detail": 6,
+        "text": 0,
+        "textUpdates": 1,
+        "annotations": 0,
+        "cancelled": 0
+      },
+      "profile": {
+        "(browser) › drawImage": 97.5,
+        "(browser) › fillText": 7.4,
+        "(browser) › (garbage collector)": 4.3,
+        "pdf.js › zn": 2.4,
+        "pdf.js › Rn": 1.8,
+        "(browser) › save": 1.5,
+        "(browser) › measureText": 1.2,
+        "pdf.js › showText": 1
+      }
+    },
+    {
+      "scenario": "zoom",
+      "variant": "pdfjs-hwa, no text",
+      "runs": 3,
+      "taskMs": 181.3,
+      "scriptMs": 143.3,
+      "layoutMs": 1.6,
+      "styleMs": 2,
+      "renders": {
+        "base": 2,
+        "detail": 6,
+        "text": 0,
+        "textUpdates": 0,
+        "annotations": 0,
+        "cancelled": 0
+      },
+      "profile": {
+        "(browser) › drawImage": 116.5,
+        "(browser) › fillText": 8,
+        "(browser) › (garbage collector)": 4.1,
+        "pdf.js › zn": 2.6,
+        "pdf.js › Rn": 1.2,
+        "pdf.js › #g": 1.2,
+        "pdf.js › showText": 1.1,
+        "pdf.js › Nn": 1,
+        "(browser) › fillRect": 1
+      }
+    },
+    {
+      "scenario": "slow scroll",
+      "variant": "pdfjs-hwa",
+      "runs": 3,
+      "taskMs": 111.1,
+      "scriptMs": 37.1,
+      "layoutMs": 2.8,
+      "styleMs": 5.9,
+      "renders": {
+        "base": 0,
+        "detail": 2,
+        "text": 2,
+        "textUpdates": 0,
+        "annotations": 2,
+        "cancelled": 0
+      },
+      "profile": {
+        "PdfViewer.js › Zn": 10.2,
+        "(browser) › (garbage collector)": 4.7,
+        "PdfViewer.js › Fn": 2.9,
+        "(browser) › fillText": 2.7,
+        "PdfViewer.js › i_": 2.2,
+        "PdfViewer.js › (anonymous)": 1.9,
+        "PdfViewer.js › update": 1.5,
+        "(browser) › tick": 1.3,
+        "(browser) › requestAnimationFrame": 1.2,
+        "(browser) › measureText": 1.2
+      }
+    },
+    {
+      "scenario": "slow scroll",
+      "variant": "pdfjs-hwa, no text",
+      "runs": 3,
+      "taskMs": 66.3,
+      "scriptMs": 29.1,
+      "layoutMs": 0.5,
+      "styleMs": 0.4,
+      "renders": {
+        "base": 0,
+        "detail": 2,
+        "text": 0,
+        "textUpdates": 0,
+        "annotations": 2,
+        "cancelled": 0
+      },
+      "profile": {
+        "(browser) › (garbage collector)": 3.1,
+        "PdfViewer.js › Zn": 1.9,
+        "(browser) › fillText": 1.8,
+        "(browser) › tick": 1.2,
+        "PdfViewer.js › i_": 1.2,
+        "PdfViewer.js › Fn": 1.2
+      }
+    }
+  ]
+}
