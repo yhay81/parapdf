@@ -39,13 +39,20 @@ export interface ViewerPosition {
 
 /**
  * Show page `index` from its top: its row at the viewport's top, or, in
- * "horizontal" mode, the page at the viewport's left.
+ * "horizontal" mode, the page at the viewport's left, or its right in "rtl",
+ * where the pages are read from the right.
  */
 export function pageTarget(layout: Layout, index: number, scroller: ScrollBox): ScrollTarget {
   const { gap } = layout;
   const left = pageLeft(layout, index, scroller.clientWidth);
   const top = pageTop(layout, index, scroller.clientHeight);
-  if (layout.scrollMode === "horizontal") return { top: top - gap, left: left - gap };
+  if (layout.scrollMode === "horizontal") {
+    const right = left + (layout.widths[index] ?? 0) + gap;
+    return {
+      top: top - gap,
+      left: layout.direction === "rtl" ? right - scroller.clientWidth : left - gap,
+    };
+  }
   // The row's top: a page shorter than its row is centered in it.
   const rowTop = top - ((layout.tops[index] ?? 0) - (layout.rowTops[index] ?? 0)) - gap;
   // A page of a spread wider than the viewport may lie beside it.

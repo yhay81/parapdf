@@ -1,7 +1,7 @@
 "use client";
 
 import { CONTROLS } from "./gestures.ts";
-import type { ScrollMode } from "./layout.ts";
+import type { Direction, ScrollMode } from "./layout.ts";
 import { scrollEdges } from "./scrolling.ts";
 import type { PointerTool } from "./state.ts";
 
@@ -12,7 +12,7 @@ const ZOOM_STEP = 1.25;
 export interface InputHost {
   /** The scroll container, while a viewport is attached. */
   scroller(): HTMLElement | null;
-  state(): { tool: PointerTool; scrollMode: ScrollMode };
+  state(): { tool: PointerTool; scrollMode: ScrollMode; direction: Direction };
   /** A feature, such as an annotation tool, takes the pointer: the hand tool leaves it alone. */
   pointerClaimed(): boolean;
   pageCount(): number;
@@ -70,8 +70,9 @@ export class ViewerInput {
   /**
    * In "page" mode, keys that would scroll past an edge of the page shown
    * flip to the next or previous one and show it from the edge they crossed:
-   * PageDown, Space, and ↓ at its bottom, → at its right edge, and PageUp,
-   * Shift+Space, ↑, and ← back the other way. Home and End go to the first
+   * PageDown, Space, and ↓ at its bottom, and the arrow toward the next
+   * page, → or in "rtl" ←, at its edge that way, and PageUp, Shift+Space,
+   * ↑, and the other arrow back. Home and End go to the first
    * and last page. Keys meant for a form field or a button stay theirs.
    */
   #pageKey(event: KeyboardEvent): void {
@@ -81,6 +82,8 @@ export class ViewerInput {
     // Arrow keys move a selected annotation.
     if (!scroller || target?.closest(CONTROLS)) return;
     const { atTop, atBottom, atLeft, atRight } = scrollEdges(scroller);
+    // → shows the page on the right: the next, or in "rtl" the previous.
+    const rtl = host.state().direction === "rtl";
     let flipped = false;
     switch (event.key) {
       case "PageDown":
@@ -95,10 +98,10 @@ export class ViewerInput {
         flipped = event.shiftKey ? atTop && host.flip(-1, "y") : atBottom && host.flip(1, "y");
         break;
       case "ArrowRight":
-        flipped = atRight && host.flip(1, "x");
+        flipped = atRight && host.flip(rtl ? -1 : 1, "x");
         break;
       case "ArrowLeft":
-        flipped = atLeft && host.flip(-1, "x");
+        flipped = atLeft && host.flip(rtl ? 1 : -1, "x");
         break;
       case "Home":
         host.goToPage(0);

@@ -16,6 +16,7 @@ import { ViewerGestures } from "./gestures.ts";
 import { ViewerInput } from "./input.ts";
 import {
   computeLayout,
+  type Direction,
   type Layout,
   type LayoutOptions,
   type PageArea,
@@ -83,6 +84,8 @@ interface Showing {
   layers: LayerState | null;
   /** The renderer of its pages, while the viewport shows them. */
   renderer: Renderer | null;
+  /** The page order the document asks for, once it has loaded. */
+  direction: Direction | null;
 }
 
 /** Opens a session in a viewer; the React bindings' to call (`openViewer()`). */
@@ -121,6 +124,7 @@ export class Viewer {
     rotation: 0,
     spread: "none",
     scrollMode: "vertical",
+    direction: "ltr",
   });
   /** The options as set, which the renderer and the next opening read. */
   #options: ViewerOptions = {};
@@ -183,6 +187,11 @@ export class Viewer {
   /** Viewport size the "fit-width" or "fit-page" scale was last computed for. */
   #fittedWidth = 0;
   #fittedHeight = 0;
+  /**
+   * How far the viewport's right edge was from the content's at the last
+   * scroll, which pages read from the right keep as the scroller resizes.
+   */
+  #fromRight = 0;
   readonly #input = new ViewerInput({
     scroller: () => this.#scroller,
     state: () => this.store.get(),
@@ -214,7 +223,7 @@ export class Viewer {
     this.#maxScale = options.maxScale ?? 10;
     const gap = options.gap ?? 12;
     const overscan = options.overscan ?? 2;
-    const arranged = gap !== this.#gap || overscan !== this.#overscan;
+    let arranged = gap !== this.#gap || overscan !== this.#overscan;
     this.#gap = gap;
     this.#overscan = overscan;
     const layout = this.store.get().layout;
@@ -222,6 +231,11 @@ export class Viewer {
     if (rendererChanged(previous, options)) {
       this.#rebuild();
       return;
+    }
+    const direction = this.#direction();
+    if (direction !== this.store.get().direction) {
+      this.store.set({ direction });
+      arranged = true;
     }
     if (arranged) {
       this.#gestures.finish();
@@ -241,7 +255,13 @@ export class Viewer {
       rotation: options.initialRotation ?? 0,
       spread: options.initialSpread ?? "none",
       scrollMode: options.initialScrollMode ?? "vertical",
+      direction: this.#direction(),
     });
+  }
+
+  /** The page order: the option's, or the document's, or "ltr". */
+  #direction(): Direction {
+    return this.#options.direction ?? this.#shown?.direction ?? "ltr";
   }
 
   get textLayer(): boolean {
@@ -429,6 +449,7 @@ export class Viewer {
       permissions: null,
       layers: null,
       renderer: null,
+      direction: null,
     };
     this.#shown = shown;
     this.#firstPaintAt = null;
@@ -463,9 +484,10 @@ export class Viewer {
     const opening = shown.savedPosition ? undefined : this.#options.opening;
     // Fetched beside the first page's size: features read the permissions
     // before the pages are drawn, and the first layout follows the opening.
-    const [sizes, permissions, view] = await Promise.all([
+    const [sizes, permissions, direction, view] = await Promise.all([
       session.pageSizes(),
       session.permissions().catch(() => null),
+      session.direction().catch(() => null),
       opening
         ? opening(session).catch((error: unknown) => {
             console.error("reading the initial view failed", error);
@@ -477,6 +499,7 @@ export class Viewer {
     signal.throwIfAborted();
     shown.session = session;
     shown.permissions = permissions;
+    shown.direction = direction;
     // Every page has the first one's size until the background pass knows better.
     this.#sizes = [...sizes];
     this.#extensions.prepare(session, signal);
@@ -508,6 +531,7 @@ export class Viewer {
     for (const [index, host] of this.#pageHosts) renderer.attach(index, host);
     if (view?.spread) this.store.set({ spread: view.spread });
     if (view?.scrollMode) this.store.set({ scrollMode: view.scrollMode });
+    this.store.set({ direction: this.#direction() });
     // Where a viewport showed the document, it shows it again at once.
     const saved = shown.savedPosition;
     shown.savedPosition = null;
@@ -522,6 +546,8 @@ export class Viewer {
     else if (view?.view) this.show(view.view);
     else if (this.#initialPage > 0) this.goToPage(this.#initialPage);
     else if (view?.destination) this.#jump(view.destination, this.#destinationZoom);
+    // A row of pages read from the right starts at its right end.
+    else if (this.store.get().direction === "rtl") this.goToPage(0);
     this.#update();
     this.#extensions.ready(session, signal);
     this.#background(this.#measurePages(session, signal), "measuring page sizes", signal);
@@ -718,7 +744,9 @@ export class Viewer {
       scroller.scrollTop = direction > 0 ? 0 : scroller.scrollHeight;
     } else if (axis === "x") {
       scroller.scrollTop = scrollTop;
-      scroller.scrollLeft = direction > 0 ? 0 : scroller.scrollWidth;
+      // Flipping to the page on the right shows it from its left edge.
+      const rightward = direction > 0 !== (layout.direction === "rtl");
+      scroller.scrollLeft = rightward ? 0 : scroller.scrollWidth;
     }
     return true;
   }
@@ -1136,12 +1164,13 @@ export class Viewer {
    * "page" mode shows the row of page `page`, by default the row it shows.
    */
   #layoutOptions(page?: number): LayoutOptions {
-    const { rotation, spread, scrollMode, layout, currentPage } = this.store.get();
+    const { rotation, spread, scrollMode, direction, layout, currentPage } = this.store.get();
     return {
       gap: this.#gap,
       rotation,
       spread,
       scrollMode,
+      direction,
       viewportWidth: this.#scroller?.clientWidth ?? 0,
       page: page ?? layout?.shown?.first ?? currentPage,
     };
@@ -1211,6 +1240,12 @@ export class Viewer {
     if (scroller && refits(mode, scroller, this.#fittedWidth, this.#fittedHeight)) {
       this.#gestures.finish();
       this.#fit();
+    } else if (scroller && this.store.get().direction === "rtl") {
+      // The browser keeps the content's left edge in place; pages read from
+      // the right keep their right edge, as the viewport or a scrollbar
+      // changes. A browser that already moved them, clamping at the end of
+      // the row, scrolled to where they keep it.
+      scroller.scrollLeft = scroller.scrollWidth - scroller.clientWidth - this.#fromRight;
     }
     this.#rewrap();
     this.#requestUpdate();
@@ -1241,6 +1276,9 @@ export class Viewer {
   #onScroll = (): void => {
     const scroller = this.#scroller;
     if (!scroller) return;
+    if (this.store.get().direction === "rtl") {
+      this.#fromRight = scroller.scrollWidth - scroller.scrollLeft - scroller.clientWidth;
+    }
     move(
       this.#scrolling,
       positionOf(this.store.get().scrollMode, viewportOf(scroller)),

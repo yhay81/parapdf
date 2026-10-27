@@ -6,6 +6,13 @@ change the API.
 
 ## Unreleased
 
+- Pages run right to left for documents whose `/ViewerPreferences
+  /Direction` is `R2L`, and with `PdfViewer`'s new `direction` prop set to
+  `"rtl"`: the earlier page of a spread is on the right, rows run right to
+  left, `"horizontal"` mode opens at its right end, and in `"page"` mode ←
+  and a swipe to the right go forward. `direction="ltr"` keeps the old order
+  for such documents. The view state has a `direction`, and `Direction` is
+  exported (#9).
 - With `annotationEditing`, the annotations a PDF already holds of the kinds
   the tools create (text, drawings, highlights, and images) become editable
   while a tool is chosen: they can be selected, moved, restyled, and

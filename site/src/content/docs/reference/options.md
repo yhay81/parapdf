@@ -73,6 +73,7 @@ document, and unset, they detach.
 | Prop | Default | |
 |---|---|---|
 | `destinationZoom` | `true` | `false` keeps the zoom when following links and the outline; they only scroll. |
+| `direction` | the document's | `"rtl"` orders pages right to left, `"ltr"` left to right; unset, the document's `/ViewerPreferences /Direction` decides, and left to right where it says nothing (see [Right to left](/guides/layout/#right-to-left)). |
 | `externalLinks` | `"new-tab"` | `"disabled"` leaves links to other documents inert; internal links and the outline keep working. |
 | `openAttachment` | download | What opening a file attachment annotation or a link to an embedded file does: `({ filename, content }) => void`. |
 | `enforcePermissions` | `false` | Follow what the document permits, as pdf.js does not by default (see [Permissions](/guides/permissions/)). |

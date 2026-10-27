@@ -82,6 +82,10 @@ const settings = {
   scrollMode: (["horizontal", "wrapped", "page"].includes(params.get("scroll") ?? "")
     ? params.get("scroll")
     : "vertical") as ScrollMode,
+  /** "ltr" or "rtl" orders pages; unset, the document's /ViewerPreferences decide. */
+  direction: (["ltr", "rtl"].includes(params.get("direction") ?? "")
+    ? params.get("direction")
+    : undefined) as PdfViewerProps["direction"],
   /**
    * "document" opens the document where and as it asks, and its sidebar
    * panel; `spread`, `scroll`, `page`, and `scale` still win when given.
@@ -206,6 +210,7 @@ const viewerProps: PdfViewerProps = {
     : {}),
   initialView: settings.initialView,
   destinationZoom: settings.destinationZoom,
+  ...(settings.direction ? { direction: settings.direction } : {}),
   enforcePermissions: settings.enforcePermissions,
   ...(settings.viewState ? { initialViewState: settings.viewState } : {}),
   ...(settings.initialPage > 0 ? { defaultPage: settings.initialPage } : {}),

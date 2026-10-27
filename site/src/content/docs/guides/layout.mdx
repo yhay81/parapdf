@@ -42,6 +42,23 @@ pages side by side in pairs, 1–2, 3–4; `"even"` shows page 1 alone and pairs
 row. Pairs stay together in every scroll mode: in a wrapped row and when
 `"page"` mode turns.
 
+## Right to left
+
+Pages of a document read from the right, such as Japanese or Arabic books,
+run right to left when the document says so in its `/ViewerPreferences
+/Direction`, or when `PdfViewer`'s `direction` is `"rtl"`:
+
+- the earlier page of a spread is on the right;
+- rows of `"wrapped"` and the row of `"horizontal"` run right to left, and
+  `"horizontal"` opens at its right end, on page 1;
+- in `"page"` mode, ← goes forward and → back, and a swipe to the right
+  turns to the next page; ↑, ↓, Page Up, Page Down, Home, and End do not
+  change.
+
+`direction="ltr"` keeps left to right whatever the document says. The view
+state's `direction` holds the order shown. Page numbers, destinations,
+search results, and `getViewState()` do not change with it.
+
 ## Fitting
 
 `setScale("fit-width")`, or `"fit-width"` as `PdfViewer`'s `zoom` or

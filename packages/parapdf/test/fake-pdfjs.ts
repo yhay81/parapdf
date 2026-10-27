@@ -227,6 +227,7 @@ export function fakeDocument({
     getOpenAction: async () => null,
     getPageLayout: async () => "",
     getPageMode: async () => "",
+    getViewerPreferences: async () => null,
     getOutline: async () => null,
     getPageLabels: async () => null,
     getMetadata: async () => ({ info: {}, metadata: null }),
