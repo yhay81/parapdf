@@ -1,5 +1,5 @@
 import { type SearchOptions, useDocumentState, useSearch, type Viewer } from "parapdf";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
  * Find-in-document. Typing searches after a short pause; Enter and Shift+Enter
@@ -13,18 +13,28 @@ export function SearchBox({ viewer }: { viewer: Viewer }) {
   const [options, setOptions] = useState<SearchOptions>({});
   const inputRef = useRef<HTMLInputElement>(null);
   const { search: run, query } = search;
+  /** What the field last searched for: a search started elsewhere leaves it be. */
+  const asked = useRef(value);
+  const ask = useCallback(
+    (text: string, searchOptions: SearchOptions) => {
+      asked.current = text;
+      run(text, searchOptions);
+    },
+    [run],
+  );
 
   useEffect(() => {
-    if (value === query) return;
-    const timer = setTimeout(() => run(value, options), 250);
+    const timer = setTimeout(() => {
+      if (value !== asked.current) ask(value, options);
+    }, 250);
     return () => clearTimeout(timer);
-  }, [value, query, run, options]);
+  }, [value, ask, options]);
 
   /** Changing an option searches again at once. */
   const toggle = (name: keyof SearchOptions) => {
     const next = { ...options, [name]: !options[name] };
     setOptions(next);
-    if (value) run(value, next);
+    if (value) ask(value, next);
   };
 
   useEffect(() => {
@@ -61,11 +71,12 @@ export function SearchBox({ viewer }: { viewer: Viewer }) {
         onKeyDown={(event) => {
           if (event.key === "Enter") {
             event.preventDefault();
-            if (value !== query) run(value, options);
+            if (value !== query) ask(value, options);
             else if (event.shiftKey) search.previous();
             else search.next();
           } else if (event.key === "Escape") {
             setValue("");
+            asked.current = "";
             search.clear();
           }
         }}
