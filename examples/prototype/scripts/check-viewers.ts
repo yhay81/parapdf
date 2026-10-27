@@ -9,7 +9,11 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Page } from "playwright";
 import { createServer, preview } from "vite";
-import { launchBrowser, restoreScaleFactor } from "../../../bench/scripts/browsers.ts";
+import {
+  captureFailure,
+  launchBrowser,
+  restoreScaleFactor,
+} from "../../../bench/scripts/browsers.ts";
 
 const exampleDir = fileURLToPath(new URL("..", import.meta.url));
 const configFile = join(exampleDir, "vite.config.ts");
@@ -173,6 +177,9 @@ async function checkViews(url: string) {
     console.log(
       "PASS closing the viewers and then the provider releases the session without errors",
     );
+  } catch (error) {
+    await captureFailure(error instanceof Error ? error.message : String(error));
+    throw error;
   } finally {
     await context.close();
   }
@@ -279,6 +286,9 @@ async function checkSharedEditing(url: string) {
         `NOTE the browser refused a worker script under COEP ${workerRefusals} times; pdf.js then parsed those bytes on the main thread`,
       );
     }
+  } catch (error) {
+    await captureFailure(error instanceof Error ? error.message : String(error));
+    throw error;
   } finally {
     await context.close();
   }
@@ -311,5 +321,5 @@ try {
     await dev.close();
   }
 } finally {
-  await launched.browser.close();
+  await launched.close();
 }

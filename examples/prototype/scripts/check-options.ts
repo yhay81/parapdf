@@ -13,7 +13,11 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Page } from "playwright";
 import { preview } from "vite";
-import { launchBrowser, restoreScaleFactor } from "../../../bench/scripts/browsers.ts";
+import {
+  captureFailure,
+  launchBrowser,
+  restoreScaleFactor,
+} from "../../../bench/scripts/browsers.ts";
 import type { LoadedPdfjs } from "../../../packages/parapdf/src/pdfjs/loader.ts";
 import type { Viewer } from "../../../packages/parapdf/src/view/viewer.ts";
 
@@ -23,7 +27,10 @@ let failures = 0;
 
 function check(name: string, ok: boolean, detail = ""): void {
   console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
-  if (!ok) failures++;
+  if (!ok) {
+    failures++;
+    captureFailure(name);
+  }
 }
 
 interface Probe {

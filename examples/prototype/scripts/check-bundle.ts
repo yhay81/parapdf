@@ -33,7 +33,11 @@ import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 import type { Browser } from "playwright";
 import { build, createServer, preview } from "vite";
-import { launchBrowser, restoreScaleFactor } from "../../../bench/scripts/browsers.ts";
+import {
+  captureFailure,
+  launchBrowser,
+  restoreScaleFactor,
+} from "../../../bench/scripts/browsers.ts";
 
 const exampleDir = fileURLToPath(new URL("..", import.meta.url));
 const packageDir = join(exampleDir, "../../packages/parapdf");
@@ -43,7 +47,10 @@ let failures = 0;
 
 function check(name: string, ok: boolean, detail = ""): void {
   console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
-  if (!ok) failures++;
+  if (!ok) {
+    failures++;
+    captureFailure(name);
+  }
 }
 
 /** A one-page PDF with the given objects after the catalog, page tree, and page. */
@@ -406,7 +413,7 @@ export function start() {
     await new Promise<void>((resolve) => server.httpServer.close(() => resolve()));
   }
 } finally {
-  await launched.browser.close();
+  await launched.close();
   rmSync(app, { recursive: true, force: true });
 }
 
