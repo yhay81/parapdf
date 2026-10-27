@@ -552,8 +552,26 @@ try {
   );
   await settle(relative);
   const wide = await canvasPixels(relative);
+  const detailsBefore = await relative.evaluate(
+    () => (window as unknown as { __viewer: { stats: { detail: number } } }).__viewer.stats.detail,
+  );
   await relative.setViewportSize({ width: 640, height: 600 });
-  await relative.waitForTimeout(300);
+  // The wide detail still covers the narrow viewport sharply, so the viewer
+  // is sharp at once while it draws the smaller detail into the spare canvas.
+  // Playwright's WebKit on Linux, slower, was still drawing it 600 ms later:
+  // both canvases counted. Wait for a detail to complete and no canvas to be
+  // drawn, hidden with pixels until its drawing completes.
+  await relative.waitForFunction(
+    (before) => {
+      const viewer = (window as unknown as { __viewer: { stats: { detail: number } } }).__viewer;
+      const drawing = [...document.querySelectorAll<HTMLCanvasElement>("section canvas")].some(
+        (canvas) => canvas.width > 0 && canvas.style.visibility === "hidden",
+      );
+      return viewer.stats.detail > before && !drawing;
+    },
+    detailsBefore,
+    { timeout: 30_000, polling: 50 },
+  );
   await settle(relative);
   const narrow = await canvasPixels(relative);
   check(

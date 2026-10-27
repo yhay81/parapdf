@@ -208,11 +208,19 @@ export class TextSelectionTracker {
   }
 
   #onPointerMove(event: PointerEvent): void {
-    const anchor = this.#anchor;
-    if (!anchor) return;
+    if (!this.#dragging) return;
     if ((event.buttons & 1) === 0) {
       // The release went unseen.
       this.#endDrag();
+      return;
+    }
+    const anchor = this.#anchor;
+    if (!anchor) {
+      // The selectionchange of the previous move may come after this one:
+      // Playwright's WebKit on Linux hit-tested a quick move into page 1's
+      // blank space before page 1 had `before-selection`, and selected all of
+      // it. Mark the layers for the selection as it is now.
+      this.#onSelectionChange();
       return;
     }
     const selection = document.getSelection();
@@ -347,6 +355,16 @@ export class TextSelectionTracker {
     // so a jump covers at most the run being dragged over.
     const range = selection.getRangeAt(0);
     const previous = this.#previousRange;
+    // A pointer move marks the layers before its selectionchange comes, so the
+    // same selection may come twice; unchanged, it would read as a change of
+    // its start.
+    if (
+      previous !== null &&
+      range.compareBoundaryPoints(Range.START_TO_START, previous) === 0 &&
+      range.compareBoundaryPoints(Range.END_TO_END, previous) === 0
+    ) {
+      return;
+    }
     const modifyStart =
       previous !== null &&
       (range.compareBoundaryPoints(Range.END_TO_END, previous) === 0 ||
