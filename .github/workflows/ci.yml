@@ -58,7 +58,9 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @parapdf/bench exec playwright install --with-deps ${{ matrix.browser }}
+      # Bounded and retried: a slow apt mirror once took the whole job.
+      - run: .github/scripts/install-browser.sh ${{ matrix.browser }}
+        timeout-minutes: 14
       - run: pnpm --filter @parapdf/bench corpus
       - id: build
         run: pnpm --filter @parapdf/prototype build
@@ -110,7 +112,8 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @parapdf/bench exec playwright install --with-deps chromium
+      - run: .github/scripts/install-browser.sh chromium
+        timeout-minutes: 14
       - run: pnpm --filter @parapdf/bench corpus
       - run: pnpm --filter @parapdf/prototype check:bundlers
       # What each bundler built, beside the launcher's diagnostics.

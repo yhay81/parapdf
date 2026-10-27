@@ -660,6 +660,41 @@ try {
     `${quick} characters; page 2's first three lines hold ${up?.min}, page 1's last line ${up?.last}`,
   );
 
+  // The same drag with every selectionchange 50 ms late, as when the browser
+  // runs it after the next move: Playwright's WebKit on Linux in CI
+  // hit-tested the move into page 1's margin before page 1's layer was
+  // marked, and selected all of page 1, 3,631 characters, once; with the delay
+  // WebKit and Firefox on macOS did so every time until the layers were marked
+  // at each pointer move.
+  let late = -1;
+  if (up && head) {
+    await page.evaluate(() => {
+      window.getSelection()?.removeAllRanges();
+      const delay = (event: Event) => {
+        if (!event.isTrusted) return;
+        // Window's capture listeners run before the document's own.
+        event.stopImmediatePropagation();
+        setTimeout(() => document.dispatchEvent(new Event("selectionchange")), 50);
+      };
+      window.addEventListener("selectionchange", delay, true);
+      (window as { __undelay?: () => void }).__undelay = () =>
+        window.removeEventListener("selectionchange", delay, true);
+    });
+    await page.mouse.move(up.start.x, up.start.y);
+    await page.mouse.down();
+    await page.mouse.move((head.left + head.right) / 2, middle(head));
+    await page.mouse.move(up.x, up.end);
+    await page.mouse.up();
+    late = await selectedChars(page);
+    await page.evaluate(() => (window as { __undelay?: () => void }).__undelay?.());
+    await page.waitForTimeout(100);
+  }
+  check(
+    "a quick drag whose selectionchange comes after the next move selects only the dragged lines",
+    up !== null && late >= up.min && late <= up.min + up.last,
+    `${late} characters; page 2's first three lines hold ${up?.min}, page 1's last line ${up?.last}`,
+  );
+
   // Drags that start beside a page or in the gap between pages must start at
   // the nearest text. That space belongs to the element that holds the
   // absolutely positioned pages, and all three browsers started a selection

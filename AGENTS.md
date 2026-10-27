@@ -146,7 +146,9 @@ when the choice matters for performance or direction.
   tags.
 - `docs/` — `rebuild/` (target and milestones), `decisions/`, and
   `history/`.
-- `.github/` — CI, issue forms, the pull request template, and Dependabot.
+- `.github/` — CI, the script it installs Playwright's browsers with
+  (`scripts/install-browser.sh`), issue forms, the pull request template,
+  and Dependabot.
 
 ## Commands
 

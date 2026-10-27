@@ -6,6 +6,10 @@ change the API.
 
 ## Unreleased
 
+- In WebKit and Firefox, a quick drag up from a page's text into the blank
+  space of the page above selects the dragged lines, not all of that page,
+  also when the browser reports the selection's change after the next
+  pointer move, as Playwright's WebKit on Linux did.
 - `maxKeptPixels` keeps twelve viewports' worth of device pixels by default
   instead of six. Scrolling back over ten or twenty pages now shows them
   sharp about a second sooner, without drawing them again, at up to twice
