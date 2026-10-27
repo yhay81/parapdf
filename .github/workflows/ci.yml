@@ -27,10 +27,15 @@ jobs:
       - run: pnpm --filter parapdf check:package
 
   browser:
-    name: Functional checks in Chromium
+    name: Functional checks in ${{ matrix.browser }}
     runs-on: ubuntu-latest
+    strategy:
+      # Each browser's failures are its own; one never cancels the others.
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit, firefox]
     env:
-      BROWSER: chromium
+      BROWSER: ${{ matrix.browser }}
       # Released pdfjs-dist; the pdfjs-next engine needs a pdf.js master build.
       ENGINE: pdfjs
     steps:
@@ -41,19 +46,31 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @parapdf/bench exec playwright install --with-deps chromium
+      - run: pnpm --filter @parapdf/bench exec playwright install --with-deps ${{ matrix.browser }}
       - run: pnpm --filter @parapdf/bench corpus
       - run: pnpm --filter @parapdf/prototype build
-      - run: pnpm --filter @parapdf/prototype check:text
-      - run: pnpm --filter @parapdf/prototype check:links
-      - run: pnpm --filter @parapdf/prototype check:lifecycle
-      - run: pnpm --filter @parapdf/prototype check:viewers
-      - run: pnpm --filter @parapdf/prototype check:rotation
-      - run: pnpm --filter @parapdf/prototype check:options
-      - run: pnpm --filter @parapdf/prototype check:pinch
-      - run: pnpm --filter @parapdf/prototype check:features
-      - run: pnpm --filter @parapdf/prototype check:scroll
-      - run: pnpm --filter @parapdf/prototype check:annotations
-      - run: pnpm --filter @parapdf/prototype check:document
-      - run: pnpm --filter @parapdf/prototype check:bundle
-      - run: pnpm --filter @parapdf/prototype check:modules
+      # Every check runs, also after one fails, and keeps its output in
+      # logs/<check>.log; the step fails if any did.
+      - name: Functional checks
+        timeout-minutes: 40
+        run: |
+          set -o pipefail
+          mkdir -p logs
+          failed=""
+          for check in text links lifecycle viewers rotation options pinch features scroll annotations document bundle modules; do
+            echo "::group::check:$check"
+            if ! pnpm --filter @parapdf/prototype "check:$check" 2>&1 | tee "logs/$check.log"; then
+              failed="$failed $check"
+            fi
+            echo "::endgroup::"
+            grep -h "^FAIL" "logs/$check.log" | sed "s/^/::error title=check:$check::/" || true
+          done
+          if [ -n "$failed" ]; then
+            echo "Failed in $BROWSER:$failed"
+            exit 1
+          fi
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: functional-checks-${{ matrix.browser }}
+          path: logs/

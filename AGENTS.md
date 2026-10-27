@@ -178,7 +178,7 @@ when the choice matters for performance or direction.
   them; extend that check
   instead of duplicating it. They default to `ENGINE=pdfjs-next`, which
   needs `bench/scripts/build-pdfjs-next.sh`; CI runs them with
-  `ENGINE=pdfjs` in Chromium. What each covers is listed in
+  `ENGINE=pdfjs` in Chromium, WebKit, and Firefox on Linux. What each covers is listed in
   `docs/history/AGENTS-v0.md`, "Commands".
 - Runtime benchmarks in `examples/prototype/scripts/`: `scroll-bench.ts`
   (also `pnpm --filter @parapdf/prototype bench`), `commit-bench.ts` (zoom
