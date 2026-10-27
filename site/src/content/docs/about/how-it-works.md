@@ -136,7 +136,8 @@ that cap all canvases together, as iOS Safari does.
 ## Text, links, and the rest
 
 Text layers, built with pdf.js's `TextLayer`, make pages selectable and
-readable by screen readers, in the structure a tagged PDF gives them. The
+expose their text to assistive technology, in the structure a tagged PDF
+gives them. The
 renderer builds DOM layers one at a time, after scrolling settles, in idle
 time, never while a visible page still waits for its first pixels: text,
 then the annotations being edited, then links and forms. Text layers keep

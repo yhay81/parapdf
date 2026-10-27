@@ -25,11 +25,11 @@ A fast PDF viewer for React, built on [pdf.js](https://github.com/mozilla/pdf.js
   pages: each viewer of a document has its own position, zoom, rotation,
   and layout, and the document is opened, parsed, and searched once for all
   of them.
-- **A real document.** pdf.js text layers make pages selectable and readable
-  by screen readers, in the structure a tagged PDF gives them; whole-document
-  search matches the way pdf.js's own viewer does, Japanese and other CJK
-  text included; links, the outline, and back and forward stacks navigate
-  within the document.
+- **A real document.** pdf.js text layers make pages selectable and expose
+  their text to assistive technology, in the structure a tagged PDF gives
+  them; whole-document search matches the way pdf.js's own viewer does,
+  Japanese and other CJK text included; links, the outline, and back and
+  forward stacks navigate within the document.
 - **What a document viewer does.** Fillable forms that save into the PDF,
   annotations the reader creates, layers, attachments, page labels,
   thumbnails, printing, two-page spreads, scrolling sideways, in rows, or a
@@ -1034,6 +1034,9 @@ with `PdfThumbnails`'s.
 - The functional checks run in Playwright's builds of Chromium, WebKit, and
   Firefox; 0.4 was also tried by hand in Safari in the iPadOS simulator.
   Safari on macOS and real iOS and iPadOS devices are not verified yet.
+- No screen reader has been tried. The checks inspect what the page exposes
+  (text language, accessible names, the tagged structure), not what
+  VoiceOver, NVDA, or another reader announces.
 - Whether iOS Safari counts the canvases pages keep when they unmount
   (`maxKeptPixels`) toward its canvas memory cap is not verified; it needs a
   device.
