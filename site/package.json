@@ -6,6 +6,7 @@
     "dev": "astro dev",
     "build": "astro build && node scripts/check-build.ts",
     "preview": "astro preview",
+    "check:demo": "node scripts/check-demo.ts",
     "typecheck": "tsc -p ."
   },
   "dependencies": {

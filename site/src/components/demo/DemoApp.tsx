@@ -1,11 +1,19 @@
-import { PdfDocument, type PdfSource, PdfViewer, useViewer } from "parapdf";
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import {
+  download,
+  PdfDocument,
+  type PdfSource,
+  PdfViewer,
+  useAnnotations,
+  useFormChange,
+  useViewer,
+} from "parapdf";
+import { Suspense, useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { type Sample, samples, sampleUrl } from "../../samples.ts";
 import { AnnotationBar } from "./AnnotationBar.tsx";
 import { DropHint, ErrorNotice, LoadingBar, PasswordDialog } from "./Overlays.tsx";
 import { type Panel, SidePanel } from "./SidePanel.tsx";
 import { Toolbar } from "./Toolbar.tsx";
-import { ViewerContext } from "./viewer.ts";
+import { useDemoViewer, ViewerContext } from "./viewer.ts";
 
 /** A sample from the site, or a file the reader opened, which stays in the browser. */
 export type Opened = { sample: Sample } | { name: string; data: Uint8Array };
@@ -35,7 +43,25 @@ async function readPdf(file: File | undefined): Promise<Opened | null> {
   return { name: file.name, data: new Uint8Array(await file.arrayBuffer()) };
 }
 
-/** The full viewer: every sample or your own PDF, with the controls ParaPDF offers. */
+/** Calls `onEdit` once the reader fills in a form field or creates, changes, or deletes an annotation. */
+function EditWatcher({ onEdit }: { onEdit: () => void }) {
+  const viewer = useDemoViewer();
+  useFormChange(viewer, onEdit);
+  const edited = useAnnotations(viewer)?.canUndo ?? false;
+  useEffect(() => {
+    if (edited) onEdit();
+  }, [edited, onEdit]);
+  return null;
+}
+
+const DISCARD = "Discard your changes to this document? Download it first to keep them.";
+
+/**
+ * The full viewer: every sample or your own PDF, with the controls ParaPDF
+ * offers. Showing or hiding the annotation tools keeps the reading position,
+ * the annotations, and the form values. Opening another document discards
+ * them, after asking while some were not downloaded.
+ */
 export default function DemoApp() {
   const [session, setSession] = useState<Session>(() => ({
     id: 0,
@@ -50,10 +76,31 @@ export default function DemoApp() {
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const viewer = useViewer();
+  /** Whether the reader changed the document since it opened or was last downloaded. */
+  const unsaved = useRef(false);
+  const markUnsaved = useCallback(() => {
+    unsaved.current = true;
+  }, []);
 
+  /** Shows `next` in place of the document shown, unless the reader keeps unsaved changes. */
+  const replace = (next: Opened) => {
+    if (unsaved.current && !confirm(DISCARD)) return;
+    unsaved.current = false;
+    setSession((current) => ({ id: current.id + 1, opened: next, editing: current.editing }));
+  };
+  const replaceDropped = useEffectEvent(replace);
   const open = (next: Opened | null) => {
-    if (next)
-      setSession((current) => ({ id: current.id + 1, opened: next, editing: current.editing }));
+    if (next) replace(next);
+  };
+  const save = async () => {
+    // Changes made while the download is written stay unsaved.
+    unsaved.current = false;
+    try {
+      await download(viewer);
+    } catch (error) {
+      unsaved.current = true;
+      throw error;
+    }
   };
   const showAnnotationTools = (next: boolean) => {
     setAnnotating(next);
@@ -105,11 +152,9 @@ export default function DemoApp() {
       if (!hasFiles(event)) return;
       event.preventDefault();
       setDragging(false);
-      void readPdf(event.dataTransfer?.files[0]).then((file) =>
-        setSession((current) =>
-          file ? { id: current.id + 1, opened: file, editing: current.editing } : current,
-        ),
-      );
+      void readPdf(event.dataTransfer?.files[0]).then((file) => {
+        if (file) replaceDropped(file);
+      });
     };
     window.addEventListener("dragover", onDragOver);
     window.addEventListener("dragleave", onDragLeave);
@@ -125,10 +170,12 @@ export default function DemoApp() {
     <div className="demo">
       <ViewerContext value={viewer}>
         <PdfDocument key={session.id} source={source}>
+          <EditWatcher onEdit={markUnsaved} />
           <Toolbar
             opened={opened}
             onOpen={open}
             onOpenFile={() => fileInput.current?.click()}
+            onDownload={() => void save()}
             sidebar={sidebar}
             onSidebarChange={setSidebar}
             onShowInfo={() => {
