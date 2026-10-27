@@ -10,8 +10,10 @@ import type { LayerState } from "../pdfjs/layers.ts";
 import type { TextLayerHandle } from "../pdfjs/text.ts";
 import { Renderer, type RenderStats } from "../render/renderer.ts";
 import { TextSelectionTracker } from "../render/selection.ts";
+import { ExtensionSet, type ViewerExtension } from "./extensions.ts";
 import { downloadBytes, filenameFromUrl } from "./files.ts";
-import { CONTROLS, ViewerGestures } from "./gestures.ts";
+import { ViewerGestures } from "./gestures.ts";
+import { ViewerInput } from "./input.ts";
 import {
   computeLayout,
   type Layout,
@@ -29,6 +31,7 @@ import {
   visibleRange,
   zoomTarget,
 } from "./layout.ts";
+import { blankFraction, sharpness } from "./metrics.ts";
 import {
   destinationTarget,
   pageTarget,
@@ -40,61 +43,17 @@ import {
 } from "./navigation.ts";
 import { rendererChanged, rendererOptions, type ShownView, type ViewerOptions } from "./options.ts";
 import {
-  type Edges,
   type Motion,
   move,
   positionOf,
   SETTLE_DELAY,
   SETTLE_VELOCITY,
-  scrollEdges,
   sizeOf,
   viewportOf,
 } from "./scrolling.ts";
 import { linked } from "./signals.ts";
 import { type PointerTool, ViewerStore, type ZoomMode } from "./state.ts";
 import { destinationScale, fitScale, refits } from "./zoom.ts";
-
-/**
- * What a feature hears from a viewer, registered with `extend()`. Every hook
- * is optional; the viewer knows no feature by name.
- */
-export interface ViewerExtension {
-  /**
-   * The document is open, its permissions published, and its pages are
-   * about to be laid out and drawn: a feature that changes how they are
-   * drawn says so here. Called at once by `extend()` once the document is ready.
-   */
-  prepare?(session: DocumentSession, signal: AbortSignal): void;
-  /**
-   * The document is ready in this viewer, again after a viewport
-   * reattaches; `signal` aborts when the document closes or the viewport
-   * detaches. Called at once by `extend()` once the document is ready.
-   */
-  ready?(session: DocumentSession, signal: AbortSignal): void;
-  /**
-   * A viewport attached; `signal` aborts when it detaches. Called at once by
-   * `extend()` while one is attached.
-   */
-  viewport?(scroller: HTMLElement, content: HTMLElement, signal: AbortSignal): void;
-  /** The viewport is about to detach, its pages still in place. */
-  detaching?(): void;
-  /**
-   * The document is closing, its pages still in place: what was kept for it
-   * goes. The `ready` signal aborts right after.
-   */
-  closed?(): void;
-  /** A page's text layer was built, or, with null, removed. */
-  textLayer?(pageIndex: number, handle: TextLayerHandle | null): void;
-  /** A link, outline entry, or named action is about to jump. */
-  jumping?(): void;
-  /** A link's named action the viewer does not carry out itself, such as "GoBack". */
-  namedAction?(action: string): void;
-  /** A viewer of the document showed or hid layers: drawings are stale. */
-  layersChanged?(): void;
-}
-
-/** What Ctrl or ⌘ with + and - zooms by. */
-const ZOOM_STEP = 1.25;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
@@ -154,9 +113,7 @@ export class Viewer {
     setLayers: (action) => this.#layers?.apply(action),
   };
   /** What the features attached hear. */
-  readonly #extensions = new Set<ViewerExtension>();
-  /** Features still loading, which the first layout of a document waits for. */
-  readonly #deferred = new Set<Promise<unknown>>();
+  readonly #extensions = new ExtensionSet();
   /** Whether annotation layers show form fields (`setFormLayers()`). */
   #formLayers = false;
   /** The annotation editor a feature gave, whose layers pages get. */
@@ -177,8 +134,6 @@ export class Viewer {
   #work: AbortController | null = null;
   /** Where a viewport that detached showed the document, for the next one. */
   #savedPosition: ViewerPosition | null = null;
-  /** The work of the load whose `ready` hooks ran, which `extend()` replays. */
-  #ready: AbortSignal | null = null;
 
   /** Aborted while no viewport is attached. */
   get signal(): AbortSignal {
@@ -222,8 +177,16 @@ export class Viewer {
   /** Viewport size the "fit-width" or "fit-page" scale was last computed for. */
   #fittedWidth = 0;
   #fittedHeight = 0;
-  /** The hand tool's drag in progress: the pointer and where it last was. */
-  #grab: { pointerId: number; x: number; y: number } | null = null;
+  readonly #input = new ViewerInput({
+    scroller: () => this.#scroller,
+    state: () => this.store.get(),
+    pointerClaimed: () => this.#pointerClaimed,
+    pageCount: () => this.#sizes.length,
+    flip: (direction, axis) => this.#flip(direction, axis),
+    goToPage: (index) => this.goToPage(index),
+    zoomBy: (factor) => this.zoomBy(factor),
+    resetScale: () => this.resetScale(),
+  });
 
   constructor(options: ViewerOptions = {}) {
     this.#configure(options);
@@ -370,19 +333,12 @@ export class Viewer {
    * viewport.
    */
   extend(extension: ViewerExtension): () => void {
-    this.#extensions.add(extension);
-    const session = this.#session;
-    const ready = this.#ready;
-    if (session && ready && !ready.aborted) {
-      extension.prepare?.(session, ready);
-      extension.ready?.(session, ready);
-    }
-    if (this.#scroller && this.#content) {
-      extension.viewport?.(this.#scroller, this.#content, this.#viewportControl.signal);
-    }
-    return () => {
-      this.#extensions.delete(extension);
-    };
+    const scroller = this.#scroller;
+    const content = this.#content;
+    return this.#extensions.add(
+      extension,
+      scroller && content ? { scroller, content, signal: this.#viewportControl.signal } : null,
+    );
   }
 
   /**
@@ -390,10 +346,7 @@ export class Viewer {
    * loading for this viewer that changes how pages are drawn.
    */
   defer(loading: Promise<unknown>): void {
-    const waiting = loading
-      .catch((error: unknown) => console.error("loading a feature failed", error))
-      .finally(() => this.#deferred.delete(waiting));
-    this.#deferred.add(waiting);
+    this.#extensions.defer(loading);
   }
 
   /**
@@ -455,9 +408,8 @@ export class Viewer {
       ended.abort();
       // Features let go of the document while its pages are still there,
       // then stop what they started for it with this signal.
-      for (const extension of this.#extensions) extension.closed?.();
+      this.#extensions.closed();
       this.#work?.abort();
-      this.#ready = null;
       this.#work = null;
       this.#savedPosition = null;
       this.#pdf = null;
@@ -509,14 +461,14 @@ export class Viewer {
             return null;
           })
         : null,
-      Promise.all([...this.#deferred]),
+      this.#extensions.loaded(),
     ]);
     signal.throwIfAborted();
     this.#session = session;
     this.#permissions = permissions;
     // Every page has the first one's size until the background pass knows better.
     this.#sizes = [...sizes];
-    for (const extension of this.#extensions) extension.prepare?.(session, signal);
+    this.#extensions.prepare(session, signal);
     signal.throwIfAborted();
     const renderer = new Renderer(session, {
       ...rendererOptions(this.#options),
@@ -531,11 +483,11 @@ export class Viewer {
       },
       onTextReady: (pageIndex, handle) => {
         this.#textPages.set(pageIndex, handle);
-        for (const extension of this.#extensions) extension.textLayer?.(pageIndex, handle);
+        this.#extensions.textLayer(pageIndex, handle);
       },
       onTextRemoved: (pageIndex) => {
         this.#textPages.delete(pageIndex);
-        for (const extension of this.#extensions) extension.textLayer?.(pageIndex, null);
+        this.#extensions.textLayer(pageIndex, null);
       },
       signal,
     });
@@ -560,8 +512,7 @@ export class Viewer {
     else if (this.#initialPage > 0) this.goToPage(this.#initialPage);
     else if (view?.destination) this.#jump(view.destination, this.#destinationZoom);
     this.#update();
-    this.#ready = signal;
-    for (const extension of this.#extensions) extension.ready?.(session, signal);
+    this.#extensions.ready(session, signal);
     this.#background(this.#measurePages(session, signal), "measuring page sizes", signal);
     // Until the session's layers arrive, the viewer draws the document's
     // default ones, which they start with: nothing is drawn again, unless
@@ -584,7 +535,7 @@ export class Viewer {
   #onLayersChange = (): void => {
     if (!this.#layers) return;
     this.#renderer?.invalidateContent();
-    for (const extension of this.#extensions) extension.layersChanged?.();
+    this.#extensions.layersChanged();
   };
 
   /**
@@ -596,9 +547,8 @@ export class Viewer {
     const pdf = this.#pdf;
     if (!pdf || !this.#scroller || !this.store.get().layout) return;
     this.#savedPosition = this.position();
-    for (const extension of this.#extensions) extension.detaching?.();
+    this.#extensions.detaching(true);
     this.#work?.abort();
-    this.#ready = null;
     this.#renderer = null;
     this.#start(pdf);
   }
@@ -619,19 +569,13 @@ export class Viewer {
     if (layout) this.#sizeContent(layout);
     scroller.addEventListener("scroll", this.#onScroll, { passive: true });
     const detachGestures = this.#gestures.attach(scroller);
-    scroller.addEventListener("pointerdown", this.#onGrabStart);
-    scroller.addEventListener("pointermove", this.#onGrabMove, { passive: true });
-    scroller.addEventListener("pointerup", this.#onGrabEnd, { passive: true });
-    scroller.addEventListener("pointercancel", this.#onGrabEnd, { passive: true });
-    scroller.addEventListener("keydown", this.#onKeyDown);
+    const detachInput = this.#input.attach(scroller);
     scroller.classList.toggle("parapdf-hand", this.store.get().tool === "hand");
     const resize = new ResizeObserver(this.#onResize);
     resize.observe(scroller);
     const detachSelection = this.#selection.attachPages(content);
     this.#requestUpdate();
-    for (const extension of this.#extensions) {
-      extension.viewport?.(scroller, content, control.signal);
-    }
+    this.#extensions.viewport(scroller, content, control.signal);
     let detached = false;
     return () => {
       if (detached) return;
@@ -639,7 +583,7 @@ export class Viewer {
       // A provider may keep the session while its viewport is hidden (Activity).
       // Only viewport work ends; its view and edits return on the next attach.
       this.#savedPosition = this.store.get().layout ? this.position() : null;
-      for (const extension of this.#extensions) extension.detaching?.();
+      this.#extensions.detaching();
       control.abort();
       this.#renderer = null;
       this.#pageHosts.clear();
@@ -647,13 +591,8 @@ export class Viewer {
       this.#settleTimer = 0;
       scroller.removeEventListener("scroll", this.#onScroll);
       detachGestures();
-      scroller.removeEventListener("pointerdown", this.#onGrabStart);
-      scroller.removeEventListener("pointermove", this.#onGrabMove);
-      scroller.removeEventListener("pointerup", this.#onGrabEnd);
-      scroller.removeEventListener("pointercancel", this.#onGrabEnd);
-      scroller.removeEventListener("keydown", this.#onKeyDown);
-      scroller.classList.remove("parapdf-hand", "parapdf-grabbing");
-      this.#grab = null;
+      detachInput();
+      scroller.classList.remove("parapdf-hand");
       resize.disconnect();
       detachSelection();
       if (this.#frame) cancelAnimationFrame(this.#frame);
@@ -691,20 +630,8 @@ export class Viewer {
   blankFraction(): number {
     const layout = this.store.get().layout;
     const scroller = this.#scroller;
-    if (!layout || !scroller || scroller.clientHeight === 0) return 0;
-    const viewport = viewportOf(scroller);
-    const { first, last } = visibleRange(layout, viewport);
-    let blank = 0;
-    for (let index = first; index <= last; index++) {
-      const area = visibleArea(layout, index, viewport);
-      if (!area || this.hasPixels(index)) continue;
-      blank +=
-        (area.maxX - area.minX) *
-        (layout.widths[index] ?? 0) *
-        (area.maxY - area.minY) *
-        (layout.heights[index] ?? 0);
-    }
-    return blank / (scroller.clientHeight * scroller.clientWidth);
+    if (!layout || !scroller) return 0;
+    return blankFraction(layout, viewportOf(scroller), (index) => this.hasPixels(index));
   }
 
   /**
@@ -716,24 +643,11 @@ export class Viewer {
     const layout = this.store.get().layout;
     const scroller = this.#scroller;
     const renderer = this.#renderer;
-    if (!layout || !scroller || !renderer || scroller.clientHeight === 0) return 0;
-    const viewport = viewportOf(scroller);
+    if (!layout || !scroller || !renderer) return 0;
     const needed = layout.scale * (window.devicePixelRatio || 1);
-    const { first, last } = visibleRange(layout, viewport);
-    let weighted = 0;
-    let total = 0;
-    for (let index = first; index <= last; index++) {
-      const area = visibleArea(layout, index, viewport);
-      if (!area) continue;
-      const size =
-        (area.maxX - area.minX) *
-        (layout.widths[index] ?? 0) *
-        (area.maxY - area.minY) *
-        (layout.heights[index] ?? 0);
-      weighted += size * renderer.sharpness(index, area, needed);
-      total += size;
-    }
-    return total > 0 ? weighted / total : 0;
+    return sharpness(layout, viewportOf(scroller), needed, (index, area, needed) =>
+      renderer.sharpness(index, area, needed),
+    );
   }
 
   /**
@@ -971,7 +885,7 @@ export class Viewer {
 
   /** A link, outline entry, or named action is about to jump: history keeps the position. */
   #jumping(): void {
-    for (const extension of this.#extensions) extension.jumping?.();
+    this.#extensions.jumping();
   }
 
   #namedAction(action: string): void {
@@ -992,7 +906,7 @@ export class Viewer {
         this.goToPage(pageCount - 1);
         break;
       default:
-        for (const extension of this.#extensions) extension.namedAction?.(action);
+        this.#extensions.namedAction(action);
     }
   }
 
@@ -1106,10 +1020,7 @@ export class Viewer {
   setTool(tool: PointerTool): void {
     this.store.set({ tool });
     this.#scroller?.classList.toggle("parapdf-hand", tool === "hand");
-    if (tool !== "hand") {
-      this.#grab = null;
-      this.#scroller?.classList.remove("parapdf-grabbing");
-    }
+    if (tool !== "hand") this.#input.release();
   }
 
   /**
@@ -1314,121 +1225,6 @@ export class Viewer {
     scroller.scrollLeft = target.left;
     this.#update();
   }
-
-  #onKeyDown = (event: KeyboardEvent): void => {
-    if (event.altKey) return;
-    if (event.ctrlKey || event.metaKey) this.#zoomKey(event);
-    else if (this.store.get().scrollMode === "page") this.#pageKey(event);
-  };
-
-  /**
-   * In "page" mode, keys that would scroll past an edge of the page shown
-   * flip to the next or previous one and show it from the edge they crossed:
-   * PageDown, Space, and ↓ at its bottom, → at its right edge, and PageUp,
-   * Shift+Space, ↑, and ← back the other way. Home and End go to the first
-   * and last page. Keys meant for a form field or a button stay theirs.
-   */
-  #pageKey(event: KeyboardEvent): void {
-    const target = event.target instanceof Element ? event.target : null;
-    // Arrow keys move a selected annotation.
-    const edges = target?.closest(CONTROLS) ? null : this.#edges();
-    if (!edges) return;
-    const { atTop, atBottom, atLeft, atRight } = edges;
-    let flipped = false;
-    switch (event.key) {
-      case "PageDown":
-      case "ArrowDown":
-        flipped = atBottom && this.#flip(1, "y");
-        break;
-      case "PageUp":
-      case "ArrowUp":
-        flipped = atTop && this.#flip(-1, "y");
-        break;
-      case " ":
-        flipped = event.shiftKey ? atTop && this.#flip(-1, "y") : atBottom && this.#flip(1, "y");
-        break;
-      case "ArrowRight":
-        flipped = atRight && this.#flip(1, "x");
-        break;
-      case "ArrowLeft":
-        flipped = atLeft && this.#flip(-1, "x");
-        break;
-      case "Home":
-        this.goToPage(0);
-        flipped = true;
-        break;
-      case "End":
-        this.goToPage(this.#sizes.length - 1);
-        flipped = true;
-        break;
-    }
-    if (flipped) event.preventDefault();
-  }
-
-  /** Which edges of its scroll range the scroller is at; null without a scroller. */
-  #edges(): Edges | null {
-    return this.#scroller ? scrollEdges(this.#scroller) : null;
-  }
-
-  /**
-   * Ctrl or ⌘ with +, -, or 0 zooms the document instead of the page while
-   * focus is in the viewport, as in pdf.js's viewer.
-   */
-  #zoomKey(event: KeyboardEvent): void {
-    switch (event.key) {
-      case "+":
-      case "=":
-        this.zoomBy(ZOOM_STEP);
-        break;
-      case "-":
-      case "_":
-        this.zoomBy(1 / ZOOM_STEP);
-        break;
-      case "0":
-        this.resetScale();
-        break;
-      default:
-        return;
-    }
-    event.preventDefault();
-  }
-
-  /**
-   * The hand tool scrolls with a mouse or pen drag. Links, form fields, and
-   * other controls keep their own behavior; touches pan natively.
-   */
-  #onGrabStart = (event: PointerEvent): void => {
-    // An annotation tool takes the pointer over the hand tool.
-    if (this.store.get().tool !== "hand" || this.#pointerClaimed) return;
-    if (event.pointerType === "touch" || event.button !== 0) return;
-    const target = event.target as Element | null;
-    if (target?.closest("a, button, input, select, textarea, [contenteditable]")) return;
-    // Keeps the drag from selecting text or dragging images, and the press
-    // from focusing the viewport, which keys then would not scroll.
-    event.preventDefault();
-    const scroller = this.#scroller;
-    if (!scroller) return;
-    scroller.focus({ preventScroll: true });
-    this.#grab = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
-    scroller.setPointerCapture(event.pointerId);
-    scroller.classList.add("parapdf-grabbing");
-  };
-
-  #onGrabMove = (event: PointerEvent): void => {
-    const grab = this.#grab;
-    const scroller = this.#scroller;
-    if (!grab || !scroller || grab.pointerId !== event.pointerId) return;
-    scroller.scrollLeft -= event.clientX - grab.x;
-    scroller.scrollTop -= event.clientY - grab.y;
-    grab.x = event.clientX;
-    grab.y = event.clientY;
-  };
-
-  #onGrabEnd = (event: PointerEvent): void => {
-    if (this.#grab?.pointerId !== event.pointerId) return;
-    this.#grab = null;
-    this.#scroller?.classList.remove("parapdf-grabbing");
-  };
 
   #onScroll = (): void => {
     const scroller = this.#scroller;
