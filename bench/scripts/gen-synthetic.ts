@@ -554,6 +554,22 @@ async function navigation(): Promise<Uint8Array> {
   return doc.save({ useObjectStreams: false });
 }
 
+/**
+ * Six Letter pages, numbered large, read from the right: the catalog's
+ * /ViewerPreferences ask for /Direction /R2L.
+ */
+async function rightToLeft(): Promise<Uint8Array> {
+  const doc = await PDFDocument.create({ updateMetadata: false });
+  doc.setTitle("Right-to-left sampler");
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  for (let index = 0; index < 6; index++) {
+    const page = doc.addPage([612, 792]);
+    page.drawText(String(index + 1), { x: 220, y: 320, size: 240, font });
+  }
+  doc.catalog.set(PDFName.of("ViewerPreferences"), doc.context.obj({ Direction: "R2L" }));
+  return doc.save({ useObjectStreams: false });
+}
+
 mkdirSync(outDir, { recursive: true });
 for (const [name, build] of [
   ["synthetic-text-1000.pdf", longText],
@@ -565,6 +581,7 @@ for (const [name, build] of [
   ["synthetic-encrypted.pdf", encrypted],
   ["synthetic-restricted.pdf", restricted],
   ["synthetic-navigation.pdf", navigation],
+  ["synthetic-rtl.pdf", rightToLeft],
 ] as const) {
   const bytes = await build();
   writeFileSync(join(outDir, name), bytes);

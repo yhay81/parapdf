@@ -19,6 +19,12 @@ export type SpreadMode = "none" | "odd" | "even";
 export type ScrollMode = "vertical" | "horizontal" | "wrapped" | "page";
 
 /**
+ * The order of pages in a row: left to right, or right to left, as a
+ * document whose /ViewerPreferences /Direction is R2L asks.
+ */
+export type Direction = "ltr" | "rtl";
+
+/**
  * Immutable layout of every page at one zoom level, in CSS pixels. Pages sit
  * in rows, each page centered vertically in its row and each row centered in
  * the viewport's width (see pageLeft). Rows stack top to bottom; in
@@ -34,13 +40,17 @@ export interface Layout {
   readonly gap: number;
   readonly spread: SpreadMode;
   readonly scrollMode: ScrollMode;
+  readonly direction: Direction;
   /** Page sizes in PDF points, unturned by the view. */
   readonly sizes: readonly PageSize[];
   /** Each page's top, before a row is centered in the viewport's height (see pageTop). */
   readonly tops: Float64Array;
   readonly widths: Float64Array;
   readonly heights: Float64Array;
-  /** Each page's distance from its row's left edge. */
+  /**
+   * Each page's distance from its row's left edge: in "rtl", the row's
+   * first page is at its right end.
+   */
   readonly offsets: Float64Array;
   /** The top, width, and height of each page's row. */
   readonly rowTops: Float64Array;
@@ -65,6 +75,7 @@ export interface LayoutOptions {
   rotation?: Rotation;
   spread?: SpreadMode;
   scrollMode?: ScrollMode;
+  direction?: Direction;
   /** The width "wrapped" rows fill: the scroller's. */
   viewportWidth?: number;
   /** In "page" mode, a page of the row shown (default 0). */
@@ -93,6 +104,7 @@ export function computeLayout(
     rotation = 0,
     spread = "none",
     scrollMode = "vertical",
+    direction = "ltr",
     viewportWidth = 0,
     page = 0,
   } = options;
@@ -146,6 +158,11 @@ export function computeLayout(
       rowWidth = (offsets[index] ?? 0) + (widths[index] ?? 0);
       rowHeight = Math.max(rowHeight, heights[index] ?? 0);
     }
+    if (direction === "rtl") {
+      for (let index = first; index < end; index++) {
+        offsets[index] = rowWidth - (offsets[index] ?? 0) - (widths[index] ?? 0);
+      }
+    }
     const top = stacked ? y : gap;
     for (let index = first; index < end; index++) {
       tops[index] = top + Math.round((rowHeight - (heights[index] ?? 0)) / 2);
@@ -166,6 +183,7 @@ export function computeLayout(
     gap,
     spread,
     scrollMode,
+    direction,
     sizes,
     tops,
     widths,
@@ -239,8 +257,8 @@ function rowAt(layout: Layout, y: number): { first: number; last: number } {
 }
 
 /**
- * The last page from `first` to `last`, pages of one row, whose left edge
- * is at or left of `x` (binary search); `first` when none is.
+ * The page from `first` to `last`, pages of one row, whose left edge is the
+ * nearest at or left of `x` (binary search); the leftmost when none is.
  */
 function pageAtX(
   layout: Layout,
@@ -251,6 +269,15 @@ function pageAtX(
 ): number {
   let low = first;
   let high = last;
+  if (layout.direction === "rtl") {
+    // Left edges fall as the pages go on: the first page at or left of `x`.
+    while (low < high) {
+      const mid = (low + high) >> 1;
+      if (pageLeft(layout, mid, viewportWidth) <= x) high = mid;
+      else low = mid + 1;
+    }
+    return low;
+  }
   while (low < high) {
     const mid = (low + high + 1) >> 1;
     if (pageLeft(layout, mid, viewportWidth) <= x) low = mid;
@@ -274,13 +301,16 @@ export function visibleRange(layout: Layout, viewport: Viewport): { first: numbe
   if (layout.shown) return { first: layout.shown.first, last: layout.shown.last };
   if (layout.scrollMode === "horizontal") {
     const { left, width, scrollerWidth } = viewport;
-    let first = pageAtX(layout, 0, count - 1, left, scrollerWidth);
-    // A viewport that starts in the gap after a page begins with the next.
-    if (pageLeft(layout, first, scrollerWidth) + (layout.widths[first] ?? 0) <= left) {
-      first = Math.min(count - 1, first + 1);
+    let leftmost = pageAtX(layout, 0, count - 1, left, scrollerWidth);
+    // A viewport that starts in the gap right of a page begins with the page beyond it.
+    if (pageLeft(layout, leftmost, scrollerWidth) + (layout.widths[leftmost] ?? 0) <= left) {
+      const step = layout.direction === "rtl" ? -1 : 1;
+      leftmost = Math.min(count - 1, Math.max(0, leftmost + step));
     }
-    const last = pageAtX(layout, 0, count - 1, left + width, scrollerWidth);
-    return { first, last: Math.max(first, last) };
+    const rightmost = pageAtX(layout, 0, count - 1, left + width, scrollerWidth);
+    return layout.direction === "rtl"
+      ? { first: Math.min(leftmost, rightmost), last: leftmost }
+      : { first: leftmost, last: Math.max(leftmost, rightmost) };
   }
   const { top, height } = viewport;
   let { first, last: end } = rowAt(layout, top);

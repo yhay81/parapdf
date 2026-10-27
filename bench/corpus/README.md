@@ -51,3 +51,5 @@ Generated stress documents live in `generated/`, are recreated with
   (/OpenAction to page 3 at 200%, /PageLayout /TwoColumnLeft, /PageMode
   /UseOutlines), with links on page 1 to a destination of every kind (XYZ
   with and without a zoom, Fit, FitH, FitV, FitR) and an outline.
+- `synthetic-rtl.pdf` — six numbered pages whose /ViewerPreferences ask
+  for /Direction /R2L, for right-to-left page order.

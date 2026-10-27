@@ -1,6 +1,6 @@
 import { type ReadableStore, Store } from "../document/store.ts";
 import type { Rotation } from "../pdfjs/draw.ts";
-import type { Layout, ScrollMode, SpreadMode } from "./layout.ts";
+import type { Direction, Layout, ScrollMode, SpreadMode } from "./layout.ts";
 
 /**
  * What a viewer shows: its view of the document, which its store publishes.
@@ -42,6 +42,11 @@ export interface ViewerState {
    * filling the viewport's width, or one page or spread at a time.
    */
   scrollMode: ScrollMode;
+  /**
+   * The order of pages in a row: the `direction` option, or the document's
+   * /ViewerPreferences /Direction, or "ltr".
+   */
+  direction: Direction;
 }
 
 export type ZoomMode = "fit-width" | "fit-page" | "custom";
@@ -52,7 +57,10 @@ export type HotViewState = Pick<
   ViewerState,
   "layout" | "first" | "last" | "currentPage" | "scale" | "zoomMode"
 >;
-export type ColdViewState = Pick<ViewerState, "rotation" | "spread" | "scrollMode" | "tool">;
+export type ColdViewState = Pick<
+  ViewerState,
+  "rotation" | "spread" | "scrollMode" | "tool" | "direction"
+>;
 
 /**
  * A viewer's view state: its hot and cold parts, published apart, and the
@@ -78,9 +86,10 @@ export class ViewerStore implements ReadableStore<ViewerState> {
       spread,
       scrollMode,
       tool,
+      direction,
     } = initial;
     this.hot = this.#hot = new Store({ layout, first, last, currentPage, scale, zoomMode });
-    this.cold = this.#cold = new Store({ rotation, spread, scrollMode, tool });
+    this.cold = this.#cold = new Store({ rotation, spread, scrollMode, tool, direction });
   }
 
   get = (): ViewerState => this.#all.get();

@@ -177,6 +177,17 @@ describe("DocumentSession", () => {
     });
   });
 
+  it("reads the page order the document asks for", async () => {
+    const order = async (preferences: unknown) =>
+      (
+        await openSession({ proxy: { getViewerPreferences: async () => preferences } })
+      ).session.direction();
+    assert.equal(await order(new Map([["Direction", "R2L"]])), "rtl");
+    assert.equal(await order(new Map([["Direction", "L2R"]])), "ltr");
+    assert.equal(await order(new Map([["HideToolbar", true]])), null);
+    assert.equal(await order(null), null);
+  });
+
   it("reads the outline, page labels, metadata, and attachments", async () => {
     const { session } = await openSession({
       pages: [LETTER, LETTER],

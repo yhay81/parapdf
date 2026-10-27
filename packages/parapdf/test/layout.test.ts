@@ -224,6 +224,57 @@ describe("horizontal scrolling", () => {
   });
 });
 
+describe("right-to-left page order", () => {
+  const letter = { width: 612, height: 792 };
+  const a4 = { width: 842, height: 595 };
+
+  it("puts the earlier page of a spread on the right", () => {
+    const layout = computeLayout([letter, letter, letter, a4], 1, {
+      gap: 10,
+      spread: "odd",
+      direction: "rtl",
+    });
+    assert.equal(layout.direction, "rtl");
+    assert.deepEqual([...layout.offsets], [622, 0, 852, 0]);
+    assert.deepEqual([...layout.rowWidths], [1234, 1234, 1464, 1464]);
+    assert.equal(pageAtPoint(layout, 0, 900, 1254), 3);
+    assert.equal(pageAtPoint(layout, 1000, 900, 1254), 2);
+    // Pages alone in their row sit where they would from the left.
+    const single = computeLayout([letter, a4], 1, { gap: 10, direction: "rtl" });
+    assert.deepEqual([...single.offsets], [0, 0]);
+  });
+
+  it("runs the horizontal row from right to left", () => {
+    const layout = computeLayout(sizes, 1, {
+      gap: 10,
+      scrollMode: "horizontal",
+      direction: "rtl",
+    });
+    assert.deepEqual([...layout.offsets], [852, 0]);
+    assert.deepEqual([pageLeft(layout, 0, 1000), pageLeft(layout, 1, 1000)], [862, 10]);
+    // The boundary is the middle of the gap between the pages.
+    assert.equal(pageAtPoint(layout, 856, 0, 1000), 1);
+    assert.equal(pageAtPoint(layout, 857, 0, 1000), 0);
+    assert.deepEqual(visibleRange(layout, view(0, 0, 600, 900)), { first: 1, last: 1 });
+    // A viewport that starts in the gap right of a page begins with the page beyond it.
+    assert.deepEqual(visibleRange(layout, view(855, 0, 600, 900)), { first: 0, last: 0 });
+    assert.deepEqual(visibleRange(layout, view(0, 0, 1484, 900)), { first: 0, last: 1 });
+  });
+
+  it("fills wrapped rows from the right", () => {
+    const pages = Array.from({ length: 3 }, () => letter);
+    const layout = computeLayout(pages, 0.5, {
+      gap: 10,
+      scrollMode: "wrapped",
+      direction: "rtl",
+      viewportWidth: 700,
+    });
+    // Two pages of 306 CSS pixels fit 700 with the gaps; the third wraps.
+    assert.deepEqual([...layout.offsets], [316, 0, 0]);
+    assert.deepEqual([...layout.rowFirst], [0, 0, 2]);
+  });
+});
+
 describe("wrapped scrolling", () => {
   // Six US Letter pages at half size: 306 by 396 CSS pixels.
   const letter = { width: 612, height: 792 };

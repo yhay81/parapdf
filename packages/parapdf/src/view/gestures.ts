@@ -1,6 +1,12 @@
 "use client";
 
-import { type Layout, type ScrollMode, type Viewport, zoomTarget } from "./layout.ts";
+import {
+  type Direction,
+  type Layout,
+  type ScrollMode,
+  type Viewport,
+  zoomTarget,
+} from "./layout.ts";
 import {
   type Edges,
   type Motion,
@@ -93,6 +99,7 @@ export interface GestureHost {
     layout: Layout | null;
     scale: number;
     scrollMode: ScrollMode;
+    direction: Direction;
   };
   /** A feature, such as an annotation tool, takes the pointer: swipes leave it alone. */
   pointerClaimed(): boolean;
@@ -200,8 +207,8 @@ export class ViewerGestures {
 
   /**
    * A swipe of SWIPE_DISTANCE along an axis flips pages in "page" mode,
-   * like turning paper: to the left or up for the next row, the other way
-   * for the previous one, which shows from the edge the swipe crossed. It
+   * like turning paper: to the left or up for the next row (to the right in
+   * "rtl"), the other way for the previous one, which shows from the edge the swipe crossed. It
    * flips only past an edge the page shown was already scrolled to when the
    * finger went down and still is: within a zoomed page, a swipe scrolls,
    * and the next swipe from the edge flips. Pinches and selections by long
@@ -223,9 +230,12 @@ export class ViewerGestures {
     if (Math.abs(across) > Math.abs(along) * Math.tan(SWIPE_ANGLE)) return;
     const edges = this.#edges();
     if (!edges) return;
-    const next = along < 0;
-    const edge = horizontal ? (next ? "atRight" : "atLeft") : next ? "atBottom" : "atTop";
+    // Content moving left or up shows what is right of or below the page.
+    const onward = along < 0;
+    const edge = horizontal ? (onward ? "atRight" : "atLeft") : onward ? "atBottom" : "atTop";
     if (!swipe.edges[edge] || !edges[edge]) return;
+    const reversed = horizontal && this.#host.state().direction === "rtl";
+    const next = onward !== reversed;
     if (this.#host.flip(next ? 1 : -1, horizontal ? "x" : "y")) this.#stopFling();
   };
 

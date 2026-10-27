@@ -40,6 +40,7 @@ nothing in it per frame.
 | `spread` | cold | `"none"`, `"odd"`, or `"even"` (see [Scroll modes and spreads](/guides/layout/)). |
 | `scrollMode` | cold | `"vertical"`, `"horizontal"`, `"wrapped"`, or `"page"`. |
 | `tool` | cold | What a mouse drag does: `"select"` text, or scroll the document with the `"hand"`. |
+| `direction` | cold | The order of pages in a row, `"ltr"` or `"rtl"`: `PdfViewer`'s `direction`, or the document's `/ViewerPreferences /Direction` (see [Right to left](/guides/layout/#right-to-left)). |
 
 ## Document state
 

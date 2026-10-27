@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { type InputHost, ViewerInput } from "../src/view/input.ts";
+import type { Direction } from "../src/view/layout.ts";
 import type { PointerTool } from "../src/view/state.ts";
 
 // Key events' targets are checked against Element, which Node lacks.
@@ -41,12 +42,15 @@ function fakeScroller(top = 0) {
   return { scroller, listeners, classes, fire };
 }
 
-function setUp(state: { tool: PointerTool; scrollMode: "vertical" | "page" }, top = 0) {
+function setUp(
+  state: { tool: PointerTool; scrollMode: "vertical" | "page"; direction?: Direction },
+  top = 0,
+) {
   const fake = fakeScroller(top);
   const calls: string[] = [];
   const host: InputHost = {
     scroller: () => fake.scroller as unknown as HTMLElement,
-    state: () => state,
+    state: () => ({ direction: "ltr", ...state }),
     pointerClaimed: () => false,
     pageCount: () => 5,
     flip: (direction, axis) => {
@@ -85,6 +89,18 @@ describe("ViewerInput", () => {
     const scrolling = setUp({ tool: "select", scrollMode: "vertical" }, 1000);
     assert.equal(scrolling.fire("keydown", { key: " " }), false);
     assert.deepEqual(scrolling.calls, []);
+  });
+
+  it("flips pages with ← and → toward the page on that side", () => {
+    const ltr = setUp({ tool: "select", scrollMode: "page" });
+    assert.equal(ltr.fire("keydown", { key: "ArrowRight" }), true);
+    assert.equal(ltr.fire("keydown", { key: "ArrowLeft" }), true);
+    assert.deepEqual(ltr.calls, ["flip 1 x", "flip -1 x"]);
+    const rtl = setUp({ tool: "select", scrollMode: "page", direction: "rtl" });
+    assert.equal(rtl.fire("keydown", { key: "ArrowLeft" }), true);
+    assert.equal(rtl.fire("keydown", { key: "ArrowRight" }), true);
+    assert.equal(rtl.fire("keydown", { key: "PageUp" }), true);
+    assert.deepEqual(rtl.calls, ["flip 1 x", "flip -1 x", "flip -1 y"]);
   });
 
   it("scrolls with the hand tool's drag and lets go when the tool changes", () => {

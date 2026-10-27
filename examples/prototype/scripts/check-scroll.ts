@@ -6,7 +6,9 @@
  * after a resize; and flipping pages in "page" mode with keys, buttons,
  * goToPage(), and one-finger swipes, while scrolling stays within a zoomed
  * page and pinches, short or slanted swipes, and annotation tools do not
- * flip. They run on the synthetic document of mixed page sizes.
+ * flip; and pages read from the right, in pairs and in a row, with keys,
+ * swipes, and the order changing live. They run on the synthetic document of
+ * mixed page sizes, and the one that asks for right-to-left order.
  *
  * Chromium gets real touches through the DevTools protocol, which scroll a
  * zoomed page natively; WebKit and Firefox get dispatched touch events.
@@ -852,6 +854,115 @@ try {
       String(drawn.shown?.first),
     );
     await editing.page.context().close();
+
+    // Pages read from the right flip the other way.
+    const rtl = await openTouch("scroll=page&scale=fit-page&direction=rtl");
+    const rightward = await rtl.swipe(200, 0);
+    const leftward = await rtl.swipe(-200, 0);
+    check(
+      "page, swipe, right to left: right flips to the next page, left back",
+      rightward.shown?.first === 1 && leftward.shown?.first === 0,
+      `${rightward.shown?.first}, ${leftward.shown?.first}`,
+    );
+    check("page, swipe, right to left: no errors", rtl.errors.length === 0, rtl.errors.join(" | "));
+    await rtl.page.context().close();
+  }
+
+  // --- Right-to-left page order ---
+  {
+    const rtlDemo = (query: string) =>
+      `${baseUrl}?engine=${engine}&file=synthetic-rtl.pdf&${query}`;
+    const boxOf = (g: Geometry, index: number) => g.pages.find((box) => box.index === index);
+    const direction = (page: Page) =>
+      page.evaluate(() => (window as unknown as Demo).__viewer?.store.get().direction);
+
+    // The document asks for /Direction /R2L: the earlier page of a pair is on the right.
+    const spreads = await open(launched.browser, rtlDemo("spread=odd&scale=0.5"));
+    let g = await geometry(spreads.page);
+    let first = boxOf(g, 0);
+    let second = boxOf(g, 1);
+    check(
+      "right to left: the document's /ViewerPreferences put page 1 right of page 2",
+      (await direction(spreads.page)) === "rtl" &&
+        !!first &&
+        !!second &&
+        near(first.top, second.top) &&
+        near(first.left, second.left + second.width + g.gap),
+      `${first && round(first)} ${second && round(second)}`,
+    );
+    // The application's option wins, and changes the order live on the same page.
+    await spreads.page.evaluate(() =>
+      (
+        window as unknown as { __setViewerProps(props: Record<string, unknown>): void }
+      ).__setViewerProps({ direction: "ltr" }),
+    );
+    await frames(spreads.page);
+    await frames(spreads.page);
+    g = await geometry(spreads.page);
+    first = boxOf(g, 0);
+    second = boxOf(g, 1);
+    check(
+      'right to left: direction="ltr" set live puts page 1 left of page 2',
+      (await direction(spreads.page)) === "ltr" &&
+        !!first &&
+        !!second &&
+        near(second.left, first.left + first.width + g.gap) &&
+        g.currentPage === 0,
+      `${first && round(first)} ${second && round(second)}, current ${g.currentPage}`,
+    );
+    check("right to left: no errors", spreads.errors.length === 0, spreads.errors.join(" | "));
+    await spreads.page.context().close();
+
+    // One row read from the right opens at its right end, on page 1.
+    const row = await open(launched.browser, rtlDemo("scroll=horizontal&scale=0.5"));
+    g = await geometry(row.page);
+    first = boxOf(g, 0);
+    second = boxOf(g, 1);
+    check(
+      "right to left, horizontal: opens at the row's right end on page 1, page 2 to its left",
+      g.scrollWidth > g.clientWidth &&
+        near(g.scrollLeft, g.scrollWidth - g.clientWidth) &&
+        g.currentPage === 0 &&
+        !!first &&
+        !!second &&
+        inView(g, first) &&
+        near(first.left, second.left + second.width + g.gap),
+      `scrolled ${g.scrollLeft} of ${g.scrollWidth - g.clientWidth}; current ${g.currentPage}; ${first && round(first)} ${second && round(second)}`,
+    );
+    await row.page.evaluate(() => (window as unknown as Demo).__viewer?.goToPage(5));
+    await frames(row.page);
+    g = await geometry(row.page);
+    check(
+      "right to left, horizontal: goToPage shows the last page at the row's left end",
+      g.scrollLeft === 0 && g.currentPage === 5,
+      `scrolled ${g.scrollLeft}; current ${g.currentPage}`,
+    );
+    check("right to left, horizontal: no errors", row.errors.length === 0, row.errors.join(" | "));
+    await row.page.context().close();
+
+    // ← goes forward and → back; ↓ and ↑ do not change.
+    const keys = await open(launched.browser, rtlDemo("scroll=page&scale=fit-page"));
+    await keys.page.locator(".parapdf-viewport").focus();
+    const shownAfter = async (key: string) => {
+      await keys.page.keyboard.press(key);
+      await still(keys.page);
+      await frames(keys.page);
+      return (await geometry(keys.page)).shown?.first;
+    };
+    const flips = [
+      await shownAfter("ArrowLeft"),
+      await shownAfter("ArrowLeft"),
+      await shownAfter("ArrowRight"),
+      await shownAfter("ArrowDown"),
+      await shownAfter("ArrowUp"),
+    ];
+    check(
+      "right to left, page: ← flips to the next page and → back; ↓ and ↑ as in left to right",
+      flips.join() === "1,2,1,2,1",
+      flips.join(", "),
+    );
+    check("right to left, page: no errors", keys.errors.length === 0, keys.errors.join(" | "));
+    await keys.page.context().close();
   }
 } finally {
   await launched.close();

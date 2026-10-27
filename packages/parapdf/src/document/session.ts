@@ -435,6 +435,16 @@ export class DocumentSession {
     });
   }
 
+  /** The page order the document asks for in /ViewerPreferences /Direction; null where it asks none. */
+  direction(): Promise<"ltr" | "rtl" | null> {
+    return this.#once("direction", async () => {
+      // pdf.js gives the preferences there are as a Map, or null.
+      const preferences = (await this.proxy.getViewerPreferences()) as Map<string, unknown> | null;
+      const direction = preferences?.get("Direction");
+      return direction === "R2L" ? "rtl" : direction === "L2R" ? "ltr" : null;
+    });
+  }
+
   /** The document outline (bookmarks); empty when the PDF has none. */
   outline(): Promise<readonly OutlineNode[]> {
     return this.#once("outline", async () => toOutline(await this.proxy.getOutline()));

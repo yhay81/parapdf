@@ -11,7 +11,6 @@ description: What ParaPDF does not do yet, and what has not been verified.
 - Comments on created annotations, and pdf.js's alt text dialog: images take
   their alternative text from `addImage()`.
 - Form scripts (calculations, validation, and button actions), and XFA forms.
-- Right-to-left page order (`/ViewerPreferences /Direction`).
 - Text layers for pages outside the mounted window, so the browser's own find
   and assistive technology see only mounted pages; use `useSearch()` and
   `getText()` for the whole document.

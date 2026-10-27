@@ -2,7 +2,7 @@ import type { DocumentSession } from "../document/session.ts";
 import type { ResolvedDestination } from "../pdfjs/destinations.ts";
 import type { PageColors, Rotation } from "../pdfjs/draw.ts";
 import type { RendererOptions } from "../render/renderer.ts";
-import type { ScrollMode, SpreadMode } from "./layout.ts";
+import type { Direction, ScrollMode, SpreadMode } from "./layout.ts";
 import type { PointerTool } from "./state.ts";
 
 /** A view for `show()`: what it leaves out stays as the viewer shows it. */
@@ -56,6 +56,13 @@ export interface ViewerOptions {
   initialScale?: number | "fit-width" | "fit-page";
   /** The zero-based page shown first, at the top of the viewport (default 0). */
   initialPage?: number;
+  /**
+   * The order of pages in a row, as the view state's `direction` holds it:
+   * "rtl" puts the earlier page of a spread on the right and runs rows from
+   * right to left. Unset, the document's /ViewerPreferences /Direction
+   * decides, and "ltr" where it says nothing.
+   */
+  direction?: Direction;
   /** What a mouse drag does at first (default "select"); see `setTool()`. */
   initialTool?: PointerTool;
   /**

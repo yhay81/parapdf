@@ -119,6 +119,16 @@ scroll mode, and tool: a split view, or thumbnails beside the pages.
 - Layout stays pure and immutable per zoom (typed arrays, rows, spreads,
   scroll modes, `pageLeft`/`pageTop`, `zoomTarget`), as in 0.x
   `runtime/layout.ts`.
+- Page order follows a direction, "ltr" or "rtl": the `direction` option,
+  or, left unset, the document's `/ViewerPreferences /Direction` (`R2L` is
+  "rtl"), else "ltr". The layout mirrors every row for "rtl": in a spread
+  the earlier page is on the right, rows of "wrapped" and the one row of
+  "horizontal" run right to left, and "horizontal" opens at its right end,
+  on page 1. ← and → and "page" mode's swipes follow the pages (← goes
+  forward in "rtl"); ↑, ↓, Page Up, Page Down, Home, and End do not change.
+  Page indices, destinations, search results, and view states stay as they
+  are: a view state holds no direction. The direction is the layout's, not
+  CSS's, so the page contents and the application's own layout keep theirs.
 - Gestures stay as in 0.x `runtime/gestures.ts`: a CSS transform previews a
   zoom, which commits where the preview showed it; touch, wheel, and
   Safari's gesture events; swipes in "page" mode.
@@ -235,7 +245,8 @@ How features reach the core (M4):
 
 - Each viewer publishes its hot state, which changes while the reader
   scrolls or zooms (layout, mounted window, current page, scale, zoom mode),
-  apart from its cold state (rotation, spreads, scroll mode, tool).
+  apart from its cold state (rotation, spreads, scroll mode, tool, and the
+  direction it resolved).
 - Each session publishes its document state (status, progress, password
   request, page count, permissions) and loads its secondary data (outline,
   labels, metadata, attachments, layers, form fields, the initial view) as
@@ -299,7 +310,7 @@ Components:
   - The opening: `initialView` and `initialViewState`, as the initial view
     feature reads them; the props above that the application sets win.
   - Live options: `textLayer`, `annotationLayer`, `forms`,
-    `annotationEditing`, `annotationLabels`, `enforcePermissions`,
+    `annotationEditing`, `annotationLabels`, `enforcePermissions`, `direction`,
     `destinationZoom`, `externalLinks`, `openAttachment`, `pageColors`,
     `gap`, `overscan`, `minScale`, `maxScale`, `maxConcurrentRenders`, and
     the budgets (`maxDetailPixels`, `maxDetailViewports`, `maxBasePixels`,
@@ -322,7 +333,8 @@ Hooks, named without a `Pdf` prefix:
 
 - `useViewer()`: a `Viewer`, for the life of the calling component.
 - `useViewState(viewer, selector)`: its view state (layout, mounted window,
-  current page, scale, zoom mode, rotation, spread, scroll mode, tool).
+  current page, scale, zoom mode, rotation, spread, scroll mode, tool,
+  direction).
 - `useSession()`: the nearest `PdfDocument`'s `PdfSession`.
 - `useDocumentState(selector)`: the session's document state.
 - `useOutline()`, `usePageLabels()`, `useMetadata()`, `useAttachments()`,

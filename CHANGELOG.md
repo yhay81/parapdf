@@ -6,6 +6,14 @@ change the API.
 
 ## Unreleased
 
+- Pages run right to left for documents whose `/ViewerPreferences
+  /Direction` is `R2L`, and with `PdfViewer`'s new `direction` prop set to
+  `"rtl"`: the earlier page of a spread is on the right, rows run right to
+  left, `"horizontal"` mode opens at its right end, and in `"page"` mode ←
+  and a swipe to the right go forward. `direction="ltr"` keeps the old order
+  for such documents. The view state has a `direction`, and `Direction` is
+  exported (#9).
+
 - In WebKit, a drag selection that crosses from one page into the space
   above the next page's first line ends at the start of that page. Until now
   Playwright's WebKit on Linux selected all of the next page there.

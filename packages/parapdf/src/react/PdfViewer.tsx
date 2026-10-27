@@ -17,7 +17,7 @@ import { createPortal } from "react-dom";
 import { type InitialViewOptions, initialViewOpening } from "../features/initial-view.ts";
 import type { PageColors, Rotation } from "../pdfjs/draw.ts";
 import type { AnnotationLabels } from "../pdfjs/editor.ts";
-import type { ScrollMode, SpreadMode } from "../view/layout.ts";
+import type { Direction, ScrollMode, SpreadMode } from "../view/layout.ts";
 import type { ViewerOptions } from "../view/options.ts";
 import type { PointerTool, ViewerState } from "../view/state.ts";
 import {
@@ -124,6 +124,14 @@ export interface PdfViewerProps extends InitialViewOptions {
    * (default true), as in pdf.js. With false, they keep the zoom and only scroll.
    */
   destinationZoom?: boolean;
+  /**
+   * The order of pages in a row: "rtl" puts the earlier page of a spread on
+   * the right and runs rows from right to left, for documents read from the
+   * right; ← and → follow it. Unset, the document's /ViewerPreferences
+   * /Direction decides, and "ltr" where it says nothing. The view state's
+   * `direction` holds the order shown.
+   */
+  direction?: Direction;
   /**
    * What links to other documents do: open in a new tab (the default), or
    * nothing, for apps that must not lead away from the document. Internal
@@ -280,6 +288,7 @@ function ViewerViewport({
   textLayer,
   annotationLayer,
   destinationZoom,
+  direction,
   externalLinks,
   openAttachment,
   pageColors,
@@ -325,6 +334,7 @@ function ViewerViewport({
     textLayer,
     annotationLayer,
     destinationZoom,
+    direction,
     externalLinks,
     openAttachment,
     pageColors,

@@ -136,6 +136,7 @@ holds. The view state (`ViewerState`) has:
 | `scale`, `zoomMode` | CSS pixels per PDF point; `"fit-width"` or `"fit-page"` while the page is fitted as the viewport resizes, otherwise `"custom"`. |
 | `rotation`, `spread`, `scrollMode` | The view's clockwise rotation (0, 90, 180, or 270); `"none"`, `"odd"`, or `"even"`; and `"vertical"`, `"horizontal"`, `"wrapped"`, or `"page"` (see [Scroll modes](#scroll-modes-spreads-and-fitting)). |
 | `tool` | What a mouse drag does: `"select"` text, or scroll the document with the `"hand"`. |
+| `direction` | The order of pages in a row: `"ltr"` or `"rtl"`, from the `direction` prop or the document. |
 | `first`, `last` | The mounted pages: those in view and `overscan` more on each side. |
 | `layout` | The pages laid out at the current zoom (their sizes and places); null until a document shows. |
 
@@ -752,6 +753,17 @@ resizes; in a spread mode, fitting counts two pages, so the zoom stays the
 same from row to row, as in pdf.js. In `"horizontal"` mode, where all pages
 share one row, fitting counts one.
 
+Pages of a document read from the right, such as Japanese or Arabic books,
+run right to left when the document says so in its `/ViewerPreferences
+/Direction`, or when `PdfViewer`'s `direction` is `"rtl"`: the earlier page
+of a spread is on the right, rows of `"wrapped"` and the row of
+`"horizontal"` run right to left, and `"horizontal"` opens at its right end
+on page 1. In `"page"` mode ← goes forward and → back, and a swipe to the
+right turns to the next page; ↑, ↓, Page Up, Page Down, Home, and End do
+not change. `direction="ltr"` keeps left to right whatever the document
+says. The view state's `direction` holds the order shown; page numbers,
+destinations, search results, and `getViewState()` do not change with it.
+
 ## Selections and highlights
 
 `getSelection(viewer)` returns the text selected in the viewer and the
@@ -836,6 +848,7 @@ keeps the position and the edits. Besides `viewer`, the view state
 | `annotationLabels` | English | The accessible names of the annotation editor's controls, such as `{ removeInk: "線を削除" }`. |
 | `enforcePermissions` | `false` | Follow what the document permits (see [Permissions](#permissions)). |
 | `destinationZoom` | `true` | `false` keeps the zoom when following links and the outline. |
+| `direction` | the document's | `"rtl"` orders pages right to left, `"ltr"` left to right; unset, the document's `/ViewerPreferences /Direction` decides (see [Scroll modes](#scroll-modes-spreads-and-fitting)). |
 | `externalLinks` | `"new-tab"` | `"disabled"` leaves links to other documents inert. |
 | `openAttachment` | download | What opening an embedded file does: `({ filename, content }) => void`. |
 | `pageColors` | none | `{ background, foreground }` to draw pages in two colors, for example `Canvas` and `CanvasText` in forced-colors mode. |
@@ -1000,8 +1013,8 @@ with `PdfThumbnails`'s.
   needs pdf.js's renderer worker (`configurePdfjs({ rendererSrc })`), which
   is only in unreleased pdf.js builds so far.
 - Not yet supported: editing annotations the PDF already holds, form
-  scripts (calculations, validation, and button actions), XFA forms, and
-  right-to-left page order (`/ViewerPreferences /Direction`). Annotations
+  scripts (calculations, validation, and button actions), and XFA forms.
+  Annotations
   the reader creates can be moved, restyled, and deleted; those in the file
   stay as they are drawn.
 - The current page is reported, never controlled: `onPageChange` reports it
