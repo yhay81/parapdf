@@ -61,6 +61,17 @@ async function choose(page: Page, title: string): Promise<void> {
   await page.waitForTimeout(800);
 }
 
+/** Draws a stroke with the Draw tool on. */
+async function draw(page: Page): Promise<void> {
+  const box = await page.locator(".parapdf-viewport").boundingBox();
+  if (!box) return;
+  await page.mouse.move(box.x + 300, box.y + 300);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 400, box.y + 350, { steps: 8 });
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+}
+
 const server = await preview();
 const launched = await launchBrowser();
 console.log(launched.label);
@@ -95,14 +106,7 @@ try {
   await page.getByRole("toolbar", { name: "Annotations" }).waitFor();
   await page.getByRole("button", { name: "Draw" }).click();
   await page.waitForTimeout(500);
-  const box = await scroller.boundingBox();
-  if (box) {
-    await page.mouse.move(box.x + 300, box.y + 300);
-    await page.mouse.down();
-    await page.mouse.move(box.x + 400, box.y + 350, { steps: 8 });
-    await page.mouse.up();
-  }
-  await page.waitForTimeout(300);
+  await draw(page);
   // Hiding the tools ends the drawing, which then shows as an ink annotation.
   await page.getByRole("button", { name: "Done" }).click();
   await page.waitForTimeout(500);
@@ -162,11 +166,17 @@ try {
     dialogs.length === 1 && (await field(page).inputValue()) === "",
   );
 
-  await field(page).fill("x");
+  // A drawing alone, without a form value, also counts as a change.
+  await annotate.click();
+  await page.getByRole("button", { name: "Draw" }).click();
+  await page.waitForTimeout(500);
+  await draw(page);
+  await page.getByRole("button", { name: "Done" }).click();
+  await page.waitForTimeout(500);
   accept = true;
   await choose(page, "1,000 pages");
   check(
-    "accepting discards the changes and opens the other document",
+    "a drawing alone asks too; accepting discards it and opens the other document",
     dialogs.length === 2 && (await documentTitle(page)) === "Document: 1,000 pages",
   );
   check("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));

@@ -47,10 +47,13 @@ async function readPdf(file: File | undefined): Promise<Opened | null> {
 function EditWatcher({ onEdit }: { onEdit: () => void }) {
   const viewer = useDemoViewer();
   useFormChange(viewer, onEdit);
-  const edited = useAnnotations(viewer)?.canUndo ?? false;
+  // The viewer outlives the document: its editing state as this document
+  // opens may still be the last one's, so only later states count.
+  const state = useAnnotations(viewer)?.state;
+  const opened = useRef(state);
   useEffect(() => {
-    if (edited) onEdit();
-  }, [edited, onEdit]);
+    if (state !== opened.current && state?.canUndo) onEdit();
+  }, [state, onEdit]);
   return null;
 }
 
