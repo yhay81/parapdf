@@ -37,14 +37,22 @@ export const positionOf = (
   viewport: { left: number; top: number },
 ): number => (scrollMode === "horizontal" ? viewport.left : viewport.top);
 
-export const viewportOf = (scroller: HTMLElement): Viewport => ({
-  left: scroller.scrollLeft,
-  top: scroller.scrollTop,
-  width: scroller.clientWidth,
-  height: scroller.clientHeight,
-  scrollerWidth: scroller.clientWidth,
-  scrollerHeight: scroller.clientHeight,
-});
+export const viewportOf = (scroller: HTMLElement): Viewport => {
+  const { scrollLeft, clientWidth, scrollWidth } = scroller;
+  // Chromium stops scrolling short of scrollWidth - clientWidth by a stable
+  // gutter that holds no scrollbar, and shows the content under it: at the
+  // far right end, everything up to the content's right edge is in view.
+  const gutter = scroller.offsetWidth - clientWidth;
+  const atRight = scrollLeft + clientWidth >= scrollWidth - gutter - 1;
+  return {
+    left: scrollLeft,
+    top: scroller.scrollTop,
+    width: atRight ? Math.max(clientWidth, scrollWidth - scrollLeft) : clientWidth,
+    height: scroller.clientHeight,
+    scrollerWidth: clientWidth,
+    scrollerHeight: scroller.clientHeight,
+  };
+};
 
 export const sizeOf = (scroller: HTMLElement): ScrollerSize => ({
   width: scroller.clientWidth,

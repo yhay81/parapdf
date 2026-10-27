@@ -187,8 +187,11 @@ export class Viewer {
   /** Viewport size the "fit-width" or "fit-page" scale was last computed for. */
   #fittedWidth = 0;
   #fittedHeight = 0;
-  /** The scroller's width at the last resize, which pages read from the right keep their place by. */
-  #scrollerWidth = 0;
+  /**
+   * How far the viewport's right edge was from the content's at the last
+   * scroll, which pages read from the right keep as the scroller resizes.
+   */
+  #fromRight = 0;
   readonly #input = new ViewerInput({
     scroller: () => this.#scroller,
     state: () => this.store.get(),
@@ -600,7 +603,6 @@ export class Viewer {
     const detachGestures = this.#gestures.attach(scroller);
     const detachInput = this.#input.attach(scroller);
     scroller.classList.toggle("parapdf-hand", this.store.get().tool === "hand");
-    this.#scrollerWidth = scroller.clientWidth;
     const resize = new ResizeObserver(this.#onResize);
     resize.observe(scroller);
     const detachSelection = this.#selection.attachPages(content);
@@ -1230,15 +1232,15 @@ export class Viewer {
   #onResize = (): void => {
     const scroller = this.#scroller;
     const mode = this.store.get().zoomMode;
-    const widened = (scroller?.clientWidth ?? 0) - this.#scrollerWidth;
-    this.#scrollerWidth = scroller?.clientWidth ?? 0;
     if (scroller && refits(mode, scroller, this.#fittedWidth, this.#fittedHeight)) {
       this.#gestures.finish();
       this.#fit();
-    } else if (scroller && widened !== 0 && this.store.get().direction === "rtl") {
+    } else if (scroller && this.store.get().direction === "rtl") {
       // The browser keeps the content's left edge in place; pages read from
-      // the right keep their right edge, as a scrollbar comes or goes.
-      scroller.scrollLeft -= widened;
+      // the right keep their right edge, as the viewport or a scrollbar
+      // changes. A browser that already moved them, clamping at the end of
+      // the row, scrolled to where they keep it.
+      scroller.scrollLeft = scroller.scrollWidth - scroller.clientWidth - this.#fromRight;
     }
     this.#rewrap();
     this.#requestUpdate();
@@ -1269,6 +1271,9 @@ export class Viewer {
   #onScroll = (): void => {
     const scroller = this.#scroller;
     if (!scroller) return;
+    if (this.store.get().direction === "rtl") {
+      this.#fromRight = scroller.scrollWidth - scroller.scrollLeft - scroller.clientWidth;
+    }
     move(
       this.#scrolling,
       positionOf(this.store.get().scrollMode, viewportOf(scroller)),

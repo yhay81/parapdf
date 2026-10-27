@@ -96,6 +96,20 @@ interface Geometry {
   pages: Box[];
 }
 
+/**
+ * Where the scroller stops scrolling right: short of scrollWidth -
+ * clientWidth by a stable gutter that holds no scrollbar, in Chromium.
+ */
+const rightEnd = (page: Page): Promise<number> =>
+  page.evaluate(() => {
+    const scroller = document.querySelector(".parapdf-viewport") as HTMLElement;
+    const { scrollLeft } = scroller;
+    scroller.scrollLeft = scroller.scrollWidth;
+    const end = scroller.scrollLeft;
+    scroller.scrollLeft = scrollLeft;
+    return end;
+  });
+
 const geometry = (page: Page): Promise<Geometry> =>
   page.evaluate(() => {
     const scroller = document.querySelector(".parapdf-viewport") as HTMLElement;
@@ -183,11 +197,22 @@ const settle = (page: Page) =>
     )
     .catch(() => {});
 
-async function open(browser: Browser, url: string) {
+async function open(browser: Browser, url: string, { classicScrollbars = false } = {}) {
   const context = await browser.newContext({
     viewport: { width: 1280, height: 900 },
     deviceScaleFactor: 2,
   });
+  // Classic scrollbars, as in Chromium on Linux and Windows, where a stable
+  // gutter without a scrollbar sits beside the row's right end.
+  if (classicScrollbars) {
+    await context.addInitScript(() => {
+      document.addEventListener("DOMContentLoaded", () => {
+        const style = document.createElement("style");
+        style.textContent = "::-webkit-scrollbar { width: 15px; height: 15px; }";
+        document.head.append(style);
+      });
+    });
+  }
   const page = await context.newPage();
   await restoreScaleFactor(page, new URL("calibrate.html", url).href);
   const errors: string[] = [];
@@ -915,34 +940,38 @@ try {
     await spreads.page.context().close();
 
     // One row read from the right opens at its right end, on page 1.
-    const row = await open(launched.browser, rtlDemo("scroll=horizontal&scale=0.5"));
+    const row = await open(launched.browser, rtlDemo("scroll=horizontal&scale=0.5"), {
+      classicScrollbars: true,
+    });
     g = await geometry(row.page);
+    let end = await rightEnd(row.page);
     first = boxOf(g, 0);
     second = boxOf(g, 1);
     check(
       "right to left, horizontal: opens at the row's right end on page 1, page 2 to its left",
       g.scrollWidth > g.clientWidth &&
-        near(g.scrollLeft, g.scrollWidth - g.clientWidth) &&
+        near(g.scrollLeft, end) &&
         g.currentPage === 0 &&
         !!first &&
         !!second &&
         inView(g, first) &&
         near(first.left, second.left + second.width + g.gap),
-      `scrolled ${g.scrollLeft} of ${g.scrollWidth - g.clientWidth}; current ${g.currentPage}; ${first && round(first)} ${second && round(second)}`,
+      `scrolled ${g.scrollLeft} of ${end}; current ${g.currentPage}; ${first && round(first)} ${second && round(second)}`,
     );
     // A narrower viewport, or a scrollbar that comes, keeps the row's right edge in place.
     await row.page.setViewportSize({ width: 1100, height: 900 });
     await frames(row.page);
     await frames(row.page);
     g = await geometry(row.page);
+    end = await rightEnd(row.page);
     first = boxOf(g, 0);
     check(
       "right to left, horizontal: a narrower viewport keeps page 1 at the right end",
-      near(g.scrollLeft, g.scrollWidth - g.clientWidth) &&
+      near(g.scrollLeft, end) &&
         g.currentPage === 0 &&
         !!first &&
-        first.left + first.width <= g.clientWidth,
-      `scrolled ${g.scrollLeft} of ${g.scrollWidth - g.clientWidth}; current ${g.currentPage}; ${first && round(first)}`,
+        first.left + first.width <= g.scrollWidth - g.scrollLeft,
+      `scrolled ${g.scrollLeft} of ${end}; current ${g.currentPage}; ${first && round(first)}`,
     );
     await row.page.evaluate(() => (window as unknown as Demo).__viewer?.goToPage(5));
     await frames(row.page);
