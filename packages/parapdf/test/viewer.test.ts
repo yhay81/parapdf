@@ -270,6 +270,30 @@ describe("closing a viewer's document", () => {
     assert.equal(session?.signal.aborted, true);
   });
 
+  it("drops what the viewer held of the document", async () => {
+    const { loader } = fakePdfjs();
+    const viewer = new Viewer();
+    const { close: closeDocument } = show(viewer, { url: "/files/a.pdf" }, loader);
+    await settle();
+    const work = viewer.workSignal;
+    assert.ok(viewer.session && viewer.permissions && viewer.renderer && viewer.layers && work);
+    assert.equal(viewer.sourceName, "a.pdf");
+    closeDocument();
+    assert.equal(work.aborted, true);
+    assert.deepEqual(
+      [
+        viewer.session,
+        viewer.permissions,
+        viewer.renderer,
+        viewer.layers,
+        viewer.workSignal,
+        viewer.sourceName,
+        viewer.store.get().layout,
+      ],
+      [null, null, null, null, null, null, null],
+    );
+  });
+
   it("stops a search, which reads no more pages once its document closes", async () => {
     const { loader, read, textsRead } = slowTexts(3);
     const viewer = new Viewer();

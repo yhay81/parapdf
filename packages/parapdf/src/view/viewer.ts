@@ -61,6 +61,30 @@ const clamp = (value: number, min: number, max: number) => Math.min(max, Math.ma
 const whole = (area: PageArea | null): boolean =>
   area !== null && area.minX === 0 && area.minY === 0 && area.maxX === 1 && area.maxY === 1;
 
+/**
+ * What a viewer holds of the document it shows, from `openViewer()` until
+ * it closes: closing drops it whole.
+ */
+interface Showing {
+  /** The session, whose signal stops what the viewer started for the document. */
+  readonly pdf: PdfSession;
+  readonly close: () => void;
+  /** The file name the document's URL gives, for download(). */
+  readonly sourceName: string | null;
+  /** Work for the viewport and the document; either ending aborts it. */
+  work: AbortController | null;
+  /** Where a viewport that detached showed the document, for the next one. */
+  savedPosition: ViewerPosition | null;
+  /** The document, once it has loaded. */
+  session: DocumentSession | null;
+  /** What the document permits, once it has loaded. */
+  permissions: PdfPermissions | null;
+  /** Which of the document's layers show, in every viewer of it. */
+  layers: LayerState | null;
+  /** The renderer of its pages, while the viewport shows them. */
+  renderer: Renderer | null;
+}
+
 /** Opens a session in a viewer; the React bindings' to call (`openViewer()`). */
 let open: (viewer: Viewer, session: PdfSession) => void;
 /** Closes what a viewer shows; see `closeViewer()`. */
@@ -80,7 +104,7 @@ let bindPage: (viewer: Viewer, index: number, host: HTMLElement) => () => void;
 export class Viewer {
   static {
     open = (viewer, session) => viewer.#open(session);
-    close = (viewer) => viewer.#close?.();
+    close = (viewer) => viewer.#shown?.close();
     configure = (viewer, options) => viewer.#configure(options);
     bindViewport = (viewer, scroller, content) => viewer.#attachViewport(scroller, content);
     bindPage = (viewer, index, host) => viewer.#attachPage(index, host);
@@ -110,7 +134,7 @@ export class Viewer {
     namedAction: (action) => this.#namedAction(action),
     externalLinks: "new-tab",
     openAttachment: (file) => this.openFile(file),
-    setLayers: (action) => this.#layers?.apply(action),
+    setLayers: (action) => this.#shown?.layers?.apply(action),
   };
   /** What the features attached hear. */
   readonly #extensions = new ExtensionSet();
@@ -121,33 +145,15 @@ export class Viewer {
   /** A feature took the pointer, which the hand tool then leaves alone. */
   #pointerClaimed = false;
   readonly #selection = new TextSelectionTracker();
-  /** Which of the open document's layers show, in every viewer of it. */
-  #layers: LayerState | null = null;
-  /**
-   * The session this viewer shows, from `openViewer()` until it closes:
-   * its signal stops what this viewer started for the document.
-   */
-  #pdf: PdfSession | null = null;
+  /** The document this viewer shows, from `openViewer()` until it closes. */
+  #shown: Showing | null = null;
   /** The viewport's lifetime, independent of the document and other viewers. */
   #viewportControl = new AbortController();
-  /** Work for this viewport and its document; either ending aborts it. */
-  #work: AbortController | null = null;
-  /** Where a viewport that detached showed the document, for the next one. */
-  #savedPosition: ViewerPosition | null = null;
 
   /** Aborted while no viewport is attached. */
   get signal(): AbortSignal {
     return this.#viewportControl.signal;
   }
-  /** Closes the open document. */
-  #close: (() => void) | null = null;
-  /** The open document, once it has loaded. */
-  #session: DocumentSession | null = null;
-  /** What the open document permits, once it has loaded. */
-  #permissions: PdfPermissions | null = null;
-  /** The file name the open document's URL gives, for download(). */
-  #sourceName: string | null = null;
-  #renderer: Renderer | null = null;
   #sizes: PageSize[] = [];
   /** The hosts of the mounted pages, by page. */
   #pageHosts = new Map<number, HTMLElement>();
@@ -265,7 +271,7 @@ export class Viewer {
 
   /** The open document's session, once it has loaded. */
   get session(): DocumentSession | null {
-    return this.#session;
+    return this.#shown?.session ?? null;
   }
 
   /**
@@ -274,7 +280,7 @@ export class Viewer {
    * that follow it.
    */
   get permissions(): PdfPermissions | null {
-    return this.#permissions;
+    return this.#shown?.permissions ?? null;
   }
 
   /**
@@ -283,17 +289,17 @@ export class Viewer {
    * document is open.
    */
   get workSignal(): AbortSignal | null {
-    return this.#work?.signal ?? null;
+    return this.#shown?.work?.signal ?? null;
   }
 
   /** The renderer of the open document's pages, once it has loaded. */
   get renderer(): Renderer | null {
-    return this.#renderer;
+    return this.#shown?.renderer ?? null;
   }
 
   /** Which of the open document's layers show, once known. */
   get layers(): LayerState | null {
-    return this.#layers;
+    return this.#shown?.layers ?? null;
   }
 
   /** The text layers of the mounted pages that have one, by page. */
@@ -306,19 +312,19 @@ export class Viewer {
     return this.#options.pageColors;
   }
 
-  /** The file name the open document's URL gives; null for bytes. */
+  /** The file name the open document's URL gives; null for bytes and with no document open. */
   get sourceName(): string | null {
-    return this.#sourceName;
+    return this.#shown?.sourceName ?? null;
   }
 
   /** Render counters for the current document. */
   get stats(): RenderStats | null {
-    return this.#renderer?.stats ?? null;
+    return this.#shown?.renderer?.stats ?? null;
   }
 
   /** Pixels of the canvases kept from pages that left the mounted window (`maxKeptPixels`). */
   get keptPixels(): number {
-    return this.#renderer?.keptPixels ?? 0;
+    return this.#shown?.renderer?.keptPixels ?? 0;
   }
 
   /** `performance.now()` when the first page first showed pixels. */
@@ -355,7 +361,7 @@ export class Viewer {
    */
   setFormLayers(enabled: boolean): void {
     this.#formLayers = enabled;
-    this.#renderer?.setForms(enabled);
+    this.#shown?.renderer?.setForms(enabled);
   }
 
   /**
@@ -364,7 +370,7 @@ export class Viewer {
    */
   setAnnotationEditor(editor: AnnotationEditor | null): void {
     this.#annotationEditor = editor;
-    this.#renderer?.setAnnotationEditor(editor);
+    this.#shown?.renderer?.setAnnotationEditor(editor);
   }
 
   /** While claimed, a mouse drag is a feature's, such as an annotation tool's, not the hand tool's. */
@@ -374,7 +380,7 @@ export class Viewer {
 
   /** What the pages show changed, such as form values: every page is drawn again. */
   invalidateContent(): void {
-    this.#renderer?.invalidateContent();
+    this.#shown?.renderer?.invalidateContent();
   }
 
   /** Open an embedded file as activating its annotation does: by default, download it. */
@@ -392,48 +398,48 @@ export class Viewer {
    * stop with it.
    */
   #open(pdf: PdfSession): void {
-    if (this.#pdf === pdf && !pdf.signal.aborted) return;
-    this.#close?.();
-    const { source } = pdf;
-    this.#pdf = pdf;
-    this.#sourceName = "url" in source ? filenameFromUrl(source.url) : null;
-    this.#firstPaintAt = null;
-    this.#resetView();
-
-    let closed = false;
+    if (this.#shown?.pdf === pdf && !pdf.signal.aborted) return;
+    this.#shown?.close();
     const ended = new AbortController();
     const close = () => {
-      if (closed) return;
-      closed = true;
+      if (ended.signal.aborted) return;
       ended.abort();
       // Features let go of the document while its pages are still there,
       // then stop what they started for it with this signal.
       this.#extensions.closed();
-      this.#work?.abort();
-      this.#work = null;
-      this.#savedPosition = null;
-      this.#pdf = null;
-      this.#close = null;
+      shown.work?.abort();
+      this.#shown = null;
       this.#selection.clear();
       this.#textPages.clear();
-      this.#session = null;
-      this.#permissions = null;
-      this.#layers = null;
-      this.#renderer = null;
       this.store.set({ layout: null, first: 0, last: -1 });
     };
+    const { source } = pdf;
+    const shown: Showing = {
+      pdf,
+      close,
+      sourceName: "url" in source ? filenameFromUrl(source.url) : null,
+      work: null,
+      savedPosition: null,
+      session: null,
+      permissions: null,
+      layers: null,
+      renderer: null,
+    };
+    this.#shown = shown;
+    this.#firstPaintAt = null;
+    this.#resetView();
     // The session closes when its provider lets it go: so does what shows it,
     // its features hearing it before the work stops.
     pdf.signal.addEventListener("abort", close, { once: true, signal: ended.signal });
-    this.#close = close;
-    this.#start(pdf);
+    this.#start(shown);
   }
 
   /** Start showing the open session in the attached viewport, or wait for one. */
-  #start(pdf: PdfSession): void {
-    this.#work = linked(pdf.signal, this.#viewportControl.signal);
-    const { signal } = this.#work;
-    this.#load(pdf, signal).catch((error: unknown) => {
+  #start(shown: Showing): void {
+    const { pdf } = shown;
+    shown.work = linked(pdf.signal, this.#viewportControl.signal);
+    const { signal } = shown.work;
+    this.#load(shown, signal).catch((error: unknown) => {
       // A document that fails to open says so in its session's state.
       if (!signal.aborted && pdf.state.get().status === "ready") {
         console.error("showing the document failed", error);
@@ -446,10 +452,10 @@ export class Viewer {
    * background: as it opens (`opening`), or, in a viewport that reattached
    * after it showed, where the last one showed it.
    */
-  async #load(pdf: PdfSession, signal: AbortSignal): Promise<void> {
-    const session = await documentOf(pdf);
+  async #load(shown: Showing, signal: AbortSignal): Promise<void> {
+    const session = await documentOf(shown.pdf);
     signal.throwIfAborted();
-    const opening = this.#savedPosition ? undefined : this.#options.opening;
+    const opening = shown.savedPosition ? undefined : this.#options.opening;
     // Fetched beside the first page's size: features read the permissions
     // before the pages are drawn, and the first layout follows the opening.
     const [sizes, permissions, view] = await Promise.all([
@@ -464,8 +470,8 @@ export class Viewer {
       this.#extensions.loaded(),
     ]);
     signal.throwIfAborted();
-    this.#session = session;
-    this.#permissions = permissions;
+    shown.session = session;
+    shown.permissions = permissions;
     // Every page has the first one's size until the background pass knows better.
     this.#sizes = [...sizes];
     this.#extensions.prepare(session, signal);
@@ -491,15 +497,15 @@ export class Viewer {
       },
       signal,
     });
-    this.#renderer = renderer;
+    shown.renderer = renderer;
     // Pages unmounting while no viewport shows them keep nothing.
     if (!this.#scroller) renderer.setKeeping(false);
     for (const [index, host] of this.#pageHosts) renderer.attach(index, host);
     if (view?.spread) this.store.set({ spread: view.spread });
     if (view?.scrollMode) this.store.set({ scrollMode: view.scrollMode });
     // Where a viewport showed the document, it shows it again at once.
-    const saved = this.#savedPosition;
-    this.#savedPosition = null;
+    const saved = shown.savedPosition;
+    shown.savedPosition = null;
     const scale = saved
       ? saved.zoomMode === "custom"
         ? saved.scale
@@ -521,7 +527,7 @@ export class Viewer {
     this.#background(
       session.layers().then((layers) => {
         if (signal.aborted) return;
-        this.#layers = layers;
+        shown.layers = layers;
         renderer.setLayers(layers);
         layers.subscribe(this.#onLayersChange, signal);
         if (layers.changed) this.#onLayersChange();
@@ -533,8 +539,9 @@ export class Viewer {
 
   /** A viewer of the document showed or hid layers: pages are drawn again. */
   #onLayersChange = (): void => {
-    if (!this.#layers) return;
-    this.#renderer?.invalidateContent();
+    const shown = this.#shown;
+    if (!shown?.layers) return;
+    shown.renderer?.invalidateContent();
     this.#extensions.layersChanged();
   };
 
@@ -544,13 +551,13 @@ export class Viewer {
    * kept, and the pages are laid out and drawn again.
    */
   #rebuild(): void {
-    const pdf = this.#pdf;
-    if (!pdf || !this.#scroller || !this.store.get().layout) return;
-    this.#savedPosition = this.position();
+    const shown = this.#shown;
+    if (!shown || !this.#scroller || !this.store.get().layout) return;
+    shown.savedPosition = this.position();
     this.#extensions.detaching(true);
-    this.#work?.abort();
-    this.#renderer = null;
-    this.#start(pdf);
+    shown.work?.abort();
+    shown.renderer = null;
+    this.#start(shown);
   }
 
   /** Bind the scroll container and its sized content element. */
@@ -562,9 +569,8 @@ export class Viewer {
     const control = this.#viewportControl;
     this.#scroller = scroller;
     this.#content = content;
-    const pdf = this.#pdf;
-    if (resuming && pdf) this.#start(pdf);
-    this.#renderer?.setKeeping(true);
+    if (resuming && this.#shown) this.#start(this.#shown);
+    this.#shown?.renderer?.setKeeping(true);
     const layout = this.store.get().layout;
     if (layout) this.#sizeContent(layout);
     scroller.addEventListener("scroll", this.#onScroll, { passive: true });
@@ -582,10 +588,11 @@ export class Viewer {
       detached = true;
       // A provider may keep the session while its viewport is hidden (Activity).
       // Only viewport work ends; its view and edits return on the next attach.
-      this.#savedPosition = this.store.get().layout ? this.position() : null;
+      const shown = this.#shown;
+      if (shown) shown.savedPosition = this.store.get().layout ? this.position() : null;
       this.#extensions.detaching();
       control.abort();
-      this.#renderer = null;
+      if (shown) shown.renderer = null;
       this.#pageHosts.clear();
       clearTimeout(this.#settleTimer);
       this.#settleTimer = 0;
@@ -613,17 +620,17 @@ export class Viewer {
    * renders there.
    */
   #attachPage(index: number, host: HTMLElement): () => void {
-    this.#renderer?.attach(index, host);
+    this.#shown?.renderer?.attach(index, host);
     this.#pageHosts.set(index, host);
     return () => {
       if (this.#pageHosts.get(index) !== host) return;
       this.#pageHosts.delete(index);
-      this.#renderer?.detach(index);
+      this.#shown?.renderer?.detach(index);
     };
   }
 
   hasPixels(index: number): boolean {
-    return this.#renderer?.hasPixels(index) ?? false;
+    return this.#shown?.renderer?.hasPixels(index) ?? false;
   }
 
   /** Fraction of the viewport covered by pages that show no pixels yet. */
@@ -642,7 +649,7 @@ export class Viewer {
   sharpness(): number {
     const layout = this.store.get().layout;
     const scroller = this.#scroller;
-    const renderer = this.#renderer;
+    const renderer = this.#shown?.renderer;
     if (!layout || !scroller || !renderer) return 0;
     const needed = layout.scale * (window.devicePixelRatio || 1);
     return sharpness(layout, viewportOf(scroller), needed, (index, area, needed) =>
@@ -737,8 +744,8 @@ export class Viewer {
    * invalid or null, as an outline entry's without one is.
    */
   async goToDestination(dest: Destination | null): Promise<boolean> {
-    const session = this.#session;
-    const signal = this.#work?.signal;
+    const session = this.#shown?.session;
+    const signal = this.#shown?.work?.signal;
     if (!session || !signal || dest === null) return false;
     const target = await session.resolveDestination(dest).catch(() => null);
     const current = this.store.get().layout;
@@ -821,7 +828,7 @@ export class Viewer {
     }
     this.store.set({ zoomMode: mode, scale });
     this.#applyLayout(scale, page);
-    if (rotation !== before.rotation) this.#renderer?.rotate(rotation);
+    if (rotation !== before.rotation) this.#shown?.renderer?.rotate(rotation);
     // The destination's zoom applies only when the view leaves the zoom unsaid.
     if (target.x === null && target.y === null && !target.view) this.goToPage(page);
     else this.#jump(target, requested === undefined && this.#destinationZoom, true);
@@ -937,7 +944,7 @@ export class Viewer {
     const target = zoomTarget(layout, next, sizeOf(scroller), anchor, point);
     scroller.scrollTop = target.top;
     scroller.scrollLeft = target.left;
-    this.#renderer?.rotate(turned);
+    this.#shown?.renderer?.rotate(turned);
     this.#update();
     // A turned page has another width to fit.
     this.#fit();
@@ -1156,7 +1163,7 @@ export class Viewer {
   #background(
     work: Promise<unknown>,
     what: string,
-    signal: AbortSignal | undefined = this.#work?.signal,
+    signal: AbortSignal | undefined = this.#shown?.work?.signal,
   ): void {
     work.catch((error: unknown) => {
       if (signal && !signal.aborted) console.error(`${what} failed`, error);
@@ -1305,7 +1312,7 @@ export class Viewer {
     // the preview counts as fast scrolling.
     const settled =
       (quiet || Math.abs(motion.velocity) < SETTLE_VELOCITY) && !this.#gestures.zooming();
-    this.#renderer?.update({
+    this.#shown?.renderer?.update({
       layout,
       first,
       last,
