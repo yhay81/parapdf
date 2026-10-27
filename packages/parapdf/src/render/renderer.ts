@@ -137,9 +137,11 @@ export interface RendererOptions extends Partial<Budgets> {
  * viewports' worth of device pixels by default (`maxKeptPixels`): a few pages
  * at fit-width, so that going back to them, by a link's back, by scrolling,
  * or by flipping, shows them at once. Kept, a page came back sharp after 3
- * to 38 ms instead of 23 to 176 in the return benchmark (decision 0004).
+ * to 38 ms instead of 23 to 176 in the return benchmark, and twelve rather
+ * than six brought a scroll back over ten or twenty pages sharp about a
+ * second sooner, drawing nothing again (decision 0004).
  */
-const KEPT_VIEWPORTS = 6;
+const KEPT_VIEWPORTS = 12;
 
 /**
  * The canvases of a page that unmounted, kept with what they show: its

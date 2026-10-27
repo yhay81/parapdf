@@ -179,7 +179,7 @@ export interface PdfViewerProps extends InitialViewOptions {
   /**
    * The most pixels kept of the canvases of pages that leave the mounted
    * window, so that a page the reader comes back to shows at once (default
-   * six viewports' worth of device pixels; 0 keeps none).
+   * twelve viewports' worth of device pixels; 0 keeps none).
    */
   maxKeptPixels?: number;
 

@@ -94,7 +94,7 @@ document, and unset, they detach.
 | `maxDetailViewports` | unlimited | The same limit as a multiple of the viewport's device pixels, so the sharp margin around the visible area follows the viewport's size; `maxDetailPixels` still caps it. At 1 the detail holds just the viewport; below 1 the visible area loses resolution. |
 | `maxBasePixels` | 2,097,152 | Pixels of one page's low-resolution canvas. |
 | `maxCanvasPixels` | unlimited | Pixels of all of this viewer's canvases together. Pages outside the viewport give theirs back first, farthest first and detail before base; past the budget, visible pages lose their sharp margin and then resolution, in quarter-octave steps, but keep their low-resolution canvases, so a visible page never goes blank. |
-| `maxKeptPixels` | six viewports | Pixels kept of the canvases of pages that leave the mounted window, so that a page the reader comes back to shows at once; the default is six viewports' worth of device pixels, and `0` keeps none. Within `maxCanvasPixels`, kept canvases count and go first. |
+| `maxKeptPixels` | twelve viewports | Pixels kept of the canvases of pages that leave the mounted window, so that a page the reader comes back to shows at once; the default is six viewports' worth of device pixels, and `0` keeps none. Within `maxCanvasPixels`, kept canvases count and go first. |
 | `maxConcurrentRenders` | `2` | Pages drawn at once. |
 
 `maxCanvasPixels` exists for browsers that cap all canvases together, as iOS

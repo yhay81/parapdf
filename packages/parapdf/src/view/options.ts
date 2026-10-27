@@ -135,7 +135,7 @@ export interface ViewerOptions {
    * The most pixels kept of the canvases of pages that leave the mounted
    * window, so that a page the reader comes back to, by a link's back, by
    * scrolling back, or by flipping back, shows at once instead of being
-   * drawn again (default six viewports' worth of device pixels; 0 keeps
+   * drawn again (default twelve viewports' worth of device pixels; 0 keeps
    * none). Within `maxCanvasPixels`, they count as canvases and go first.
    */
   maxKeptPixels?: number;

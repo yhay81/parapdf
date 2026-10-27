@@ -114,7 +114,7 @@ start of the host React places.
 ## Pages you come back to show at once
 
 A page that leaves the mounted window keeps its canvases, up to
-`maxKeptPixels`, six viewports' worth of device pixels by default. When it
+`maxKeptPixels`, twelve viewports' worth of device pixels by default. When it
 mounts again, by a link's back, by scrolling back, or by flipping back, the
 same canvas elements move into its new host: no pixel is copied and
 nothing is drawn. Over the budget, the least recently kept go first.

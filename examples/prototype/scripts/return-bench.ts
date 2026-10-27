@@ -8,6 +8,7 @@
  * - jump-back: goes to page 13, settles, and goes back to page 1;
  * - scroll-back: scrolls 10 pages down at 3600 CSS px per second, settles,
  *   and scrolls back up at the same speed;
+ * - long-scroll-back: the same over 20 pages, which outlasts a small budget;
  * - flip-back: in "page" mode flips forward 8 pages, settling after each, and
  *   back 8 pages, one every 50 ms, as a held key repeats.
  *
@@ -24,7 +25,9 @@
  * Usage: pnpm --filter @parapdf/prototype build && node examples/prototype/scripts/return-bench.ts
  * Environment: BROWSER (chromium, webkit, or firefox), ENGINE (pdfjs), VARIANTS (none,kept;
  * none keeps no canvases), SCENARIOS, FILES (bill-hr815.pdf,synthetic-vector-pages.pdf), RUNS (3),
- * KEPT (maxKeptPixels in the kept variant; the viewer's default when absent), DIST (another
+ * KEPT (maxKeptPixels in the kept variant; the viewer's default when absent; a comma-separated
+ * list measures a variant kept-<value> for each, where <n>vp is n viewports' worth of device
+ * pixels and "default" the viewer's default), DIST (another
  * build of the demo to measure), BEFORE (a build of the demo from before a change, measured
  * as the variant "before" in turn with the others), BEFORE_LABEL (its name in the report),
  * OUTPUT (return-<browser>).
@@ -57,10 +60,21 @@ const output = process.env.OUTPUT ?? `return-${browserName}`;
 const files = (process.env.FILES ?? "bill-hr815.pdf,synthetic-vector-pages.pdf").split(",");
 const viewport = { width: 820, height: 1000 };
 
+/** A viewport's worth of device pixels at devicePixelRatio 2. */
+const viewportPixels = viewport.width * 2 * viewport.height * 2;
+/** A KEPT value in device pixels: a number, or <n>vp for n viewports' worth. */
+const keptToPixels = (value: string) =>
+  value.endsWith("vp") ? Number(value.slice(0, -2)) * viewportPixels : Number(value);
+const keptValues = keptPixels?.split(",") ?? [];
+const keptQuery = (value: string): Record<string, string> =>
+  value === "default" ? {} : { maxKeptPixels: String(keptToPixels(value)) };
+
 const allVariants: { name: string; query: Record<string, string>; before?: boolean }[] = [
   ...(beforeDist ? [{ name: "before", query: {}, before: true }] : []),
   { name: "none", query: { maxKeptPixels: "0" } },
-  { name: "kept", query: keptPixels ? { maxKeptPixels: keptPixels } : {} },
+  ...(keptValues.length > 1
+    ? keptValues.map((value) => ({ name: `kept-${value}`, query: keptQuery(value) }))
+    : [{ name: "kept", query: keptQuery(keptPixels ?? "default") }]),
 ];
 // BEFORE, when set, is always measured, as in the other benchmarks.
 const variants = allVariants.filter(
@@ -74,6 +88,10 @@ const allScenarios = [
   {
     name: "scroll-back",
     description: "10 pages down and back up at 3600 CSS px per second, settling at the bottom",
+  },
+  {
+    name: "long-scroll-back",
+    description: "20 pages down and back up at 3600 CSS px per second, settling at the bottom",
   },
   {
     name: "flip-back",
@@ -209,8 +227,9 @@ async function runScenario(scenario: string): Promise<InPageResult> {
   if (scenario === "jump-back") {
     viewer.goToPage(Math.min(12, pageCount - 1));
     await settle();
-  } else if (scenario === "scroll-back") {
-    const top = viewer.store.get().layout?.tops[Math.min(10, pageCount - 1)] ?? 0;
+  } else if (scenario === "scroll-back" || scenario === "long-scroll-back") {
+    const pages = scenario === "scroll-back" ? 10 : 20;
+    const top = viewer.store.get().layout?.tops[Math.min(pages, pageCount - 1)] ?? 0;
     await scrollTo(top, 3600);
     await settle();
   } else {
@@ -271,8 +290,9 @@ async function runScenario(scenario: string): Promise<InPageResult> {
   const start = performance.now();
   const flips: number[] = [];
   if (scenario === "jump-back") viewer.goToPage(0);
-  else if (scenario === "scroll-back") await scrollTo(0, 3600);
-  else {
+  else if (scenario === "scroll-back" || scenario === "long-scroll-back") {
+    await scrollTo(0, 3600);
+  } else {
     for (let flip = 0; flip < 8; flip++) {
       flips.push(performance.now());
       viewer.previousPage();
@@ -547,7 +567,7 @@ const markdown = [
   `- Run at: ${environment.runAt}`,
   `- Machine: ${environment.os}, ${environment.cpu}; ${environment.browser} (Playwright build, ${launched.headless ? "headless" : "headed"}); power: ${power.source === "ac" && !power.lowPowerMode ? "AC" : `**${power.source}; not comparable with AC runs**`}`,
   `- One-minute load average: ${environment.loadAverage.start.toFixed(1)} at the start, ${environment.loadAverage.end.toFixed(1)} at the end, on ${cpus().length} cores. The run ${turnTakingSummary()}.`,
-  `- Method: ${engine === "pdfjs" ? "pdf.js drawing on the main thread" : engine}, GPU-backed canvases, ${viewport.width}×${viewport.height} at devicePixelRatio 2 and fit-width, ${runs} runs; medians. Variants: none keeps no canvases of pages that unmount (\`maxKeptPixels: 0\`); kept keeps them, ${keptPixels ? `${fmt((Number(keptPixels) * 4) / 2 ** 20)} MiB` : "six viewports' worth"} at most, and draws them back when the pages mount again.${beforeDist ? ` before is ${beforeLabel}, measured in turn with them.` : ""}`,
+  `- Method: ${engine === "pdfjs" ? "pdf.js drawing on the main thread" : engine}, GPU-backed canvases, ${viewport.width}×${viewport.height} at devicePixelRatio 2 and fit-width, ${runs} runs; medians. Variants: none keeps no canvases of pages that unmount (\`maxKeptPixels: 0\`); ${keptValues.length > 1 ? `kept-<budget> keeps them, at most that budget (<n>vp: n viewports' worth, ${fmt((viewportPixels * 4) / 2 ** 20)} MiB each; default: the viewer's default)` : `kept keeps them, ${keptPixels ? `${fmt((keptToPixels(keptPixels) * 4) / 2 ** 20)} MiB` : "six viewports' worth"} at most`}, and draws them back when the pages mount again.${beforeDist ? ` before is ${beforeLabel}, measured in turn with them.` : ""}`,
   "- From the start of the way back, a probe records after every frame's animation frame callbacks and layout. No blank: from the first frame after which no page in view lacked pixels (`blankFraction()` 0). Sharp: from the first frame after which the visible pages' `sharpness()` stayed at 0.99 or more. Blank frames count frames with any blank area until sharp; mean blank and mean sharpness are over the frames while scrolling or flipping. Renders and layers drawn back count from the start of the way back until sharp. Main thread blocked sums a 4 ms timer's lateness beyond 2 ms or the idle 95th percentile; dropped frames are longer than 1.5 idle frames. Memory: width × height × 4 bytes of every canvas in the viewport and of the kept ones, at their peaks.",
   `- Reproduce: \`pnpm --filter @parapdf/bench corpus && pnpm --filter @parapdf/prototype build && BROWSER=${browserName} node examples/prototype/scripts/return-bench.ts\``,
   "",

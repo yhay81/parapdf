@@ -6,6 +6,12 @@ change the API.
 
 ## Unreleased
 
+- `maxKeptPixels` keeps twelve viewports' worth of device pixels by default
+  instead of six. Scrolling back over ten or twenty pages now shows them
+  sharp about a second sooner, without drawing them again, at up to twice
+  the memory for kept canvases. In Firefox with GPU-backed canvases,
+  scrolling forward fast blocks the main thread a little more (decision
+  0004).
 - Zooming in past a page's whole-page detail budget on phone-sized
   viewports gets sharp two to four times sooner: a whole-page detail no
   larger than a base becomes the page's base instead of a base drawn again

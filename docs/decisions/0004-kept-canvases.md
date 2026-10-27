@@ -3,7 +3,8 @@
 - Status: adopted
 - Date: 2026-10-24
 - Implemented in M1; since M5 the kept canvases move into the page's new
-  host instead of being copied into new ones (decision 0010)
+  host instead of being copied into new ones (decision 0010); the default
+  budget rose from six to twelve viewports on 2026-10-27 (see "Budget")
 
 ## Context
 
@@ -15,7 +16,7 @@ back, drew it again from nothing.
 ## Decision
 
 A page that unmounts keeps its canvases as they are, up to `maxKeptPixels`
-(by default six viewports' worth of device pixels; 0 keeps none). When the
+(by default twelve viewports' worth of device pixels; 0 keeps none). When the
 page mounts again, they are drawn into its new canvases, one GPU copy each,
 and it shows at once. Canvases mounted again as they are, as React's
 StrictMode does when a page mounts, stay untouched. Over the budget, the least recently kept go, but only after the pages
@@ -78,6 +79,67 @@ with the build before (e10dcc4); medians.
   (bill-hr815.pdf, the vector pages; `return-frames-firefox.md`), against
   37 and 135 with frames alone and 48 and 70 drawing in place.
 
+## Budget
+
+The default budget was left open, and six viewports first. On 2026-10-27
+the return benchmark measured the budgets against each other
+(`return-kept-budget-*.md`): the build of f397dfb at
+820×1000, devicePixelRatio 2, and fit-width, with pdf.js drawing on the
+main thread into GPU-backed canvases. Each run took the variants in turn,
+three runs each; the results are medians. A new scenario,
+long-scroll-back, scrolls 20 pages down and back up at 3600 CSS px per
+second.
+
+| Scroll back, sharp after (ms) · bases drawn | File | Budget | Chromium | WebKit | Firefox |
+|---|---|---|---:|---:|---:|
+| 10 pages | bill-hr815.pdf | 6 | 3673 · 3 | 3564 · 3 | 3649 · 3 |
+| 10 pages | bill-hr815.pdf | 12 | 2632 · 0 | 2632 · 0 | 2621 · 0 |
+| 10 pages | synthetic-vector-pages.pdf | 6 | 3134 · 3 | 3185 · 3 | 3137 · 3 |
+| 10 pages | synthetic-vector-pages.pdf | 12 | 2015 · 0 | 2018 · 0 | 2000 · 0 |
+| 20 pages | bill-hr815.pdf | 6 | 7007 · 13 | 6938 · 13 | 7001 · 13 |
+| 20 pages | bill-hr815.pdf | 12 | 5982 · 0 | 5977 · 0 | 5970 · 0 |
+| 20 pages | synthetic-vector-pages.pdf | 6 | 6067 · 12 | 6063 · 12 | 6070 · 12 |
+| 20 pages | synthetic-vector-pages.pdf | 12 | 4915 · 0 | 4920 · 0 | 4904 · 0 |
+
+- Twelve viewports kept every page of both scroll backs. They got sharp
+  about a second sooner, drew no base again, and the mean sharpness while
+  scrolling back rose from 0.51 to 0.59 to 0.70 to 0.78 over ten pages,
+  and from 0.38 to 0.48 to 0.52 over twenty. Main thread blocked time was
+  the same or lower: over twenty pages of the vector document in Firefox,
+  17 ms instead of 63. No variant showed a blank frame.
+- Twenty-four viewports measured the same as twelve: these ways back keep
+  no more than twelve.
+- Jumping back from page 13 and flipping back were as fast with six as with
+  twelve: three pages, or six flips, fit in either.
+- The cost is memory: kept canvases peaked at 116 to 139 MiB instead of 62
+  to 72. Within `maxCanvasPixels` they still count as canvases and go
+  before any page's, so they never keep a page from drawing.
+
+Against the build before the change (687293f, six viewports), in the same
+run, job by job:
+
+- Scrolling forward (`scroll-bench.ts`, 1280×900 at devicePixelRatio 2,
+  `scroll-kept12-*.md`) drew the same pages with no blank area in every
+  browser. Main thread blocked time stayed within the runs' spread, except
+  in Firefox with GPU-backed canvases, pdf.js's default, on
+  synthetic-text-1000.pdf at 3600 CSS px per second: over ten runs
+  (`scroll-kept12-fast-firefox.md`, `scroll-kept12-fast2-firefox.md`) the
+  median was about 62 ms over four seconds instead of 44, and one run
+  stalled for 1.7 s (one of the build before's, 135 ms). Without GPU-backed
+  canvases, and on bill-hr815.pdf, Firefox stayed within the spread, and so
+  did WebKit (`scroll-kept12-fast-webkit.md`).
+- Zoom commits (`commit-bench.ts`, `commit-kept12-*.md`) drew the same
+  bases and details, with times to sharp within the runs' spread.
+- Nine viewports (`return-kept-budget9-*.md`, `scroll-kept9-fast-firefox.md`)
+  kept the same Firefox loss, about 60 ms instead of 45, while scrolling
+  back got sharp sooner only over ten pages of the vector document: the
+  other ways back needed twelve.
+
+The Firefox loss is accepted for what twelve viewports bring every browser
+on the way back, which in Firefox includes less blocked time while
+scrolling back (20 instead of 60 ms over ten pages of bill-hr815.pdf, 31
+instead of 126 over twenty of the vector document).
+
 ## Consequences
 
 - The copies that draw kept canvases back are accepted: a few ms of main
@@ -85,11 +147,13 @@ with the build before (e10dcc4); medians.
   frames, against pages that show at once. M5 removes them: the renderer
   owns the page DOM, so a kept canvas moves into the page's new host
   without a copy.
-- Open, with no decision yet: the default budget (more keeps more of a long
-  scroll back, at more memory), and whether iOS Safari counts kept canvases
-  toward its canvas memory cap (not verified; needs a device).
+- Twelve viewports hold up to twice the memory of six: about 160 MiB at
+  this viewport. In Firefox with GPU-backed canvases, scrolling forward
+  fast blocks the main thread somewhat more (above). Open: whether iOS Safari counts kept canvases toward its
+  canvas memory cap (not verified; needs a device).
 
 ## Reopen if
 
-Memory on phones shows a problem, or a budget measured on a long scroll
-back pays for its memory.
+Memory on phones shows a problem, a way back the benchmark does not
+cover needs more than twelve viewports, or the Firefox loss scrolling
+forward grows or turns out to come from something a budget can avoid.
