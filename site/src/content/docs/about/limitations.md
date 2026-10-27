@@ -32,10 +32,10 @@ builds so far.
 
 ## Not verified yet
 
-- ParaPDF is tested in Playwright's builds of Chromium, WebKit, and Firefox,
-  and by hand in Safari in the iPadOS simulator. Playwright's WebKit is not
-  Safari: Safari on macOS and real iOS and iPadOS devices are not verified
-  yet.
+- The functional checks run in Playwright's builds of Chromium, WebKit, and
+  Firefox; 0.4 was also tried by hand in Safari in the iPadOS simulator.
+  Playwright's WebKit is not Safari: Safari on macOS and real iOS and iPadOS
+  devices are not verified yet.
 - Whether iOS Safari counts the canvases pages keep when they unmount
   (`maxKeptPixels`) toward its canvas memory cap is not verified; it needs a
   device.
