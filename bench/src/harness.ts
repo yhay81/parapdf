@@ -104,7 +104,10 @@ const SAMPLE_WIDTH = 256;
 /**
  * The displayed canvas's pixels, read through a 2D canvas so that canvases
  * with any context, `bitmaprenderer` included, read alike: a SHA-256 digest
- * of all of them, and RGBA at SAMPLE_WIDTH pixels wide.
+ * of all of them, and RGBA at SAMPLE_WIDTH pixels wide. Both are composited
+ * over white, as the page shows them: engines that leave a page's backdrop
+ * transparent (PDFium and hayro on pages with transparency) would otherwise
+ * differ from opaque pdf.js canvases wherever nothing is drawn.
  */
 async function pagePixels(source: HTMLCanvasElement) {
   const full = document.createElement("canvas");
@@ -112,6 +115,8 @@ async function pagePixels(source: HTMLCanvasElement) {
   full.height = source.height;
   const context = full.getContext("2d", { willReadFrequently: true });
   if (!context) throw new Error("no 2D context to read pixels back");
+  context.fillStyle = "#fff";
+  context.fillRect(0, 0, full.width, full.height);
   context.drawImage(source, 0, 0);
   const pixels = context.getImageData(0, 0, full.width, full.height).data;
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", pixels));
@@ -119,6 +124,10 @@ async function pagePixels(source: HTMLCanvasElement) {
   sample.width = SAMPLE_WIDTH;
   sample.height = Math.round((source.height * SAMPLE_WIDTH) / source.width);
   const sampled = sample.getContext("2d", { willReadFrequently: true });
+  if (sampled) {
+    sampled.fillStyle = "#fff";
+    sampled.fillRect(0, 0, sample.width, sample.height);
+  }
   sampled?.drawImage(source, 0, 0, sample.width, sample.height);
   const rgba =
     sampled?.getImageData(0, 0, sample.width, sample.height).data ?? new Uint8ClampedArray();
