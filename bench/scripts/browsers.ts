@@ -8,12 +8,13 @@
  * HEADED=1 to show the window, ALLOW_BATTERY=1 to measure without AC power,
  * ALLOW_PARALLEL=1 to measure beside other Playwright browsers, MAX_LOAD to
  * also wait for the one-minute load average, IGNORE_PIDS to ignore the
- * browsers of the listed processes.
+ * browsers of the listed processes, DIAGNOSTICS to keep what the browser
+ * showed and said (see `captureFailure`).
  */
 import { execFile, execFileSync } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { appendFileSync, mkdirSync } from "node:fs";
 import { loadavg, platform, tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, extname, join } from "node:path";
 import { promisify } from "node:util";
 import { type Browser, chromium, firefox, type Page, webkit } from "playwright";
 
@@ -133,7 +134,12 @@ export async function launchBrowser(
       if (!current) throw new Error(`${browserLabels[name]} is closed`);
       return current;
     },
-    close,
+    async close() {
+      // A check that threw leaves its pages open where it stopped.
+      if (current) await captureFailure("open at close", current);
+      await Promise.all(pendingCaptures);
+      await close();
+    },
   };
   turns.set(launched, {
     pause: close,
@@ -183,7 +189,81 @@ async function openBrowser(name: BrowserName, headless: boolean): Promise<Browse
   } else {
     browser = await webkit.launch({ headless });
   }
+  if (diagnostics) recordDiagnostics(browser, diagnostics);
   return browser;
+}
+
+// DIAGNOSTICS=<folder> keeps what CI uploads when a check fails: the console
+// messages, page errors, and failed requests of every page in <script>.log,
+// and screenshots of the open pages when a check fails (`captureFailure`) and
+// of those a check that threw left open when its browser closes.
+
+const diagnostics = process.env.DIAGNOSTICS;
+const scriptName = basename(process.argv[1] ?? "script", extname(process.argv[1] ?? ""));
+const diagnosed = new Set<Browser>();
+const pendingCaptures: Promise<unknown>[] = [];
+let captures = 0;
+
+function recordDiagnostics(browser: Browser, folder: string): void {
+  mkdirSync(folder, { recursive: true });
+  diagnosed.add(browser);
+  browser.on("disconnected", () => diagnosed.delete(browser));
+  const logFile = join(folder, `${scriptName}.log`);
+  const log = (page: Page | null, line: string) => {
+    const url = page ? new URL(page.url()) : null;
+    const where = url ? `${url.pathname}${url.search} ` : "";
+    appendFileSync(
+      logFile,
+      `${new Date().toISOString()} ${browser.browserType().name()} ${where}${line}\n`,
+    );
+  };
+  const newContext = browser.newContext.bind(browser);
+  browser.newContext = async (options) => {
+    const context = await newContext(options);
+    context.on("console", (message) => log(message.page(), `${message.type()}: ${message.text()}`));
+    context.on("weberror", (error) => log(error.page(), `page error: ${error.error().stack}`));
+    context.on("requestfailed", (request) => {
+      // Service workers' requests have no frame.
+      let page: Page | null = null;
+      try {
+        page = request.frame().page();
+      } catch {}
+      log(page, `failed ${request.url()}: ${request.failure()?.errorText}`);
+    });
+    return context;
+  };
+}
+
+/**
+ * With DIAGNOSTICS set, screenshots every open page, or those of `browser`,
+ * as <script>-<n>-<check>-<page>.jpg. A check's failure need not wait for
+ * it: the launched browser finishes the screenshots before it closes.
+ */
+export async function captureFailure(check: string, browser?: Browser): Promise<void> {
+  if (!diagnostics) return;
+  const n = ++captures;
+  const slug = check
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 60);
+  const pages = [...(browser ? [browser] : diagnosed)].flatMap((open) =>
+    open.contexts().flatMap((context) => context.pages()),
+  );
+  const shots = Promise.all(
+    pages.map((page, index) =>
+      page
+        .screenshot({
+          path: join(diagnostics, `${scriptName}-${n}-${slug}-${index + 1}.jpg`),
+          type: "jpeg",
+          scale: "css",
+          timeout: 5_000,
+        })
+        .catch(() => {}),
+    ),
+  );
+  pendingCaptures.push(shots);
+  await shots;
 }
 
 // Other sessions run Playwright benchmarks on the same machine, and a job

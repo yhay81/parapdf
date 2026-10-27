@@ -10,7 +10,11 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Page } from "playwright";
 import { preview } from "vite";
-import { launchBrowser, restoreScaleFactor } from "../../../bench/scripts/browsers.ts";
+import {
+  captureFailure,
+  launchBrowser,
+  restoreScaleFactor,
+} from "../../../bench/scripts/browsers.ts";
 
 const exampleDir = fileURLToPath(new URL("..", import.meta.url));
 const engine = process.env.ENGINE ?? "pdfjs-next";
@@ -18,7 +22,10 @@ let failures = 0;
 
 function check(name: string, ok: boolean, detail = ""): void {
   console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
-  if (!ok) failures++;
+  if (!ok) {
+    failures++;
+    captureFailure(name);
+  }
 }
 
 interface ViewerProbe {
@@ -186,10 +193,10 @@ try {
     route.fulfill({ contentType: "application/pdf", body: rotatedPages() }),
   );
   await rotated.goto(`${baseUrl}?engine=${engine}&file=rotated-destinations.pdf`);
+  // The viewer's session, which the viewer sets once it shows the document,
+  // after the document is ready.
   await rotated.waitForFunction(
-    () =>
-      (window as { __session?: { state: { get(): { status: string } } } }).__session?.state.get()
-        .status === "ready",
+    () => (window as { __viewer?: { session: unknown } }).__viewer?.session != null,
   );
   const destinations = await rotated.evaluate(async () => {
     // The loaded session, which resolves destinations for the viewer.

@@ -177,8 +177,14 @@ when the choice matters for performance or direction.
   search, forms, annotation editing, and print. Each feature has one primary home among
   them; extend that check
   instead of duplicating it. They default to `ENGINE=pdfjs-next`, which
-  needs `bench/scripts/build-pdfjs-next.sh`; CI runs them with
-  `ENGINE=pdfjs` in Chromium. What each covers is listed in
+  needs `bench/scripts/build-pdfjs-next.sh`. CI (`.github/workflows/ci.yml`)
+  runs them with `ENGINE=pdfjs` in Chromium, WebKit, and Firefox on Linux,
+  a job per browser that runs every check even after one fails, and
+  `check:modules`, which needs no browser, with the unit tests. With
+  `DIAGNOSTICS=<dir>`, the launcher keeps every page's console, page errors,
+  and failed requests and screenshots of the failures, which a failing CI job
+  uploads. CI's runners have no GPU and are not macOS, so releases still run
+  the checks on macOS. What each covers is listed in
   `docs/history/AGENTS-v0.md`, "Commands".
 - Runtime benchmarks in `examples/prototype/scripts/`: `scroll-bench.ts`
   (also `pnpm --filter @parapdf/prototype bench`), `commit-bench.ts` (zoom

@@ -58,9 +58,12 @@ ENGINE=pdfjs pnpm --filter @parapdf/prototype check:text
 
 - Run the functional checks your change touches; `AGENTS.md` says what each
   one covers. `ENGINE=pdfjs` runs them on the pdfjs-dist the package ships.
-  CI runs every one in Chromium, and a release needs them to pass in
-  Chromium, WebKit, and Firefox, so for selection, gestures, scrolling, or
-  layout, run them with `BROWSER=webkit` and `BROWSER=firefox` too.
+  CI runs every one in Chromium, WebKit, and Firefox on Linux; when one
+  fails there, the job's `diagnostics-<browser>` artifact holds the browser's
+  console and screenshots of the failure. For selection, gestures,
+  scrolling, or layout, run them with `BROWSER=webkit` and
+  `BROWSER=firefox` on your machine too: CI's browsers run on Linux without
+  a GPU, and Playwright's WebKit is not Safari.
 - A change to the package gets an entry under "Unreleased" in
   [`CHANGELOG.md`](CHANGELOG.md), and both
   [`packages/parapdf/README.md`](packages/parapdf/README.md), the package's
