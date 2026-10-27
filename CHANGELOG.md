@@ -4,15 +4,8 @@ Changes to the `parapdf` package. It follows
 [Semantic Versioning](https://semver.org/); until 1.0, a minor release may
 change the API.
 
-## Unreleased
+## 0.6.0 — 2026-10-27
 
-- `PdfDocument` no longer preloads a URL source whose own `httpHeaders` no
-  preload can carry, and preloads one with `withCredentials` in the CORS mode
-  pdf.js fetches it with. Until now the preload followed only
-  `configurePdfjs({ documentOptions })`, so such a source downloaded twice or
-  its preload failed.
-- `Viewer.sourceName` is null once the viewer's document closes, as
-  `session` is. Until now it kept the closed document's file name.
 - ParaPDF needs React 19.3 or later (`react` and `react-dom` 19.3.0).
 - On the server, `useOutline()`, `usePageLabels()`, `useMetadata()`,
   `useAttachments()`, `useLayers()`, `useFormFields()`, and
@@ -21,6 +14,13 @@ change the API.
   browser, which reports no error. Until now they suspended on a read that
   never settles on the server, so a server render waited for good; a
   prerender ended with the process and wrote none of the pages after it.
+- `Viewer.sourceName` is null once the viewer's document closes, as
+  `session` is. Until now it kept the closed document's file name.
+- `PdfDocument` no longer preloads a URL source whose own `httpHeaders` no
+  preload can carry, and preloads one with `withCredentials` in the CORS mode
+  pdf.js fetches it with. Until now the preload followed only
+  `configurePdfjs({ documentOptions })`, so such a source downloaded twice or
+  its preload failed.
 
 ## 0.5.0 — 2026-10-26
 
