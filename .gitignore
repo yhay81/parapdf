@@ -29,3 +29,6 @@ site/.astro/
 
 # Wrangler's local state
 site/.wrangler/
+
+# The applications check:bundlers builds (examples/prototype/scripts/check-bundlers.ts)
+examples/prototype/.bundlers/
