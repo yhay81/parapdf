@@ -294,7 +294,10 @@ async function checkNext(bundler: "next-turbopack" | "next-webpack"): Promise<vo
   const next = join(exampleDir, "node_modules", ".bin", "next");
   const flags = bundler === "next-webpack" ? ["--webpack"] : ["--turbopack"];
   const name = bundler === "next-webpack" ? "Next.js with webpack" : "Next.js with Turbopack";
-  const env = { ...process.env, NEXT_TELEMETRY_DISABLED: "1" };
+  // Rsbuild and webpack set NODE_ENV in this process; Next.js sets its own,
+  // and its build fails to prerender with "development".
+  const { NODE_ENV: _, ...inherited } = process.env;
+  const env = { ...inherited, NEXT_TELEMETRY_DISABLED: "1" };
   const url = `http://127.0.0.1:${PORT}/`;
 
   /** Runs `next <command>` until the pages are checked. */
