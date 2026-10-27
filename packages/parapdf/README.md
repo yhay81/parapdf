@@ -1000,9 +1000,12 @@ with `PdfThumbnails`'s.
   needs pdf.js's renderer worker (`configurePdfjs({ rendererSrc })`), which
   is only in unreleased pdf.js builds so far.
 - Not yet supported: editing annotations the PDF already holds, form
-  scripts (calculations, validation, and button actions), and XFA forms.
-  Annotations the reader creates can be moved, restyled, and deleted; those
-  in the file stay as they are drawn.
+  scripts (calculations, validation, and button actions), XFA forms, and
+  right-to-left page order (`/ViewerPreferences /Direction`). Annotations
+  the reader creates can be moved, restyled, and deleted; those in the file
+  stay as they are drawn.
+- The current page is reported, never controlled: `onPageChange` reports it
+  and `viewer.goToPage()` sets it.
 - Comments on created annotations and pdf.js's alt text dialog are not
   shown; images take their alternative text from `addImage()`.
 - A viewer shows the annotations it created, not those other viewers of the
@@ -1019,6 +1022,9 @@ with `PdfThumbnails`'s.
 - The functional checks run in Playwright's builds of Chromium, WebKit, and
   Firefox; 0.4 was also tried by hand in Safari in the iPadOS simulator.
   Safari on macOS and real iOS and iPadOS devices are not verified yet.
+- Whether iOS Safari counts the canvases pages keep when they unmount
+  (`maxKeptPixels`) toward its canvas memory cap is not verified; it needs a
+  device.
 
 ## License
 
