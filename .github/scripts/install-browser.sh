@@ -27,8 +27,7 @@ for attempt in 1 2 3; do
     # A stopped attempt may have interrupted dpkg.
     sudo dpkg --configure -a
   fi
-  limit=4m; [ "$attempt" -eq 1 ] && limit=15s  # TEMPORARY test of the kill
-  if sudo --preserve-env timeout --kill-after=10s "$limit" \
+  if sudo --preserve-env timeout --kill-after=10s 4m \
     sudo --preserve-env -u "$USER" env "PATH=$PATH" \
     pnpm --filter @parapdf/bench exec playwright install --with-deps "$browser"; then
     exit 0
