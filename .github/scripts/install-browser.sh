@@ -10,13 +10,19 @@
 #
 # Playwright runs apt-get through sudo, as root, where a timeout of the
 # runner's user cannot reach it: a slow first attempt then ran until the
-# step's limit (run 40545670466). The timeout runs as root instead, and
-# kills the attempt's whole process group, apt-get included.
+# step's limit (run 40545670466). The timeout runs as root instead. sudo
+# also starts apt-get in a session of its own, out of the timeout's process
+# group, where it kept the dpkg lock from the next attempt (run
+# 40554742031), so a retry first kills what is left of apt and dpkg.
 set -uo pipefail
 
 browser=$1
 for attempt in 1 2 3; do
   if [ "$attempt" -gt 1 ]; then
+    sudo pkill -KILL -x apt-get
+    sudo pkill -KILL -f '^/usr/lib/apt/methods/'
+    sudo pkill -KILL -x dpkg
+    sleep 2
     sudo sed -i 's|azure\.archive\.ubuntu\.com|archive.ubuntu.com|' /etc/apt/apt-mirrors.txt
     # A stopped attempt may have interrupted dpkg.
     sudo dpkg --configure -a
