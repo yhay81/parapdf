@@ -768,7 +768,8 @@ export function createPdfjsAnnotationEditor(
   // WebKit collects a signal from AbortSignal.any() that nothing references,
   // and aborting its sources then no longer removes the listeners added with
   // it: in Playwright's WebKit 27.2, the window listener of a finished
-  // drawing stayed, and every later press threw in it (yhay81/parapdf#1).
+  // drawing stayed, and every later press threw in it (yhay81/parapdf#1;
+  // bench/scripts/abort-any-repro.ts reproduces it without pdf.js).
   // pdf.js combines its signals here; each is kept until it aborts.
   const combined = new Set<AbortSignal>();
   manager.combinedSignal = (controller) => {
