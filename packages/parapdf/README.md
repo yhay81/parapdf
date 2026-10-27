@@ -914,10 +914,10 @@ it does with its files served from one directory: a fill in CMYK red (0, 1,
 1, 0) shows as rgb(236 31 37), where pdf.js without its ICC profile shows
 rgb(255 46 23).
 
-That works as it is with Vite 8 (development server and build), which the
-repository's checks build with, and with webpack 5, Rsbuild 2, and Next.js
-16 (Turbopack and webpack), which were tested with 0.4's bundling, which
-this release keeps. Parcel 2 bundles the worker again into a script that
+That works as it is with Vite 8, webpack 5, Rsbuild 2, and Next.js 16
+(Turbopack and webpack), in development and production builds: the
+repository's checks install the packed package into an application of each
+that configures nothing, on every change. Parcel 2 bundles the worker again into a script that
 does not start, and esbuild and Bun copy none of the files. With those,
 copy `node_modules/parapdf/pdfjs/` to where your application serves static
 files, such as `public/pdfjs/`, and tell ParaPDF where it is:

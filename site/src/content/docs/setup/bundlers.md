@@ -23,15 +23,18 @@ profile shows rgb(255 46 23).
 
 These need no setup:
 
-- Vite 8, its development server and its builds, which the repository's
-  bundle check runs against the packed package (this site is built with
+- Vite 8, its development server and its builds (this site is built with
   Astro on Vite)
-- webpack 5
-- Rsbuild 2
-- Next.js 16, with Turbopack and with webpack
+- webpack 5, its development and production builds
+- Rsbuild 2, its development server and its builds
+- Next.js 16, with Turbopack and with webpack, its development server and
+  its builds
 
-webpack, Rsbuild, and Next.js were tested with 0.4, whose handling of
-pdf.js's files 0.5 keeps unchanged.
+The repository's checks install the packed package into an application of
+each that configures nothing, on every change, and open PDFs that need the
+worker, CMaps, standard fonts, decoders, and the ICC profile, with pdf.js's
+modern and legacy builds. They also check that no build holds those files as
+`data:` URLs.
 
 ## Bundlers that need a copy
 
