@@ -207,6 +207,7 @@ async function visit(browser: Browser, url: string, served: Map<string, string>)
   const responses: Visit["responses"] = [];
   const bodies: Promise<void>[] = [];
   const errors: string[] = [];
+  const untypedLazyReplies = new Set<string>();
   const workers = new Set<string>();
   page.on("worker", (worker) => workers.add(worker.url().split("#")[0] ?? ""));
   // Scripts that are no shipped file's bytes, by URL: webpack's production
@@ -222,6 +223,15 @@ async function visit(browser: Browser, url: string, served: Map<string, string>)
     bodies.push(
       response.body().then(
         (body) => {
+          if (
+            entry.path === "/_rspack/lazy/trigger" &&
+            response.request().method() === "POST" &&
+            entry.status === 200 &&
+            !response.headers()["content-type"] &&
+            body.equals(Buffer.from("\n"))
+          ) {
+            untypedLazyReplies.add(response.url());
+          }
           entry.file = served.get(fingerprint(body, false));
           if (!entry.file) scripts.set(response.url().split("#")[0] ?? "", { entry, body });
         },
@@ -261,6 +271,23 @@ async function visit(browser: Browser, url: string, served: Map<string, string>)
     return [...context.getImageData(x, y, 1, 1).data.slice(0, 3)];
   });
   await Promise.all(bodies);
+  // Rspack 2.2.9's lazy-compilation middleware replies with a newline and
+  // no Content-Type. Firefox parses that XHR response as XML and reports
+  // an empty document, even without ParaPDF. Keep every other error, and
+  // recognize this diagnostic only after checking the actual response.
+  const lazyUrl = new URL("/_rspack/lazy/trigger", url).href;
+  const lazyXmlError = `[JavaScript Error: "XML Parsing Error: no root element found\nLocation: ${lazyUrl}\nLine Number 2, Column 1:" {file: "${lazyUrl}" line: 2}]`;
+  const reportedErrors = errors.filter((error) => {
+    if (
+      browser.browserType().name() === "firefox" &&
+      untypedLazyReplies.has(lazyUrl) &&
+      error === lazyXmlError
+    ) {
+      console.log("NOTE Firefox parsed Rspack's untyped lazy-compilation reply as XML");
+      return false;
+    }
+    return true;
+  });
   // A worker started from a script that is no shipped file's bytes is
   // pdf.js's, transformed, and the legacy one if it holds core-js.
   for (const url of workers) {
@@ -270,7 +297,7 @@ async function visit(browser: Browser, url: string, served: Map<string, string>)
     script.entry.file = `transformed ${legacy ? "pdf.worker.legacy.js" : "pdf.worker.js"}`;
   }
   await context.close();
-  return { responses, errors, painted, center };
+  return { responses, errors: reportedErrors, painted, center };
 }
 
 /** Whether a response succeeded with a file named like `pattern`, by its path or its content. */
