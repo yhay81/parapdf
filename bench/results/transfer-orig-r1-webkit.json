@@ -1,0 +1,203 @@
+{
+  "environment": {
+    "runAt": "2026-10-27T17:05:54.368Z",
+    "os": "darwin 27.0.0 arm64",
+    "cpu": "Apple M2 Pro (12 logical cores)",
+    "memoryGiB": 32,
+    "browserName": "webkit",
+    "browser": "WebKit 27.2",
+    "headless": true,
+    "power": {
+      "source": "ac",
+      "lowPowerMode": false
+    },
+    "turnTaking": "waited once (1 min in all) for other Playwright browsers and repeated 1 job that another browser overlapped",
+    "gpu": "Apple GPU",
+    "crossOriginIsolated": true,
+    "idle": {
+      "timerLagP50Ms": 3.9,
+      "timerLagP95Ms": 4.8,
+      "frameIntervalMs": 16.6
+    },
+    "versions": {
+      "pdfjs-dist": "6.4.299",
+      "pdf.js master": "157d30e83 2026-10-17",
+      "@embedpdf/pdfium": "2.15.1",
+      "hayro": "0.8.0"
+    },
+    "settings": {
+      "runs": 3,
+      "pages": 10,
+      "scale": 2.7,
+      "engines": [
+        "pdfjs-hwa",
+        "pdfjs-next",
+        "pdfjs-next-hwa"
+      ],
+      "output": "transfer-orig-r1-"
+    }
+  },
+  "payload": {
+    "pdfjs": {
+      "files": [
+        "pdf.worker.min-CjEcRF4W.mjs",
+        "pdfjs-BHwuZeSp.js"
+      ],
+      "raw": 1694984,
+      "gzip": 503726,
+      "brotli": 413962
+    },
+    "pdfjs-next (workers unminified)": {
+      "files": [
+        "pdf.renderer-GA8x22nu.mjs",
+        "pdf.worker-A5U9OorG.mjs",
+        "pdfjs-next-D7Any2-3.js"
+      ],
+      "raw": 2920926,
+      "gzip": 660612,
+      "brotli": 533738
+    },
+    "pdfium": {
+      "files": [
+        "pdfium-BJ2Yip8Q.wasm",
+        "pdfium-Cq6T_0ZZ.js",
+        "pdfium.worker-B6sCQZf0.js"
+      ],
+      "raw": 4803543,
+      "gzip": 2186865,
+      "brotli": 1684405
+    },
+    "hayro": {
+      "files": [
+        "hayro-CPRxIzm9.js",
+        "hayro.worker-DtVKusZb.js",
+        "hayro_wasm_bench_bg-B6N7ImOe.wasm"
+      ],
+      "raw": 4061725,
+      "gzip": 1748434,
+      "brotli": 1396376
+    }
+  },
+  "summaries": [
+    {
+      "file": "patent-us223898.pdf",
+      "engine": "pdfjs-hwa",
+      "runs": 3,
+      "pageCount": 4,
+      "renderedPages": 4,
+      "usesRendererWorker": false,
+      "initMs": 85.9,
+      "openMs": 5,
+      "firstRenderMs": 68.5,
+      "firstPresentMs": 99.9,
+      "pagePresentP50Ms": 84.3,
+      "pagePresentP95Ms": 116.6,
+      "renderPhaseMs": 383.6,
+      "blockedMs": 0.2,
+      "lagP95Ms": 4.9,
+      "lagMaxMs": 5,
+      "longTaskBlockingMs": 0,
+      "wasmMemoryMiB": null
+    },
+    {
+      "file": "patent-us223898.pdf",
+      "engine": "pdfjs-next",
+      "runs": 3,
+      "pageCount": 4,
+      "renderedPages": 4,
+      "usesRendererWorker": true,
+      "initMs": 110.7,
+      "openMs": 5.5,
+      "firstRenderMs": 130.3,
+      "firstPresentMs": 149.7,
+      "pagePresentP50Ms": 105.7,
+      "pagePresentP95Ms": 165.6,
+      "renderPhaseMs": 497.4,
+      "blockedMs": 69.8,
+      "lagP95Ms": 13.6,
+      "lagMaxMs": 42.3,
+      "longTaskBlockingMs": 0,
+      "wasmMemoryMiB": null
+    },
+    {
+      "file": "patent-us223898.pdf",
+      "engine": "pdfjs-next-hwa",
+      "runs": 3,
+      "pageCount": 4,
+      "renderedPages": 4,
+      "usesRendererWorker": true,
+      "initMs": 134.2,
+      "openMs": 6.9,
+      "firstRenderMs": 278.7,
+      "firstPresentMs": 299.5,
+      "pagePresentP50Ms": 149.8,
+      "pagePresentP95Ms": 338.3,
+      "renderPhaseMs": 762.6,
+      "blockedMs": 78.7,
+      "lagP95Ms": 6.2,
+      "lagMaxMs": 53.2,
+      "longTaskBlockingMs": 0,
+      "wasmMemoryMiB": null
+    },
+    {
+      "file": "bunka-kokugo-series-019-p4.pdf",
+      "engine": "pdfjs-hwa",
+      "runs": 3,
+      "pageCount": 1,
+      "renderedPages": 1,
+      "usesRendererWorker": false,
+      "initMs": 86.2,
+      "openMs": 5.2,
+      "firstRenderMs": 102.3,
+      "firstPresentMs": 134.2,
+      "pagePresentP50Ms": 134.2,
+      "pagePresentP95Ms": 217.1,
+      "renderPhaseMs": 151.1,
+      "blockedMs": 0.3,
+      "lagP95Ms": 4.9,
+      "lagMaxMs": 5,
+      "longTaskBlockingMs": 0,
+      "wasmMemoryMiB": null
+    },
+    {
+      "file": "bunka-kokugo-series-019-p4.pdf",
+      "engine": "pdfjs-next",
+      "runs": 3,
+      "pageCount": 1,
+      "renderedPages": 1,
+      "usesRendererWorker": true,
+      "initMs": 114.2,
+      "openMs": 5.8,
+      "firstRenderMs": 255.9,
+      "firstPresentMs": 283.2,
+      "pagePresentP50Ms": 283.2,
+      "pagePresentP95Ms": 369.1,
+      "renderPhaseMs": 339.3,
+      "blockedMs": 68.1,
+      "lagP95Ms": 4.8,
+      "lagMaxMs": 72.7,
+      "longTaskBlockingMs": 0,
+      "wasmMemoryMiB": null
+    },
+    {
+      "file": "bunka-kokugo-series-019-p4.pdf",
+      "engine": "pdfjs-next-hwa",
+      "runs": 3,
+      "pageCount": 1,
+      "renderedPages": 1,
+      "usesRendererWorker": true,
+      "initMs": 133.2,
+      "openMs": 6.6,
+      "firstRenderMs": 332.3,
+      "firstPresentMs": 350,
+      "pagePresentP50Ms": 350,
+      "pagePresentP95Ms": 415.6,
+      "renderPhaseMs": 391.6,
+      "blockedMs": 77.1,
+      "lagP95Ms": 4.8,
+      "lagMaxMs": 82,
+      "longTaskBlockingMs": 0,
+      "wasmMemoryMiB": null
+    }
+  ]
+}

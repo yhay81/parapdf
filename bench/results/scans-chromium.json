@@ -1,0 +1,244 @@
+{
+  "environment": {
+    "runAt": "2026-10-27T16:50:30.101Z",
+    "os": "darwin 27.0.0 arm64",
+    "cpu": "Apple M2 Pro (12 logical cores)",
+    "memoryGiB": 32,
+    "browserName": "chromium",
+    "browser": "Chromium 156.0.8078.4",
+    "headless": true,
+    "power": {
+      "source": "ac",
+      "lowPowerMode": false
+    },
+    "turnTaking": "waited 0 times (0 min in all) for other Playwright browsers and repeated 0 jobs that another browser overlapped",
+    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2 Pro, Unspecified Version)",
+    "crossOriginIsolated": true,
+    "idle": {
+      "timerLagP50Ms": 0.5,
+      "timerLagP95Ms": 1.2,
+      "frameIntervalMs": 16.7
+    },
+    "versions": {
+      "pdfjs-dist": "6.4.299",
+      "pdf.js master": "157d30e83 2026-10-17",
+      "@embedpdf/pdfium": "2.15.1",
+      "hayro": "0.8.0"
+    },
+    "settings": {
+      "runs": 3,
+      "pages": 10,
+      "scale": 2.7,
+      "engines": [
+        "pdfjs",
+        "pdfjs-hwa",
+        "pdfjs-next",
+        "pdfjs-next-hwa"
+      ],
+      "output": "scans-"
+    }
+  },
+  "payload": {
+    "pdfjs": {
+      "files": [
+        "pdf.worker.min-CjEcRF4W.mjs",
+        "pdfjs-BHwuZeSp.js"
+      ],
+      "raw": 1694984,
+      "gzip": 503726,
+      "brotli": 413962
+    },
+    "pdfjs-next (workers unminified)": {
+      "files": [
+        "pdf.renderer-GA8x22nu.mjs",
+        "pdf.worker-A5U9OorG.mjs",
+        "pdfjs-next-D7Any2-3.js"
+      ],
+      "raw": 2920926,
+      "gzip": 660612,
+      "brotli": 533738
+    },
+    "pdfium": {
+      "files": [
+        "pdfium-BJ2Yip8Q.wasm",
+        "pdfium-Cq6T_0ZZ.js",
+        "pdfium.worker-B6sCQZf0.js"
+      ],
+      "raw": 4803543,
+      "gzip": 2186865,
+      "brotli": 1684405
+    },
+    "hayro": {
+      "files": [
+        "hayro-CPRxIzm9.js",
+        "hayro.worker-DtVKusZb.js",
+        "hayro_wasm_bench_bg-B6N7ImOe.wasm"
+      ],
+      "raw": 4061725,
+      "gzip": 1748434,
+      "brotli": 1396376
+    }
+  },
+  "summaries": [
+    {
+      "file": "patent-us223898.pdf",
+      "engine": "pdfjs",
+      "runs": 3,
+      "pageCount": 4,
+      "renderedPages": 4,
+      "usesRendererWorker": false,
+      "initMs": 88.7,
+      "openMs": 3.2,
+      "firstRenderMs": 53.6,
+      "firstPresentMs": 83.3,
+      "pagePresentP50Ms": 82.7,
+      "pagePresentP95Ms": 516.8,
+      "renderPhaseMs": 366.9,
+      "blockedMs": 3.9,
+      "lagP95Ms": 1.3,
+      "lagMaxMs": 3.8,
+      "longTaskBlockingMs": 0,
+      "wasmMemoryMiB": null
+    },
+    {
+      "file": "patent-us223898.pdf",
+      "engine": "pdfjs-hwa",
+      "runs": 3,
+      "pageCount": 4,
+      "renderedPages": 4,
+      "usesRendererWorker": false,
+      "initMs": 92.5,
+      "openMs": 3.5,
+      "firstRenderMs": 51.5,
+      "firstPresentMs": 83.2,
+      "pagePresentP50Ms": 67.3,
+      "pagePresentP95Ms": 133.4,
+      "renderPhaseMs": 367,
+      "blockedMs": 0.5,
+      "lagP95Ms": 1.3,
+      "lagMaxMs": 2.5,
+      "longTaskBlockingMs": 0,
+      "wasmMemoryMiB": null
+    },
+    {
+      "file": "patent-us223898.pdf",
+      "engine": "pdfjs-next",
+      "runs": 3,
+      "pageCount": 4,
+      "renderedPages": 4,
+      "usesRendererWorker": true,
+      "initMs": 127.5,
+      "openMs": 4,
+      "firstRenderMs": 100.4,
+      "firstPresentMs": 116.6,
+      "pagePresentP50Ms": 116.6,
+      "pagePresentP95Ms": 166.6,
+      "renderPhaseMs": 515.9,
+      "blockedMs": 108.6,
+      "lagP95Ms": 7.1,
+      "lagMaxMs": 32.6,
+      "longTaskBlockingMs": 0,
+      "wasmMemoryMiB": null
+    },
+    {
+      "file": "patent-us223898.pdf",
+      "engine": "pdfjs-next-hwa",
+      "runs": 3,
+      "pageCount": 4,
+      "renderedPages": 4,
+      "usesRendererWorker": true,
+      "initMs": 105.9,
+      "openMs": 3.7,
+      "firstRenderMs": 78.1,
+      "firstPresentMs": 100,
+      "pagePresentP50Ms": 99.9,
+      "pagePresentP95Ms": 150,
+      "renderPhaseMs": 433.8,
+      "blockedMs": 74.2,
+      "lagP95Ms": 14.3,
+      "lagMaxMs": 25.9,
+      "longTaskBlockingMs": 0,
+      "wasmMemoryMiB": null
+    },
+    {
+      "file": "bunka-kokugo-series-019-p4.pdf",
+      "engine": "pdfjs",
+      "runs": 3,
+      "pageCount": 1,
+      "renderedPages": 1,
+      "usesRendererWorker": false,
+      "initMs": 96.7,
+      "openMs": 3.9,
+      "firstRenderMs": 125.3,
+      "firstPresentMs": 149.9,
+      "pagePresentP50Ms": 149.9,
+      "pagePresentP95Ms": 199.9,
+      "renderPhaseMs": 171.7,
+      "blockedMs": 10.4,
+      "lagP95Ms": 5.4,
+      "lagMaxMs": 7.6,
+      "longTaskBlockingMs": 0,
+      "wasmMemoryMiB": null
+    },
+    {
+      "file": "bunka-kokugo-series-019-p4.pdf",
+      "engine": "pdfjs-hwa",
+      "runs": 3,
+      "pageCount": 1,
+      "renderedPages": 1,
+      "usesRendererWorker": false,
+      "initMs": 85.7,
+      "openMs": 3.3,
+      "firstRenderMs": 100.7,
+      "firstPresentMs": 133.4,
+      "pagePresentP50Ms": 133.4,
+      "pagePresentP95Ms": 150.1,
+      "renderPhaseMs": 150.5,
+      "blockedMs": 0,
+      "lagP95Ms": 1.2,
+      "lagMaxMs": 1.4,
+      "longTaskBlockingMs": 0,
+      "wasmMemoryMiB": null
+    },
+    {
+      "file": "bunka-kokugo-series-019-p4.pdf",
+      "engine": "pdfjs-next",
+      "runs": 3,
+      "pageCount": 1,
+      "renderedPages": 1,
+      "usesRendererWorker": true,
+      "initMs": 119.1,
+      "openMs": 4.1,
+      "firstRenderMs": 233.6,
+      "firstPresentMs": 249.8,
+      "pagePresentP50Ms": 249.8,
+      "pagePresentP95Ms": 249.9,
+      "renderPhaseMs": 299.2,
+      "blockedMs": 81.4,
+      "lagP95Ms": 1.4,
+      "lagMaxMs": 77.6,
+      "longTaskBlockingMs": 28,
+      "wasmMemoryMiB": null
+    },
+    {
+      "file": "bunka-kokugo-series-019-p4.pdf",
+      "engine": "pdfjs-next-hwa",
+      "runs": 3,
+      "pageCount": 1,
+      "renderedPages": 1,
+      "usesRendererWorker": true,
+      "initMs": 114.1,
+      "openMs": 4.1,
+      "firstRenderMs": 206.9,
+      "firstPresentMs": 232.9,
+      "pagePresentP50Ms": 232.9,
+      "pagePresentP95Ms": 233.2,
+      "renderPhaseMs": 250,
+      "blockedMs": 73.4,
+      "lagP95Ms": 1.4,
+      "lagMaxMs": 75.4,
+      "longTaskBlockingMs": 27,
+      "wasmMemoryMiB": null
+    }
+  ]
+}
