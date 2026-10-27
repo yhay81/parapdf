@@ -11,6 +11,8 @@ change the API.
   pdf.js fetches it with. Until now the preload followed only
   `configurePdfjs({ documentOptions })`, so such a source downloaded twice or
   its preload failed.
+- `Viewer.sourceName` is null once the viewer's document closes, as
+  `session` is. Until now it kept the closed document's file name.
 
 ## 0.5.0 — 2026-10-26
 
