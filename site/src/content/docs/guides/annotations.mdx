@@ -92,6 +92,16 @@ tool while either is pending cancels that insertion, which resolves to
 `false`. Empty or untraceable signatures also resolve to `false`, without
 adding an annotation or undo step.
 
+## Annotations the PDF holds
+
+The annotations a PDF already holds of the kinds the tools create (text,
+drawings, highlights, and images) become editable while a tool is chosen:
+they can be selected, moved, restyled, and deleted as those created, and a
+double click on one with no tool chosen selects it. This needs the
+`annotationLayer` option, which is on by default. Undo, unmounting, zoom,
+and rotation keep the changes, and saving and printing write them.
+Annotations of other kinds stay as they are drawn.
+
 ## Saving and keeping annotations
 
 Annotations go into the document's bytes that `save(viewer)`,
@@ -112,6 +122,9 @@ Each exported annotation has `pageIndex`, `type` (the tool that made it), and
 pdf.js pastes copies in, which may change when ParaPDF moves to another
 pdf.js; the changelog says when. Text being typed counts once it is
 committed, when the reader clicks elsewhere or another tool is chosen.
+`export()` also includes the PDF's annotations the reader changed, not those
+deleted, and `import()` puts each back in place of the annotation it
+changed.
 
 Annotations belong to the viewer that created them: they stay while its
 `PdfViewer` unmounts and mounts again, and are gone once the component that
@@ -124,7 +137,9 @@ Viewers of one `PdfDocument` that edit annotations share its document.
 `save()`, `download()`, and `print()` from any of them include every
 viewer's annotations, those of a viewer whose `PdfViewer` is unmounted too,
 and what is being typed in any of them. Each viewer shows the annotations it
-created.
+created. An annotation of the PDF one viewer changed or deleted is left out
+by the others once they draw its page again, without the change, until that
+viewer goes.
 
 ## Costs and limits
 
@@ -139,5 +154,4 @@ Label the editor's controls in the application's language with
 `annotationLabels`; the defaults are pdf.js's English names. New labels
 apply without losing the annotations created.
 
-Annotations the PDF already holds stay as they are drawn: they cannot be
-edited yet, and comments on created annotations are not shown.
+Comments on created annotations are not shown.

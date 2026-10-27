@@ -19,7 +19,8 @@
     "typecheck": "tsc -p .",
     "check:bundle": "node scripts/check-bundle.ts",
     "check:viewers": "node scripts/check-viewers.ts",
-    "check:modules": "node scripts/check-modules.ts"
+    "check:modules": "node scripts/check-modules.ts",
+    "check:bundlers": "node scripts/check-bundlers.ts"
   },
   "dependencies": {
     "parapdf": "workspace:*",
@@ -28,11 +29,14 @@
     "react-dom": "19.3.1"
   },
   "devDependencies": {
+    "@rsbuild/core": "2.2.12",
     "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
+    "next": "16.4.3",
     "playwright": "^1.64.1",
-    "vite": "^8.3.4"
+    "vite": "^8.3.4",
+    "webpack": "5.112.0"
   }
 }

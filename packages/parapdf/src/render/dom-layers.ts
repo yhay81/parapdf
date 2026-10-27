@@ -23,8 +23,9 @@ import type { TextSelectionTracker } from "./selection.ts";
  * The text, annotation, and annotation editor layers are DOM built on the
  * main thread, so they are the last things a page gets: one layer at a time,
  * only after scrolling settles, during idle periods, and never while a
- * visible page waits for its first pixels: text, then the annotations the
- * viewer edits, then links.
+ * visible page waits for its first pixels: text, then links, then the
+ * annotations the viewer edits, which take the file's annotations from the
+ * annotation layer.
  *
  * A text layer keeps the zoom it was laid out for: it carries its own
  * `--total-scale-factor`, and later zooms scale the laid-out layer with CSS.
@@ -213,13 +214,9 @@ export class DomLayers {
    */
   setAnnotationEditor(editor: AnnotationEditor | undefined): void {
     for (const index of [...this.#editorWaiters.keys()]) this.#editorBuilt(index, false);
-    for (const page of this.#pages.values()) {
-      page.editorTask?.cancel();
-      page.editorTask = undefined;
-      page.editorHandle?.destroy();
-      page.editorHandle = undefined;
-    }
     this.#options.annotationEditor = editor;
+    // Annotation layers report the file's annotations to the editor they were built with.
+    this.invalidateAnnotations();
     this.schedule();
   }
 
@@ -231,9 +228,17 @@ export class DomLayers {
     this.#options.layers = layers;
   }
 
-  /** Annotation layers are built again, as when the content or the forms option changed. */
+  /**
+   * Annotation layers are built again, as when the content or the forms
+   * option changed, and the annotation editor layers that take the file's
+   * annotations from them after them.
+   */
   invalidateAnnotations(): void {
     for (const page of this.#pages.values()) {
+      page.editorTask?.cancel();
+      page.editorTask = undefined;
+      page.editorHandle?.destroy();
+      page.editorHandle = undefined;
       const { annotations } = page.elements;
       if (!annotations) continue;
       page.annotationTask?.cancel();
@@ -278,25 +283,27 @@ export class DomLayers {
       page.elements.text !== null && !page.textHandle && !page.textTask;
     const needsLinks = (page: PageLayerState) =>
       page.elements.annotations !== null && !page.annotationHandle && !page.annotationTask;
+    // The editor layer takes the file's annotations from the annotation layer.
     const needsEditor = (page: PageLayerState) =>
       page.elements.editor !== null &&
       this.#options.annotationEditor !== undefined &&
       !page.editorHandle &&
-      !page.editorTask;
+      !page.editorTask &&
+      (page.elements.annotations === null || page.annotationHandle !== undefined);
     for (const inWindow of [visible, (page: PageLayerState) => !visible(page)]) {
       const text = pages.find((page) => inWindow(page) && needsText(page));
       if (text) {
         this.#startText(text, scale, rotation);
         return;
       }
-      const editor = pages.find((page) => inWindow(page) && needsEditor(page));
-      if (editor) {
-        this.#startEditor(editor, scale, rotation);
-        return;
-      }
       const links = pages.find((page) => inWindow(page) && needsLinks(page));
       if (links) {
         this.#startAnnotations(links, scale, rotation);
+        return;
+      }
+      const editor = pages.find((page) => inWindow(page) && needsEditor(page));
+      if (editor) {
+        this.#startEditor(editor, scale, rotation);
         return;
       }
     }
@@ -383,6 +390,8 @@ export class DomLayers {
       container,
       drawings,
       textLayer: text,
+      annotationLayer: page.annotationHandle?.layer ?? null,
+      structTree: page.textHandle?.structTree ?? null,
       cssScale,
       rotation,
     });
@@ -424,6 +433,7 @@ export class DomLayers {
       ...(this.#options.layers ? { layers: this.#options.layers.config } : {}),
       // The structure tree built with the page's text layer labels its annotations.
       structTree: page.textHandle?.structTree ?? null,
+      editor: this.#options.annotationEditor?.layerEditing ?? null,
     });
     page.annotationTask = task;
     this.#running = true;

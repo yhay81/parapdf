@@ -2,7 +2,8 @@
 /**
  * M3: independent viewports of one document session, including viewport-only
  * teardown and StrictMode; M4: viewers that edit annotations sharing the
- * session. Run after build; BROWSER, ENGINE, and DIST apply.
+ * session, and an annotation of the file one of them deletes. Run after
+ * build; BROWSER, ENGINE, and DIST apply.
  */
 import assert from "node:assert/strict";
 import { join } from "node:path";
@@ -14,6 +15,7 @@ import {
   launchBrowser,
   restoreScaleFactor,
 } from "../../../bench/scripts/browsers.ts";
+import { decodePng } from "./png.ts";
 
 const exampleDir = fileURLToPath(new URL("..", import.meta.url));
 const configFile = join(exampleDir, "vite.config.ts");
@@ -294,6 +296,82 @@ async function checkSharedEditing(url: string) {
   }
 }
 
+/** An annotation of the file one viewer deletes, as the other viewer of the session draws it. */
+async function checkFileAnnotations(url: string) {
+  const context = await launched.browser.newContext({
+    viewport: { width: 1440, height: 900 },
+    deviceScaleFactor: 2,
+  });
+  const page = await context.newPage();
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(String(error)));
+  try {
+    await restoreScaleFactor(page, new URL("calibrate.html", url).href);
+    await page.goto(
+      `${url}?split=1&annotations=1&engine=${engine}&count=1&file=synthetic-annotations.pdf`,
+    );
+    await ready(page, 0);
+    await ready(page, 1);
+    await page.waitForFunction(() =>
+      window.__split!.annotations.every((editing) => editing?.store.get().state != null),
+    );
+    /**
+     * Whether viewer `index` shows the file's stamp, a blue box whose middle
+     * is 400 by 262 points from page 1's top-left corner.
+     */
+    const stampShown = async (index: number) => {
+      const box = await page
+        .locator(`[data-viewer="${index}"] section[data-page="1"]`)
+        .boundingBox();
+      if (!box) return false;
+      const scale = box.width / 612;
+      const clip = { x: box.x + 400 * scale - 2, y: box.y + 262 * scale - 2, width: 4, height: 4 };
+      const { rgba, width } = decodePng(await page.screenshot({ clip }));
+      const at = (Math.floor(width / 2) * width + Math.floor(width / 2)) * 4;
+      return (rgba[at + 2] ?? 0) > 180 && (rgba[at] ?? 0) < 120;
+    };
+    /** Draws viewer `index`'s pages again, at another zoom. */
+    const redraw = async (index: number, scale: number) => {
+      await page.evaluate(({ i, s }) => window.__split!.viewers[i]!.setScale(s), {
+        i: index,
+        s: scale,
+      });
+      await page.waitForTimeout(300);
+      await ready(page, index);
+    };
+    assert.deepEqual([await stampShown(0), await stampShown(1)], [true, true]);
+
+    await page.evaluate(() => window.__split!.annotations[0]!.setTool("ink"));
+    await page.locator('[data-viewer="0"] .stampEditor').click();
+    await page.keyboard.press("Delete");
+    await page.evaluate(() => window.__split!.annotations[0]!.setTool("none"));
+    await ready(page, 0);
+    const drawnBefore = await stampShown(1);
+    await redraw(1, 1.5);
+    const drawnAfter = await stampShown(1);
+    assert.deepEqual(
+      { editing: await stampShown(0), other: drawnBefore, redrawn: drawnAfter },
+      { editing: false, other: true, redrawn: false },
+      "another viewer leaves the deleted annotation out once it draws the page again",
+    );
+    console.log(
+      "PASS another viewer leaves an annotation of the file one viewer deleted out once it draws again",
+    );
+
+    await page.locator('[data-viewer="0"]').getByRole("button", { name: "Close viewer" }).click();
+    await page.waitForFunction(() => window.__split!.viewers[0]!.session === null);
+    await redraw(1, 1);
+    assert.equal(await stampShown(1), true, "closing the viewer that deleted it brings it back");
+    assert.deepEqual(errors, []);
+    console.log("PASS closing the viewer that deleted it brings the annotation back");
+  } catch (error) {
+    await captureFailure(error instanceof Error ? error.message : String(error));
+    throw error;
+  } finally {
+    await context.close();
+  }
+}
+
 try {
   const server = await preview({
     root: exampleDir,
@@ -305,6 +383,7 @@ try {
   try {
     await checkViews(server.resolvedUrls!.local[0]!);
     await checkSharedEditing(server.resolvedUrls!.local[0]!);
+    await checkFileAnnotations(server.resolvedUrls!.local[0]!);
   } finally {
     await new Promise<void>((resolve) => server.httpServer.close(() => resolve()));
   }

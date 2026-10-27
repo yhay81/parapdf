@@ -95,3 +95,32 @@ jobs:
           path: diagnostics/
           if-no-files-found: ignore
           retention-days: 14
+
+  bundlers:
+    name: Packaged assets in webpack, Rsbuild, and Next.js
+    runs-on: ubuntu-latest
+    env:
+      BROWSER: chromium
+      DIAGNOSTICS: ${{ github.workspace }}/diagnostics
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @parapdf/bench exec playwright install --with-deps chromium
+      - run: pnpm --filter @parapdf/bench corpus
+      - run: pnpm --filter @parapdf/prototype check:bundlers
+      # What each bundler built, beside the launcher's diagnostics.
+      - if: ${{ failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: diagnostics-bundlers
+          path: |
+            diagnostics/
+            examples/prototype/.bundlers/*/dist*/
+            examples/prototype/.bundlers/*/.next/static/
+          if-no-files-found: ignore
+          retention-days: 14

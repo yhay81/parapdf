@@ -657,6 +657,18 @@ form pdf.js pastes copies in, which may change when ParaPDF moves to
 another pdf.js; the changelog says when. Text being typed counts once it is
 committed, when the reader clicks elsewhere or another tool is chosen.
 
+The annotations the PDF already holds of the kinds the tools create (text,
+drawings, highlights, and images) become editable while a tool is chosen,
+with the `annotationLayer` option on, as it is by default: they can be
+selected, moved, restyled, and deleted as those created, and a double click
+on one with no tool chosen selects it. Undo, unmounting, zoom, and rotation
+keep the changes, and `save()`, `download()`, and `print()` write them.
+`export()` includes the changed ones, not the deleted ones, and `import()`
+puts each back in place of the annotation it changed. Annotations of other
+kinds stay as they are drawn. Other viewers of the document leave a changed
+annotation out once they draw its page again, without showing the change,
+until the viewer that changed it goes.
+
 A viewer keeps its annotations while its `PdfViewer` unmounts and shows
 them again when it returns; they go when the viewer goes or the document
 closes, so export or save them before. Each viewer shows the annotations it
@@ -927,10 +939,10 @@ it does with its files served from one directory: a fill in CMYK red (0, 1,
 1, 0) shows as rgb(236 31 37), where pdf.js without its ICC profile shows
 rgb(255 46 23).
 
-That works as it is with Vite 8 (development server and build), which the
-repository's checks build with, and with webpack 5, Rsbuild 2, and Next.js
-16 (Turbopack and webpack), which were tested with 0.4's bundling, which
-this release keeps. Parcel 2 bundles the worker again into a script that
+That works as it is with Vite 8, webpack 5, Rsbuild 2, and Next.js 16
+(Turbopack and webpack), in development and production builds: the
+repository's checks install the packed package into an application of each
+that configures nothing, on every change. Parcel 2 bundles the worker again into a script that
 does not start, and esbuild and Bun copy none of the files. With those,
 copy `node_modules/parapdf/pdfjs/` to where your application serves static
 files, such as `public/pdfjs/`, and tell ParaPDF where it is:
@@ -1012,11 +1024,10 @@ with `PdfThumbnails`'s.
 - Released pdfjs-dist draws pages on the main thread. Drawing in a worker
   needs pdf.js's renderer worker (`configurePdfjs({ rendererSrc })`), which
   is only in unreleased pdf.js builds so far.
-- Not yet supported: editing annotations the PDF already holds, form
-  scripts (calculations, validation, and button actions), and XFA forms.
-  Annotations
-  the reader creates can be moved, restyled, and deleted; those in the file
-  stay as they are drawn.
+- Not yet supported: form scripts (calculations, validation, and button
+  actions) and XFA forms. Of the annotations the PDF already holds, only
+  text, drawings, highlights, and images can be edited; others stay as they
+  are drawn.
 - The current page is reported, never controlled: `onPageChange` reports it
   and `viewer.goToPage()` sets it.
 - Comments on created annotations and pdf.js's alt text dialog are not

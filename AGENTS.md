@@ -167,7 +167,12 @@ when the choice matters for performance or direction.
 - Functional checks, `pnpm --filter @parapdf/prototype check:<name>`, with
   `BROWSER` and `ENGINE`: `text`, `links`, `lifecycle`, `rotation`,
   `options`, `pinch`, `features`, `scroll`, `annotations`, `document`,
-  `viewers`, and `bundle`. `check:viewers` opens two viewers under one
+  `viewers`, `bundle`, and `bundlers`. `check:bundle` installs the packed
+  package into a Vite application and `check:bundlers` into webpack,
+  Rsbuild, and Next.js (Turbopack and webpack) ones under
+  `examples/prototype/.bundlers/` (`BUNDLERS` picks some), whose versions
+  the prototype's devDependencies pin; both share `scripts/bundle-app.ts`.
+  `check:viewers` opens two viewers under one
   `PdfDocument` and checks independent view state, closing one while the
   other works, viewport-only detach/reattach, the provider releasing the
   session, StrictMode, and two viewers editing annotations in one session;
@@ -180,7 +185,8 @@ when the choice matters for performance or direction.
   needs `bench/scripts/build-pdfjs-next.sh`. CI (`.github/workflows/ci.yml`)
   runs them with `ENGINE=pdfjs` in Chromium, WebKit, and Firefox on Linux,
   a job per browser that runs every check even after one fails, and
-  `check:modules`, which needs no browser, with the unit tests. With
+  `check:modules`, which needs no browser, with the unit tests, and
+  `check:bundlers` in Chromium, as a job of its own. With
   `DIAGNOSTICS=<dir>`, the launcher keeps every page's console, page errors,
   and failed requests and screenshots of the failures, which a failing CI job
   uploads. CI's runners have no GPU and are not macOS, so releases still run
@@ -201,7 +207,9 @@ when the choice matters for performance or direction.
   (decisions 0005 and 0006); `bench/scripts/fidelity.ts` compares what the
   `-frame` variants draw, and `bench/scripts/frame-ops.ts` times the canvas
   and bitmap operations behind them.
-- `pnpm --filter @parapdf/site dev`, `build`, and `preview` for the site.
+- `pnpm --filter @parapdf/site dev`, `build`, and `preview` for the site;
+  after `build`, `check:demo` (with `BROWSER`) checks what the demo keeps of
+  the reader's changes across the annotation tools and other documents.
 
 ## Benchmark methodology
 
