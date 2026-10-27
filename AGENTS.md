@@ -207,7 +207,9 @@ when the choice matters for performance or direction.
   (decisions 0005 and 0006); `bench/scripts/fidelity.ts` compares what the
   `-frame` variants draw, and `bench/scripts/frame-ops.ts` times the canvas
   and bitmap operations behind them.
-- `pnpm --filter @parapdf/site dev`, `build`, and `preview` for the site.
+- `pnpm --filter @parapdf/site dev`, `build`, and `preview` for the site;
+  after `build`, `check:demo` (with `BROWSER`) checks what the demo keeps of
+  the reader's changes across the annotation tools and other documents.
 
 ## Benchmark methodology
 

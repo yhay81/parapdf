@@ -1,5 +1,4 @@
 import {
-  download,
   print,
   type ScrollMode,
   type SpreadMode,
@@ -41,6 +40,8 @@ export interface ToolbarProps {
   onOpen: (opened: Opened) => void;
   /** Asks for a PDF on the reader's device. */
   onOpenFile: () => void;
+  /** Downloads the document with what the reader typed and drew. */
+  onDownload: () => void;
   sidebar: boolean;
   onSidebarChange: (open: boolean) => void;
   onShowInfo: () => void;
@@ -127,7 +128,7 @@ export function Toolbar(props: ToolbarProps) {
           icon="download"
           label="Download"
           disabled={!ready}
-          onClick={() => void download(viewer)}
+          onClick={props.onDownload}
         />
         <IconButton
           className="demo-from-lg"
@@ -356,7 +357,7 @@ function Tile({
  * narrow windows hide.
  */
 function MoreMenu(props: ToolbarProps) {
-  const { annotating, onOpenFile, onShowInfo } = props;
+  const { annotating, onOpenFile, onShowInfo, onDownload } = props;
   const viewer = useDemoViewer();
   const toggleAnnotating = useAnnotatingToggle(props);
   const ready = useDocumentState((state) => state.status === "ready");
@@ -389,7 +390,7 @@ function MoreMenu(props: ToolbarProps) {
         </MenuItem>
       </div>
       <div className="demo-until-lg">
-        <MenuItem icon="download" disabled={!ready} onSelect={() => void download(viewer)}>
+        <MenuItem icon="download" disabled={!ready} onSelect={onDownload}>
           Download
         </MenuItem>
         <MenuItem icon="print" disabled={!ready} onSelect={() => void print(viewer)}>
