@@ -1,0 +1,490 @@
+{
+  "runAt": "2026-10-27T15:43:40.034Z",
+  "browser": "WebKit 27.2",
+  "pages": 1,
+  "scale": 2.6667,
+  "rows": [
+    {
+      "file": "pdfium-smask-blend.pdf",
+      "engine": "pdfjs",
+      "variant": "pdfium",
+      "pages": 1,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "533×533 / 533×533",
+          "maxDiff": 153,
+          "offShare": 0.1875,
+          "offBox": [
+            0,
+            0.5,
+            0.5,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "file": "pdfium-smask-blend.pdf",
+      "engine": "pdfjs-next",
+      "variant": "pdfium",
+      "pages": 1,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "533×533 / 533×533",
+          "maxDiff": 153,
+          "offShare": 0.1875,
+          "offBox": [
+            0,
+            0.5,
+            0.5,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "file": "pdfium-smask-blend.pdf",
+      "engine": "hayro",
+      "variant": "pdfium",
+      "pages": 1,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "533×533 / 533×533",
+          "maxDiff": 2,
+          "offShare": 0,
+          "offBox": null
+        }
+      ]
+    },
+    {
+      "file": "smask-group-luminosity.pdf",
+      "engine": "pdfjs",
+      "variant": "pdfium",
+      "pages": 1,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "533×533 / 533×533",
+          "maxDiff": 5,
+          "offShare": 0,
+          "offBox": null
+        }
+      ]
+    },
+    {
+      "file": "smask-group-luminosity.pdf",
+      "engine": "pdfjs-next",
+      "variant": "pdfium",
+      "pages": 1,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "533×533 / 533×533",
+          "maxDiff": 5,
+          "offShare": 0,
+          "offBox": null
+        }
+      ]
+    },
+    {
+      "file": "smask-group-luminosity.pdf",
+      "engine": "hayro",
+      "variant": "pdfium",
+      "pages": 1,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "533×533 / 533×533",
+          "maxDiff": 153,
+          "offShare": 0.0625,
+          "offBox": [
+            0.25,
+            0.5,
+            0.5,
+            0.75
+          ]
+        }
+      ]
+    },
+    {
+      "file": "smask-group-typed.pdf",
+      "engine": "pdfjs",
+      "variant": "pdfium",
+      "pages": 1,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "533×533 / 533×533",
+          "maxDiff": 5,
+          "offShare": 0,
+          "offBox": null
+        }
+      ]
+    },
+    {
+      "file": "smask-group-typed.pdf",
+      "engine": "pdfjs-next",
+      "variant": "pdfium",
+      "pages": 1,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "533×533 / 533×533",
+          "maxDiff": 5,
+          "offShare": 0,
+          "offBox": null
+        }
+      ]
+    },
+    {
+      "file": "smask-group-typed.pdf",
+      "engine": "hayro",
+      "variant": "pdfium",
+      "pages": 1,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "533×533 / 533×533",
+          "maxDiff": 2,
+          "offShare": 0,
+          "offBox": null
+        }
+      ]
+    },
+    {
+      "file": "smask-group.pdf",
+      "engine": "pdfjs",
+      "variant": "pdfium",
+      "pages": 1,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "533×533 / 533×533",
+          "maxDiff": 5,
+          "offShare": 0,
+          "offBox": null
+        }
+      ]
+    },
+    {
+      "file": "smask-group.pdf",
+      "engine": "pdfjs-next",
+      "variant": "pdfium",
+      "pages": 1,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "533×533 / 533×533",
+          "maxDiff": 5,
+          "offShare": 0,
+          "offBox": null
+        }
+      ]
+    },
+    {
+      "file": "smask-group.pdf",
+      "engine": "hayro",
+      "variant": "pdfium",
+      "pages": 1,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "533×533 / 533×533",
+          "maxDiff": 2,
+          "offShare": 0,
+          "offBox": null
+        }
+      ]
+    },
+    {
+      "file": "smask-luminosity.pdf",
+      "engine": "pdfjs",
+      "variant": "pdfium",
+      "pages": 1,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "533×533 / 533×533",
+          "maxDiff": 255,
+          "offShare": 0.1875,
+          "offBox": [
+            0,
+            0.5,
+            0.5,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "file": "smask-luminosity.pdf",
+      "engine": "pdfjs-next",
+      "variant": "pdfium",
+      "pages": 1,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "533×533 / 533×533",
+          "maxDiff": 255,
+          "offShare": 0.1875,
+          "offBox": [
+            0,
+            0.5,
+            0.5,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "file": "smask-luminosity.pdf",
+      "engine": "hayro",
+      "variant": "pdfium",
+      "pages": 1,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "533×533 / 533×533",
+          "maxDiff": 153,
+          "offShare": 0.0625,
+          "offBox": [
+            0.25,
+            0.5,
+            0.5,
+            0.75
+          ]
+        }
+      ]
+    },
+    {
+      "file": "smask-nomask.pdf",
+      "engine": "pdfjs",
+      "variant": "pdfium",
+      "pages": 1,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "533×533 / 533×533",
+          "maxDiff": 3,
+          "offShare": 0,
+          "offBox": null
+        }
+      ]
+    },
+    {
+      "file": "smask-nomask.pdf",
+      "engine": "pdfjs-next",
+      "variant": "pdfium",
+      "pages": 1,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "533×533 / 533×533",
+          "maxDiff": 3,
+          "offShare": 0,
+          "offBox": null
+        }
+      ]
+    },
+    {
+      "file": "smask-nomask.pdf",
+      "engine": "hayro",
+      "variant": "pdfium",
+      "pages": 1,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "533×533 / 533×533",
+          "maxDiff": 2,
+          "offShare": 0,
+          "offBox": null
+        }
+      ]
+    },
+    {
+      "file": "smask-normal-nomask.pdf",
+      "engine": "pdfjs",
+      "variant": "pdfium",
+      "pages": 1,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "533×533 / 533×533",
+          "maxDiff": 6,
+          "offShare": 0,
+          "offBox": null
+        }
+      ]
+    },
+    {
+      "file": "smask-normal-nomask.pdf",
+      "engine": "pdfjs-next",
+      "variant": "pdfium",
+      "pages": 1,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "533×533 / 533×533",
+          "maxDiff": 6,
+          "offShare": 0,
+          "offBox": null
+        }
+      ]
+    },
+    {
+      "file": "smask-normal-nomask.pdf",
+      "engine": "hayro",
+      "variant": "pdfium",
+      "pages": 1,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "533×533 / 533×533",
+          "maxDiff": 6,
+          "offShare": 0,
+          "offBox": null
+        }
+      ]
+    },
+    {
+      "file": "smask-normal.pdf",
+      "engine": "pdfjs",
+      "variant": "pdfium",
+      "pages": 1,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "533×533 / 533×533",
+          "maxDiff": 102,
+          "offShare": 0.125,
+          "offBox": [
+            0,
+            0.5,
+            0.5,
+            0.75
+          ]
+        }
+      ]
+    },
+    {
+      "file": "smask-normal.pdf",
+      "engine": "pdfjs-next",
+      "variant": "pdfium",
+      "pages": 1,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "533×533 / 533×533",
+          "maxDiff": 102,
+          "offShare": 0.125,
+          "offBox": [
+            0,
+            0.5,
+            0.5,
+            0.75
+          ]
+        }
+      ]
+    },
+    {
+      "file": "smask-normal.pdf",
+      "engine": "hayro",
+      "variant": "pdfium",
+      "pages": 1,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "533×533 / 533×533",
+          "maxDiff": 6,
+          "offShare": 0,
+          "offBox": null
+        }
+      ]
+    },
+    {
+      "file": "smask-typed.pdf",
+      "engine": "pdfjs",
+      "variant": "pdfium",
+      "pages": 1,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "533×533 / 533×533",
+          "maxDiff": 153,
+          "offShare": 0.1875,
+          "offBox": [
+            0,
+            0.5,
+            0.5,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "file": "smask-typed.pdf",
+      "engine": "pdfjs-next",
+      "variant": "pdfium",
+      "pages": 1,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "533×533 / 533×533",
+          "maxDiff": 153,
+          "offShare": 0.1875,
+          "offBox": [
+            0,
+            0.5,
+            0.5,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "file": "smask-typed.pdf",
+      "engine": "hayro",
+      "variant": "pdfium",
+      "pages": 1,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "533×533 / 533×533",
+          "maxDiff": 2,
+          "offShare": 0,
+          "offBox": null
+        }
+      ]
+    }
+  ]
+}
