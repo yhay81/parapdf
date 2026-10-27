@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
+import { crossOriginIsolation } from "../../bench/scripts/isolation.ts";
 
 const exampleDir = fileURLToPath(new URL(".", import.meta.url));
 const benchDir = join(exampleDir, "../../bench");
@@ -10,11 +11,6 @@ const publicDir = join(exampleDir, "public");
 // Optional unreleased pdf.js master build (bench/scripts/build-pdfjs-next.sh).
 const pdfjsNextDir = join(benchDir, "vendor/pdf.js/build/generic");
 const hasPdfjsNext = existsSync(join(pdfjsNextDir, "build/pdf.renderer.mjs"));
-
-const isolationHeaders = {
-  "Cross-Origin-Opener-Policy": "same-origin",
-  "Cross-Origin-Embedder-Policy": "require-corp",
-};
 
 /**
  * Stage the benchmark corpus, and pdf.js master's binary assets, as
@@ -47,7 +43,7 @@ function stageStaticFiles(): Plugin {
 
 export default defineConfig(({ command }) => ({
   root: exampleDir,
-  plugins: [react(), stageStaticFiles()],
+  plugins: [react(), stageStaticFiles(), crossOriginIsolation()],
   resolve: {
     alias: [
       {
@@ -63,8 +59,6 @@ export default defineConfig(({ command }) => ({
         : []),
     ],
   },
-  server: { headers: isolationHeaders },
-  preview: { headers: isolationHeaders },
   worker: { format: "es" },
   build: {
     target: "es2023",

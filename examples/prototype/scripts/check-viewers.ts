@@ -22,14 +22,6 @@ const configFile = join(exampleDir, "vite.config.ts");
 const engine = process.env.ENGINE ?? "pdfjs-next";
 const launched = await launchBrowser();
 console.log(`${launched.label}, engine ${engine}`);
-// WebKit refuses module worker scripts it takes from its cache in this
-// cross-origin-isolated demo (as check-lifecycle.ts notes), here when the
-// check opens saved bytes again; pdf.js then parses them on the main thread.
-// That is reported, not counted as an error.
-const isWebKitWorkerRefusal = (text: string) =>
-  launched.label.startsWith("WebKit") &&
-  /Cross-Origin-Embedder-Policy|due to access control checks/.test(text);
-let workerRefusals = 0;
 
 async function ready(page: Page, index: number) {
   await page.waitForFunction(
@@ -195,14 +187,9 @@ async function checkSharedEditing(url: string) {
   });
   const page = await context.newPage();
   const errors: string[] = [];
-  page.on("pageerror", (error) => {
-    if (isWebKitWorkerRefusal(String(error))) workerRefusals++;
-    else errors.push(String(error));
-  });
+  page.on("pageerror", (error) => errors.push(String(error)));
   page.on("console", (message) => {
-    if (message.type() !== "error") return;
-    if (isWebKitWorkerRefusal(message.text())) workerRefusals++;
-    else errors.push(message.text());
+    if (message.type() === "error") errors.push(message.text());
   });
   try {
     await restoreScaleFactor(page, new URL("calibrate.html", url).href);
@@ -283,11 +270,6 @@ async function checkSharedEditing(url: string) {
     assert.equal(await page.evaluate(() => window.__split!.annotations[1]!.export().length), 1);
     assert.deepEqual(errors, []);
     console.log("PASS closing one editing viewer leaves the other's annotations");
-    if (workerRefusals > 0) {
-      console.log(
-        `NOTE the browser refused a worker script under COEP ${workerRefusals} times; pdf.js then parsed those bytes on the main thread`,
-      );
-    }
   } catch (error) {
     await captureFailure(error instanceof Error ? error.message : String(error));
     throw error;

@@ -27,12 +27,6 @@ const exampleDir = fileURLToPath(new URL("..", import.meta.url));
 const configFile = join(exampleDir, "vite.config.ts");
 const engine = process.env.ENGINE ?? "pdfjs-next";
 let failures = 0;
-// WebKit refuses module worker scripts it takes from its cache in this
-// cross-origin-isolated demo, so pdf.js's renderer worker for a reopened
-// document fails to start there. That is reported, not counted as a failure.
-const browserNotes: string[] = [];
-const isWebKitWorkerRefusal = (text: string) =>
-  /Cross-Origin-Embedder-Policy|due to access control checks/.test(text);
 
 function check(name: string, ok: boolean, detail = ""): void {
   console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
@@ -91,13 +85,9 @@ async function openPage(browser: Browser, url: string) {
   const page = await context.newPage();
   await restoreScaleFactor(page, new URL("calibrate.html", url).href);
   const errors: string[] = [];
-  const record = (text: string) => {
-    if (isWebKitWorkerRefusal(text)) browserNotes.push(text);
-    else errors.push(text);
-  };
-  page.on("pageerror", (error) => record(error.message));
+  page.on("pageerror", (error) => errors.push(error.message));
   page.on("console", (message) => {
-    if (message.type() === "error") record(message.text());
+    if (message.type() === "error") errors.push(message.text());
   });
   await page.goto(url);
   await waitForNewViewer(page);
@@ -281,10 +271,5 @@ try {
   await launched.close();
 }
 
-if (browserNotes.length > 0) {
-  console.log(
-    `NOTE the browser refused a worker script under COEP ${browserNotes.length} times; pdf.js then draws that document on the main thread`,
-  );
-}
 console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);
