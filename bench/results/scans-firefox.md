@@ -1,0 +1,72 @@
+# ParaPDF engine benchmark: Firefox 157.0
+
+- Run at: 2026-10-27T16:57:52.732Z
+- Machine: darwin 27.0.0 arm64, Apple M2 Pro (12 logical cores), 32 GiB
+- Browser: Firefox 157.0 (Playwright build, headless), WebGL renderer: Apple M1, or similar, crossOriginIsolated: true
+- Power: AC. Idle baseline: on an idle page a 4 ms timer fires 2.0 ms late (median) / 3.3 ms (p95), and animation frames arrive every 16.7 ms. The run waited 2 times (5 min in all) for other Playwright browsers and repeated 1 job that another browser overlapped.
+- Engines: pdfjs-dist 6.4.299 (main-thread drawing), pdf.js master 157d30e83 2026-10-17 (renderer worker), @embedpdf/pdfium 2.15.1 (worker), hayro 0.8.0 (worker, wasm simd128). `-hwa` variants set `enableHWA` for a GPU-backed canvas.
+- Method: scale 2.7 (100% zoom at devicePixelRatio 2), first 10 pages rendered one after another, fresh page per job, median of 3 runs. "Visible" waits two animation frames after the pixels are committed to the canvas.
+- Reproduce: `pnpm bench:build && BROWSER=firefox ENGINES=pdfjs,pdfjs-hwa,pdfjs-next,pdfjs-next-hwa OUTPUT=scans- pnpm bench`
+
+## Engine payload
+
+| Engine | Files | Raw | gzip | brotli |
+|---|---|---:|---:|---:|
+| pdfjs | 2 | 1655 KiB | 492 KiB | 404 KiB |
+| pdfjs-next (workers unminified) | 3 | 2852 KiB | 645 KiB | 521 KiB |
+| pdfium | 3 | 4691 KiB | 2136 KiB | 1645 KiB |
+| hayro | 3 | 3967 KiB | 1707 KiB | 1364 KiB |
+
+## First page visible, cold (ms)
+
+Frame-aligned, so values move in steps of about 16.7 ms; use the committed table for finer engine differences.
+
+| File | pdfjs | pdfjs-hwa | pdfjs-next | pdfjs-next-hwa |
+|---|---:|---:|---:|---:|
+| patent-us223898.pdf | 182.6 | 150.9 | 98.7 | 100.6 |
+| bunka-kokugo-series-019-p4.pdf | 230.3 | 286.4 | 232.4 | 180.0 |
+
+## First page committed to the canvas, cold (ms)
+
+| File | pdfjs | pdfjs-hwa | pdfjs-next | pdfjs-next-hwa |
+|---|---:|---:|---:|---:|
+| patent-us223898.pdf | 148.3 | 119.7 | 83.1 | 75.8 |
+| bunka-kokugo-series-019-p4.pdf | 223.8 | 279.8 | 199.2 | 158.1 |
+
+## Per-page visible p50 / p95 (ms)
+
+| File | pdfjs | pdfjs-hwa | pdfjs-next | pdfjs-next-hwa |
+|---|---:|---:|---:|---:|
+| patent-us223898.pdf | 126.8 / 214.2 | 134.0 / 488.7 | 99.6 / 182.1 | 115.3 / 232.3 |
+| bunka-kokugo-series-019-p4.pdf | 230.3 / 469.4 | 286.4 / 366.1 | 232.4 / 300.0 | 180.0 / 299.0 |
+
+## Main thread blocked while rendering (ms)
+
+Sum of event-loop lag measured by a 4 ms timer during the whole render phase, counting only lateness beyond 2 ms or the idle page's 95th percentile, whichever is larger. Lower means input and scrolling stay responsive while pages render.
+
+| File | pdfjs | pdfjs-hwa | pdfjs-next | pdfjs-next-hwa |
+|---|---:|---:|---:|---:|
+| patent-us223898.pdf | 76 | 94 | 53 | 34 |
+| bunka-kokugo-series-019-p4.pdf | 32 | 26 | 17 | 19 |
+
+## Event-loop lag p95 / max (ms)
+
+| File | pdfjs | pdfjs-hwa | pdfjs-next | pdfjs-next-hwa |
+|---|---:|---:|---:|---:|
+| patent-us223898.pdf | 11.5 / 18.9 | 10.1 / 16.6 | 5.5 / 15.4 | 6.9 / 18.6 |
+| bunka-kokugo-series-019-p4.pdf | 3.3 / 41.5 | 4.6 / 35.5 | 3.3 / 14.3 | 11.6 / 11.9 |
+
+## Engine init + document open (ms)
+
+| File | pdfjs | pdfjs-hwa | pdfjs-next | pdfjs-next-hwa |
+|---|---:|---:|---:|---:|
+| patent-us223898.pdf | 215 + 4 | 167 + 6 | 157 + 3 | 157 + 5 |
+| bunka-kokugo-series-019-p4.pdf | 156 + 6 | 185 + 7 | 222 + 5 | 149 + 3 |
+
+## Wasm linear memory after rendering (MiB)
+
+| File | pdfjs | pdfjs-hwa | pdfjs-next | pdfjs-next-hwa |
+|---|---:|---:|---:|---:|
+| patent-us223898.pdf | — | — | — | — |
+| bunka-kokugo-series-019-p4.pdf | — | — | — | — |
+
