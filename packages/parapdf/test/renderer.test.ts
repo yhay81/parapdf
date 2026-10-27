@@ -103,7 +103,9 @@ describe("Renderer page DOM", () => {
     const host = fakeHost("parapdf-overlay-layer");
     renderer.attach(0, host);
     const classes = () => (host as unknown as FakeElement).children.map((child) => child.className);
-    const editor = {} as Parameters<Renderer["setAnnotationEditor"]>[0];
+    const editor = { layerEditing: { editing: false } } as Parameters<
+      Renderer["setAnnotationEditor"]
+    >[0];
     renderer.setAnnotationEditor(editor);
     assert.deepEqual(classes().slice(-2), ["parapdf-editor-layer", "parapdf-overlay-layer"]);
     renderer.setAnnotationEditor(null);

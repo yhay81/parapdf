@@ -554,6 +554,62 @@ async function navigation(): Promise<Uint8Array> {
   return doc.save({ useObjectStreams: false });
 }
 
+/**
+ * Annotations the file holds, one of each kind pdf.js's editor edits (text,
+ * freehand, highlight, and an image stamp) and a square it does not, on the
+ * first of eight pages, for the checks that edit them. pdf.js draws all but
+ * the stamp from their dictionaries alone.
+ */
+async function annotations(): Promise<Uint8Array> {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const { context } = doc;
+  for (let index = 0; index < 8; index++) {
+    const page = doc.addPage([612, 792]);
+    page.drawText(`Page ${index + 1}`, { x: 72, y: 720, size: 24, font });
+    page.drawText("The line a highlight from the file marks.", { x: 72, y: 444, size: 14, font });
+  }
+  const stamp = context.register(
+    context.stream("0.2 0.6 0.9 rg 0 0 100 60 re f", {
+      Type: "XObject",
+      Subtype: "Form",
+      BBox: [0, 0, 100, 60],
+    }),
+  );
+  const annots = [
+    {
+      Subtype: "FreeText",
+      Rect: [72, 640, 320, 670],
+      Contents: PDFString.of("A note from the file"),
+      DA: PDFString.of("/Helv 14 Tf 0 0 1 rg"),
+    },
+    {
+      Subtype: "Ink",
+      Rect: [72, 500, 272, 600],
+      InkList: [[80, 510, 120, 590, 160, 520, 200, 580, 240, 510, 264, 590]],
+      C: [1, 0, 0],
+      BS: { W: 3 },
+    },
+    {
+      Subtype: "Highlight",
+      Rect: [70, 438, 360, 462],
+      QuadPoints: [70, 462, 360, 462, 70, 438, 360, 438],
+      C: [1, 1, 0],
+    },
+    {
+      Subtype: "Stamp",
+      Rect: [350, 500, 450, 560],
+      Name: "Approved",
+      AP: { N: stamp },
+    },
+    { Subtype: "Square", Rect: [350, 640, 450, 690], C: [0, 0.6, 0], BS: { W: 2 } },
+  ].map((annotation) =>
+    context.register(context.obj({ Type: "Annot", F: 4, ...annotation } as never)),
+  );
+  doc.getPage(0).node.set(PDFName.of("Annots"), context.obj(annots));
+  return doc.save({ useObjectStreams: false });
+}
+
 mkdirSync(outDir, { recursive: true });
 for (const [name, build] of [
   ["synthetic-text-1000.pdf", longText],
@@ -565,6 +621,7 @@ for (const [name, build] of [
   ["synthetic-encrypted.pdf", encrypted],
   ["synthetic-restricted.pdf", restricted],
   ["synthetic-navigation.pdf", navigation],
+  ["synthetic-annotations.pdf", annotations],
 ] as const) {
   const bytes = await build();
   writeFileSync(join(outDir, name), bytes);

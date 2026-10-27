@@ -9,8 +9,11 @@ class FakeManager {
   /** The manager made last, whose ids its editor's annotations get. */
   static last: FakeManager;
   #id = 0;
+  #mode = 0;
   viewParameters = { realScale: 1, rotation: 0 };
   _signal = null;
+  /** The editors of the page, by page. */
+  editors: unknown[] = [];
 
   constructor() {
     FakeManager.last = this;
@@ -18,6 +21,20 @@ class FakeManager {
 
   getId() {
     return `pdfjs_internal_editor_${this.#id++}`;
+  }
+
+  async updateMode(mode: number) {
+    this.#mode = mode;
+  }
+
+  getMode() {
+    return this.#mode;
+  }
+
+  endCurrentEditing() {}
+
+  getEditors() {
+    return this.editors;
   }
 
   destroy() {}
@@ -44,18 +61,22 @@ const pdfjs = {
 /** A document whose annotation storage is a map, as pdf.js's is. */
 function document() {
   const storage = new Map<string, unknown>();
+  /** How often pdf.js was told to collect the ids of changed annotations again. */
+  const resets = { count: 0 };
   const doc = {
     numPages: 1,
     annotationStorage: {
       setValue: (id: string, value: unknown) => storage.set(id, value),
       remove: (id: string) => storage.delete(id),
+      resetModifiedIds: () => resets.count++,
       [Symbol.iterator]: () => storage.entries(),
     },
   } as unknown as Pdfjs.PDFDocumentProxy;
-  return { doc, storage };
+  return { doc, storage, resets };
 }
 
 const editorOf = (doc: Pdfjs.PDFDocumentProxy) => {
+  const changes: boolean[] = [];
   const editor = createPdfjsAnnotationEditor(pdfjs, doc, async () => ({}) as never, {
     container: {} as HTMLElement,
     pages: {} as HTMLElement,
@@ -65,9 +86,23 @@ const editorOf = (doc: Pdfjs.PDFDocumentProxy) => {
     onStateChange() {},
     onStylesChange() {},
     onToolChange() {},
+    onRedraw: () => changes.push(editor.layerEditing.editing),
   });
-  return { editor, manager: FakeManager.last };
+  return { editor, manager: FakeManager.last, changes };
 };
+
+/** An editor as pdf.js's manager lists it, of an annotation created or of the file's. */
+const editorData = (
+  serialized: Record<string, unknown> | null,
+  { replaces = null as string | null, deleted = false } = {},
+) => ({
+  editorType: "ink",
+  annotationElementId: replaces,
+  deleted,
+  isEmpty: () => false,
+  serialize: (isForCopying = false) =>
+    serialized && (isForCopying || replaces === null || !deleted) ? { ...serialized } : null,
+});
 
 describe("annotation editors of one document", () => {
   it("give their annotations ids of the document, not of each editor", () => {
@@ -103,5 +138,40 @@ describe("annotation editors of one document", () => {
     assert.ok(storage.has(id), "saved and printed meanwhile");
     forget();
     assert.equal(storage.has(id), false);
+  });
+
+  it("draw pages again as a tool is chosen and as it goes back to none", async () => {
+    const { doc, resets } = document();
+    const { editor, changes } = editorOf(doc);
+    assert.equal(editor.layerEditing.editing, false);
+    await editor.setTool("ink");
+    assert.equal(editor.layerEditing.editing, true);
+    await editor.setTool("freetext");
+    assert.deepEqual(changes, [true], "another tool changes nothing pages draw");
+    assert.equal(resets.count, 0);
+    await editor.setTool("none");
+    assert.deepEqual(changes, [true, false]);
+    assert.equal(resets.count, 1, "drawings leave out the annotations changed meanwhile");
+    editor.destroy();
+    assert.equal(resets.count, 2, "closing brings the file's annotations back");
+  });
+
+  it("export the file's annotations once changed, in their place, and leave deletions out", () => {
+    const { doc } = document();
+    const { editor, manager } = editorOf(doc);
+    manager.editors = [
+      editorData({ rect: [0, 0, 1, 1] }),
+      // pdf.js serializes the file's annotations only once changed, but for copying.
+      {
+        ...editorData({ rect: [1, 1, 2, 2] }, { replaces: "12R" }),
+        serialize: (copy = false) => (copy ? { rect: [1, 1, 2, 2] } : null),
+      },
+      editorData({ rect: [2, 2, 3, 3] }, { replaces: "13R" }),
+      editorData({ rect: [3, 3, 4, 4] }, { replaces: "14R", deleted: true }),
+    ];
+    assert.deepEqual(
+      editor.export().map(({ data }) => data),
+      [{ rect: [0, 0, 1, 1] }, { rect: [2, 2, 3, 3], annotationElementId: "13R" }],
+    );
   });
 });

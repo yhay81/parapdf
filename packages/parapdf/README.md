@@ -656,6 +656,18 @@ form pdf.js pastes copies in, which may change when ParaPDF moves to
 another pdf.js; the changelog says when. Text being typed counts once it is
 committed, when the reader clicks elsewhere or another tool is chosen.
 
+The annotations the PDF already holds of the kinds the tools create (text,
+drawings, highlights, and images) become editable while a tool is chosen,
+with the `annotationLayer` option on, as it is by default: they can be
+selected, moved, restyled, and deleted as those created, and a double click
+on one with no tool chosen selects it. Undo, unmounting, zoom, and rotation
+keep the changes, and `save()`, `download()`, and `print()` write them.
+`export()` includes the changed ones, not the deleted ones, and `import()`
+puts each back in place of the annotation it changed. Annotations of other
+kinds stay as they are drawn. Other viewers of the document leave a changed
+annotation out once they draw its page again, without showing the change,
+until the viewer that changed it goes.
+
 A viewer keeps its annotations while its `PdfViewer` unmounts and shows
 them again when it returns; they go when the viewer goes or the document
 closes, so export or save them before. Each viewer shows the annotations it
@@ -999,10 +1011,10 @@ with `PdfThumbnails`'s.
 - Released pdfjs-dist draws pages on the main thread. Drawing in a worker
   needs pdf.js's renderer worker (`configurePdfjs({ rendererSrc })`), which
   is only in unreleased pdf.js builds so far.
-- Not yet supported: editing annotations the PDF already holds, form
-  scripts (calculations, validation, and button actions), XFA forms, and
-  right-to-left page order (`/ViewerPreferences /Direction`). Annotations
-  the reader creates can be moved, restyled, and deleted; those in the file
+- Not yet supported: form scripts (calculations, validation, and button
+  actions), XFA forms, and right-to-left page order
+  (`/ViewerPreferences /Direction`). Of the annotations the PDF already
+  holds, only text, drawings, highlights, and images can be edited; others
   stay as they are drawn.
 - The current page is reported, never controlled: `onPageChange` reports it
   and `viewer.goToPage()` sets it.

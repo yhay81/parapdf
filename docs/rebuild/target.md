@@ -79,6 +79,26 @@ those of the others (see "Open questions"). A viewer whose viewport is
 hidden leaves its annotations in the storage, and shows them again when it
 returns; closing a viewer removes them, as closing the document did before.
 
+Editing reaches the annotations the file holds too, those of the kinds
+pdf.js's editor edits: text, freehand drawings, highlights, and images whose
+contents the file does not lock. While a tool is chosen, they become the
+viewer's editors, taken from the page's annotation layer (so the
+`annotationLayer` option must be on), and can be selected, moved,
+restyled, and deleted; a double click on one with no tool chosen selects it
+with its tool, as in pdf.js's viewer. Pages are drawn again, leaving out
+the annotations being edited, when a tool is chosen, and, leaving out those
+changed or deleted, when it goes back to none, as pdf.js's viewer draws
+them again. Changes are undone and redone as any other edit, stay through
+unmounting, zoom, and rotation, and go into saving and printing.
+`export()` includes the changed annotations and leaves deletions out;
+`import()` puts each back in place of the file's annotation it changed,
+which drawings then leave out. Other kinds stay as the file draws them. Another viewer of the session leaves an annotation that one
+viewer changed or deleted out of its drawings once it draws the page again,
+without showing the change: pdf.js leaves out of every drawing what the
+document's annotation storage changed (see "Open questions"). Closing the
+editing viewer brings the file's annotations back, as it removes those it
+created.
+
 The session's state and its public surface (M6):
 
 - The registry's entry for a source publishes the session's document state
@@ -177,8 +197,9 @@ The renderer draws a viewer's mounted pages. It splits what 0.x
   and structure layers. A kept canvas moves into the page's next host
   without a copy.
 - DOM layers are built one at a time, after scrolling settles, in idle time,
-  never while a visible page waits for its first pixels: text, then the
-  annotations being edited, then links and forms, as in 0.x. Text layers
+  never while a visible page waits for its first pixels: text, then links
+  and forms, then the annotations being edited, which take the file's
+  annotations from the page's annotation layer and are built again with it. Text layers
   keep the zoom they were laid out at and follow later zooms with CSS.
 - pdf.js draws on the main thread today. Its renderer worker, once a
   released pdfjs-dist has it, replaces that if it measures better.
@@ -408,5 +429,6 @@ them in passing:
 - Text layers for unmounted pages, so that the browser's own find and
   assistive technology reach the whole document.
 - Whether viewers of one session show the annotations other viewers create
-  as they edit, beyond saving and printing them together (M4 shows each
-  viewer's own).
+  or change as they edit, beyond saving and printing them together (M4
+  shows each viewer's own; another viewer leaves a changed annotation of
+  the file out once it draws the page again).

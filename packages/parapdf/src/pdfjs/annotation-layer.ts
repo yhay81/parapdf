@@ -42,9 +42,31 @@ export interface AnnotationLayerRequest {
   layers?: OptionalContentConfig;
   /** The page's structure tree, built with its text layer, which labels its annotations. */
   structTree?: StructTreeBuilder | null;
+  /** The annotation editor the layer hands the annotations pdf.js edits to. */
+  editor?: AnnotationLayerEditing | null;
+}
+
+/**
+ * What a page's annotation layer and drawing need of the viewer's
+ * annotation editor, so that the annotations of the file that pdf.js edits
+ * become its editors.
+ */
+export interface AnnotationLayerEditing {
+  /** pdf.js's AnnotationEditorUIManager, which the layer reports them to. */
+  readonly uiManager: object;
+  /** Where a double click on one asks the editor to edit it. */
+  readonly eventBus: object;
+  /**
+   * A tool is chosen: the page's drawing leaves them out, and draws images
+   * among them into canvases of their own, which the layer takes, as it
+   * takes those of form fields (see `formLayerOf`).
+   */
+  readonly editing: boolean;
 }
 
 export interface AnnotationLayerHandle {
+  /** pdf.js's layer, which the page's annotation editor layer takes the file's annotations from. */
+  readonly layer: Pdfjs.AnnotationLayer;
   update(cssScale: number, rotation: Rotation): void;
 }
 
@@ -58,11 +80,16 @@ export interface AnnotationLayerTask {
  * Internal links and named actions go to the viewer; pdf.js's own viewer
  * components are never involved.
  */
-function createLinkService(links: LinkHandlers, doc: Pdfjs.PDFDocumentProxy) {
+function createLinkService(
+  links: LinkHandlers,
+  doc: Pdfjs.PDFDocumentProxy,
+  eventBus: object | undefined,
+) {
   const external = links.externalLinks !== "disabled";
   return {
     externalLinkEnabled: external,
-    eventBus: undefined,
+    // Where annotations the editor edits ask for it on a double click.
+    eventBus,
     addLinkAttributes(link: HTMLAnchorElement, url: string) {
       // Without an href the element is neither focusable nor a link, and the
       // text it covered stays readable in the text layer.
@@ -133,6 +160,7 @@ export function buildAnnotationLayer(
     forms = false,
     layers,
     structTree,
+    editor,
   }: AnnotationLayerRequest,
 ): AnnotationLayerTask {
   let cancelled = false;
@@ -146,16 +174,18 @@ export function buildAnnotationLayer(
     ]);
     if (cancelled) throw new RenderCancelledError("annotation layer cancelled");
     const viewport = viewportOf(page, cssScale, rotation);
-    const linkService = createLinkService(links, doc);
+    const linkService = createLinkService(links, doc, editor?.eventBus);
     // Without forms, form fields stay in the drawing (pdf.js's default
     // annotation mode), so only links, popups, and other annotations
-    // that are not fields become HTML here.
-    const form = forms ? formLayerOf(container) : null;
+    // that are not fields become HTML here. With an editor, the drawings
+    // made while a tool is chosen hand the layer the canvases of images
+    // it edits, whether or not one was chosen as the layer was built.
+    const form = forms || editor ? formLayerOf(container) : null;
     const layer = new pdfjs.AnnotationLayer({
       div: container,
       accessibilityManager: null,
       annotationCanvasMap: form?.canvases ?? null,
-      annotationEditorUIManager: null,
+      annotationEditorUIManager: (editor?.uiManager ?? null) as never,
       page,
       viewport,
       structTreeLayer: structTree ?? null,
@@ -180,6 +210,7 @@ export function buildAnnotationLayer(
     if (iconUrls) placeIcons(container, imageResourcesPath, iconUrls);
     if (form) form.layer = layer;
     return {
+      layer,
       update(nextScale, nextRotation) {
         layer.update({ viewport: viewportOf(page, nextScale, nextRotation) } as never);
       },

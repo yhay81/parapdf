@@ -464,6 +464,8 @@ export class Renderer {
    */
   setAnnotationEditor(editor: AnnotationEditor | null): void {
     if (this.#layers.annotationEditor === (editor ?? undefined)) return;
+    // Pages drawn without the annotations an editor was editing show them again.
+    const editing = this.#layers.annotationEditor?.layerEditing.editing ?? false;
     for (const slot of this.#slots.values()) {
       if (editor) addEditorLayer(slot.elements);
     }
@@ -471,6 +473,7 @@ export class Renderer {
     if (!editor) {
       for (const slot of this.#slots.values()) removeEditorLayer(slot.elements);
     }
+    if (editing) this.invalidateContent();
   }
 
   /**
@@ -500,10 +503,15 @@ export class Renderer {
    * and annotation layers are built again.
    */
   invalidateContent(): void {
+    this.#layers.invalidateAnnotations();
+    this.invalidateDrawings();
+  }
+
+  /** What the drawings show changed, but not the layers: every page is drawn again. */
+  invalidateDrawings(): void {
     this.#version++;
     this.#forgetAll();
     for (const slot of this.#slots.values()) slot.job?.task.cancel();
-    this.#layers.invalidateAnnotations();
     this.#pump();
   }
 
@@ -736,6 +744,10 @@ export class Renderer {
       canvas,
       ...(drawing.pixels ? { region: drawing.pixels } : {}),
       ...(forms && elements.annotations ? { formLayer: elements.annotations } : {}),
+      // The annotation layer makes editors of what the drawing leaves out.
+      ...(this.#layers.annotationEditor?.layerEditing.editing && elements.annotations
+        ? { editing: elements.annotations }
+        : {}),
       ...(pageColors ? { colors: pageColors } : {}),
       ...(layers ? { layers: layers.config } : {}),
     });

@@ -5,9 +5,8 @@ description: What ParaPDF does not do yet, and what has not been verified.
 
 ## Not supported yet
 
-- Editing the annotations a PDF already holds. Annotations the reader
-  creates can be moved, restyled, and deleted; those in the file stay as
-  they are drawn.
+- Editing the annotations a PDF already holds other than text, drawings,
+  highlights, and images: those stay as they are drawn.
 - Comments on created annotations, and pdf.js's alt text dialog: images take
   their alternative text from `addImage()`.
 - Form scripts (calculations, validation, and button actions), and XFA forms.

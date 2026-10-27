@@ -6,6 +6,14 @@ change the API.
 
 ## Unreleased
 
+- With `annotationEditing`, the annotations a PDF already holds of the kinds
+  the tools create (text, drawings, highlights, and images) become editable
+  while a tool is chosen: they can be selected, moved, restyled, and
+  deleted, and a double click on one with no tool chosen selects it. Saving
+  and printing write the changes; `export()` includes the changed ones, and
+  `import()` puts each back in place of the annotation it changed. Until now
+  they stayed as the file draws them (#4).
+
 - In WebKit, a drag selection that crosses from one page into the space
   above the next page's first line ends at the start of that page. Until now
   Playwright's WebKit on Linux selected all of the next page there.
