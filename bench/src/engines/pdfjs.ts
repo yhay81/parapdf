@@ -12,13 +12,15 @@ export function createPdfjsEngine({
   hwa,
   frame,
   record = false,
+  pathText = false,
 }: {
   hwa: boolean;
   frame: boolean;
   record?: boolean;
+  pathText?: boolean;
 }): EngineAdapter {
   return createPdfjsAdapter({
-    id: `pdfjs${hwa ? "-hwa" : ""}${frame ? "-frame" : ""}${record ? "-record" : ""}`,
+    id: `pdfjs${hwa ? "-hwa" : ""}${frame ? "-frame" : ""}${record ? "-record" : ""}${pathText ? "-pathtext" : ""}`,
     lib: pdfjs,
     label: "pdfjs-dist",
     workerUrl,
@@ -26,5 +28,6 @@ export function createPdfjsEngine({
     hwa,
     frame,
     record,
+    pathText,
   });
 }

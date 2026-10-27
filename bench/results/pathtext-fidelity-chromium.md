@@ -1,0 +1,52 @@
+# Frame display fidelity: Chromium 156.0.8078.4
+
+- Run at: 2026-10-27T16:27:48.134Z
+- Method: the first 10 pages of each file at scale 2.6667, read back from the displayed canvas through a 2D canvas after each render, in a fresh page per engine. Identical means the same size and the same SHA-256 of every pixel. Pages that differ are compared on 256 px wide samples: the largest channel difference, the share of sample pixels off by more than 16, and the box around them as shares of the page (left top right bottom). bench/results/raw/ keeps each such page's samples and a mask of those pixels.
+- Reproduce: `pnpm bench:build && BROWSER=chromium node bench/scripts/fidelity.ts`
+
+| File | Engine | Variant | Identical pages | Differing pages (largest difference, share off, where) |
+|---|---|---|---:|---|
+| bill-hr815.pdf | pdfjs-hwa | pdfjs-hwa-pathtext | 0/10 | p1 (180, 2.7% in 0.164 0.06 0.715 0.695), p2 (180, 3.5% in 0.273 0.151 0.715 0.695), p3 (177, 4.1% in 0.273 0.151 0.715 0.698), p4 (180, 4.0% in 0.273 0.151 0.715 0.695), p5 (173, 3.1% in 0.273 0.151 0.715 0.695), p6 (144, 2.8% in 0.273 0.151 0.715 0.688), p7 (165, 4.2% in 0.273 0.151 0.715 0.695), p8 (181, 4.2% in 0.273 0.151 0.715 0.695), p9 (173, 4.3% in 0.273 0.151 0.715 0.695), p10 (173, 3.9% in 0.273 0.151 0.715 0.695) |
+| bill-hr815.pdf | pdfjs | pdfjs-pathtext | 0/10 | p1 (177, 2.7% in 0.164 0.06 0.715 0.698), p2 (185, 3.6% in 0.273 0.151 0.715 0.698), p3 (178, 4.2% in 0.273 0.151 0.715 0.698), p4 (158, 4.0% in 0.273 0.151 0.715 0.698), p5 (155, 3.1% in 0.273 0.151 0.715 0.698), p6 (140, 2.9% in 0.273 0.151 0.715 0.688), p7 (172, 4.3% in 0.273 0.151 0.715 0.695), p8 (154, 4.1% in 0.273 0.151 0.715 0.698), p9 (160, 4.3% in 0.273 0.151 0.715 0.695), p10 (164, 3.9% in 0.273 0.151 0.715 0.695) |
+| bunka-kokugo-series-019-p4.pdf | pdfjs-hwa | pdfjs-hwa-pathtext | 1/1 | — |
+| bunka-kokugo-series-019-p4.pdf | pdfjs | pdfjs-pathtext | 1/1 | — |
+| f1040.pdf | pdfjs-hwa | pdfjs-hwa-pathtext | 0/2 | p1 (226, 5.6% in 0.059 0.03 0.941 0.976), p2 (153, 4.6% in 0.051 0.03 0.941 0.97) |
+| f1040.pdf | pdfjs | pdfjs-pathtext | 0/2 | p1 (230, 5.4% in 0.059 0.033 0.941 0.976), p2 (147, 4.3% in 0.051 0.033 0.941 0.97) |
+| mhlw-doc.pdf | pdfjs-hwa | pdfjs-hwa-pathtext | 0/2 | p1 (143, 4.7% in 0.145 0.047 0.891 0.884), p2 (128, 1.4% in 0.145 0.144 0.859 0.914) |
+| mhlw-doc.pdf | pdfjs | pdfjs-pathtext | 0/2 | p1 (135, 4.9% in 0.145 0.047 0.898 0.884), p2 (125, 1.4% in 0.145 0.144 0.859 0.914) |
+| nics-background-checks-2015-11.pdf | pdfjs-hwa | pdfjs-hwa-pathtext | 0/1 | p1 (241, 3.7% in 0.043 0.045 0.965 0.968) |
+| nics-background-checks-2015-11.pdf | pdfjs | pdfjs-pathtext | 0/1 | p1 (227, 3.6% in 0.043 0.045 0.961 0.968) |
+| patent-us223898.pdf | pdfjs-hwa | pdfjs-hwa-pathtext | 4/4 | — |
+| patent-us223898.pdf | pdfjs | pdfjs-pathtext | 4/4 | — |
+| pdfium-jpx-lzw.pdf | pdfjs-hwa | pdfjs-hwa-pathtext | 1/1 | — |
+| pdfium-jpx-lzw.pdf | pdfjs | pdfjs-pathtext | 1/1 | — |
+| pdfium-smask-blend.pdf | pdfjs-hwa | pdfjs-hwa-pathtext | 1/1 | — |
+| pdfium-smask-blend.pdf | pdfjs | pdfjs-pathtext | 1/1 | — |
+| pdfium-type3.pdf | pdfjs-hwa | pdfjs-hwa-pathtext | 1/1 | — |
+| pdfium-type3.pdf | pdfjs | pdfjs-pathtext | 1/1 | — |
+| synthetic-annotations.pdf | pdfjs-hwa | pdfjs-hwa-pathtext | 0/8 | p1 (255, 0.17% in 0.117 0.069 0.504 0.444), p2 (255, 0.18% in 0.117 0.069 0.504 0.444), p3 (255, 0.17% in 0.117 0.069 0.504 0.444), p4 (255, 0.18% in 0.117 0.069 0.504 0.444), p5 (255, 0.18% in 0.117 0.069 0.504 0.444), p6 (255, 0.18% in 0.117 0.069 0.504 0.444), p7 (255, 0.17% in 0.117 0.069 0.504 0.444), p8 (255, 0.17% in 0.117 0.069 0.504 0.444) |
+| synthetic-annotations.pdf | pdfjs | pdfjs-pathtext | 0/8 | p1 (255, 0.17% in 0.117 0.069 0.5 0.444), p2 (255, 0.18% in 0.117 0.069 0.5 0.444), p3 (255, 0.17% in 0.117 0.069 0.5 0.444), p4 (255, 0.18% in 0.117 0.069 0.5 0.444), p5 (255, 0.17% in 0.117 0.069 0.5 0.444), p6 (255, 0.18% in 0.117 0.069 0.5 0.444), p7 (255, 0.17% in 0.117 0.069 0.5 0.444), p8 (255, 0.17% in 0.117 0.069 0.5 0.444) |
+| synthetic-cjk-nonembedded.pdf | pdfjs-hwa | pdfjs-hwa-pathtext | 1/1 | — |
+| synthetic-cjk-nonembedded.pdf | pdfjs | pdfjs-pathtext | 1/1 | — |
+| synthetic-encrypted.pdf | pdfjs-hwa | pdfjs-hwa-pathtext | 0/0 | error: No password given |
+| synthetic-encrypted.pdf | pdfjs | pdfjs-pathtext | 0/0 | error: No password given |
+| synthetic-features.pdf | pdfjs-hwa | pdfjs-hwa-pathtext | 0/6 | p1 (255, 0.51% in 0.117 0.073 0.703 0.184), p2 (251, 0.21% in 0.117 0.073 0.465 0.305), p3 (251, 0.16% in 0.121 0.073 0.465 0.097), p4 (251, 0.15% in 0.121 0.073 0.453 0.097), p5 (251, 0.16% in 0.121 0.073 0.465 0.097), p6 (251, 0.16% in 0.121 0.073 0.465 0.097) |
+| synthetic-features.pdf | pdfjs | pdfjs-pathtext | 0/6 | p1 (255, 0.50% in 0.117 0.073 0.703 0.184), p2 (247, 0.21% in 0.117 0.073 0.465 0.305), p3 (247, 0.15% in 0.121 0.073 0.465 0.097), p4 (247, 0.15% in 0.121 0.073 0.453 0.097), p5 (247, 0.15% in 0.121 0.073 0.465 0.097), p6 (247, 0.16% in 0.121 0.073 0.465 0.097) |
+| synthetic-mixed-sizes.pdf | pdfjs-hwa | pdfjs-hwa-pathtext | 0/8 | p1 (255, 0.18% in 0.082 0.069 0.332 0.124), p2 (255, 0.17% in 0.082 0.069 0.332 0.124), p3 (195, 0.10% in 0.039 0.072 0.188 0.122), p4 (255, 0.17% in 0.082 0.069 0.332 0.124), p5 (255, 0.32% in 0.875 0.083 0.93 0.663), p6 (255, 0.20% in 0.078 0.073 0.41 0.133), p7 (250, 0.30% in 0.117 0.099 0.473 0.176), p8 (255, 0.18% in 0.082 0.069 0.332 0.124) |
+| synthetic-mixed-sizes.pdf | pdfjs | pdfjs-pathtext | 0/8 | p1 (255, 0.18% in 0.082 0.069 0.332 0.124), p2 (255, 0.18% in 0.082 0.069 0.332 0.124), p3 (181, 0.10% in 0.039 0.072 0.188 0.122), p4 (255, 0.18% in 0.082 0.069 0.332 0.124), p5 (255, 0.32% in 0.875 0.083 0.93 0.663), p6 (255, 0.20% in 0.078 0.073 0.41 0.133), p7 (249, 0.32% in 0.117 0.099 0.473 0.176), p8 (255, 0.18% in 0.082 0.069 0.332 0.124) |
+| synthetic-navigation.pdf | pdfjs-hwa | pdfjs-hwa-pathtext | 0/4 | p1 (255, 0.32% in 0.117 0.073 0.379 0.444), p2 (214, 0.13% in 0.121 0.073 0.379 0.097), p3 (214, 0.13% in 0.121 0.073 0.379 0.097), p4 (214, 0.13% in 0.121 0.073 0.379 0.097) |
+| synthetic-navigation.pdf | pdfjs | pdfjs-pathtext | 0/4 | p1 (255, 0.31% in 0.117 0.073 0.379 0.444), p2 (211, 0.14% in 0.121 0.073 0.379 0.097), p3 (211, 0.14% in 0.121 0.073 0.379 0.097), p4 (211, 0.14% in 0.121 0.073 0.379 0.097) |
+| synthetic-restricted.pdf | pdfjs-hwa | pdfjs-hwa-pathtext | 0/2 | p1 (239, 0.25% in 0.117 0.073 0.398 0.145), p2 (239, 0.25% in 0.117 0.073 0.398 0.145) |
+| synthetic-restricted.pdf | pdfjs | pdfjs-pathtext | 0/2 | p1 (236, 0.24% in 0.117 0.073 0.398 0.145), p2 (236, 0.24% in 0.117 0.073 0.398 0.145) |
+| synthetic-rtl.pdf | pdfjs-hwa | pdfjs-hwa-pathtext | 0/6 | p1 (255, 0.71% in 0.391 0.384 0.559 0.595), p2 (255, 0.50% in 0.371 0.384 0.563 0.595), p3 (255, 0.45% in 0.367 0.384 0.563 0.601), p4 (255, 0.55% in 0.367 0.384 0.566 0.595), p5 (255, 0.34% in 0.371 0.387 0.563 0.601), p6 (255, 0.40% in 0.375 0.384 0.563 0.601) |
+| synthetic-rtl.pdf | pdfjs | pdfjs-pathtext | 0/6 | p1 (255, 0.71% in 0.391 0.384 0.559 0.595), p2 (255, 0.51% in 0.371 0.384 0.563 0.595), p3 (255, 0.44% in 0.367 0.384 0.563 0.601), p4 (255, 0.55% in 0.367 0.384 0.566 0.595), p5 (255, 0.35% in 0.371 0.387 0.563 0.601), p6 (255, 0.40% in 0.375 0.384 0.563 0.601) |
+| synthetic-text-1000.pdf | pdfjs-hwa | pdfjs-hwa-pathtext | 0/10 | p1 (255, 9.0% in 0.117 0.048 0.855 0.912), p2 (238, 8.7% in 0.117 0.048 0.805 0.909), p3 (243, 8.8% in 0.117 0.048 0.809 0.912), p4 (238, 8.6% in 0.117 0.048 0.844 0.912), p5 (243, 8.7% in 0.117 0.048 0.824 0.912), p6 (248, 8.2% in 0.117 0.048 0.824 0.912), p7 (245, 8.5% in 0.117 0.048 0.84 0.912), p8 (238, 8.3% in 0.117 0.048 0.773 0.912), p9 (247, 8.9% in 0.117 0.048 0.809 0.912), p10 (255, 8.7% in 0.117 0.048 0.828 0.912) |
+| synthetic-text-1000.pdf | pdfjs | pdfjs-pathtext | 0/10 | p1 (255, 9.0% in 0.117 0.048 0.855 0.912), p2 (237, 8.8% in 0.117 0.048 0.805 0.909), p3 (241, 8.9% in 0.117 0.048 0.809 0.912), p4 (249, 8.7% in 0.117 0.048 0.844 0.912), p5 (241, 8.8% in 0.117 0.048 0.824 0.912), p6 (242, 8.3% in 0.117 0.048 0.824 0.912), p7 (245, 8.5% in 0.117 0.048 0.84 0.912), p8 (240, 8.4% in 0.117 0.048 0.773 0.912), p9 (236, 8.9% in 0.117 0.048 0.809 0.912), p10 (255, 8.8% in 0.117 0.048 0.824 0.912) |
+| synthetic-vector-200k.pdf | pdfjs-hwa | pdfjs-hwa-pathtext | 1/1 | — |
+| synthetic-vector-200k.pdf | pdfjs | pdfjs-pathtext | 1/1 | — |
+| synthetic-vector-pages.pdf | pdfjs-hwa | pdfjs-hwa-pathtext | 0/10 | p1 (231, 0.19% in 0.012 0.036 0.992 1), p2 (221, 0.05% in 0.063 0.036 0.152 0.057), p3 (201, 0.05% in 0.063 0.036 0.152 0.057), p4 (221, 0.05% in 0.063 0.036 0.152 0.057), p5 (221, 0.04% in 0.063 0.036 0.152 0.054), p6 (180, 0.04% in 0.063 0.036 0.152 0.057), p7 (188, 0.04% in 0.063 0.036 0.152 0.057), p8 (188, 0.05% in 0.063 0.036 0.152 0.057), p9 (221, 0.05% in 0.063 0.036 0.152 0.057), p10 (231, 0.06% in 0.063 0.036 0.168 0.057) |
+| synthetic-vector-pages.pdf | pdfjs | pdfjs-pathtext | 0/10 | p1 (230, 0.05% in 0.063 0.036 0.152 0.057), p2 (221, 0.05% in 0.063 0.036 0.152 0.054), p3 (198, 0.05% in 0.063 0.036 0.152 0.057), p4 (221, 0.05% in 0.063 0.036 0.152 0.057), p5 (221, 0.04% in 0.063 0.036 0.152 0.054), p6 (184, 0.04% in 0.063 0.036 0.152 0.057), p7 (191, 0.05% in 0.063 0.036 0.152 0.057), p8 (212, 0.05% in 0.063 0.036 0.152 0.057), p9 (221, 0.05% in 0.063 0.036 0.152 0.057), p10 (230, 0.06% in 0.063 0.036 0.164 0.057) |
+| usrguide.pdf | pdfjs-hwa | pdfjs-hwa-pathtext | 0/10 | p1 (160, 2.7% in 0.211 0.196 0.789 0.84), p2 (200, 3.7% in 0.211 0.152 0.789 0.892), p3 (212, 4.6% in 0.211 0.152 0.789 0.892), p4 (207, 4.2% in 0.18 0.152 0.789 0.854), p5 (192, 3.5% in 0.18 0.155 0.789 0.892), p6 (187, 3.3% in 0.211 0.152 0.789 0.892), p7 (210, 3.2% in 0.211 0.155 0.789 0.773), p8 (183, 3.5% in 0.18 0.152 0.879 0.892), p9 (192, 2.1% in 0.18 0.155 0.789 0.89), p10 (166, 3.3% in 0.211 0.152 0.789 0.892) |
+| usrguide.pdf | pdfjs | pdfjs-pathtext | 0/10 | p1 (154, 2.6% in 0.211 0.196 0.789 0.892), p2 (213, 3.6% in 0.211 0.152 0.789 0.892), p3 (199, 4.7% in 0.211 0.152 0.789 0.892), p4 (209, 4.1% in 0.18 0.152 0.789 0.854), p5 (204, 3.5% in 0.18 0.155 0.789 0.892), p6 (200, 3.3% in 0.211 0.152 0.789 0.892), p7 (191, 3.2% in 0.211 0.155 0.789 0.773), p8 (173, 3.6% in 0.18 0.152 0.883 0.892), p9 (204, 2.1% in 0.18 0.155 0.789 0.89), p10 (165, 3.3% in 0.211 0.152 0.789 0.887) |
+| wdl6812-manuscript.pdf | pdfjs-hwa | pdfjs-hwa-pathtext | 2/2 | — |
+| wdl6812-manuscript.pdf | pdfjs | pdfjs-pathtext | 2/2 | — |

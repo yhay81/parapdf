@@ -48,7 +48,14 @@ for (const [type, sink] of [
   }
 }
 
-async function loadEngine(id: string): Promise<EngineAdapter> {
+async function loadEngine(engineId: string): Promise<EngineAdapter> {
+  // "-pathtext" variants of released pdf.js draw text as paths
+  // (`disableFontFace`) instead of with the fonts it loads as FontFaces.
+  const pathText = engineId.endsWith("-pathtext");
+  const id = pathText ? engineId.slice(0, -"-pathtext".length) : engineId;
+  if (pathText && id !== "pdfjs" && id !== "pdfjs-hwa") {
+    throw new Error(`${engineId}: -pathtext applies to pdfjs and pdfjs-hwa only`);
+  }
   // "-frame" variants of the pdf.js engines draw off screen and show frames,
   // and "-record" variants record each operation's box as pdf.js draws.
   const record = id.endsWith("-record");
@@ -60,9 +67,19 @@ async function loadEngine(id: string): Promise<EngineAdapter> {
   }
   switch (frame ? variantOf.slice(0, -"-frame".length) : variantOf) {
     case "pdfjs":
-      return (await import("./engines/pdfjs.ts")).createPdfjsEngine({ hwa: false, frame, record });
+      return (await import("./engines/pdfjs.ts")).createPdfjsEngine({
+        hwa: false,
+        frame,
+        record,
+        pathText,
+      });
     case "pdfjs-hwa":
-      return (await import("./engines/pdfjs.ts")).createPdfjsEngine({ hwa: true, frame, record });
+      return (await import("./engines/pdfjs.ts")).createPdfjsEngine({
+        hwa: true,
+        frame,
+        record,
+        pathText,
+      });
     case "pdfjs-next":
       return (await import("./engines/pdfjs-next.ts")).createPdfjsNextEngine({ hwa: false, frame });
     case "pdfjs-next-hwa":
