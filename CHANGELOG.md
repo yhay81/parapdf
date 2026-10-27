@@ -4,7 +4,7 @@ Changes to the `parapdf` package. It follows
 [Semantic Versioning](https://semver.org/); until 1.0, a minor release may
 change the API.
 
-## Unreleased
+## 0.7.0 — 2026-10-27
 
 - In WebKit and Firefox, a quick drag up from a page's text into the blank
   space of the page above selects the dragged lines, not all of that page,
@@ -34,7 +34,6 @@ change the API.
   and printing write the changes; `export()` includes the changed ones, and
   `import()` puts each back in place of the annotation it changed. Until now
   they stayed as the file draws them (#4).
-
 - In WebKit, a drag selection that crosses from one page into the space
   above the next page's first line ends at the start of that page. Until now
   Playwright's WebKit on Linux selected all of the next page there.
