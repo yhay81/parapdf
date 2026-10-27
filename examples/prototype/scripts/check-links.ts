@@ -193,10 +193,10 @@ try {
     route.fulfill({ contentType: "application/pdf", body: rotatedPages() }),
   );
   await rotated.goto(`${baseUrl}?engine=${engine}&file=rotated-destinations.pdf`);
+  // The viewer's session, which the viewer sets once it shows the document,
+  // after the document is ready.
   await rotated.waitForFunction(
-    () =>
-      (window as { __session?: { state: { get(): { status: string } } } }).__session?.state.get()
-        .status === "ready",
+    () => (window as { __viewer?: { session: unknown } }).__viewer?.session != null,
   );
   const destinations = await rotated.evaluate(async () => {
     // The loaded session, which resolves destinations for the viewer.
