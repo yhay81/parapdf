@@ -356,21 +356,38 @@ export class TextSelectionTracker {
     if (!modifyStart && range.endOffset === 0) {
       // The selection ends before the anchor's first character: use the
       // closest earlier node that has content.
+      const ending =
+        anchor instanceof Element ? anchor.closest<HTMLElement>(".parapdf-text-layer") : null;
       do {
         while (anchor && !anchor.previousSibling) anchor = anchor.parentNode;
         anchor = anchor?.previousSibling ?? null;
       } while (anchor && !anchor.hasChildNodes());
+      // Before a layer's first run, the element goes to the start of that
+      // layer, not to an earlier page: Playwright's WebKit on Linux ends a
+      // selection over the element where it sits in the DOM, so a drag into
+      // the top of a page selected all of it.
+      const end = ending ? this.#layers.get(ending) : undefined;
+      if (ending && end && !(anchor && ending.contains(anchor))) {
+        this.#moveEnd(ending, end, ending.firstChild);
+        this.#previousRange = range.cloneRange();
+        return;
+      }
     }
     const parent = anchor?.parentElement;
     const layer = parent?.closest(".parapdf-text-layer");
     const end = layer instanceof HTMLElement ? this.#layers.get(layer) : undefined;
     if (anchor && parent && layer instanceof HTMLElement && end) {
-      end.style.width = layer.style.width;
-      end.style.height = layer.style.height;
-      end.style.userSelect = "text";
-      parent.insertBefore(end, modifyStart ? anchor : anchor.nextSibling);
+      this.#moveEnd(layer, end, modifyStart ? anchor : anchor.nextSibling, parent);
     }
     this.#previousRange = range.cloneRange();
+  }
+
+  /** Stretches `end` over `layer` and puts it before `next` in `parent`. */
+  #moveEnd(layer: HTMLElement, end: HTMLElement, next: Node | null, parent: Node = layer): void {
+    end.style.width = layer.style.width;
+    end.style.height = layer.style.height;
+    end.style.userSelect = "text";
+    parent.insertBefore(end, next);
   }
 }
 

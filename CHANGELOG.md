@@ -4,6 +4,12 @@ Changes to the `parapdf` package. It follows
 [Semantic Versioning](https://semver.org/); until 1.0, a minor release may
 change the API.
 
+## Unreleased
+
+- In WebKit, a drag selection that crosses from one page into the space
+  above the next page's first line ends at the start of that page. Until now
+  Playwright's WebKit on Linux selected all of the next page there.
+
 ## 0.6.0 — 2026-10-27
 
 - ParaPDF needs React 19.3 or later (`react` and `react-dom` 19.3.0).
