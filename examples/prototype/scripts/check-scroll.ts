@@ -51,6 +51,7 @@ interface Viewer {
       scale: number;
       scrollMode: ScrollMode;
       spread: string;
+      direction: "ltr" | "rtl";
       layout: {
         gap: number;
         rowFirst: Int32Array;
@@ -928,6 +929,20 @@ try {
         inView(g, first) &&
         near(first.left, second.left + second.width + g.gap),
       `scrolled ${g.scrollLeft} of ${g.scrollWidth - g.clientWidth}; current ${g.currentPage}; ${first && round(first)} ${second && round(second)}`,
+    );
+    // A narrower viewport, or a scrollbar that comes, keeps the row's right edge in place.
+    await row.page.setViewportSize({ width: 1100, height: 900 });
+    await frames(row.page);
+    await frames(row.page);
+    g = await geometry(row.page);
+    first = boxOf(g, 0);
+    check(
+      "right to left, horizontal: a narrower viewport keeps page 1 at the right end",
+      near(g.scrollLeft, g.scrollWidth - g.clientWidth) &&
+        g.currentPage === 0 &&
+        !!first &&
+        first.left + first.width <= g.clientWidth,
+      `scrolled ${g.scrollLeft} of ${g.scrollWidth - g.clientWidth}; current ${g.currentPage}; ${first && round(first)}`,
     );
     await row.page.evaluate(() => (window as unknown as Demo).__viewer?.goToPage(5));
     await frames(row.page);
