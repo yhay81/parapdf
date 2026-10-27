@@ -199,8 +199,10 @@ The renderer draws a viewer's mounted pages. It splits what 0.x
 - The executor compares the plan with what pages show and draw, and starts,
   cancels, and releases drawings, and keeps the canvases of pages that
   unmount (decision 0004). Zoomed past a page's whole-page detail budget,
-  it draws the page's base again: copying the whole-page detail into it
-  instead was rejected in the form measured (decision 0008).
+  a whole-page detail no larger than a base becomes the page's base, copied
+  into it, when a detail of part of the page replaces it or the page leaves
+  the viewport (decision 0012); a larger one gives way to a base drawn
+  again, since copying those cost more than it saved (decision 0008).
 - The renderer owns each page's DOM inside the host React places: the
   canvases (base, detail, and the spare a new detail is drawn into while
   the old one shows), and the containers of the text, annotation, editor,
@@ -435,8 +437,6 @@ them in passing:
 ## Open questions
 
 - The default of `maxKeptPixels` (decision 0004).
-- A form of decision 0008's copied base that keeps its gains on
-  phone-sized viewports without its losses on desktop-sized ones.
 - When pdf.js's renderer worker reaches a release: measure it, then decide.
 - Text layers for unmounted pages, so that the browser's own find and
   assistive technology reach the whole document.

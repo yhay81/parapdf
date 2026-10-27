@@ -6,6 +6,10 @@ change the API.
 
 ## Unreleased
 
+- Zooming in past a page's whole-page detail budget on phone-sized
+  viewports gets sharp two to four times sooner: a whole-page detail no
+  larger than a base becomes the page's base instead of a base drawn again
+  (decision 0012).
 - Pages run right to left for documents whose `/ViewerPreferences
   /Direction` is `R2L`, and with `PdfViewer`'s new `direction` prop set to
   `"rtl"`: the earlier page of a spread is on the right, rows run right to

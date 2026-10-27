@@ -1,6 +1,6 @@
 # 0008. A whole-page detail becomes the base when zooming past its budget
 
-- Status: rejected, in the form measured
+- Status: rejected, in the form measured; the form of decision 0012 was adopted
 - Date: 2026-10-24
 
 ## Context

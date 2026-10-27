@@ -20,6 +20,7 @@ for the direction of the rebuild gets a new record, numbered next.
 | [0009](0009-viewer-lifetimes.md) | Each viewport owns its viewer work; separate hot and cold snapshots | adopted |
 | [0010](0010-renderer-owns-page-dom.md) | The renderer owns each page's DOM, and kept canvases move | adopted |
 | [0011](0011-react-api.md) | The React API: viewers of their own, live options, the session's state | adopted |
+| [0012](0012-demote-small-whole-page-detail.md) | A whole-page detail no larger than a base becomes the base | adopted |
 
 ## Template
 

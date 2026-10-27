@@ -3,6 +3,7 @@
 import type { DocumentSession } from "../document/session.ts";
 import type { LinkHandlers } from "../pdfjs/annotation-layer.ts";
 import {
+  copyDrawing,
   type DrawRequest,
   type DrawTask,
   drawPage,
@@ -13,7 +14,7 @@ import {
 import type { AnnotationEditor } from "../pdfjs/editor.ts";
 import type { LayerState } from "../pdfjs/layers.ts";
 import type { TextLayerHandle } from "../pdfjs/text.ts";
-import type { PageArea } from "../view/layout.ts";
+import { type PageArea, turnedSize } from "../view/layout.ts";
 import { type DomLayerStats, DomLayers } from "./dom-layers.ts";
 import {
   addEditorLayer,
@@ -26,8 +27,10 @@ import {
 } from "./page.ts";
 import {
   type Budgets,
+  baseScale,
   canvasPixels,
   DEFAULT_BUDGETS,
+  demotes,
   type FailedDrawing,
   type Layer,
   type PageState,
@@ -91,6 +94,8 @@ export interface RenderStats extends DomLayerStats {
   trimmed: number;
   /** Layers shown again from the canvases a page kept when it unmounted (`maxKeptPixels`). */
   kept: number;
+  /** Whole-page details drawn into the base instead of a base drawn again (decision 0012). */
+  demoted: number;
 }
 
 export interface RendererOptions extends Partial<Budgets> {
@@ -191,6 +196,7 @@ export class Renderer {
     failed: 0,
     trimmed: 0,
     kept: 0,
+    demoted: 0,
   };
   readonly #session: DocumentSession;
   readonly #slots = new Map<number, Slot>();
@@ -583,8 +589,12 @@ export class Renderer {
         const { cancel, clear } = staleDetail(context, slot);
         if (cancel) slot.job?.task.cancel();
         // Pages that left the viewport at a region-drawing zoom give their
-        // detail memory back; their base layer still shows.
-        if (clear) this.#clearDetail(slot);
+        // detail memory back; their base layer still shows, a small
+        // whole-page detail drawn into it first.
+        if (clear) {
+          this.#demote(slot, context);
+          this.#clearDetail(slot);
+        }
       }
     }
     this.#pump();
@@ -651,6 +661,37 @@ export class Renderer {
     while (total + this.#keptPixels > this.#budgets.maxCanvasPixels && this.#kept.size > 0) {
       this.#forgetOldest();
     }
+  }
+
+  /**
+   * Draws the page's whole-page detail into its base canvas, scaled down to
+   * the base's resolution, where the planner says it becomes the base
+   * (`demotes`) and the base is older or less sharp. One `drawImage()` of a
+   * canvas no larger than a base, instead of a base drawn from scratch.
+   */
+  #demote(slot: Slot, context: PlanContext): void {
+    if (!demotes(context, slot)) return;
+    const { layout } = context.input;
+    const unturned = layout.sizes[slot.index];
+    if (!unturned) return;
+    const scale = Math.min(slot.detailScale, baseScale(context, slot.index));
+    if (slot.baseVersion === context.version && slot.baseScale >= scale) return;
+    // A base being drawn would draw over the copy.
+    if (slot.job?.layer === "base") slot.job.task.cancel();
+    const size = turnedSize(unturned, layout.rotation);
+    const { base, detail } = slot.elements;
+    // Whole pixels, as pdf.js sizes a base drawn at this scale.
+    copyDrawing(
+      this.#session.pdfjs,
+      base,
+      detail,
+      Math.floor(size.width * scale + 1e-6),
+      Math.floor(size.height * scale + 1e-6),
+    );
+    base.style.visibility = "";
+    slot.baseScale = scale;
+    slot.baseVersion = context.version;
+    this.stats.demoted++;
   }
 
   /** Drops the page's detail pixels, the spare's included; any detail drawing is cancelled first. */
@@ -773,7 +814,11 @@ export class Renderer {
             this.stats.base++;
           } else {
             if (intoSpare) {
-              // The new detail takes the shown one's place in the same frame.
+              // The new detail takes the shown one's place in the same frame,
+              // and a whole-page one it replaces with part of the page may
+              // show under it as the base.
+              const context = this.#context();
+              if (region !== null && context) this.#demote(slot, context);
               const shown = elements.detail;
               elements.detail = canvas;
               elements.spare = shown;

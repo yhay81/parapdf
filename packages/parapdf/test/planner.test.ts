@@ -5,6 +5,7 @@ import {
   type Budgets,
   canvasPixels,
   DEFAULT_BUDGETS,
+  demotes,
   detailPlan,
   type PageState,
   type PlanContext,
@@ -297,6 +298,24 @@ describe("planner", () => {
     const [detail] = plan(tight, [page], 2);
     assert.equal(detail?.layer, "detail");
     assert.equal(detail?.intoSpare, false);
+  });
+
+  it("draws no base under a whole-page detail no larger than a base that gives way to part of the page", () => {
+    const page = blank(0);
+    Object.assign(page, { detailScale: 1, detailPixels: 612 * 792 });
+    // Zoomed past the detail budget: the visible page gets part of it.
+    const zoomed = context(view([LETTER], 2).input, { maxDetailPixels: 1_000_000 });
+    assert.equal(demotes(zoomed, page), true);
+    const [detail] = plan(zoomed, [page], 1);
+    assert.equal(detail?.layer, "detail");
+    assert.equal(detail?.intoSpare, true);
+    assert.ok(detail?.region);
+    // A larger one, as on a desktop-sized viewport, gets a base first (decision 0008).
+    const small = { ...zoomed, budgets: { ...zoomed.budgets, maxBasePixels: 400_000 } };
+    assert.equal(demotes(small, page), false);
+    assert.equal(plan(small, [page], 1)[0]?.layer, "base");
+    // So does a detail of an older content version.
+    assert.equal(demotes({ ...zoomed, version: 1 }, page), false);
   });
 
   it("plans the same for pages that count their pixels with getters, as the renderer's do", () => {
