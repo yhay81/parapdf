@@ -872,7 +872,7 @@ keeps the position and the edits. Besides `viewer`, the view state
 | `maxDetailViewports` | unlimited | The same limit as a multiple of the viewport's device pixels, so the sharp margin around the visible area follows the viewport's size. |
 | `maxBasePixels` | 2,097,152 | Pixels of one page's low-resolution canvas. |
 | `maxCanvasPixels` | unlimited | Pixels of all of this viewer's canvases together, kept ones included. Kept canvases go first, then those of pages outside the viewport; past the budget, visible pages lose their sharp margin and then resolution, but keep their low-resolution canvases. |
-| `maxKeptPixels` | six viewports' worth of device pixels | Pixels kept of the canvases of pages that leave the mounted window, so that a page the reader comes back to shows at once; `0` keeps none. Pages whose form fields are shown keep nothing. |
+| `maxKeptPixels` | twelve viewports' worth of device pixels | Pixels kept of the canvases of pages that leave the mounted window, so that a page the reader comes back to shows at once; `0` keeps none. Pages whose form fields are shown keep nothing. |
 | `className`, `style` | | The scroll container's. |
 | `label` | `"PDF document"` | The accessible name of the document. |
 | `pageLabel` | `"Page 3 of 12"` | The accessible name of each page: `(pageNumber, pageCount) => string`. |

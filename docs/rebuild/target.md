@@ -436,7 +436,6 @@ them in passing:
 
 ## Open questions
 
-- The default of `maxKeptPixels` (decision 0004).
 - When pdf.js's renderer worker reaches a release: measure it, then decide.
 - Text layers for unmounted pages, so that the browser's own find and
   assistive technology reach the whole document.
