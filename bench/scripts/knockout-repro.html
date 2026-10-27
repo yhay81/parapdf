@@ -124,6 +124,7 @@
         // pdf.js master draws in its renderer worker unless this is set; it
         // falls back to the main thread anyway when rendererSrc is unset.
         disableWorkerRendering: !rendererUrl,
+        disableFontFace: params.has("pathText"),
         cMapUrl: `${assets}cmaps/`,
         cMapPacked: true,
         standardFontDataUrl: `${assets}standard_fonts/`,

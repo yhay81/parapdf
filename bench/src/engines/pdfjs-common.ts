@@ -24,6 +24,8 @@ export interface PdfjsAdapterOptions {
    * then filters operations with: what the recording costs.
    */
   record?: boolean;
+  /** Draw text as paths (`disableFontFace`) instead of with FontFaces. */
+  pathText?: boolean;
 }
 
 /**
@@ -64,6 +66,7 @@ export function createPdfjsAdapter(options: PdfjsAdapterOptions): EngineAdapter 
         data,
         worker,
         enableHWA: hwa,
+        disableFontFace: options.pathText ?? false,
         cMapUrl: `${assetBase}cmaps/`,
         cMapPacked: true,
         standardFontDataUrl: `${assetBase}standard_fonts/`,

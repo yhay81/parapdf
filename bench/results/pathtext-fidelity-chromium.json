@@ -1,0 +1,2284 @@
+{
+  "runAt": "2026-10-27T16:27:48.134Z",
+  "browser": "Chromium 156.0.8078.4",
+  "pages": 10,
+  "scale": 2.6667,
+  "rows": [
+    {
+      "file": "bill-hr815.pdf",
+      "engine": "pdfjs-hwa",
+      "variant": "pdfjs-hwa-pathtext",
+      "pages": 10,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "1920×2880 / 1920×2880",
+          "maxDiff": 180,
+          "offShare": 0.027109781901041668,
+          "offBox": [
+            0.164,
+            0.06,
+            0.715,
+            0.695
+          ]
+        },
+        {
+          "page": 2,
+          "sizes": "1920×2880 / 1920×2880",
+          "maxDiff": 180,
+          "offShare": 0.035288492838541664,
+          "offBox": [
+            0.273,
+            0.151,
+            0.715,
+            0.695
+          ]
+        },
+        {
+          "page": 3,
+          "sizes": "1920×2880 / 1920×2880",
+          "maxDiff": 177,
+          "offShare": 0.040863037109375,
+          "offBox": [
+            0.273,
+            0.151,
+            0.715,
+            0.698
+          ]
+        },
+        {
+          "page": 4,
+          "sizes": "1920×2880 / 1920×2880",
+          "maxDiff": 180,
+          "offShare": 0.040293375651041664,
+          "offBox": [
+            0.273,
+            0.151,
+            0.715,
+            0.695
+          ]
+        },
+        {
+          "page": 5,
+          "sizes": "1920×2880 / 1920×2880",
+          "maxDiff": 173,
+          "offShare": 0.030863444010416668,
+          "offBox": [
+            0.273,
+            0.151,
+            0.715,
+            0.695
+          ]
+        },
+        {
+          "page": 6,
+          "sizes": "1920×2880 / 1920×2880",
+          "maxDiff": 144,
+          "offShare": 0.027598063151041668,
+          "offBox": [
+            0.273,
+            0.151,
+            0.715,
+            0.688
+          ]
+        },
+        {
+          "page": 7,
+          "sizes": "1920×2880 / 1920×2880",
+          "maxDiff": 165,
+          "offShare": 0.042043050130208336,
+          "offBox": [
+            0.273,
+            0.151,
+            0.715,
+            0.695
+          ]
+        },
+        {
+          "page": 8,
+          "sizes": "1920×2880 / 1920×2880",
+          "maxDiff": 181,
+          "offShare": 0.041798909505208336,
+          "offBox": [
+            0.273,
+            0.151,
+            0.715,
+            0.695
+          ]
+        },
+        {
+          "page": 9,
+          "sizes": "1920×2880 / 1920×2880",
+          "maxDiff": 173,
+          "offShare": 0.042510986328125,
+          "offBox": [
+            0.273,
+            0.151,
+            0.715,
+            0.695
+          ]
+        },
+        {
+          "page": 10,
+          "sizes": "1920×2880 / 1920×2880",
+          "maxDiff": 173,
+          "offShare": 0.038798014322916664,
+          "offBox": [
+            0.273,
+            0.151,
+            0.715,
+            0.695
+          ]
+        }
+      ]
+    },
+    {
+      "file": "bill-hr815.pdf",
+      "engine": "pdfjs",
+      "variant": "pdfjs-pathtext",
+      "pages": 10,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "1920×2880 / 1920×2880",
+          "maxDiff": 177,
+          "offShare": 0.027445475260416668,
+          "offBox": [
+            0.164,
+            0.06,
+            0.715,
+            0.698
+          ]
+        },
+        {
+          "page": 2,
+          "sizes": "1920×2880 / 1920×2880",
+          "maxDiff": 185,
+          "offShare": 0.035847981770833336,
+          "offBox": [
+            0.273,
+            0.151,
+            0.715,
+            0.698
+          ]
+        },
+        {
+          "page": 3,
+          "sizes": "1920×2880 / 1920×2880",
+          "maxDiff": 178,
+          "offShare": 0.041615804036458336,
+          "offBox": [
+            0.273,
+            0.151,
+            0.715,
+            0.698
+          ]
+        },
+        {
+          "page": 4,
+          "sizes": "1920×2880 / 1920×2880",
+          "maxDiff": 158,
+          "offShare": 0.040354410807291664,
+          "offBox": [
+            0.273,
+            0.151,
+            0.715,
+            0.698
+          ]
+        },
+        {
+          "page": 5,
+          "sizes": "1920×2880 / 1920×2880",
+          "maxDiff": 155,
+          "offShare": 0.030924479166666668,
+          "offBox": [
+            0.273,
+            0.151,
+            0.715,
+            0.698
+          ]
+        },
+        {
+          "page": 6,
+          "sizes": "1920×2880 / 1920×2880",
+          "maxDiff": 140,
+          "offShare": 0.028656005859375,
+          "offBox": [
+            0.273,
+            0.151,
+            0.715,
+            0.688
+          ]
+        },
+        {
+          "page": 7,
+          "sizes": "1920×2880 / 1920×2880",
+          "maxDiff": 172,
+          "offShare": 0.042826334635416664,
+          "offBox": [
+            0.273,
+            0.151,
+            0.715,
+            0.695
+          ]
+        },
+        {
+          "page": 8,
+          "sizes": "1920×2880 / 1920×2880",
+          "maxDiff": 154,
+          "offShare": 0.041453043619791664,
+          "offBox": [
+            0.273,
+            0.151,
+            0.715,
+            0.698
+          ]
+        },
+        {
+          "page": 9,
+          "sizes": "1920×2880 / 1920×2880",
+          "maxDiff": 160,
+          "offShare": 0.042734781901041664,
+          "offBox": [
+            0.273,
+            0.151,
+            0.715,
+            0.695
+          ]
+        },
+        {
+          "page": 10,
+          "sizes": "1920×2880 / 1920×2880",
+          "maxDiff": 164,
+          "offShare": 0.038726806640625,
+          "offBox": [
+            0.273,
+            0.151,
+            0.715,
+            0.695
+          ]
+        }
+      ]
+    },
+    {
+      "file": "bunka-kokugo-series-019-p4.pdf",
+      "engine": "pdfjs-hwa",
+      "variant": "pdfjs-hwa-pathtext",
+      "pages": 1,
+      "identical": 1,
+      "differing": []
+    },
+    {
+      "file": "bunka-kokugo-series-019-p4.pdf",
+      "engine": "pdfjs",
+      "variant": "pdfjs-pathtext",
+      "pages": 1,
+      "identical": 1,
+      "differing": []
+    },
+    {
+      "file": "f1040.pdf",
+      "engine": "pdfjs-hwa",
+      "variant": "pdfjs-hwa-pathtext",
+      "pages": 2,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 226,
+          "offShare": 0.055891238670694864,
+          "offBox": [
+            0.059,
+            0.03,
+            0.941,
+            0.976
+          ]
+        },
+        {
+          "page": 2,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 153,
+          "offShare": 0.04621412386706949,
+          "offBox": [
+            0.051,
+            0.03,
+            0.941,
+            0.97
+          ]
+        }
+      ]
+    },
+    {
+      "file": "f1040.pdf",
+      "engine": "pdfjs",
+      "variant": "pdfjs-pathtext",
+      "pages": 2,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 230,
+          "offShare": 0.05357817220543807,
+          "offBox": [
+            0.059,
+            0.033,
+            0.941,
+            0.976
+          ]
+        },
+        {
+          "page": 2,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 147,
+          "offShare": 0.0425320996978852,
+          "offBox": [
+            0.051,
+            0.033,
+            0.941,
+            0.97
+          ]
+        }
+      ]
+    },
+    {
+      "file": "mhlw-doc.pdf",
+      "engine": "pdfjs-hwa",
+      "variant": "pdfjs-hwa-pathtext",
+      "pages": 2,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "1587×2245 / 1587×2245",
+          "maxDiff": 143,
+          "offShare": 0.04744690953038674,
+          "offBox": [
+            0.145,
+            0.047,
+            0.891,
+            0.884
+          ]
+        },
+        {
+          "page": 2,
+          "sizes": "1587×2245 / 1587×2245",
+          "maxDiff": 128,
+          "offShare": 0.013920062154696133,
+          "offBox": [
+            0.145,
+            0.144,
+            0.859,
+            0.914
+          ]
+        }
+      ]
+    },
+    {
+      "file": "mhlw-doc.pdf",
+      "engine": "pdfjs",
+      "variant": "pdfjs-pathtext",
+      "pages": 2,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "1587×2245 / 1587×2245",
+          "maxDiff": 135,
+          "offShare": 0.048687845303867404,
+          "offBox": [
+            0.145,
+            0.047,
+            0.898,
+            0.884
+          ]
+        },
+        {
+          "page": 2,
+          "sizes": "1587×2245 / 1587×2245",
+          "maxDiff": 125,
+          "offShare": 0.01406034185082873,
+          "offBox": [
+            0.145,
+            0.144,
+            0.859,
+            0.914
+          ]
+        }
+      ]
+    },
+    {
+      "file": "nics-background-checks-2015-11.pdf",
+      "engine": "pdfjs-hwa",
+      "variant": "pdfjs-hwa-pathtext",
+      "pages": 1,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "2688×1632 / 2688×1632",
+          "maxDiff": 241,
+          "offShare": 0.03654233870967742,
+          "offBox": [
+            0.043,
+            0.045,
+            0.965,
+            0.968
+          ]
+        }
+      ]
+    },
+    {
+      "file": "nics-background-checks-2015-11.pdf",
+      "engine": "pdfjs",
+      "variant": "pdfjs-pathtext",
+      "pages": 1,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "2688×1632 / 2688×1632",
+          "maxDiff": 227,
+          "offShare": 0.03613911290322581,
+          "offBox": [
+            0.043,
+            0.045,
+            0.961,
+            0.968
+          ]
+        }
+      ]
+    },
+    {
+      "file": "patent-us223898.pdf",
+      "engine": "pdfjs-hwa",
+      "variant": "pdfjs-hwa-pathtext",
+      "pages": 4,
+      "identical": 4,
+      "differing": []
+    },
+    {
+      "file": "patent-us223898.pdf",
+      "engine": "pdfjs",
+      "variant": "pdfjs-pathtext",
+      "pages": 4,
+      "identical": 4,
+      "differing": []
+    },
+    {
+      "file": "pdfium-jpx-lzw.pdf",
+      "engine": "pdfjs-hwa",
+      "variant": "pdfjs-hwa-pathtext",
+      "pages": 1,
+      "identical": 1,
+      "differing": []
+    },
+    {
+      "file": "pdfium-jpx-lzw.pdf",
+      "engine": "pdfjs",
+      "variant": "pdfjs-pathtext",
+      "pages": 1,
+      "identical": 1,
+      "differing": []
+    },
+    {
+      "file": "pdfium-smask-blend.pdf",
+      "engine": "pdfjs-hwa",
+      "variant": "pdfjs-hwa-pathtext",
+      "pages": 1,
+      "identical": 1,
+      "differing": []
+    },
+    {
+      "file": "pdfium-smask-blend.pdf",
+      "engine": "pdfjs",
+      "variant": "pdfjs-pathtext",
+      "pages": 1,
+      "identical": 1,
+      "differing": []
+    },
+    {
+      "file": "pdfium-type3.pdf",
+      "engine": "pdfjs-hwa",
+      "variant": "pdfjs-hwa-pathtext",
+      "pages": 1,
+      "identical": 1,
+      "differing": []
+    },
+    {
+      "file": "pdfium-type3.pdf",
+      "engine": "pdfjs",
+      "variant": "pdfjs-pathtext",
+      "pages": 1,
+      "identical": 1,
+      "differing": []
+    },
+    {
+      "file": "synthetic-annotations.pdf",
+      "engine": "pdfjs-hwa",
+      "variant": "pdfjs-hwa-pathtext",
+      "pages": 8,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.0016993957703927492,
+          "offBox": [
+            0.117,
+            0.069,
+            0.504,
+            0.444
+          ]
+        },
+        {
+          "page": 2,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.0018174093655589124,
+          "offBox": [
+            0.117,
+            0.069,
+            0.504,
+            0.444
+          ]
+        },
+        {
+          "page": 3,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.0017347998489425983,
+          "offBox": [
+            0.117,
+            0.069,
+            0.504,
+            0.444
+          ]
+        },
+        {
+          "page": 4,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.001841012084592145,
+          "offBox": [
+            0.117,
+            0.069,
+            0.504,
+            0.444
+          ]
+        },
+        {
+          "page": 5,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.001758402567975831,
+          "offBox": [
+            0.117,
+            0.069,
+            0.504,
+            0.444
+          ]
+        },
+        {
+          "page": 6,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.0017702039274924471,
+          "offBox": [
+            0.117,
+            0.069,
+            0.504,
+            0.444
+          ]
+        },
+        {
+          "page": 7,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.001687594410876133,
+          "offBox": [
+            0.117,
+            0.069,
+            0.504,
+            0.444
+          ]
+        },
+        {
+          "page": 8,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.0017466012084592145,
+          "offBox": [
+            0.117,
+            0.069,
+            0.504,
+            0.444
+          ]
+        }
+      ]
+    },
+    {
+      "file": "synthetic-annotations.pdf",
+      "engine": "pdfjs",
+      "variant": "pdfjs-pathtext",
+      "pages": 8,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.0016993957703927492,
+          "offBox": [
+            0.117,
+            0.069,
+            0.5,
+            0.444
+          ]
+        },
+        {
+          "page": 2,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.0018174093655589124,
+          "offBox": [
+            0.117,
+            0.069,
+            0.5,
+            0.444
+          ]
+        },
+        {
+          "page": 3,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.0017466012084592145,
+          "offBox": [
+            0.117,
+            0.069,
+            0.5,
+            0.444
+          ]
+        },
+        {
+          "page": 4,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.0018292107250755286,
+          "offBox": [
+            0.117,
+            0.069,
+            0.5,
+            0.444
+          ]
+        },
+        {
+          "page": 5,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.0017466012084592145,
+          "offBox": [
+            0.117,
+            0.069,
+            0.5,
+            0.444
+          ]
+        },
+        {
+          "page": 6,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.001758402567975831,
+          "offBox": [
+            0.117,
+            0.069,
+            0.5,
+            0.444
+          ]
+        },
+        {
+          "page": 7,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.001687594410876133,
+          "offBox": [
+            0.117,
+            0.069,
+            0.5,
+            0.444
+          ]
+        },
+        {
+          "page": 8,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.0017466012084592145,
+          "offBox": [
+            0.117,
+            0.069,
+            0.5,
+            0.444
+          ]
+        }
+      ]
+    },
+    {
+      "file": "synthetic-cjk-nonembedded.pdf",
+      "engine": "pdfjs-hwa",
+      "variant": "pdfjs-hwa-pathtext",
+      "pages": 1,
+      "identical": 1,
+      "differing": []
+    },
+    {
+      "file": "synthetic-cjk-nonembedded.pdf",
+      "engine": "pdfjs",
+      "variant": "pdfjs-pathtext",
+      "pages": 1,
+      "identical": 1,
+      "differing": []
+    },
+    {
+      "file": "synthetic-encrypted.pdf",
+      "engine": "pdfjs-hwa",
+      "variant": "pdfjs-hwa-pathtext",
+      "pages": 0,
+      "identical": 0,
+      "differing": [],
+      "error": "No password given"
+    },
+    {
+      "file": "synthetic-encrypted.pdf",
+      "engine": "pdfjs",
+      "variant": "pdfjs-pathtext",
+      "pages": 0,
+      "identical": 0,
+      "differing": [],
+      "error": "No password given"
+    },
+    {
+      "file": "synthetic-features.pdf",
+      "engine": "pdfjs-hwa",
+      "variant": "pdfjs-hwa-pathtext",
+      "pages": 6,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.00512179003021148,
+          "offBox": [
+            0.117,
+            0.073,
+            0.703,
+            0.184
+          ]
+        },
+        {
+          "page": 2,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 251,
+          "offShare": 0.002147847432024169,
+          "offBox": [
+            0.117,
+            0.073,
+            0.465,
+            0.305
+          ]
+        },
+        {
+          "page": 3,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 251,
+          "offShare": 0.0015577794561933535,
+          "offBox": [
+            0.121,
+            0.073,
+            0.465,
+            0.097
+          ]
+        },
+        {
+          "page": 4,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 251,
+          "offShare": 0.0014751699395770394,
+          "offBox": [
+            0.121,
+            0.073,
+            0.453,
+            0.097
+          ]
+        },
+        {
+          "page": 5,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 251,
+          "offShare": 0.0015577794561933535,
+          "offBox": [
+            0.121,
+            0.073,
+            0.465,
+            0.097
+          ]
+        },
+        {
+          "page": 6,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 251,
+          "offShare": 0.001616786253776435,
+          "offBox": [
+            0.121,
+            0.073,
+            0.465,
+            0.097
+          ]
+        }
+      ]
+    },
+    {
+      "file": "synthetic-features.pdf",
+      "engine": "pdfjs",
+      "variant": "pdfjs-pathtext",
+      "pages": 6,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.005015577794561934,
+          "offBox": [
+            0.117,
+            0.073,
+            0.703,
+            0.184
+          ]
+        },
+        {
+          "page": 2,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 247,
+          "offShare": 0.002100641993957704,
+          "offBox": [
+            0.117,
+            0.073,
+            0.465,
+            0.305
+          ]
+        },
+        {
+          "page": 3,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 247,
+          "offShare": 0.001545978096676737,
+          "offBox": [
+            0.121,
+            0.073,
+            0.465,
+            0.097
+          ]
+        },
+        {
+          "page": 4,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 247,
+          "offShare": 0.0014751699395770394,
+          "offBox": [
+            0.121,
+            0.073,
+            0.453,
+            0.097
+          ]
+        },
+        {
+          "page": 5,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 247,
+          "offShare": 0.001545978096676737,
+          "offBox": [
+            0.121,
+            0.073,
+            0.465,
+            0.097
+          ]
+        },
+        {
+          "page": 6,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 247,
+          "offShare": 0.0016049848942598188,
+          "offBox": [
+            0.121,
+            0.073,
+            0.465,
+            0.097
+          ]
+        }
+      ]
+    },
+    {
+      "file": "synthetic-mixed-sizes.pdf",
+      "engine": "pdfjs-hwa",
+      "variant": "pdfjs-hwa-pathtext",
+      "pages": 8,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "1586×2245 / 1586×2245",
+          "maxDiff": 255,
+          "offShare": 0.001769682320441989,
+          "offBox": [
+            0.082,
+            0.069,
+            0.332,
+            0.124
+          ]
+        },
+        {
+          "page": 2,
+          "sizes": "1586×2245 / 1586×2245",
+          "maxDiff": 255,
+          "offShare": 0.001737310082872928,
+          "offBox": [
+            0.082,
+            0.069,
+            0.332,
+            0.124
+          ]
+        },
+        {
+          "page": 3,
+          "sizes": "3176×2245 / 3176×2245",
+          "maxDiff": 195,
+          "offShare": 0.0009711671270718232,
+          "offBox": [
+            0.039,
+            0.072,
+            0.188,
+            0.122
+          ]
+        },
+        {
+          "page": 4,
+          "sizes": "1586×2245 / 1586×2245",
+          "maxDiff": 255,
+          "offShare": 0.001715728591160221,
+          "offBox": [
+            0.082,
+            0.069,
+            0.332,
+            0.124
+          ]
+        },
+        {
+          "page": 5,
+          "sizes": "2245×1586 / 2245×1586",
+          "maxDiff": 255,
+          "offShare": 0.003172479281767956,
+          "offBox": [
+            0.875,
+            0.083,
+            0.93,
+            0.663
+          ]
+        },
+        {
+          "page": 6,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.001994429758308157,
+          "offBox": [
+            0.078,
+            0.073,
+            0.41,
+            0.133
+          ]
+        },
+        {
+          "page": 7,
+          "sizes": "1120×1586 / 1120×1586",
+          "maxDiff": 250,
+          "offShare": 0.0029700413223140497,
+          "offBox": [
+            0.117,
+            0.099,
+            0.473,
+            0.176
+          ]
+        },
+        {
+          "page": 8,
+          "sizes": "1586×2245 / 1586×2245",
+          "maxDiff": 255,
+          "offShare": 0.0017804730662983425,
+          "offBox": [
+            0.082,
+            0.069,
+            0.332,
+            0.124
+          ]
+        }
+      ]
+    },
+    {
+      "file": "synthetic-mixed-sizes.pdf",
+      "engine": "pdfjs",
+      "variant": "pdfjs-pathtext",
+      "pages": 8,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "1586×2245 / 1586×2245",
+          "maxDiff": 255,
+          "offShare": 0.0017912638121546961,
+          "offBox": [
+            0.082,
+            0.069,
+            0.332,
+            0.124
+          ]
+        },
+        {
+          "page": 2,
+          "sizes": "1586×2245 / 1586×2245",
+          "maxDiff": 255,
+          "offShare": 0.001769682320441989,
+          "offBox": [
+            0.082,
+            0.069,
+            0.332,
+            0.124
+          ]
+        },
+        {
+          "page": 3,
+          "sizes": "3176×2245 / 3176×2245",
+          "maxDiff": 181,
+          "offShare": 0.0009711671270718232,
+          "offBox": [
+            0.039,
+            0.072,
+            0.188,
+            0.122
+          ]
+        },
+        {
+          "page": 4,
+          "sizes": "1586×2245 / 1586×2245",
+          "maxDiff": 255,
+          "offShare": 0.001769682320441989,
+          "offBox": [
+            0.082,
+            0.069,
+            0.332,
+            0.124
+          ]
+        },
+        {
+          "page": 5,
+          "sizes": "2245×1586 / 2245×1586",
+          "maxDiff": 255,
+          "offShare": 0.0032372237569060773,
+          "offBox": [
+            0.875,
+            0.083,
+            0.93,
+            0.663
+          ]
+        },
+        {
+          "page": 6,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.0020062311178247736,
+          "offBox": [
+            0.078,
+            0.073,
+            0.41,
+            0.133
+          ]
+        },
+        {
+          "page": 7,
+          "sizes": "1120×1586 / 1120×1586",
+          "maxDiff": 249,
+          "offShare": 0.0031637396694214875,
+          "offBox": [
+            0.117,
+            0.099,
+            0.473,
+            0.176
+          ]
+        },
+        {
+          "page": 8,
+          "sizes": "1586×2245 / 1586×2245",
+          "maxDiff": 255,
+          "offShare": 0.0018020545580110497,
+          "offBox": [
+            0.082,
+            0.069,
+            0.332,
+            0.124
+          ]
+        }
+      ]
+    },
+    {
+      "file": "synthetic-navigation.pdf",
+      "engine": "pdfjs-hwa",
+      "variant": "pdfjs-hwa-pathtext",
+      "pages": 4,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.0031627643504531723,
+          "offBox": [
+            0.117,
+            0.073,
+            0.379,
+            0.444
+          ]
+        },
+        {
+          "page": 2,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 214,
+          "offShare": 0.0012863481873111782,
+          "offBox": [
+            0.121,
+            0.073,
+            0.379,
+            0.097
+          ]
+        },
+        {
+          "page": 3,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 214,
+          "offShare": 0.0012863481873111782,
+          "offBox": [
+            0.121,
+            0.073,
+            0.379,
+            0.097
+          ]
+        },
+        {
+          "page": 4,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 214,
+          "offShare": 0.0013217522658610272,
+          "offBox": [
+            0.121,
+            0.073,
+            0.379,
+            0.097
+          ]
+        }
+      ]
+    },
+    {
+      "file": "synthetic-navigation.pdf",
+      "engine": "pdfjs",
+      "variant": "pdfjs-pathtext",
+      "pages": 4,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.0031273602719033232,
+          "offBox": [
+            0.117,
+            0.073,
+            0.379,
+            0.444
+          ]
+        },
+        {
+          "page": 2,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 211,
+          "offShare": 0.0014161631419939576,
+          "offBox": [
+            0.121,
+            0.073,
+            0.379,
+            0.097
+          ]
+        },
+        {
+          "page": 3,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 211,
+          "offShare": 0.0014043617824773414,
+          "offBox": [
+            0.121,
+            0.073,
+            0.379,
+            0.097
+          ]
+        },
+        {
+          "page": 4,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 211,
+          "offShare": 0.001427964501510574,
+          "offBox": [
+            0.121,
+            0.073,
+            0.379,
+            0.097
+          ]
+        }
+      ]
+    },
+    {
+      "file": "synthetic-restricted.pdf",
+      "engine": "pdfjs-hwa",
+      "variant": "pdfjs-hwa-pathtext",
+      "pages": 2,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 239,
+          "offShare": 0.0024664841389728095,
+          "offBox": [
+            0.117,
+            0.073,
+            0.398,
+            0.145
+          ]
+        },
+        {
+          "page": 2,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 239,
+          "offShare": 0.002525490936555891,
+          "offBox": [
+            0.117,
+            0.073,
+            0.398,
+            0.145
+          ]
+        }
+      ]
+    },
+    {
+      "file": "synthetic-restricted.pdf",
+      "engine": "pdfjs",
+      "variant": "pdfjs-pathtext",
+      "pages": 2,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 236,
+          "offShare": 0.0023720732628398794,
+          "offBox": [
+            0.117,
+            0.073,
+            0.398,
+            0.145
+          ]
+        },
+        {
+          "page": 2,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 236,
+          "offShare": 0.002431080060422961,
+          "offBox": [
+            0.117,
+            0.073,
+            0.398,
+            0.145
+          ]
+        }
+      ]
+    },
+    {
+      "file": "synthetic-rtl.pdf",
+      "engine": "pdfjs-hwa",
+      "variant": "pdfjs-hwa-pathtext",
+      "pages": 6,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.007104418429003021,
+          "offBox": [
+            0.391,
+            0.384,
+            0.559,
+            0.595
+          ]
+        },
+        {
+          "page": 2,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.005003776435045317,
+          "offBox": [
+            0.371,
+            0.384,
+            0.563,
+            0.595
+          ]
+        },
+        {
+          "page": 3,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.004472715256797583,
+          "offBox": [
+            0.367,
+            0.384,
+            0.563,
+            0.601
+          ]
+        },
+        {
+          "page": 4,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.005499433534743203,
+          "offBox": [
+            0.367,
+            0.384,
+            0.566,
+            0.595
+          ]
+        },
+        {
+          "page": 5,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.0033987915407854984,
+          "offBox": [
+            0.371,
+            0.387,
+            0.563,
+            0.601
+          ]
+        },
+        {
+          "page": 6,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.003988859516616314,
+          "offBox": [
+            0.375,
+            0.384,
+            0.563,
+            0.601
+          ]
+        }
+      ]
+    },
+    {
+      "file": "synthetic-rtl.pdf",
+      "engine": "pdfjs",
+      "variant": "pdfjs-pathtext",
+      "pages": 6,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.007104418429003021,
+          "offBox": [
+            0.391,
+            0.384,
+            0.559,
+            0.595
+          ]
+        },
+        {
+          "page": 2,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.005050981873111782,
+          "offBox": [
+            0.371,
+            0.384,
+            0.563,
+            0.595
+          ]
+        },
+        {
+          "page": 3,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.004401907099697885,
+          "offBox": [
+            0.367,
+            0.384,
+            0.563,
+            0.601
+          ]
+        },
+        {
+          "page": 4,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.005511234894259818,
+          "offBox": [
+            0.367,
+            0.384,
+            0.566,
+            0.595
+          ]
+        },
+        {
+          "page": 5,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.0034695996978851965,
+          "offBox": [
+            0.371,
+            0.387,
+            0.563,
+            0.601
+          ]
+        },
+        {
+          "page": 6,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.004000660876132931,
+          "offBox": [
+            0.375,
+            0.384,
+            0.563,
+            0.601
+          ]
+        }
+      ]
+    },
+    {
+      "file": "synthetic-text-1000.pdf",
+      "engine": "pdfjs-hwa",
+      "variant": "pdfjs-hwa-pathtext",
+      "pages": 10,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.09002077039274925,
+          "offBox": [
+            0.117,
+            0.048,
+            0.855,
+            0.912
+          ]
+        },
+        {
+          "page": 2,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 238,
+          "offShare": 0.08714123867069487,
+          "offBox": [
+            0.117,
+            0.048,
+            0.805,
+            0.909
+          ]
+        },
+        {
+          "page": 3,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 243,
+          "offShare": 0.08840398413897281,
+          "offBox": [
+            0.117,
+            0.048,
+            0.809,
+            0.912
+          ]
+        },
+        {
+          "page": 4,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 238,
+          "offShare": 0.08624433534743202,
+          "offBox": [
+            0.117,
+            0.048,
+            0.844,
+            0.912
+          ]
+        },
+        {
+          "page": 5,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 243,
+          "offShare": 0.08729465634441087,
+          "offBox": [
+            0.117,
+            0.048,
+            0.824,
+            0.912
+          ]
+        },
+        {
+          "page": 6,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 248,
+          "offShare": 0.08205485271903323,
+          "offBox": [
+            0.117,
+            0.048,
+            0.824,
+            0.912
+          ]
+        },
+        {
+          "page": 7,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 245,
+          "offShare": 0.08493438444108761,
+          "offBox": [
+            0.117,
+            0.048,
+            0.84,
+            0.912
+          ]
+        },
+        {
+          "page": 8,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 238,
+          "offShare": 0.08325859138972809,
+          "offBox": [
+            0.117,
+            0.048,
+            0.773,
+            0.912
+          ]
+        },
+        {
+          "page": 9,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 247,
+          "offShare": 0.0888996412386707,
+          "offBox": [
+            0.117,
+            0.048,
+            0.809,
+            0.912
+          ]
+        },
+        {
+          "page": 10,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.08692881419939577,
+          "offBox": [
+            0.117,
+            0.048,
+            0.828,
+            0.912
+          ]
+        }
+      ]
+    },
+    {
+      "file": "synthetic-text-1000.pdf",
+      "engine": "pdfjs",
+      "variant": "pdfjs-pathtext",
+      "pages": 10,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.08992635951661632,
+          "offBox": [
+            0.117,
+            0.048,
+            0.855,
+            0.912
+          ]
+        },
+        {
+          "page": 2,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 237,
+          "offShare": 0.08848659365558913,
+          "offBox": [
+            0.117,
+            0.048,
+            0.805,
+            0.909
+          ]
+        },
+        {
+          "page": 3,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 241,
+          "offShare": 0.08932449018126888,
+          "offBox": [
+            0.117,
+            0.048,
+            0.809,
+            0.912
+          ]
+        },
+        {
+          "page": 4,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 249,
+          "offShare": 0.08657477341389729,
+          "offBox": [
+            0.117,
+            0.048,
+            0.844,
+            0.912
+          ]
+        },
+        {
+          "page": 5,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 241,
+          "offShare": 0.08826236782477341,
+          "offBox": [
+            0.117,
+            0.048,
+            0.824,
+            0.912
+          ]
+        },
+        {
+          "page": 6,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 242,
+          "offShare": 0.08293995468277945,
+          "offBox": [
+            0.117,
+            0.048,
+            0.824,
+            0.912
+          ]
+        },
+        {
+          "page": 7,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 245,
+          "offShare": 0.08483997356495468,
+          "offBox": [
+            0.117,
+            0.048,
+            0.84,
+            0.912
+          ]
+        },
+        {
+          "page": 8,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 240,
+          "offShare": 0.08413189199395771,
+          "offBox": [
+            0.117,
+            0.048,
+            0.773,
+            0.912
+          ]
+        },
+        {
+          "page": 9,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 236,
+          "offShare": 0.08937169561933535,
+          "offBox": [
+            0.117,
+            0.048,
+            0.809,
+            0.912
+          ]
+        },
+        {
+          "page": 10,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 255,
+          "offShare": 0.0876014916918429,
+          "offBox": [
+            0.117,
+            0.048,
+            0.824,
+            0.912
+          ]
+        }
+      ]
+    },
+    {
+      "file": "synthetic-vector-200k.pdf",
+      "engine": "pdfjs-hwa",
+      "variant": "pdfjs-hwa-pathtext",
+      "pages": 1,
+      "identical": 1,
+      "differing": []
+    },
+    {
+      "file": "synthetic-vector-200k.pdf",
+      "engine": "pdfjs",
+      "variant": "pdfjs-pathtext",
+      "pages": 1,
+      "identical": 1,
+      "differing": []
+    },
+    {
+      "file": "synthetic-vector-pages.pdf",
+      "engine": "pdfjs-hwa",
+      "variant": "pdfjs-hwa-pathtext",
+      "pages": 10,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 231,
+          "offShare": 0.0019236216012084592,
+          "offBox": [
+            0.012,
+            0.036,
+            0.992,
+            1
+          ]
+        },
+        {
+          "page": 2,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 221,
+          "offShare": 0.0004720543806646526,
+          "offBox": [
+            0.063,
+            0.036,
+            0.152,
+            0.057
+          ]
+        },
+        {
+          "page": 3,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 201,
+          "offShare": 0.0004956570996978852,
+          "offBox": [
+            0.063,
+            0.036,
+            0.152,
+            0.057
+          ]
+        },
+        {
+          "page": 4,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 221,
+          "offShare": 0.0004720543806646526,
+          "offBox": [
+            0.063,
+            0.036,
+            0.152,
+            0.057
+          ]
+        },
+        {
+          "page": 5,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 221,
+          "offShare": 0.00036584214501510573,
+          "offBox": [
+            0.063,
+            0.036,
+            0.152,
+            0.054
+          ]
+        },
+        {
+          "page": 6,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 180,
+          "offShare": 0.0004366503021148036,
+          "offBox": [
+            0.063,
+            0.036,
+            0.152,
+            0.057
+          ]
+        },
+        {
+          "page": 7,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 188,
+          "offShare": 0.00044845166163141995,
+          "offBox": [
+            0.063,
+            0.036,
+            0.152,
+            0.057
+          ]
+        },
+        {
+          "page": 8,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 188,
+          "offShare": 0.00046025302114803627,
+          "offBox": [
+            0.063,
+            0.036,
+            0.152,
+            0.057
+          ]
+        },
+        {
+          "page": 9,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 221,
+          "offShare": 0.0005192598187311178,
+          "offBox": [
+            0.063,
+            0.036,
+            0.152,
+            0.057
+          ]
+        },
+        {
+          "page": 10,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 231,
+          "offShare": 0.0005782666163141994,
+          "offBox": [
+            0.063,
+            0.036,
+            0.168,
+            0.057
+          ]
+        }
+      ]
+    },
+    {
+      "file": "synthetic-vector-pages.pdf",
+      "engine": "pdfjs",
+      "variant": "pdfjs-pathtext",
+      "pages": 10,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 230,
+          "offShare": 0.0005310611782477342,
+          "offBox": [
+            0.063,
+            0.036,
+            0.152,
+            0.057
+          ]
+        },
+        {
+          "page": 2,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 221,
+          "offShare": 0.0004720543806646526,
+          "offBox": [
+            0.063,
+            0.036,
+            0.152,
+            0.054
+          ]
+        },
+        {
+          "page": 3,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 198,
+          "offShare": 0.00046025302114803627,
+          "offBox": [
+            0.063,
+            0.036,
+            0.152,
+            0.057
+          ]
+        },
+        {
+          "page": 4,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 221,
+          "offShare": 0.00048385574018126886,
+          "offBox": [
+            0.063,
+            0.036,
+            0.152,
+            0.057
+          ]
+        },
+        {
+          "page": 5,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 221,
+          "offShare": 0.0004248489425981873,
+          "offBox": [
+            0.063,
+            0.036,
+            0.152,
+            0.054
+          ]
+        },
+        {
+          "page": 6,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 184,
+          "offShare": 0.00044845166163141995,
+          "offBox": [
+            0.063,
+            0.036,
+            0.152,
+            0.057
+          ]
+        },
+        {
+          "page": 7,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 191,
+          "offShare": 0.00046025302114803627,
+          "offBox": [
+            0.063,
+            0.036,
+            0.152,
+            0.057
+          ]
+        },
+        {
+          "page": 8,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 212,
+          "offShare": 0.00046025302114803627,
+          "offBox": [
+            0.063,
+            0.036,
+            0.152,
+            0.057
+          ]
+        },
+        {
+          "page": 9,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 221,
+          "offShare": 0.0005074584592145015,
+          "offBox": [
+            0.063,
+            0.036,
+            0.152,
+            0.057
+          ]
+        },
+        {
+          "page": 10,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 230,
+          "offShare": 0.0005782666163141994,
+          "offBox": [
+            0.063,
+            0.036,
+            0.164,
+            0.057
+          ]
+        }
+      ]
+    },
+    {
+      "file": "usrguide.pdf",
+      "engine": "pdfjs-hwa",
+      "variant": "pdfjs-hwa-pathtext",
+      "pages": 10,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "1587×2245 / 1587×2245",
+          "maxDiff": 160,
+          "offShare": 0.02668551450276243,
+          "offBox": [
+            0.211,
+            0.196,
+            0.789,
+            0.84
+          ]
+        },
+        {
+          "page": 2,
+          "sizes": "1587×2245 / 1587×2245",
+          "maxDiff": 200,
+          "offShare": 0.036645372928176795,
+          "offBox": [
+            0.211,
+            0.152,
+            0.789,
+            0.892
+          ]
+        },
+        {
+          "page": 3,
+          "sizes": "1587×2245 / 1587×2245",
+          "maxDiff": 212,
+          "offShare": 0.0464325794198895,
+          "offBox": [
+            0.211,
+            0.152,
+            0.789,
+            0.892
+          ]
+        },
+        {
+          "page": 4,
+          "sizes": "1587×2245 / 1587×2245",
+          "maxDiff": 207,
+          "offShare": 0.041695441988950276,
+          "offBox": [
+            0.18,
+            0.152,
+            0.789,
+            0.854
+          ]
+        },
+        {
+          "page": 5,
+          "sizes": "1587×2245 / 1587×2245",
+          "maxDiff": 192,
+          "offShare": 0.034810946132596686,
+          "offBox": [
+            0.18,
+            0.155,
+            0.789,
+            0.892
+          ]
+        },
+        {
+          "page": 6,
+          "sizes": "1587×2245 / 1587×2245",
+          "maxDiff": 187,
+          "offShare": 0.0325988432320442,
+          "offBox": [
+            0.211,
+            0.152,
+            0.789,
+            0.892
+          ]
+        },
+        {
+          "page": 7,
+          "sizes": "1587×2245 / 1587×2245",
+          "maxDiff": 210,
+          "offShare": 0.03249093577348066,
+          "offBox": [
+            0.211,
+            0.155,
+            0.789,
+            0.773
+          ]
+        },
+        {
+          "page": 8,
+          "sizes": "1587×2245 / 1587×2245",
+          "maxDiff": 183,
+          "offShare": 0.03549076312154696,
+          "offBox": [
+            0.18,
+            0.152,
+            0.879,
+            0.892
+          ]
+        },
+        {
+          "page": 9,
+          "sizes": "1587×2245 / 1587×2245",
+          "maxDiff": 192,
+          "offShare": 0.021322513812154695,
+          "offBox": [
+            0.18,
+            0.155,
+            0.789,
+            0.89
+          ]
+        },
+        {
+          "page": 10,
+          "sizes": "1587×2245 / 1587×2245",
+          "maxDiff": 166,
+          "offShare": 0.03319233425414365,
+          "offBox": [
+            0.211,
+            0.152,
+            0.789,
+            0.892
+          ]
+        }
+      ]
+    },
+    {
+      "file": "usrguide.pdf",
+      "engine": "pdfjs",
+      "variant": "pdfjs-pathtext",
+      "pages": 10,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "1587×2245 / 1587×2245",
+          "maxDiff": 154,
+          "offShare": 0.025681975138121548,
+          "offBox": [
+            0.211,
+            0.196,
+            0.789,
+            0.892
+          ]
+        },
+        {
+          "page": 2,
+          "sizes": "1587×2245 / 1587×2245",
+          "maxDiff": 213,
+          "offShare": 0.03641876726519337,
+          "offBox": [
+            0.211,
+            0.152,
+            0.789,
+            0.892
+          ]
+        },
+        {
+          "page": 3,
+          "sizes": "1587×2245 / 1587×2245",
+          "maxDiff": 199,
+          "offShare": 0.04692895372928177,
+          "offBox": [
+            0.211,
+            0.152,
+            0.789,
+            0.892
+          ]
+        },
+        {
+          "page": 4,
+          "sizes": "1587×2245 / 1587×2245",
+          "maxDiff": 209,
+          "offShare": 0.04111274171270718,
+          "offBox": [
+            0.18,
+            0.152,
+            0.789,
+            0.854
+          ]
+        },
+        {
+          "page": 5,
+          "sizes": "1587×2245 / 1587×2245",
+          "maxDiff": 204,
+          "offShare": 0.03468145718232044,
+          "offBox": [
+            0.18,
+            0.155,
+            0.789,
+            0.892
+          ]
+        },
+        {
+          "page": 6,
+          "sizes": "1587×2245 / 1587×2245",
+          "maxDiff": 200,
+          "offShare": 0.03287940262430939,
+          "offBox": [
+            0.211,
+            0.152,
+            0.789,
+            0.892
+          ]
+        },
+        {
+          "page": 7,
+          "sizes": "1587×2245 / 1587×2245",
+          "maxDiff": 191,
+          "offShare": 0.03240460980662983,
+          "offBox": [
+            0.211,
+            0.155,
+            0.789,
+            0.773
+          ]
+        },
+        {
+          "page": 8,
+          "sizes": "1587×2245 / 1587×2245",
+          "maxDiff": 173,
+          "offShare": 0.03586843922651934,
+          "offBox": [
+            0.18,
+            0.152,
+            0.883,
+            0.892
+          ]
+        },
+        {
+          "page": 9,
+          "sizes": "1587×2245 / 1587×2245",
+          "maxDiff": 204,
+          "offShare": 0.021354886049723756,
+          "offBox": [
+            0.18,
+            0.155,
+            0.789,
+            0.89
+          ]
+        },
+        {
+          "page": 10,
+          "sizes": "1587×2245 / 1587×2245",
+          "maxDiff": 165,
+          "offShare": 0.03270675069060774,
+          "offBox": [
+            0.211,
+            0.152,
+            0.789,
+            0.887
+          ]
+        }
+      ]
+    },
+    {
+      "file": "wdl6812-manuscript.pdf",
+      "engine": "pdfjs-hwa",
+      "variant": "pdfjs-hwa-pathtext",
+      "pages": 2,
+      "identical": 2,
+      "differing": []
+    },
+    {
+      "file": "wdl6812-manuscript.pdf",
+      "engine": "pdfjs",
+      "variant": "pdfjs-pathtext",
+      "pages": 2,
+      "identical": 2,
+      "differing": []
+    }
+  ]
+}

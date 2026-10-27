@@ -21,7 +21,8 @@
  * (pdfjs-dist,master,master-worker), HWA (1,0), VIEWS
  * (detail,detail-small,page-4,page-2), ANNOTATIONS (1,0), PROBE (1 to time
  * reading one pixel of the canvas right after each render), RUNS (5), FILE
- * (bill-hr815.pdf), PAGE (1), PDFJS_DIST (a pdfjs-dist package directory to
+ * (bill-hr815.pdf), PAGE (1), PATH_TEXT (1 to draw text as paths, pdf.js's
+ * `disableFontFace`; issue #18), PDFJS_DIST (a pdfjs-dist package directory to
  * measure instead of bench's dependency, such as a patched copy), OUTPUT (JSON
  * path; default bench/results/raw/knockout-<browser>.json), and SERVE=1 to only
  * serve the page and print its URLs, for browsers outside Playwright.
@@ -89,6 +90,14 @@ const allViews: Record<string, View> = {
   },
   "page-4": { description: "whole page at 4 px/pt (2880×4320)", scale: 4 },
   "page-2": { description: "whole page at 2 px/pt (1440×2160)", scale: 2 },
+  "page-6": { description: "whole page at 6 px/pt (4320×6480)", scale: 6 },
+  "page-7": { description: "whole page at 7 px/pt (5040×7560)", scale: 7 },
+  "page-8": { description: "whole page at 8 px/pt (5760×8640)", scale: 8 },
+  "detail-blank": {
+    description: "5000×3360 region at 8 px/pt, page bottom",
+    scale: 8,
+    region: [760, 5280, 5000, 3360],
+  },
 };
 
 const pick = <T>(all: Record<string, T>, names: string[], kind: string) =>
@@ -219,6 +228,7 @@ function jobUrl(job: Job): string {
   });
   if (build.renderer) query.set("renderer", build.renderer);
   if (probe) query.set("probe", "1");
+  if (process.env.PATH_TEXT === "1") query.set("pathText", "1");
   if (view.region) query.set("region", view.region.join(","));
   return `${baseUrl}?${query}`;
 }
