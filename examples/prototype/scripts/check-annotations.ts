@@ -21,6 +21,7 @@ import {
   launchBrowser,
   restoreScaleFactor,
 } from "../../../bench/scripts/browsers.ts";
+import { decodePng } from "./png.ts";
 
 const exampleDir = fileURLToPath(new URL("..", import.meta.url));
 const engine = process.env.ENGINE ?? "pdfjs-next";
@@ -881,6 +882,253 @@ try {
       errors.slice(0, 3).join(" | "),
     );
     await page.context().close();
+  }
+  // --- Annotations the file holds ---
+  {
+    const { page, errors } = await open(launched.browser, demo("file=synthetic-annotations.pdf"));
+    const section = page.locator('section[data-page="1"]');
+    const sectionOf = (on: Page) => on.locator('section[data-page="1"]');
+    /** The editors on page 1, by kind, with their boxes in points from the page's corner. */
+    const editors = () =>
+      page.evaluate(() => {
+        const host = document.querySelector('section[data-page="1"]');
+        const layer = host?.querySelector(".parapdf-editor-layer");
+        if (!host || !layer) return [];
+        const page = host.getBoundingClientRect();
+        const scale = page.width / 612;
+        return [...layer.children].map((editor) => {
+          const box = editor.getBoundingClientRect();
+          return {
+            kind: editor.className.split(" ")[0] ?? "",
+            x: Math.round((box.x - page.x) / scale),
+            y: Math.round((box.y - page.y) / scale),
+            canvas: editor.querySelector("canvas") !== null,
+          };
+        });
+      });
+    const kinds = async () =>
+      (await editors())
+        .map(({ kind }) => kind)
+        .sort()
+        .join(" ");
+    /** The color a screenshot shows at a point of page 1, in points from its top-left corner. */
+    const colorAt = async (x: number, y: number, on = page) => {
+      const box = await sectionOf(on).boundingBox();
+      if (!box) return [0, 0, 0];
+      const scale = box.width / 612;
+      const clip = { x: box.x + x * scale - 2, y: box.y + y * scale - 2, width: 4, height: 4 };
+      const { rgba, width } = decodePng(await on.screenshot({ clip }));
+      const at = (Math.floor(width / 2) * width + Math.floor(width / 2)) * 4;
+      return [rgba[at] ?? 0, rgba[at + 1] ?? 0, rgba[at + 2] ?? 0];
+    };
+    // The stamp is a blue box at [350, 500, 450, 560] in PDF space, its
+    // middle 400 by 262 points from the page's top-left corner.
+    const blue = ([r, , b]: number[]) => (b ?? 0) > 180 && (r ?? 0) < 120;
+    const tool = (name: string) =>
+      page.evaluate((name) => (window as unknown as Demo).__annotations?.setTool(name), name);
+    const settle = () => page.waitForTimeout(600);
+
+    const drawn = blue(await colorAt(400, 262));
+    check(
+      "with no tool, the file's annotations are drawn and none is an editor",
+      drawn && (await editors()).length === 0 && (await exported(page)).length === 0,
+    );
+    await tool("ink");
+    await settle();
+    const editable = "freeTextEditor highlightEditor inkEditor stampEditor";
+    const stamp = (await editors()).find(({ kind }) => kind === "stampEditor");
+    check(
+      "choosing a tool makes the file's text, drawing, highlight, and image editors, and not its square",
+      (await kinds()) === editable && stamp?.canvas === true,
+      `${await kinds()}; stamp canvas ${stamp?.canvas}`,
+    );
+    check("the image stays in view as an editor", blue(await colorAt(400, 262)));
+    await tool("none");
+    await settle();
+    await tool("ink");
+    await settle();
+    check(
+      "choosing a tool again makes no second editor, and unchanged annotations export nothing",
+      (await kinds()) === editable && (await exported(page)).length === 0,
+      await kinds(),
+    );
+
+    // Move the image 100 points down, and delete the text. A first click
+    // selects the image, and chooses its tool as pdf.js does; then it drags.
+    await section.locator(".stampEditor").click();
+    const stampBox = await section.locator(".stampEditor").boundingBox();
+    const sectionBox = await section.boundingBox();
+    if (stampBox && sectionBox) {
+      const scale = sectionBox.width / 612;
+      const [x, y] = [stampBox.x + stampBox.width / 2, stampBox.y + stampBox.height / 2];
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x, y + 50 * scale, { steps: 5 });
+      await page.mouse.move(x, y + 100 * scale, { steps: 5 });
+      await page.mouse.up();
+    }
+    await page.locator(".freeTextEditor").click();
+    await page.keyboard.press("Delete");
+    await settle();
+    let annotations = await exported(page);
+    const moved = annotations.find((annotation) => annotation.type === "stamp");
+    check(
+      "a moved annotation of the file exports in its place, and a deleted one not at all",
+      annotations.length === 1 &&
+        moved?.data.annotationElementId === "25R" &&
+        Math.abs((moved.data.rect?.[1] ?? 0) - 400) < 2,
+      rects(annotations),
+    );
+    check(
+      "the editors follow: the text is gone and the image moved",
+      (await kinds()) === "highlightEditor inkEditor stampEditor" &&
+        (await editors()).find(({ kind }) => kind === "stampEditor")?.y === (stamp?.y ?? 0) + 100,
+      JSON.stringify(await editors()),
+    );
+    await page.evaluate(() => (window as unknown as Demo).__annotations?.undo());
+    await settle();
+    const undone = await kinds();
+    await page.evaluate(() => (window as unknown as Demo).__annotations?.redo());
+    await settle();
+    check(
+      "undo brings the deleted text back and redo deletes it again",
+      undone === editable && (await kinds()) === "highlightEditor inkEditor stampEditor",
+      `${undone} → ${await kinds()}`,
+    );
+
+    // Back to no tool: the drawing leaves the changed and deleted ones out.
+    await tool("none");
+    await settle();
+    check(
+      "with no tool again, the image shows only where it moved, and the text not at all",
+      !blue(await colorAt(400, 262)) &&
+        blue(await colorAt(400, 362)) &&
+        (await kinds()) === "stampEditor",
+      `${await colorAt(400, 262)} / ${await colorAt(400, 362)}; ${await kinds()}`,
+    );
+
+    // Unmount the page and come back, zoom, and turn.
+    await tool("ink");
+    await settle();
+    await page.evaluate(() => (window as unknown as Demo).__viewer?.goToPage(7));
+    await page.waitForTimeout(800);
+    await page.evaluate(() => (window as unknown as Demo).__viewer?.goToPage(0));
+    await editorLayer(page, 1);
+    await settle();
+    const back = await editors();
+    check(
+      "the page mounting again shows the changes, and no editor twice",
+      (await kinds()) === "highlightEditor inkEditor stampEditor" &&
+        back.find(({ kind }) => kind === "stampEditor")?.y === (stamp?.y ?? 0) + 100,
+      JSON.stringify(back),
+    );
+    await page.evaluate(() => (window as unknown as Demo).__viewer?.setScale(2));
+    await settle();
+    await page.evaluate(() => (window as unknown as Demo).__viewer?.rotate(90));
+    await settle();
+    await page.evaluate(() => (window as unknown as Demo).__viewer?.rotate(-90));
+    await page.evaluate(() => (window as unknown as Demo).__viewer?.setScale(1));
+    await editorLayer(page, 1);
+    await settle();
+    annotations = await exported(page);
+    check(
+      "zooming and turning keep the changes",
+      (await kinds()) === "highlightEditor inkEditor stampEditor" &&
+        annotations.length === 1 &&
+        Math.abs((annotations[0]?.data.rect?.[1] ?? 0) - 400) < 2,
+      `${await kinds()}; ${rects(annotations)}`,
+    );
+
+    // Saving writes the changes into the file, read back as above: what
+    // WebKit reports of the second document's worker is not the viewer's.
+    const before = errors.length;
+    const saved = await page.evaluate(async () => {
+      const demo = window as unknown as Demo;
+      const bytes = await demo.__parapdf?.save(demo.__viewer);
+      if (!bytes || !window.pdfjsLib) return [];
+      const doc = await window.pdfjsLib.getDocument({ data: bytes }).promise;
+      const found = await (await doc.getPage(1)).getAnnotations();
+      return found.map((annotation) => {
+        const { subtype, rect } = annotation as { subtype: string; rect: number[] };
+        return `${subtype} ${rect.map(Math.round).join(" ")}`;
+      });
+    });
+    errors.splice(before);
+    check(
+      "saving writes the move and the deletion into the file",
+      !saved.some((line) => line.startsWith("FreeText")) &&
+        saved.includes("Stamp 350 400 450 460") &&
+        saved.some((line) => line.startsWith("Ink")) &&
+        saved.some((line) => line.startsWith("Highlight")) &&
+        saved.some((line) => line.startsWith("Square")),
+      saved.join(" | "),
+    );
+
+    // The export, imported into the document opened again, replaces the file's image.
+    await page.context().close();
+    const again = await open(launched.browser, demo("file=synthetic-annotations.pdf"));
+    const imported = await again.page.evaluate(
+      (list) => (window as unknown as Demo).__annotations?.import(list),
+      annotations,
+    );
+    await again.page.waitForTimeout(600);
+    const importedColors = [
+      await colorAt(400, 262, again.page),
+      await colorAt(400, 362, again.page),
+    ];
+    check(
+      "the imported change shows in place of the file's annotation, which is drawn no more",
+      !blue(importedColors[0] ?? []) && blue(importedColors[1] ?? []),
+      importedColors.join(" / "),
+    );
+    await again.page.evaluate(() => (window as unknown as Demo).__annotations?.setTool("ink"));
+    await again.page.waitForTimeout(600);
+    const replaced = await again.page.evaluate(() =>
+      [...document.querySelectorAll('section[data-page="1"] .parapdf-editor-layer > div')].map(
+        (editor) => editor.className.split(" ")[0],
+      ),
+    );
+    check(
+      "an imported change replaces the file's annotation it was made of",
+      imported === 1 &&
+        replaced.filter((kind) => kind === "stampEditor").length === 1 &&
+        replaced.length === 4,
+      `${imported}; ${replaced.join(" ")}`,
+    );
+    // Imported again while a tool is chosen, it replaces the editor it made.
+    await again.page.evaluate(
+      (list) => (window as unknown as Demo).__annotations?.import(list),
+      annotations,
+    );
+    const twice = await again.page.evaluate(() => ({
+      stamps: document.querySelectorAll('section[data-page="1"] .stampEditor').length,
+      exported: (window as unknown as Demo).__annotations?.export() ?? [],
+    }));
+    check(
+      "importing the change again replaces it, and exports it once",
+      twice.stamps === 1 &&
+        twice.exported.length === 1 &&
+        twice.exported[0]?.data.annotationElementId === "25R",
+      `${twice.stamps}; ${rects(twice.exported)}`,
+    );
+
+    // With no tool, a double click on an annotation of the file edits it.
+    await again.page.evaluate(() => (window as unknown as Demo).__annotations?.setTool("none"));
+    await again.page.waitForTimeout(600);
+    await again.page.locator('section[data-page="1"] .freeTextAnnotation').dblclick();
+    await again.page.waitForTimeout(600);
+    const chosen = await viewerState(again.page);
+    check(
+      "a double click with no tool chosen edits that annotation",
+      chosen.annotationTool === "freetext",
+      chosen.annotationTool,
+    );
+    check(
+      "no errors while editing the file's annotations",
+      errors.length === 0 && again.errors.length === 0,
+      [...errors, ...again.errors].slice(0, 3).join(" | "),
+    );
+    await again.page.context().close();
   }
 } finally {
   await launched.close();

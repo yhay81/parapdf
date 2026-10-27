@@ -1,11 +1,16 @@
 import type * as Pdfjs from "pdfjs-dist";
+import type { AnnotationLayerEditing } from "./annotation-layer.ts";
 import { type PageColors, RenderCancelledError, type Rotation } from "./draw.ts";
+import type { StructTreeBuilder } from "./struct-tree.ts";
 
 /*
  * Annotation editing through pdf.js's display API: its
  * AnnotationEditorUIManager owns the editors of one viewer, an
  * AnnotationEditorLayer per mounted page shows them, and a DrawLayer per page
- * draws highlights and freehand lines as SVG under the text layer. pdf.js's
+ * draws highlights and freehand lines as SVG under the text layer. The
+ * annotations the file holds that pdf.js edits come from the page's
+ * annotation layer, which reports them to the manager, while a tool is
+ * chosen. pdf.js's
  * viewer components, which build these for its own viewer, are not used: the
  * manager hears of scrolling, zooming, and turning through a small event bus
  * of ParaPDF's, the shape pdf.js's editors expect of one.
@@ -17,7 +22,8 @@ import { type PageColors, RenderCancelledError, type Rotation } from "./draw.ts"
 /**
  * What a pointer does on the pages while annotations are edited: create
  * one kind of annotation, or, with "none", nothing: annotations created
- * before still show, but cannot be selected.
+ * before still show, but cannot be selected. While a tool is chosen, those
+ * the file holds that pdf.js edits can be selected too.
  */
 export type AnnotationTool = "none" | "highlight" | "freetext" | "ink" | "stamp" | "signature";
 
@@ -126,6 +132,12 @@ export interface AnnotationEditorOptions {
   onStylesChange(styles: AnnotationStyles): void;
   /** The editor switched tools by itself, as when the reader selects an annotation of another kind. */
   onToolChange(tool: AnnotationTool): void;
+  /**
+   * Pages are to be drawn again, as `layerEditing.editing` says (see
+   * `AnnotationLayerEditing`): a tool was chosen, or the tool went back to
+   * none, or imported annotations took the place of the file's.
+   */
+  onRedraw(): void;
 }
 
 export interface AnnotationLayerElements {
@@ -139,6 +151,14 @@ export interface AnnotationLayerElements {
   drawings: HTMLElement;
   /** The page's text layer, whose selections become highlights; null without one. */
   textLayer: HTMLElement | null;
+  /**
+   * The page's annotation layer, built with `layerEditing`, whose
+   * annotations of the kinds pdf.js edits become editors while a tool is
+   * chosen; null without one.
+   */
+  annotationLayer: Pdfjs.AnnotationLayer | null;
+  /** The page's structure tree, which labels the images among them. */
+  structTree: StructTreeBuilder | null;
   /** CSS pixels per PDF point, and the view's rotation. */
   cssScale: number;
   rotation: Rotation;
@@ -164,6 +184,8 @@ export interface AnnotationEditorLayerTask {
 export interface AnnotationEditor {
   readonly state: AnnotationEditingState;
   readonly styles: AnnotationStyles;
+  /** What the pages' annotation layers and drawings are built with. */
+  readonly layerEditing: AnnotationLayerEditing;
   setTool(tool: AnnotationTool): Promise<void>;
   /** Restyle the selected annotations, or with none selected, the next ones `tool` creates. */
   setStyle<T extends keyof AnnotationStyles>(tool: T, style: Partial<AnnotationStyles[T]>): void;
@@ -184,9 +206,12 @@ export interface AnnotationEditor {
     signature: SignatureInput,
     description?: string,
   ): Promise<boolean>;
-  /** Every annotation created, as data `import` takes. */
+  /** Every annotation created, and those of the file changed, as data `import` takes. */
   export(): SavedAnnotation[];
-  /** Add annotations `export` gave, on mounted pages or not, without an undo step. */
+  /**
+   * Add annotations `export` gave, on mounted pages or not, without an undo
+   * step; a changed annotation of the file takes its place.
+   */
   import(annotations: readonly SavedAnnotation[]): Promise<number>;
   /** The view zoomed or turned. */
   setView(cssScale: number, rotation: Rotation): void;
@@ -194,9 +219,10 @@ export interface AnnotationEditor {
   setCurrentPage(pageIndex: number): void;
   renderLayer(elements: AnnotationLayerElements): AnnotationEditorLayerTask;
   /**
-   * Ends editing. Its annotations leave the document's storage, unless
-   * `keep`: they stay there, saved and printed with the document as those
-   * of unmounted pages are, until the function it returns removes them.
+   * Ends editing. Its annotations, and its changes to the file's, leave the
+   * document's storage, unless `keep`: they stay there, saved and printed
+   * with the document as those of unmounted pages are, until the function
+   * it returns removes them.
    */
   destroy(keep?: boolean): () => void;
 }
@@ -208,6 +234,11 @@ interface PdfjsEditor {
   /** pdf.js's name of the kind, the same as ParaPDF's. */
   readonly editorType: AnnotationType;
   pageIndex: number;
+  /** The id of the annotation of the file it edits, null for one created. */
+  annotationElementId: string | null;
+  /** What pdf.js tells a change to the file's annotation by. */
+  _initialData: object | null;
+  readonly deleted: boolean;
   /** Moves it by CSS pixels on the screen. */
   translate(x: number, y: number): void;
   isClone?: boolean;
@@ -221,6 +252,9 @@ interface PdfjsEditor {
   getDrawnSignature(curves: object): unknown;
   onceAdded(focus: boolean): void;
   remove(): void;
+  show(visible?: boolean): void;
+  /** Shows its change in the file's annotation's element: true when that hides it. */
+  renderAnnotationElement(element: object): unknown;
 }
 
 interface PdfjsEditorLayer {
@@ -231,6 +265,8 @@ interface PdfjsEditorLayer {
   deserialize(data: object): Promise<PdfjsEditor | null>;
   addOrRebuild(editor: PdfjsEditor): void;
   addNewEditor(data?: object): void;
+  /** The element of the file's annotation `id` in the page's annotation layer. */
+  getEditableAnnotation(id: string): { hide(): void; show(): void } | null;
   destroy(): void;
 }
 
@@ -251,6 +287,8 @@ interface PdfjsUIManager {
   ): Promise<void>;
   updateParams(type: number, value: unknown): void;
   getMode(): number;
+  addChangedExistingAnnotation(editor: PdfjsEditor): void;
+  removeDeletedAnnotationElement(editor: PdfjsEditor): void;
   getLayer(pageIndex: number): PdfjsEditorLayer | undefined;
   getEditors(pageIndex: number): Iterable<PdfjsEditor>;
   undo(): void;
@@ -476,6 +514,9 @@ function quietly<T>(manager: PdfjsUIManager, container: HTMLElement, run: () => 
 /** What pdf.js's ids of editors' annotations start with, followed by a number. */
 const EDITOR_PREFIX = "pdfjs_internal_editor_";
 
+/** A page without a structure tree, which labels nothing. */
+const NO_STRUCTURE = { getAriaAttributes: async () => null };
+
 /** The next editor id of each document, for every editor of it. */
 const editorIds = new WeakMap<Pdfjs.PDFDocumentProxy, { next: number }>();
 
@@ -697,6 +738,33 @@ export function createPdfjsAnnotationEditor(
     false,
   ) as unknown as PdfjsUIManager;
 
+  // Choosing a tool, or going back to none, changes what pages draw of the
+  // file's annotations: those edited are left out while a tool is chosen,
+  // and those changed or deleted after. pdf.js and its editors switch
+  // modes through updateMode(), on their own too.
+  let editing = false;
+  // pdf.js keeps the ids of changed annotations, which drawings leave out,
+  // until told to collect them again.
+  const resetModifiedIds = () =>
+    (doc.annotationStorage as unknown as { resetModifiedIds(): void }).resetModifiedIds();
+  const updateMode = manager.updateMode.bind(manager);
+  manager.updateMode = async (...args) => {
+    await updateMode(...args);
+    const now = !destroyed && manager.getMode() !== Mode.NONE;
+    if (now === editing) return;
+    editing = now;
+    // As pdf.js's viewer does here.
+    if (!now) resetModifiedIds();
+    options.onRedraw();
+  };
+  const layerEditing = {
+    uiManager: manager,
+    eventBus,
+    get editing() {
+      return editing;
+    },
+  } satisfies AnnotationLayerEditing;
+
   // WebKit collects a signal from AbortSignal.any() that nothing references,
   // and aborting its sources then no longer removes the listeners added with
   // it: in Playwright's WebKit 27.2, the window listener of a finished
@@ -878,6 +946,7 @@ export function createPdfjsAnnotationEditor(
     get styles() {
       return styles;
     },
+    layerEditing,
     async setTool(tool) {
       if (destroyed) return;
       await switchTo(modes[tool]);
@@ -979,10 +1048,16 @@ export function createPdfjsAnnotationEditor(
         for (const editor of manager.getEditors(pageIndex)) {
           const type = editor.editorType;
           if (!isAnnotationType(type) || editor.isEmpty()) continue;
+          // The file's annotations count once changed; deletions stay out.
+          const { annotationElementId: replaces } = editor;
+          if (replaces && (editor.deleted || editor.serialize() === null)) continue;
           // Copies, which pdf.js pastes, carry everything, images included;
           // highlights have none and are kept as the PDF saves them.
           const data = editor.serialize(type !== "highlight");
-          if (data) annotations.push({ pageIndex, type, data: plain(data) });
+          if (!data) continue;
+          // The id pdf.js creates an editor of the file's annotation with.
+          if (replaces) data.annotationElementId = replaces;
+          annotations.push({ pageIndex, type, data: plain(data) });
         }
       }
       return annotations;
@@ -996,11 +1071,16 @@ export function createPdfjsAnnotationEditor(
         byPage.set(pageIndex, [...(byPage.get(pageIndex) ?? []), annotation]);
       }
       let count = 0;
+      let replaced = false;
       const imported = () => {
         // The manager hears of no step, so it reports no change.
         if (count > 0 && state.isEmpty) {
           state = { ...state, isEmpty: false };
           options.onStateChange(state);
+        }
+        if (replaced && !destroyed) {
+          resetModifiedIds();
+          options.onRedraw();
         }
         return count;
       };
@@ -1010,15 +1090,32 @@ export function createPdfjsAnnotationEditor(
         if (destroyed) return imported();
         count += await withLayer(pageIndex, async (layer) => {
           const editors: PdfjsEditor[] = [];
+          const replacing = new Map<PdfjsEditor, { id: string; popupRef: unknown }>();
           for (const item of data) {
-            const editor = item ? await layer.deserialize({ ...item, pageIndex }) : null;
+            // pdf.js makes an editor of the file's annotation only of its
+            // element; this one is made new, and takes its place below.
+            const { annotationElementId: id, ...rest } = (item ?? {}) as Record<string, unknown>;
+            const editor = item ? await layer.deserialize({ ...rest, pageIndex }) : null;
+            if (editor && typeof id === "string")
+              replacing.set(editor, { id, popupRef: rest.popupRef });
             // In place: pdf.js moves a pasted copy beside its original,
             // except a clone.
             if (editor) editor.isClone = true;
             if (editor) editors.push(editor);
           }
+          // An editor of the file's annotation already there, changed,
+          // deleted, or not, gives way.
+          for (const { id } of replacing.values()) {
+            for (const existing of [...manager.getEditors(pageIndex)]) {
+              if (existing.annotationElementId !== id) continue;
+              if (existing.deleted) manager.removeDeletedAnnotationElement(existing);
+              existing.remove();
+            }
+          }
           if (layer.div) {
             const { div } = layer;
+            // pdf.js hides a layer left empty as the tool goes back to none.
+            if (editors.length > 0) div.hidden = false;
             quietly(manager, div, () => {
               for (const editor of editors) layer.addOrRebuild(editor);
             });
@@ -1031,6 +1128,27 @@ export function createPdfjsAnnotationEditor(
               }
             }
           }
+          // Drawn, it becomes a change to the file's annotation, as an edit
+          // makes one: saved over it, and shown, drawn, and exported instead.
+          for (const [editor, { id, popupRef }] of replacing) {
+            editor.annotationElementId = id;
+            // Unlike any annotation of the file, so that it counts as changed.
+            editor._initialData = {
+              pageIndex: -1,
+              color: [],
+              accessibilityData: { altText: "" },
+              popupRef: typeof popupRef === "string" ? popupRef : "",
+            };
+            doc.annotationStorage.setValue(editor.id, editor);
+            manager.addChangedExistingAnnotation(editor);
+            replaced = true;
+            // On a page shown, the file's annotation hides while a tool is
+            // chosen, and shows the change, as pdf.js has it once the tool
+            // goes back to none, otherwise.
+            const element = layer.getEditableAnnotation(id);
+            if (element && editing) element.hide();
+            else if (element && editor.renderAnnotationElement(element)) editor.show(false);
+          }
           return editors.length;
         });
       }
@@ -1040,7 +1158,16 @@ export function createPdfjsAnnotationEditor(
     setCurrentPage(pageIndex) {
       eventBus.dispatch("pagechanging", { source: null, pageNumber: pageIndex + 1 });
     },
-    renderLayer({ pageIndex, container, drawings, textLayer, cssScale, rotation: turn }) {
+    renderLayer({
+      pageIndex,
+      container,
+      drawings,
+      textLayer,
+      annotationLayer,
+      structTree,
+      cssScale,
+      rotation: turn,
+    }) {
       let cancelled = false;
       let handle: AnnotationLayerEditor | null = null;
       const promise = getPage(pageIndex).then(async (page): Promise<AnnotationLayerEditor> => {
@@ -1058,9 +1185,10 @@ export function createPdfjsAnnotationEditor(
           uiManager: manager as never,
           pageIndex,
           div: container as HTMLDivElement,
-          structTreeLayer: null as never,
+          // pdf.js labels the file's images it edits from the structure tree.
+          structTreeLayer: (structTree ?? NO_STRUCTURE) as never,
           accessibilityManager: undefined,
-          annotationLayer: undefined,
+          annotationLayer: (annotationLayer ?? undefined) as never,
           drawLayer,
           textLayer: (textLayer ? { div: textLayer } : undefined) as never,
           viewport: viewportOf(page, cssScale, turn),
@@ -1130,6 +1258,8 @@ export function createPdfjsAnnotationEditor(
       const forget = () => {
         for (const id of own) storage.remove(id);
         own.clear();
+        // The file's annotations it changed are drawn again as they were.
+        resetModifiedIds();
       };
       if (destroyed) return forget;
       destroyed = true;

@@ -42,6 +42,13 @@ export interface DrawRequest {
    * out, and what the layer needs drawn for them goes to it.
    */
   formLayer?: HTMLElement;
+  /**
+   * The container of this page's annotation layer while a tool edits
+   * annotations (`AnnotationLayerEditing.editing`): the drawing leaves out
+   * the annotations pdf.js edits, and what the layer needs drawn for them
+   * goes to it.
+   */
+  editing?: HTMLElement;
   /** Colors to draw the page in instead of its own, for high-contrast reading. */
   colors?: PageColors;
   /**
@@ -106,14 +113,15 @@ export function formLayerOf(container: HTMLElement): {
 export function drawPage(
   { pdfjs }: LoadedPdfjs,
   page: Promise<Pdfjs.PDFPageProxy>,
-  { scale, rotation, canvas, region, print, formLayer, colors, layers }: DrawRequest,
+  { scale, rotation, canvas, region, print, formLayer, editing, colors, layers }: DrawRequest,
 ): DrawTask {
   let task: Pdfjs.RenderTask | undefined;
   let cancelled = false;
   const promise = page.then(async (page) => {
     if (cancelled) throw new RenderCancelledError("render cancelled before it started");
     const viewport = viewportOf(page, scale, rotation);
-    const form = formLayer ? formLayerOf(formLayer) : null;
+    const canvasLayer = formLayer ?? editing;
+    const form = canvasLayer ? formLayerOf(canvasLayer) : null;
     const parameters = {
       canvas,
       viewport,
@@ -125,12 +133,11 @@ export function drawPage(
             annotationMode: pdfjs.AnnotationMode.ENABLE_STORAGE,
             printAnnotationStorage: print,
           }
-        : form
-          ? {
-              annotationMode: pdfjs.AnnotationMode.ENABLE_FORMS,
-              annotationCanvasMap: form.canvases,
-            }
-          : {}),
+        : {
+            ...(formLayer ? { annotationMode: pdfjs.AnnotationMode.ENABLE_FORMS } : {}),
+            ...(form ? { annotationCanvasMap: form.canvases } : {}),
+            ...(editing ? { isEditing: true } : {}),
+          }),
     };
     if (region) {
       // Shift the page so the region's corner lands on the canvas origin.

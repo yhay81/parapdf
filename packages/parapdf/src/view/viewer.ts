@@ -383,6 +383,11 @@ export class Viewer {
     this.#shown?.renderer?.invalidateContent();
   }
 
+  /** What the drawings show changed, but not the layers: every page is drawn again. */
+  invalidateDrawings(): void {
+    this.#shown?.renderer?.invalidateDrawings();
+  }
+
   /** Open an embedded file as activating its annotation does: by default, download it. */
   openFile(file: { filename: string; content: Uint8Array }): void {
     const { openAttachment } = this.#options;

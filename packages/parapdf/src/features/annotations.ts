@@ -207,6 +207,11 @@ export function attachAnnotationEditing(
         onToolChange: (tool) => {
           if (created && !signal.aborted) showTool(tool);
         },
+        // Pages leave out the annotations of the file being edited, and
+        // then those changed.
+        onRedraw: () => {
+          if (created && !signal.aborted) viewer.invalidateDrawings();
+        },
       },
     );
     created = editing;
