@@ -15,5 +15,5 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "include": ["src/components", "src/samples.ts", "astro.config.ts"]
+  "include": ["src/components", "src/samples.ts", "astro.config.ts", "scripts"]
 }

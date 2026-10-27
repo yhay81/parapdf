@@ -13,6 +13,14 @@ change the API.
   its preload failed.
 - `Viewer.sourceName` is null once the viewer's document closes, as
   `session` is. Until now it kept the closed document's file name.
+- ParaPDF needs React 19.3 or later (`react` and `react-dom` 19.3.0).
+- On the server, `useOutline()`, `usePageLabels()`, `useMetadata()`,
+  `useAttachments()`, `useLayers()`, `useFormFields()`, and
+  `useInitialView()` opt out through React's `use(browser())`: the nearest
+  Suspense boundary renders its fallback there, and what it holds in the
+  browser, which reports no error. Until now they suspended on a read that
+  never settles on the server, so a server render waited for good; a
+  prerender ended with the process and wrote none of the pages after it.
 
 ## 0.5.0 — 2026-10-26
 

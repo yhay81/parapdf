@@ -51,7 +51,7 @@ A fast PDF viewer for React, built on [pdf.js](https://github.com/mozilla/pdf.js
 npm install parapdf
 ```
 
-ParaPDF needs React 19.2 or later. It depends on pdfjs-dist 6.4.299
+ParaPDF needs React 19.3 or later. It depends on pdfjs-dist 6.4.299
 exactly, because it ships that version's worker and files.
 
 ## Quick start

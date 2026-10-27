@@ -5,7 +5,7 @@ import { documentOf, type PdfSession } from "../document/pdf-session.ts";
 import type { FormChange, FormField } from "../features/forms/fields.ts";
 import { formsOf } from "../features/forms/index.ts";
 import type { Viewer } from "../view/viewer.ts";
-import { useSession } from "./context.ts";
+import { useSessionData } from "./context.ts";
 import { useLoadedFeature } from "./features.ts";
 
 /**
@@ -24,11 +24,12 @@ const fields = new WeakMap<PdfSession, Promise<readonly FormField[]>>();
 /**
  * The form fields of the nearest `<PdfDocument>`'s document with their
  * values as first read, empty when it has none; `getFormFields()` reads the
- * values again. Suspends until they are read: render it under a Suspense
- * boundary of the application's own, apart from the viewer.
+ * values again. Suspends until they are read, and throws on the server, as
+ * `useOutline()` does: render it under a Suspense boundary of the
+ * application's own, apart from the viewer.
  */
 export function useFormFields(): readonly FormField[] {
-  const session = useSession();
+  const session = useSessionData("useFormFields");
   let read = fields.get(session);
   if (!read) {
     read = documentOf(session)
