@@ -88,8 +88,10 @@ and [`bench/results/`](bench/results/) (the engines).
   browsers, with no blank area.
 - **What was tried and rejected**: frame display through `OffscreenCanvas`
   and `ImageBitmap` (0005), pdf.js's partial rendering of regions (0006),
-  keeping unmounted pages' parsed content (0007), and copying a whole-page
-  detail into the base past its budget (0008).
+  keeping unmounted pages' parsed content (0007), and copying every
+  whole-page detail into the base past its budget (0008); copying only
+  those no larger than a base was adopted (0012), which made zooming in on
+  a phone-sized viewport sharp two to four times sooner.
 
 The notes of Phase 0, the engine benchmark and the first measurements of
 the runtime, are in this README as of the tag

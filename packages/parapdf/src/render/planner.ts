@@ -264,6 +264,24 @@ export function detailBudget(context: PlanContext, index: number): number {
   return Math.min(budget, visibleTotal > 0 ? (left * own) / visibleTotal : left);
 }
 
+/**
+ * Whether the whole-page detail `page` shows becomes its base when it gives
+ * way to a detail of part of the page or leaves the viewport, as zooming
+ * past its budget does, instead of a base drawn again: only one no larger
+ * than a base (decision 0012). On a phone a whole-page detail at fit-width
+ * is about that size, and the base drawn instead is a full drawing of the
+ * page; scaling down the larger ones of a desktop cost WebKit more than the
+ * drawings it saved (decision 0008).
+ */
+export function demotes({ budgets, version }: PlanContext, page: PageState): boolean {
+  return (
+    page.detailScale > 0 &&
+    page.detailRegion === null &&
+    page.detailVersion === version &&
+    page.detailPixels <= budgets.maxBasePixels
+  );
+}
+
 /** What a page's detail layer should hold. */
 export interface DetailPlan {
   /** Device pixels per point. */
@@ -461,7 +479,8 @@ export function nextDrawing(
   const total = canvasPixels(context, all);
   // A base under whole-page detail would never show: under a current one,
   // or under a stale one that stays until a whole-page detail drawn into the
-  // spare replaces it, as after a zoom. Once scrolling settles, a page
+  // spare replaces it, as after a zoom, or a detail of part of the page
+  // does, and the whole-page one becomes the base. Once scrolling settles, a page
   // outside the viewport that gets whole-page detail draws it without a
   // base first: the detail has time to arrive before the page scrolls in,
   // and drawing both doubled the work for every page that slow scrolling
@@ -472,9 +491,9 @@ export function nextDrawing(
     const plan = planOf(page);
     return (
       plan !== null &&
-      plan.region === null &&
+      (plan.region === null || demotes(context, page)) &&
       !failed(context, page, "detail", plan) &&
-      keepsDetail(context, page, pagePixels(input, page.index, plan.scale, null), total)
+      keepsDetail(context, page, pagePixels(input, page.index, plan.scale, plan.region), total)
     );
   };
   // A base of an older content version shows wherever the detail does not.

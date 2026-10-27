@@ -124,6 +124,11 @@ around 220 to 240 ms, whichever build measures it.
   against 99 ms to 4×), Chromium zoomed out slower, and canvas memory ended
   6 MiB higher
   ([decision 0008](https://github.com/yhay81/parapdf/blob/main/docs/decisions/0008-demote-whole-page-detail.md)).
+  Copying only whole-page details no larger than a base, which a phone's
+  are and a desktop's are not, kept the gains without the losses and was
+  adopted: to 8× on bill-hr815.pdf, 223 → 72 ms in Chromium, 157 → 55 in
+  WebKit, 257 → 84 in Firefox
+  ([decision 0012](https://github.com/yhay81/parapdf/blob/main/docs/decisions/0012-demote-small-whole-page-detail.md)).
 
 ## The rebuild
 

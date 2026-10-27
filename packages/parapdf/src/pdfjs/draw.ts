@@ -109,6 +109,27 @@ export function formLayerOf(container: HTMLElement): {
   return entry;
 }
 
+/**
+ * Draw `source`, a drawing of a page, into `canvas`, scaled to `width` by
+ * `height`, with the context pdf.js draws with, so that later drawings of
+ * pdf.js draw over it.
+ */
+export function copyDrawing(
+  { documentParameters }: LoadedPdfjs,
+  canvas: HTMLCanvasElement,
+  source: HTMLCanvasElement,
+  width: number,
+  height: number,
+): void {
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d", {
+    alpha: false,
+    willReadFrequently: documentParameters.enableHWA === false,
+  });
+  context?.drawImage(source, 0, 0, width, height);
+}
+
 /** Draw `page`, once it has loaded, into `request.canvas`, through pdf.js's core display API. */
 export function drawPage(
   { pdfjs }: LoadedPdfjs,
