@@ -286,10 +286,7 @@ const baseUrl = server.resolvedUrls?.local[0] ?? "http://127.0.0.1:4185/";
 const launched = await launchBrowser();
 console.log(`${launched.label}, engine ${engine}`);
 const errors: string[] = [];
-// Each document gets a fresh context, like a first visit. On a second visit
-// in the same context WebKit refused pdf.js's module workers under COEP,
-// apparently when taken from its cache, and pdf.js silently parsed on the
-// main thread.
+// Each document gets a fresh context, like a first visit.
 const newPage = async (): Promise<Page> => {
   const context = await launched.browser.newContext({
     viewport: { width: 1280, height: 900 },

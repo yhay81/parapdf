@@ -139,8 +139,10 @@ when the choice matters for performance or direction.
 - `bench/` — the engine benchmark (research, decision 0001): an adapter per
   engine (`src/engines/`), the corpus (`corpus/`, sources and licenses in
   its README), the synthetic corpus generator, the Playwright runner,
-  reports, and `bench/scripts/browsers.ts`, the launcher every Playwright
-  script shares. Results in `results/`.
+  reports, `bench/scripts/browsers.ts`, the launcher every Playwright
+  script shares, and `bench/scripts/isolation.ts`, the cross-origin
+  isolation the benchmark's and the demo's Vite servers send with every
+  response, 304s included. Results in `results/`.
 - `site/` — the documentation site (Astro with Starlight), deployed by
   `.github/workflows/site.yml` to https://parapdf.yhay81.com from release
   tags.
