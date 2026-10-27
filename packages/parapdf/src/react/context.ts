@@ -1,6 +1,7 @@
 "use client";
 
-import { createContext, useContext, useSyncExternalStore } from "react";
+import { createContext, use, useContext, useSyncExternalStore } from "react";
+import { browser } from "react-dom";
 import type { PdfSession } from "../document/pdf-session.ts";
 import type { DocumentState } from "../document/registry.ts";
 import type { ReadableStore } from "../document/store.ts";
@@ -28,6 +29,19 @@ export function useSelected<T, S>(store: ReadableStore<T>, selector: (state: T) 
 export function useSession(): PdfSession {
   const session = useContext(SessionContext);
   if (!session) throw new Error("useSession must be used inside <PdfDocument>");
+  return session;
+}
+
+/**
+ * The session, for a hook that reads the document's secondary data. The
+ * server opens no document, so `browser()` throws there instead of the hook
+ * suspending on a read that never settles: the nearest Suspense boundary
+ * renders its fallback, and React renders the hook's component in the
+ * browser without reporting an error.
+ */
+export function useSessionData(hook: string): PdfSession {
+  const session = useSession();
+  use(browser(() => `${hook} reads the document, which only the browser opens`));
   return session;
 }
 

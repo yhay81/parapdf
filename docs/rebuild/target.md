@@ -349,7 +349,11 @@ features extend it through (`extend()`, `defer()`, `session`, `renderer`,
 
 Server rendering stays as in 0.x: modules declare `"use client"`, the
 viewer renders an empty viewport on the server, and a URL source's preload
-goes into the page's head.
+goes into the page's head. The server opens no document, so the hooks of
+secondary data throw there, through React's `use(browser())`, instead of
+suspending on a read that never settles: the nearest Suspense boundary
+renders its fallback on the server, and React renders what it holds in the
+browser without reporting an error. This needs React 19.3.
 
 ## Ported unchanged
 

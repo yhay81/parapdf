@@ -33,3 +33,8 @@ belong in Client Components: put the toolbar and other controls in a file
 that starts with `"use client"`. A viewer from `useViewer()` cannot be
 passed from a Server Component; without one, `PdfViewer` uses a viewer of
 its own.
+
+The hooks that read the document's data and suspend, such as `useOutline()`
+and `usePageLabels()`, need a Suspense boundary on the server too: the
+server opens no document, so the boundary renders its fallback there, and
+what it holds in the browser.
