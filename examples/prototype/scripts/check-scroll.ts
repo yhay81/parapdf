@@ -134,16 +134,25 @@ const frames = (page: Page) =>
     () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
   );
 
-/** Waits until the scroll position stops moving, as after a smooth key scroll. */
+/**
+ * Waits until the scroll position stops moving, as after a smooth key scroll:
+ * until it holds for 400 ms, because WebKit on Linux starts moving it only
+ * some 200 ms after the key.
+ */
 async function still(page: Page): Promise<void> {
   let last = "";
-  for (let attempt = 0; attempt < 40; attempt++) {
+  let since = Date.now();
+  for (let attempt = 0; attempt < 60; attempt++) {
     const now = await page.evaluate(() => {
       const scroller = document.querySelector(".parapdf-viewport") as HTMLElement;
       return `${scroller.scrollLeft},${scroller.scrollTop}`;
     });
-    if (now === last) return;
-    last = now;
+    if (now !== last) {
+      last = now;
+      since = Date.now();
+    } else if (Date.now() - since >= 400) {
+      return;
+    }
     await page.waitForTimeout(60);
   }
 }
