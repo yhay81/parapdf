@@ -51,6 +51,10 @@ jobs:
       - run: pnpm --filter @parapdf/prototype build
       # Every check runs, also after one fails, and keeps its output in
       # logs/<check>.log; the step fails if any did.
+      - if: matrix.browser == 'webkit'
+        run: node examples/prototype/scripts/debug-search.ts
+        timeout-minutes: 5
+        continue-on-error: true
       - name: Functional checks
         timeout-minutes: 40
         run: |
