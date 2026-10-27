@@ -32,6 +32,10 @@ description: How ParaPDF exposes documents to assistive technology.
   pages near the viewport, not the whole document at once (see
   [Limitations](/about/limitations/)).
 
+The functional checks verify what the page exposes; no screen reader has
+been tried with it yet
+([#32](https://github.com/yhay81/parapdf/issues/32)).
+
 Applications own the rest of the interface: label your toolbar, announce
 search results with an `aria-live` region as [the search
 guide](/guides/search/) does, and label the annotation editor's controls with

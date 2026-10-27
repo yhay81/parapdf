@@ -35,7 +35,13 @@ builds so far.
 - The functional checks run in Playwright's builds of Chromium, WebKit, and
   Firefox; 0.4 was also tried by hand in Safari in the iPadOS simulator.
   Playwright's WebKit is not Safari: Safari on macOS and real iOS and iPadOS
-  devices are not verified yet.
+  devices are not verified yet
+  ([#13](https://github.com/yhay81/parapdf/issues/13)).
+- No screen reader has been tried. The checks inspect what the page exposes
+  to assistive technology (text language, accessible names, the tagged
+  structure), not what VoiceOver, NVDA, or another reader announces as a
+  reader moves through the pages
+  ([#32](https://github.com/yhay81/parapdf/issues/32)).
 - Whether iOS Safari counts the canvases pages keep when they unmount
   (`maxKeptPixels`) toward its canvas memory cap is not verified; it needs a
   device.
