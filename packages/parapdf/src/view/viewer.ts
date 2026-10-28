@@ -701,7 +701,7 @@ export class Viewer {
     if (!layout || !scroller || !renderer) return 0;
     const needed = layout.scale * (window.devicePixelRatio || 1);
     return sharpness(layout, viewportOf(scroller), needed, (index, area, needed) =>
-      renderer.sharpness(index, area, needed),
+      renderer.pageSharpness(index, area, needed),
     );
   }
 

@@ -85,7 +85,7 @@ describe("Renderer kept canvases", () => {
     assert.ok(!copied(again.base, again.detail, again.spare), "nothing is copied");
     assert.equal(renderer.keptPixels, 0);
     assert.equal(renderer.stats.kept, 1);
-    assert.equal(renderer.sharpness(0, whole, 1), 1);
+    assert.equal(renderer.pageSharpness(0, whole, 1), 1);
     renderer.update(input(1));
     await settle();
     assert.equal(renders.length, 1, "nothing is drawn again");
@@ -125,7 +125,7 @@ describe("Renderer kept canvases", () => {
     renderer.update(input(1.5));
     const { spare } = mount(renderer, 0);
     assert.equal(renderer.hasPixels(0), true);
-    assert.equal(renderer.sharpness(0, whole, 1.5), 2 / 3);
+    assert.equal(renderer.pageSharpness(0, whole, 1.5), 2 / 3);
     await settle();
     // The new detail is drawn into the spare while the kept one shows.
     assert.equal(renders.at(-1)?.request.scale, 1.5);
@@ -313,7 +313,7 @@ describe("Renderer kept canvases", () => {
     const again = mount(renderer, 0);
     assert.equal(again.detail, spare);
     assert.equal(spare.width, Math.floor(612 * 1.5), "and not cleared");
-    assert.equal(renderer.sharpness(0, whole, 1.5), 1);
+    assert.equal(renderer.pageSharpness(0, whole, 1.5), 1);
     const drawn = renders.length;
     renderer.update(input(1.5));
     await settle();

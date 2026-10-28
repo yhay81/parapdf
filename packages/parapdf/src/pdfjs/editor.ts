@@ -640,7 +640,7 @@ export function createPdfjsAnnotationEditor(
 
   let scale = options.scale;
   let rotation = options.rotation;
-  const viewportOf = (page: Pdfjs.PDFPageProxy, cssScale = scale, turn = rotation) =>
+  const pageViewport = (page: Pdfjs.PDFPageProxy, cssScale = scale, turn = rotation) =>
     page.getViewport({ scale: cssScale, rotation: (page.rotate + turn) % 360 }).clone({
       dontFlip: true,
     });
@@ -689,7 +689,7 @@ export function createPdfjsAnnotationEditor(
       annotationLayer: undefined,
       drawLayer,
       textLayer: undefined,
-      viewport: viewportOf(page),
+      viewport: pageViewport(page),
       l10n: l10n as never,
       mode: {},
       enabled: false,
@@ -1052,7 +1052,7 @@ export function createPdfjsAnnotationEditor(
           annotationLayer: (annotationLayer ?? undefined) as never,
           drawLayer,
           textLayer: (textLayer ? { div: textLayer } : undefined) as never,
-          viewport: viewportOf(page, cssScale, turn),
+          viewport: pageViewport(page, cssScale, turn),
           l10n: l10n as never,
           mode: {},
           enabled: false,
@@ -1081,7 +1081,7 @@ export function createPdfjsAnnotationEditor(
           update(nextScale, nextRotation) {
             if (removed || nextRotation === layerRotation) return;
             layerRotation = nextRotation;
-            layer.update({ viewport: viewportOf(page, nextScale, nextRotation) });
+            layer.update({ viewport: pageViewport(page, nextScale, nextRotation) });
           },
           destroy,
         };
@@ -1091,7 +1091,7 @@ export function createPdfjsAnnotationEditor(
           // layer, unless it has nothing to show and no tool is chosen.
           container.hidden = true;
           const rendered = quietly(manager, container, () =>
-            layer.render({ viewport: viewportOf(page, cssScale, turn) }),
+            layer.render({ viewport: pageViewport(page, cssScale, turn) }),
           );
           await rendered;
         } catch (error) {

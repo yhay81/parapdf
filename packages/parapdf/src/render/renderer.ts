@@ -42,9 +42,9 @@ import {
   type PageState,
   type PlanContext,
   type PlannedDrawing,
+  pageSharpness,
   plan,
   type RunningDrawing,
-  sharpness,
   staleDetail,
   trim,
   type ViewInput,
@@ -489,9 +489,9 @@ export class Renderer {
     return this.#layers.textHandle(index);
   }
 
-  /** See `sharpness` in the planner. */
-  sharpness(index: number, area: PageArea, needed: number): number {
-    return sharpness(this.#slots.get(index), area, needed);
+  /** See `pageSharpness` in the planner. */
+  pageSharpness(index: number, area: PageArea, needed: number): number {
+    return pageSharpness(this.#slots.get(index), area, needed);
   }
 
   /** See DomLayers.whenEditable. */
