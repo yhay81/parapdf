@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  clamp,
   type Direction,
   type Layout,
   type ScrollMode,
@@ -36,8 +37,6 @@ const FLING_STOP = 1000;
 const FLING_ENDS = ["touchstart", "pointerdown", "wheel", "keydown"] as const;
 /** Elements whose keys and touches belong to them rather than to page flipping. */
 export const CONTROLS = "input, select, textarea, button, [contenteditable], .parapdf-editor-layer";
-
-const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 /**
  * A zoom gesture in progress: the wheel with ctrl or meta (also trackpad

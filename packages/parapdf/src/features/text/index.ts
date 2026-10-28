@@ -1,4 +1,5 @@
 import type { PageText } from "../../pdfjs/text.ts";
+import { clamp } from "../../view/layout.ts";
 import type { Viewer } from "../../view/viewer.ts";
 import {
   type DocumentText,
@@ -18,8 +19,6 @@ export type {
 
 /** Pages `getText()` asks pdf.js for ahead of the one it reads. */
 const TEXT_READ_AHEAD = 4;
-
-const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 /**
  * The text of `viewer`'s document, read from pdf.js's text content of every

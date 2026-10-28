@@ -17,7 +17,7 @@ import type {
 import type { LayerState } from "../pdfjs/layers.ts";
 import { buildTextLayer, type TextLayerHandle, type TextLayerTask } from "../pdfjs/text.ts";
 import type { PageElements } from "./page.ts";
-import type { ViewInput } from "./planner.ts";
+import { sameScale, type ViewInput } from "./planner.ts";
 import type { TextSelectionTracker } from "./selection.ts";
 
 /**
@@ -108,8 +108,6 @@ const EDITOR_WAIT_MS = 10_000;
  * out keeps the finer layout.
  */
 const TEXT_RELAYOUT_ZOOM = 2;
-
-const sameScale = (a: number, b: number): boolean => Math.abs(a - b) <= b * 0.01;
 
 /**
  * Keeps a text layer at the zoom it is laid out for, `scale` CSS pixels per

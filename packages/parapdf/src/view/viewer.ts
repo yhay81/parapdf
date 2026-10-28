@@ -16,6 +16,7 @@ import { downloadBytes, filenameFromUrl } from "./files.ts";
 import { ViewerGestures } from "./gestures.ts";
 import { ViewerInput } from "./input.ts";
 import {
+  clamp,
   computeLayout,
   type Direction,
   type Layout,
@@ -56,8 +57,6 @@ import {
 import { linked } from "./signals.ts";
 import { type PointerTool, ViewerStore, type ZoomMode } from "./state.ts";
 import { destinationScale, fitScale, refits } from "./zoom.ts";
-
-const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 /** Whether a visible area is all of its page. */
 const whole = (area: PageArea | null): boolean =>

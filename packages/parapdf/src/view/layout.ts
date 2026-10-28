@@ -82,6 +82,10 @@ export interface LayoutOptions {
   page?: number;
 }
 
+/** `value` within `min` and `max`. */
+export const clamp = (value: number, min: number, max: number): number =>
+  Math.min(max, Math.max(min, value));
+
 /** The first and last page of the row that page `index` of `count` is in. */
 export function rowBounds(
   spread: SpreadMode,

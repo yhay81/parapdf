@@ -1,12 +1,18 @@
 import type { PageSize } from "../document/session.ts";
 import type { ResolvedDestination } from "../pdfjs/destinations.ts";
-import { rowBounds, turnedSize } from "./layout.ts";
+import { clamp, rowBounds, turnedSize } from "./layout.ts";
 import type { ViewerState, ZoomMode } from "./state.ts";
 
 // The zoom rules: the scale that fits a page or its row to the viewport, and
 // the zoom a destination asks for. A resize runs them up to once a frame, so
 // they allocate nothing the viewer's own methods did not, and read the
 // viewport's size as late as those did, forcing no layout they did not.
+
+/**
+ * The scale a PDF's zoom of 1, a destination's or a script's, stands for:
+ * the page at its printed size, 96 CSS pixels an inch of 72 points.
+ */
+export const PDF_TO_CSS = 96 / 72;
 
 /** The viewport's size: the scroller, or what a test passes. */
 export interface ViewportBox {
@@ -16,8 +22,6 @@ export interface ViewportBox {
 
 /** What fitting depends on of the view: the viewer's state passes as it is. */
 export type Arrangement = Pick<ViewerState, "rotation" | "spread" | "scrollMode">;
-
-const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 /**
  * The scale that fits the row of page `index`, the page or its spread, to
@@ -86,8 +90,7 @@ export function destinationScale(
   const quarter = view.rotation % 180 !== 0;
   switch (fit.fit) {
     case "zoom":
-      // A zoom of 1 shows the page at its printed size, 96 CSS pixels an inch.
-      return fit.zoom === null ? null : scaled((fit.zoom * 96) / 72);
+      return fit.zoom === null ? null : scaled(fit.zoom * PDF_TO_CSS);
     case "page":
     case "width": {
       const mode = fit.fit === "page" ? "fit-page" : "fit-width";
