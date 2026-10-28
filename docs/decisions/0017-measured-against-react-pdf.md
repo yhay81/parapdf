@@ -37,42 +37,46 @@ the benchmark rejects other scroll modes or scales for these variants.
 
 ## Evidence
 
-`scroll-bench.ts`, 3 runs, 900 and 3600 CSS px/s for 4 s, variants
+`scroll-bench.ts`, 5 runs, 900 and 3600 CSS px/s for 4 s, variants
 following each other job by job; Chromium 156, macOS on an Apple M2 Pro on
-AC power. These jobs use the headless Chromium preload fix in decision 0014.
-The one-minute load average was 12.1 at the start and 4.1 at the end of the
-110-page run, and 4.1 to 6.2 for the 1000-page run. The high starting load
-and differences from the earlier run make timing conclusions provisional;
-repeat under lower, stable load (`examples/prototype/results/compare-react-pdf-{110,1000}-chromium.md`).
+AC power, with the headless Chromium preload fix in decision 0014. Each job
+waited for a one-minute load average no higher than 7 and for other
+Playwright browsers to close. The 110-page run started at 18.5 before its
+initial wait and ended at 7.2; it waited 15 minutes in all. The 1000-page
+run started at 7.2 before its initial wait and ended at 4.7; it waited 4
+minutes. Neither repeated a job for an overlapping browser. An earlier
+three-run measurement had high load and different timings, so these results
+were measured again (`examples/prototype/results/compare-react-pdf-{110,1000}-chromium.md`).
 Medians:
 
 bill-hr815.pdf (110 pages):
 
 | Speed | Variant | First paint | Blocked | Lag max | Dropped frames | Commits | Canvas memory |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| 900 | ParaPDF | 159 ms | 16 ms | 9 ms | 0 / 241 | 4 | 183 MiB |
-| 900 | react-pdf, every page | 294 ms | 230 ms | 104 ms | 3 / 237 | 1 | 3972 MiB |
-| 900 | react-pdf, windowed | 191 ms | 8 ms | 7 ms | 0 / 241 | 10 | 217 MiB |
-| 3600 | ParaPDF | 140 ms | 46 ms | 9 ms | 0 / 241 | 20 | 126 MiB |
-| 3600 | react-pdf, every page | 286 ms | 311 ms | 105 ms | 3 / 235 | 0 | 3972 MiB |
-| 3600 | react-pdf, windowed | 180 ms | 31 ms | 9 ms | 0 / 241 | 46 | 289 MiB |
+| 900 | ParaPDF | 142 ms | 17 ms | 9 ms | 0 / 241 | 4 | 183 MiB |
+| 900 | react-pdf, every page | 278 ms | 488 ms | 154 ms | 5 / 219 | 3 | 3972 MiB |
+| 900 | react-pdf, windowed | 187 ms | 5 ms | 6 ms | 0 / 241 | 10 | 217 MiB |
+| 3600 | ParaPDF | 152 ms | 28 ms | 10 ms | 0 / 241 | 20 | 126 MiB |
+| 3600 | react-pdf, every page | 288 ms | 544 ms | 158 ms | 5 / 221 | 2 | 3972 MiB |
+| 3600 | react-pdf, windowed | 210 ms | 34 ms | 10 ms | 0 / 241 | 42 | 253 MiB |
 
 synthetic-text-1000.pdf (1000 pages; windowed variants only):
 
 | Speed | Variant | First paint | Blocked | Lag max | Dropped frames | Commits | Canvas memory |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| 900 | ParaPDF | 231 ms | 6 ms | 5 ms | 0 / 241 | 4 | 156 MiB |
-| 900 | react-pdf, windowed | 197 ms | 6 ms | 5 ms | 0 / 241 | 10 | 187 MiB |
-| 3600 | ParaPDF | 162 ms | 45 ms | 10 ms | 0 / 241 | 24 | 111 MiB |
-| 3600 | react-pdf, windowed | 179 ms | 12 ms | 5 ms | 0 / 241 | 45 | 249 MiB |
+| 900 | ParaPDF | 178 ms | 7 ms | 5 ms | 0 / 241 | 4 | 156 MiB |
+| 900 | react-pdf, windowed | 194 ms | 4 ms | 5 ms | 0 / 241 | 10 | 187 MiB |
+| 3600 | ParaPDF | 182 ms | 40 ms | 10 ms | 0 / 241 | 24 | 111 MiB |
+| 3600 | react-pdf, windowed | 197 ms | 40 ms | 10 ms | 0 / 241 | 43 | 249 MiB |
 
-No variant left the visible pages blank in these runs. ParaPDF committed
-React less often and used less canvas memory than the windowed comparison;
-its first paint and main-thread blocked time were not consistently lower.
-At 3600 px/s ParaPDF postponed text and link layers while react-pdf-window
-built them, so their work during scrolling differs. An earlier run without
-the headless preload fix did not draw the 1000-page document with every page
-mounted within 120 s; that case was not rerun here.
+No variant left the visible pages blank in these runs. ParaPDF painted
+first sooner, committed React less often and used less canvas memory than
+the windowed comparison. At 900 px/s its main-thread blocked time was
+longer: 17 against 5 ms on 110 pages, and 7 against 4 ms on 1000 pages.
+At 3600 px/s it blocked less or the same, but postponed text and link layers
+while react-pdf-window built them, so their work during scrolling differs.
+An earlier run without the headless preload fix did not draw the 1000-page
+document with every page mounted within 120 s; that case was not rerun here.
 
 WebKit 27.2 and Firefox 157 (Playwright's builds, not Safari), the same
 jobs with 5 runs, on AC power
@@ -123,8 +127,8 @@ runs, on battery), so it is not adopted; the cause stays open.
 
 - Speed claims against other viewers point at these results, and change
   with them. They do not support "faster in every browser": Firefox's text
-  layers at reading speed cost ParaPDF more than react-pdf, and the updated
-  Chromium timing results need a repeat under lower, stable load.
+  layers at reading speed cost ParaPDF more than react-pdf, and the Chromium
+  results also show higher blocked time at reading speed.
 - `pnpm --filter @parapdf/prototype build` stages react-pdf's pdf.js files
   under `public/react-pdf/`.
 

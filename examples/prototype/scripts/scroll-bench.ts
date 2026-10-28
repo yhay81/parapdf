@@ -444,6 +444,7 @@ const reproduceEnv = [
   "DURATION",
   "LATENCY",
   "BANDWIDTH",
+  "MAX_LOAD",
   "OUTPUT",
 ]
   .filter((name) => process.env[name] !== undefined)
