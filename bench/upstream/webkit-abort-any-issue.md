@@ -23,6 +23,12 @@ macOS, two runs in WebKit:
 | the same, the root aborted instead | 0, 0 | 0 | 0 |
 | the same, each returned signal kept in an array | 0, 0 (all 500 report `aborted`) | 0 | 0 |
 
+- Safari 27.0.1 on macOS 27.0.1 (through `bench/scripts/safari.ts`,
+  `BROWSER=safari`) reproduces it too, less often: of two runs, one gave
+  500 of 500 for the root aborted and 0 elsewhere, the other 0 in every
+  row. Two more WebKit runs in between gave 500 for both `AbortSignal.any()`
+  rows, and 500, then 0, for the root aborted. So the workaround is needed
+  in Safari, not only in Playwright's WebKit.
 - It needs time for a collection: with the controllers aborted right away
   no listener runs, and with the same number of timers but 20 instead of
   300, none did. Allocating heavily between 20 timers has the same
@@ -79,8 +85,8 @@ with `BROWSER=webkit` and see 0 listeners in every row, then run
 > ```
 >
 > Expected: 0 of 500 (each listener's signal is aborted through its
-> source). Actual, in WebKit (Playwright's WebKit 27.2 on macOS): 500 of
-> 500 in most runs; 0 when the delay is short or when the signals returned
+> source). Actual, in WebKit (Playwright's WebKit 27.2 and Safari 27.0.1 on
+> macOS): 500 of 500 in most WebKit runs and some Safari ones; 0 when the delay is short or when the signals returned
 > by `AbortSignal.any()` are kept in an array. Chromium and Firefox give 0.
 >
 > The dependent signal seems to be collected while its sources can still

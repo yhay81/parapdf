@@ -384,7 +384,11 @@ features extend it through (`extend()`, `defer()`, `session`, `renderer`,
 
 Server rendering stays as in 0.x: modules declare `"use client"`, the
 viewer renders an empty viewport on the server, and a URL source's preload
-goes into the page's head. The server opens no document, so the hooks of
+goes into the page's head. A browser rendering the provider itself
+preloads the source only if it is not WebKit's: Safari gives a fetch a
+preloaded response only once it has finished downloading, so pdf.js's
+request downloads the PDF a second time (decision 0014). The server cannot
+tell the browser, so its page keeps the preload. The server opens no document, so the hooks of
 secondary data throw there, through React's `use(browser())`, instead of
 suspending on a read that never settles: the nearest Suspense boundary
 renders its fallback on the server, and React renders what it holds in the

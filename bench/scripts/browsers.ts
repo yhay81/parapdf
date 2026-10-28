@@ -4,7 +4,8 @@
  * plus the power check and the turn-taking the measuring scripts use before
  * and during a run.
  *
- * Environment: BROWSER (chromium, webkit, or firefox; default chromium),
+ * Environment: BROWSER (chromium, webkit, firefox, or safari, the Safari on
+ * macOS that `safari.ts` drives; default chromium),
  * HEADED=1 to show the window, ALLOW_BATTERY=1 to measure without AC power,
  * ALLOW_PARALLEL=1 to measure beside other Playwright browsers, MAX_LOAD to
  * also wait for the one-minute load average, IGNORE_PIDS to ignore the
@@ -17,14 +18,16 @@ import { loadavg, platform, tmpdir } from "node:os";
 import { basename, extname, join } from "node:path";
 import { promisify } from "node:util";
 import { type Browser, chromium, firefox, type Page, webkit } from "playwright";
+import { SafariBrowser } from "./safari.ts";
 
-export const browserNames = ["chromium", "webkit", "firefox"] as const;
+export const browserNames = ["chromium", "webkit", "firefox", "safari"] as const;
 export type BrowserName = (typeof browserNames)[number];
 
 export const browserLabels: Record<BrowserName, string> = {
   chromium: "Chromium",
   webkit: "WebKit",
   firefox: "Firefox",
+  safari: "Safari",
 };
 
 export function browserFromEnv(): BrowserName {
@@ -114,7 +117,7 @@ export async function launchBrowser(
   name: BrowserName = browserFromEnv(),
   options: LaunchOptions = {},
 ): Promise<LaunchedBrowser> {
-  const headless = !process.env.HEADED;
+  const headless = !process.env.HEADED && name !== "safari";
   const open = async () => {
     const opened = await openBrowser(name, headless);
     await options.warmUp?.(opened);
@@ -151,6 +154,8 @@ export async function launchBrowser(
 }
 
 async function openBrowser(name: BrowserName, headless: boolean): Promise<Browser> {
+  // Safari on macOS, not Playwright's: through safaridriver, never headless.
+  if (name === "safari") return (await SafariBrowser.launch()) as unknown as Browser;
   let browser: Browser;
   if (name === "chromium") {
     // Headless Chromium falls back to SwiftShader unless ANGLE is pointed at the

@@ -264,6 +264,8 @@ try {
     .locator('section[data-page="1"] .parapdf-annotation-layer a')
     .first()
     .waitFor({ state: "attached", timeout: 30_000 });
+  // The outline's button moves the toolbar as it arrives.
+  await guide.getByRole("button", { name: "Outline", exact: true }).waitFor({ timeout: 30_000 });
   if (await rotate(guide, "Rotate clockwise")) await settle(guide, 90);
   const link = guide
     .locator('section[data-page="1"] .parapdf-annotation-layer a')
