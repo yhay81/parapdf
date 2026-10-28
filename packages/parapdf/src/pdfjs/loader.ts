@@ -168,10 +168,11 @@ export function documentRequestMode(
 /**
  * Whether a user agent is WebKit's, every browser on iOS and iPadOS among
  * them, which gives a fetch a preloaded response only once it has finished
- * downloading: a fetch while it downloads starts another download.
+ * downloading: a fetch while it downloads starts another download. Headless
+ * Chromium says `HeadlessChrome/`, so "Chrome/" may follow a letter.
  */
 const isWebKit = (userAgent: string): boolean =>
-  /\bAppleWebKit\//.test(userAgent) && !/\b(?:Chrome|Chromium)\//.test(userAgent);
+  /\bAppleWebKit\//.test(userAgent) && !/(?:Chrome|Chromium)\//.test(userAgent);
 
 const absolute = (url: URL | string): string => new URL(String(url), document.baseURI).href;
 
