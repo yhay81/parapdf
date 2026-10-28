@@ -77,9 +77,13 @@ Idea 2, Firefox 157, 7 runs at 900 px/s with `MAX_LOAD=5`
 (`examples/prototype/results/text-layer-detached-firefox.md`), `main` →
 idea 2: bill-hr815.pdf 59 → 41 ms; synthetic-text-1000.pdf 33 → 63 ms,
 whose runs spread from 23 to 285 ms.
+A second set of 11 runs with the same builds and `MAX_LOAD=5`
+(`examples/prototype/results/text-layer-detached-11-firefox.md`) turned
+both around: bill-hr815.pdf 54 → 53 ms, synthetic-text-1000.pdf 43 →
+34 ms.
 
-Both gain on bill-hr815.pdf at reading speed, where the comparison with
-react-pdf started, and lose or tie elsewhere. First-paint medians differed
+Which file gains changes from one set of runs to the next, so the
+difference is within what the machine's load moves. First-paint medians differed
 by up to 30 ms (idea 1, WebKit, bill-hr815.pdf at 900 px/s); these runs do
 not establish whether that difference repeats.
 
