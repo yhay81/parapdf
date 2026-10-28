@@ -2,11 +2,11 @@
 
 Issue #15, reduced to a page without ParaPDF. In Safari in the iPadOS
 simulator, a two-finger pinch that starts while a scroll container still
-scrolls from a fling reaches the page as nothing: no
-`pointerdown`, `touchstart`, or `gesturestart`. The next pinch, once
-nothing scrolls, arrives as usual. ParaPDF sees the same, since it never
-hears the first pinch. Not yet tried on a real iPad; no report has been
-filed.
+scrolls from a fling produces no `pointerdown`, `touchstart`, or
+`gesturestart` on the scroll container. The next pinch, once nothing
+scrolls, arrives as usual. This is consistent with the pinch ParaPDF
+misses, but does not establish where else the events might be delivered.
+Not yet tried on a real iPad; no report has been filed.
 
 ## Reproduction
 
@@ -42,9 +42,9 @@ The trace of the second try, oldest first (ms since the page loaded):
 
 ## What it means for ParaPDF
 
-Nothing ParaPDF listens for arrives, so ParaPDF cannot zoom on that pinch;
-listening on the document or the window instead would not help either, as
-the page hears nothing. The limitation stays documented ("In Safari on
+The scroll container receives none of the events ParaPDF uses for a pinch.
+This reproduction does not observe the document or window, so it cannot
+rule out listeners there. The limitation stays documented ("In Safari on
 iPadOS, a pinch that starts while a fling still scrolls does not reach the
 page; the next pinch zooms"). What #15 still needs: the same page on a real
 iPad, which decides whether this is Safari's or the simulator's, and then a
@@ -58,6 +58,6 @@ report to WebKit with this page if it is Safari's.
 > Open the attached page, fling the lower container, and pinch while it is
 > still scrolling. Expected: `touchstart` with two touches and
 > `gesturestart`, as when the same pinch starts with nothing scrolling.
-> Actual: the page receives no event for the whole
+> Actual: the scroll container receives no event for the whole
 > pinch; the next pinch is delivered normally. Seen in the iPadOS 27.0
 > simulator.
