@@ -148,6 +148,10 @@ export function writePublicFiles(publicDir: string): void {
     join(corpusDir, "wdl6812-manuscript.pdf"),
     join(publicDir, "wdl6812-manuscript.pdf"),
   );
+  copyFileSync(
+    join(corpusDir, "generated/synthetic-scripts.pdf"),
+    join(publicDir, "synthetic-scripts.pdf"),
+  );
   writeFileSync(join(publicDir, "cmyk.pdf"), onePagePdf("", "0 1 1 0 k 0 0 300 200 re f"));
   writeFileSync(
     join(publicDir, "symbol.pdf"),
@@ -168,15 +172,22 @@ export const APP_JS = `import { createElement as h } from "react";
 import { createRoot } from "react-dom/client";
 import { PdfDocument, PdfViewer, useViewer } from "parapdf";
 
-function App({ file }) {
+function App({ file, scripts }) {
   const viewer = useViewer();
   window.__viewer = viewer;
-  return h(PdfDocument, { source: "/" + file }, h(PdfViewer, { viewer, style: { height: "100vh" } }));
+  const options = scripts ? { forms: true, formScripts: true } : {};
+  return h(
+    PdfDocument,
+    { source: "/" + file },
+    h(PdfViewer, { viewer, style: { height: "100vh" }, ...options }),
+  );
 }
 
 export function start() {
-  const file = new URLSearchParams(location.search).get("file");
-  createRoot(document.getElementById("root")).render(h(App, { file }));
+  const params = new URLSearchParams(location.search);
+  const file = params.get("file");
+  const scripts = params.get("scripts") === "1";
+  createRoot(document.getElementById("root")).render(h(App, { file, scripts }));
 }
 `;
 
@@ -198,6 +209,8 @@ interface Visit {
   painted: boolean;
   /** The color at the center of page 1's topmost canvas. */
   center: number[];
+  /** With `scripts=1`, whether the document's script ran as it opened. */
+  scripted: boolean;
 }
 
 async function visit(browser: Browser, url: string, served: Map<string, string>): Promise<Visit> {
@@ -256,6 +269,21 @@ async function visit(browser: Browser, url: string, served: Map<string, string>)
       () => true,
       () => false,
     );
+  // The script of synthetic-scripts.pdf fills in the field "opened" as it opens.
+  const scripted = url.includes("scripts=1")
+    ? await page
+        .waitForFunction(
+          () =>
+            (document.querySelector('input[name="opened"]') as HTMLInputElement | null)?.value ===
+            "yes",
+          undefined,
+          { timeout: 30_000 },
+        )
+        .then(
+          () => true,
+          () => false,
+        )
+    : false;
   // Fonts and decoders may still arrive for the detail render.
   await page.waitForTimeout(500);
   const center = await page.evaluate(() => {
@@ -297,7 +325,7 @@ async function visit(browser: Browser, url: string, served: Map<string, string>)
     script.entry.file = `transformed ${legacy ? "pdf.worker.legacy.js" : "pdf.worker.js"}`;
   }
   await context.close();
-  return { responses, errors: reportedErrors, painted, center };
+  return { responses, errors: reportedErrors, painted, center, scripted };
 }
 
 /** Whether a response succeeded with a file named like `pattern`, by its path or its content. */
@@ -367,6 +395,22 @@ export async function checkFiles(
     `rgb(${cmyk.center.join(" ")}), rgb(236 31 37) expected`,
   );
 
-  const errors = [cjk, jbig2, symbol, cmyk].flatMap((result) => result.errors);
+  const scripts = await open("synthetic-scripts.pdf&scripts=1");
+  check(
+    `${mode}: form scripts load QuickJS from the shipped files and run`,
+    // webpack's production builds minify QuickJS's script and name the
+    // files by their hash, and the browser compiles the wasm as it streams,
+    // so neither body can be matched there: the script that ran shows they
+    // loaded, and the inlined-files check that they were not inlined.
+    scripts.scripted &&
+      (loaded(scripts, /quickjs-eval[^/]*\.wasm$/) ||
+        scripts.responses.some(({ path, status }) => status === 200 && /\.wasm$/.test(path))),
+    scripts.responses
+      .filter(({ path }) => /quickjs|sandbox/.test(path))
+      .map(({ path, status }) => `${path} ${status}`)
+      .join(" "),
+  );
+
+  const errors = [cjk, jbig2, symbol, cmyk, scripts].flatMap((result) => result.errors);
   check(`${mode}: no errors`, errors.length === 0, errors.slice(0, 3).join(" | "));
 }

@@ -556,6 +556,18 @@ export const fileUrls = (): Record<string, URL> => ({
   ),
 });
 
+/**
+ * Form scripts' engine, which the page loads: the module pdf.js's sandbox
+ * imports QuickJS through, QuickJS's script, and its WebAssembly. The
+ * scripts go with `?no-inline` alone, since Vite's development server
+ * answers a script requested with `?url` with a module that exports its URL.
+ */
+export const scriptingUrls = (): { module: URL; quickjs: URL; wasm: URL } => ({
+  module: new URL("../../pdfjs/quickjs.js?no-inline", import.meta.url),
+  quickjs: new URL("../../pdfjs/wasm/quickjs-eval.js?no-inline", import.meta.url),
+  wasm: new URL("../../pdfjs/wasm/quickjs-eval.wasm?no-inline&url", import.meta.url),
+});
+
 /** pdf.js's annotation icons, by file name, for comments without an appearance of their own. */
 export const iconUrls = (): Record<string, URL> => ({
   "annotation-check.svg": new URL(

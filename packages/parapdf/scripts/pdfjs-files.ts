@@ -24,7 +24,8 @@ const directories = [
   { dir: "cmaps", files: (name: string) => name.endsWith(".bcmap") },
   { dir: "standard_fonts", files: (name: string) => /\.(pfb|ttf)$/.test(name) },
   // The decoders only: the JavaScript fallbacks for browsers without
-  // WebAssembly and the scripting engine stay out.
+  // WebAssembly stay out, and the scripting engine, which the page loads
+  // and not the worker, is copied below.
   { dir: "wasm", files: (name: string) => name.endsWith(".wasm") && !name.startsWith("quickjs") },
   { dir: "iccs", files: (name: string) => name.endsWith(".icc") },
 ];
@@ -97,6 +98,26 @@ for (const { dir, files } of directories) {
   }
 }
 
+// The scripting engine, QuickJS, which form scripts load on the page, and
+// the module through which pdf.js's sandbox takes it from ParaPDF
+// (src/pdfjs/scripting.ts): the sandbox imports QuickJS from a URL it
+// builds itself, which the files bundlers emit under names of their own
+// do not match.
+for (const name of ["quickjs-eval.js", "quickjs-eval.wasm"]) {
+  cpSync(join(pdfjsDist, "wasm", name), join(out, "wasm", name));
+}
+writeFileSync(
+  join(out, "quickjs.js"),
+  `// ParaPDF's: pdf.js's sandbox imports this module for QuickJS, which it
+// starts from the URLs ParaPDF gives (src/pdfjs/scripting.ts).
+export default async () => {
+  const { quickjs, wasm } = globalThis[Symbol.for("parapdf.quickjs")];
+  const { default: QuickJS } = await import(quickjs);
+  return QuickJS({ locateFile: () => wasm });
+};
+`,
+);
+
 /** `new URL()` for `path` under pdfjs/, wrapped as Biome formats it after `prefix`. */
 function urlExpression(path: string, indent: string, prefix: string, suffix: string): string {
   const call = `new URL("../../pdfjs/${path}", import.meta.url)`;
@@ -132,6 +153,18 @@ export const pdfjsWorkerUrl = (): URL => ${urlExpression("pdf.worker.js", "", "e
  */
 export const fileUrls = (): Record<string, URL> => ({
 ${entries.join("\n")}
+});
+
+/**
+ * Form scripts' engine, which the page loads: the module pdf.js's sandbox
+ * imports QuickJS through, QuickJS's script, and its WebAssembly. The
+ * scripts go with \`?no-inline\` alone, since Vite's development server
+ * answers a script requested with \`?url\` with a module that exports its URL.
+ */
+export const scriptingUrls = (): { module: URL; quickjs: URL; wasm: URL } => ({
+  module: ${urlExpression("quickjs.js?no-inline", "  ", "module: ", ",")},
+  quickjs: ${urlExpression("wasm/quickjs-eval.js?no-inline", "  ", "quickjs: ", ",")},
+  wasm: ${urlExpression(`wasm/quickjs-eval.wasm${NO_INLINE}`, "  ", "wasm: ", ",")},
 });
 
 /** pdf.js's annotation icons, by file name, for comments without an appearance of their own. */

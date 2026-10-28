@@ -44,6 +44,19 @@ export interface AnnotationLayerRequest {
   structTree?: StructTreeBuilder | null;
   /** The annotation editor the layer hands the annotations pdf.js edits to. */
   editor?: AnnotationLayerEditing | null;
+  /** The document's scripts, which form fields hand their events to (`forms`). */
+  scripting?: AnnotationLayerScripting | null;
+}
+
+/** pdf.js's event bus, as annotation elements dispatch to it. */
+interface EventBus {
+  dispatch(name: string, event: Record<string, unknown>): void;
+}
+
+/** What a page's form fields need of the document's scripts. */
+export interface AnnotationLayerScripting {
+  /** Hand the scripts an event of a field: a keystroke, a focus, a click, … */
+  dispatch(event: object): void;
 }
 
 /**
@@ -55,7 +68,7 @@ export interface AnnotationLayerEditing {
   /** pdf.js's AnnotationEditorUIManager, which the layer reports them to. */
   readonly uiManager: object;
   /** Where a double click on one asks the editor to edit it. */
-  readonly eventBus: object;
+  readonly eventBus: EventBus;
   /**
    * A tool is chosen: the page's drawing leaves them out, and draws images
    * among them into canvases of their own, which the layer takes, as it
@@ -83,13 +96,23 @@ export interface AnnotationLayerTask {
 function createLinkService(
   links: LinkHandlers,
   doc: Pdfjs.PDFDocumentProxy,
-  eventBus: object | undefined,
+  editorBus: EventBus | undefined,
+  scripting: AnnotationLayerScripting | null,
 ) {
   const external = links.externalLinks !== "disabled";
   return {
     externalLinkEnabled: external,
-    // Where annotations the editor edits ask for it on a double click.
-    eventBus,
+    // Where annotations the editor edits ask for it on a double click, and
+    // form fields hand their events to the document's scripts.
+    eventBus:
+      scripting || editorBus
+        ? {
+            dispatch(name: string, event: Record<string, unknown>) {
+              if (name !== "dispatcheventinsandbox") editorBus?.dispatch(name, event);
+              else if (event.detail) scripting?.dispatch(event.detail);
+            },
+          }
+        : undefined,
     addLinkAttributes(link: HTMLAnchorElement, url: string) {
       // Without an href the element is neither focusable nor a link, and the
       // text it covered stays readable in the text layer.
@@ -161,6 +184,7 @@ export function buildAnnotationLayer(
     layers,
     structTree,
     editor,
+    scripting = null,
   }: AnnotationLayerRequest,
 ): AnnotationLayerTask {
   let cancelled = false;
@@ -174,7 +198,7 @@ export function buildAnnotationLayer(
     ]);
     if (cancelled) throw new RenderCancelledError("annotation layer cancelled");
     const viewport = viewportOf(page, cssScale, rotation);
-    const linkService = createLinkService(links, doc, editor?.eventBus);
+    const linkService = createLinkService(links, doc, editor?.eventBus, forms ? scripting : null);
     // Without forms, form fields stay in the drawing (pdf.js's default
     // annotation mode), so only links, popups, and other annotations
     // that are not fields become HTML here. With an editor, the drawings
@@ -203,7 +227,9 @@ export function buildAnnotationLayer(
       annotationStorage: doc.annotationStorage,
       imageResourcesPath,
       renderForms: forms,
-      enableScripting: false,
+      // Given only for a document with scripts (src/features/forms/scripts.ts).
+      enableScripting: forms && scripting !== null,
+      hasJSActions: forms && scripting !== null,
       fieldObjects: fields,
       ...(layers ? { optionalContentConfig: layers } : {}),
     });

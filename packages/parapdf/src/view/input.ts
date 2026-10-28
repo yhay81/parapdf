@@ -6,7 +6,7 @@ import { scrollEdges } from "./scrolling.ts";
 import type { PointerTool } from "./state.ts";
 
 /** What Ctrl or ⌘ with + and - zooms by. */
-const ZOOM_STEP = 1.25;
+export const ZOOM_STEP = 1.25;
 
 /** What keys and the hand tool need from the viewer. */
 export interface InputHost {

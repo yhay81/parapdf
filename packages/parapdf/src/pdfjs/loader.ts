@@ -1,5 +1,5 @@
 import type * as Pdfjs from "pdfjs-dist";
-import { fileUrls, iconUrls, pdfjsWorkerUrl } from "./files.ts";
+import { fileUrls, iconUrls, pdfjsWorkerUrl, scriptingUrls } from "./files.ts";
 
 /**
  * pdf.js getDocument parameters that ParaPDF does not set from the source,
@@ -101,6 +101,13 @@ export interface LoadedPdfjs {
   readonly iconUrls: Readonly<Record<string, string>> | null;
   /** Where the worker loads from, for the error when it does not. */
   readonly workerLocation: string;
+  /**
+   * Where form scripts' engine loads from (src/pdfjs/scripting.ts): the
+   * module pdf.js's sandbox imports QuickJS through, QuickJS's script, and
+   * its WebAssembly. Functions, so that a page without form scripts never
+   * resolves them.
+   */
+  readonly scriptingUrls: () => { module: string; quickjs: string; wasm: string };
 }
 
 let config: PdfjsConfig = {};
@@ -174,7 +181,8 @@ const absolute = (url: URL | string): string => new URL(String(url), document.ba
  * and Vite's build `?url`, but neither puts it in the names of the files it
  * writes, so without it the URLs are the ones they emitted before.
  */
-const shippedUrl = (url: URL): string => absolute(url).replace(/\?(?:no-inline&)?url$/, "");
+const shippedUrl = (url: URL): string =>
+  absolute(url).replace(/\?(?:no-inline&url|no-inline|url)$/, "");
 
 /** pdf.js loaded on first use and shared by every viewer: one worker parses every document. */
 export function loadPdfjs(): Promise<LoadedPdfjs> {
@@ -300,5 +308,19 @@ async function load(options: PdfjsConfig): Promise<LoadedPdfjs> {
           )
         : null,
     workerLocation,
+    scriptingUrls: assetBase
+      ? () => ({
+          module: `${assetBase}quickjs.js`,
+          quickjs: `${assetBase}wasm/quickjs-eval.js`,
+          wasm: `${assetBase}wasm/quickjs-eval.wasm`,
+        })
+      : () => {
+          const { module, quickjs, wasm } = scriptingUrls();
+          return {
+            module: shippedUrl(module),
+            quickjs: shippedUrl(quickjs),
+            wasm: shippedUrl(wasm),
+          };
+        },
   };
 }

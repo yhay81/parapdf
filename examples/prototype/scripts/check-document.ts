@@ -91,6 +91,7 @@ interface Parapdf {
 
 /** What the demo exposes on `window` for these checks. */
 interface Demo {
+  __setViewerProps(props: Record<string, unknown>): void;
   __viewer?: Viewer;
   __session?: {
     state: { get(): { status: string; permissions: Record<string, boolean> | null } };
@@ -722,6 +723,167 @@ try {
     });
     check("save() writes the values set", saved.grace && saved.large, JSON.stringify(saved));
     check("no errors with form data", errors.length === 0, errors.slice(0, 3).join(" | "));
+    await page.context().close();
+  }
+
+  // --- Form scripts: calculation, validation, formatting, actions ---
+  {
+    const { page, errors } = await open(
+      launched.browser,
+      demo("file=synthetic-scripts.pdf&forms=1&scripts=1"),
+    );
+    const dialogs: string[] = [];
+    page.on("dialog", (dialog) => {
+      dialogs.push(dialog.message());
+      void dialog.dismiss();
+    });
+    const field = (name: string) => page.locator(`.parapdf-annotation-layer input[name="${name}"]`);
+    const value = (name: string) => field(name).inputValue();
+    await page.waitForFunction(
+      () =>
+        (
+          document.querySelector(
+            '.parapdf-annotation-layer input[name="opened"]',
+          ) as HTMLInputElement | null
+        )?.value === "yes",
+      undefined,
+      { timeout: 15_000 },
+    );
+    check("the document's script runs as it opens", (await value("opened")) === "yes");
+    await page.evaluate(() => {
+      (window as unknown as Demo).__changes = [];
+      (window as unknown as Demo).__onFormChange = (change) =>
+        (window as unknown as Demo).__changes?.push(change);
+    });
+    for (const [name, typed] of [
+      ["price", "2.5"],
+      ["quantity", "3"],
+    ] as const) {
+      await field(name).click();
+      // The scripts take each keystroke in turn, as pdf.js's viewer does:
+      // typed faster than they answer, keys would meet a stale value.
+      await page.keyboard.type(typed, { delay: 150 });
+      await page.keyboard.press("Tab");
+    }
+    // A field shows its value formatted once it loses focus, which Tab gave the total.
+    await field("status").click();
+    await page
+      .waitForFunction(
+        () =>
+          (
+            document.querySelector(
+              '.parapdf-annotation-layer input[name="total"]',
+            ) as HTMLInputElement | null
+          )?.value === "7.50",
+        undefined,
+        { timeout: 10_000 },
+      )
+      .catch(() => {});
+    const shown = { price: await value("price"), total: await value("total") };
+    check(
+      "a calculated field follows its inputs, formatted",
+      shown.price === "2.50" && shown.total === "7.50",
+      JSON.stringify(shown),
+    );
+    const changes = await page.evaluate(() => (window as unknown as Demo).__changes ?? []);
+    check(
+      "the application hears the calculated value",
+      changes.some((change) => change.name === "total" && String(change.value) === "7.5"),
+      JSON.stringify(changes),
+    );
+    await field("quantity").click();
+    await page.keyboard.press("ControlOrMeta+a");
+    await page.keyboard.type("500", { delay: 150 });
+    await page.keyboard.press("Tab");
+    await page.waitForTimeout(500);
+    const rejected = { quantity: await value("quantity"), total: await value("total") };
+    // pdf.js's sandbox empties the field it refuses and gives it the focus back.
+    check(
+      "a value its validation rejects is refused with the document's message",
+      dialogs.length === 1 && rejected.quantity === "" && rejected.total === "7.50",
+      JSON.stringify({ dialogs, ...rejected }),
+    );
+    await page.locator(".parapdf-annotation-layer .pushButton").first().click();
+    await page
+      .waitForFunction(
+        () =>
+          (
+            document.querySelector(
+              '.parapdf-annotation-layer input[name="status"]',
+            ) as HTMLInputElement | null
+          )?.value === "Applied",
+        undefined,
+        { timeout: 10_000 },
+      )
+      .catch(() => {});
+    check("a button's action runs", (await value("status")) === "Applied");
+    await page.evaluate(() => (window as unknown as Demo).__viewer?.goToPage(1));
+    await page.waitForTimeout(500);
+    await page.evaluate(() => (window as unknown as Demo).__viewer?.goToPage(0));
+    await page.waitForTimeout(500);
+    const values = await page.evaluate(async () =>
+      Object.fromEntries(
+        (
+          (await (window as unknown as Demo).__parapdf?.getFormFields(
+            (window as unknown as Demo).__viewer,
+          )) ?? []
+        ).map(({ name, value }) => [name, value]),
+      ),
+    );
+    check(
+      "a page's script runs as the page opens",
+      String(values.visits) === "1",
+      JSON.stringify(values),
+    );
+    check("no errors running form scripts", errors.length === 0, errors.slice(0, 3).join(" | "));
+    await page.context().close();
+  }
+  // --- Form scripts: off by default, and loaded only for a document with scripts ---
+  {
+    const { page, errors } = await open(launched.browser, demo("file=synthetic-scripts.pdf"));
+    await page.waitForFunction(() => (window as unknown as Demo).__viewer?.hasPixels(0));
+    await page.evaluate(() =>
+      (window as unknown as Demo).__setViewerProps({ forms: true, formScripts: true }),
+    );
+    const opened = page.locator('.parapdf-annotation-layer input[name="opened"]');
+    await opened.waitFor();
+    await page.waitForFunction(
+      () =>
+        (document.querySelector('input[name="opened"]') as HTMLInputElement | null)?.value ===
+        "yes",
+      undefined,
+      { timeout: 15_000 },
+    );
+    check(
+      "enabling forms and scripts after the first paint runs the open script",
+      (await opened.inputValue()) === "yes",
+    );
+    check(
+      "no errors enabling scripts after the first paint",
+      errors.length === 0,
+      errors.slice(0, 3).join(" | "),
+    );
+    await page.context().close();
+  }
+  for (const [query, label] of [
+    ["file=synthetic-scripts.pdf&forms=1", "without formScripts"],
+    ["file=synthetic-features.pdf&forms=1&scripts=1&page=2", "for a document without scripts"],
+  ] as const) {
+    const { page, errors } = await open(launched.browser, demo(query));
+    const requested: string[] = [];
+    page.on("request", (request) => {
+      if (/quickjs|sandbox/.test(request.url())) requested.push(request.url());
+    });
+    await page.waitForSelector(".parapdf-annotation-layer input");
+    await page.waitForTimeout(1000);
+    check(`no sandbox loads ${label}`, requested.length === 0, requested.join(" | "));
+    if (query.includes("synthetic-scripts")) {
+      check(
+        "the document's scripts do not run without formScripts",
+        (await page.locator('.parapdf-annotation-layer input[name="opened"]').inputValue()) === "",
+      );
+    }
+    check(`no errors ${label}`, errors.length === 0, errors.slice(0, 3).join(" | "));
     await page.context().close();
   }
   // --- View states: kept, shown again at open and later ---
