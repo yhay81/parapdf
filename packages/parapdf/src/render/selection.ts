@@ -479,7 +479,8 @@ function selectionQuirks(): SelectionQuirks {
   const { userAgentData } = navigator as Navigator & { userAgentData?: UserAgentData };
   const version = userAgentData
     ? userAgentData.brands.find(({ brand }) => brand === "Chromium")?.version
-    : /\bChrome\/(\d+)\b/.exec(navigator.userAgent)?.[1];
+    : // Headless Chromium says HeadlessChrome/, with no word boundary before Chrome/.
+      /Chrome\/(\d+)\b/.exec(navigator.userAgent)?.[1];
   const chromium = version === undefined ? undefined : Number.parseInt(version, 10);
   return {
     keepsSelectionInRuns: firefox || (chromium !== undefined && chromium >= 148),
