@@ -438,6 +438,23 @@ them in passing:
   it in the same run; a regression stops the milestone unless a decision
   accepts it.
 
+## Toward 1.0
+
+1.0 promises a stable API (decision 0015, proposed). It waits for:
+
+- Safari: the functional checks in Safari on macOS, and reading, touch,
+  annotations, and saving tried on a real iPhone and iPad, with the
+  results published (#13); with them, whether iOS Safari counts kept
+  canvases toward its memory cap, which sets `maxKeptPixels`'s default.
+- Screen readers: reading, links, forms, search, and page changes tried
+  with VoiceOver in Safari and NVDA in Firefox, with the results published
+  (#32).
+
+pdf.js's renderer worker (#20) and the open questions below do not block
+it. From 1.0, breaks need a major release, and decision 0015 succeeds
+decision 0002. Not planned: XFA forms, and search highlights without the
+CSS Custom Highlight API.
+
 ## Open questions
 
 - When pdf.js's renderer worker reaches a release: measure it, then decide.
