@@ -432,6 +432,10 @@ export const intersectAreas = (a: PageArea, b: PageArea): PageArea => ({
   maxY: Math.min(a.maxY, b.maxY),
 });
 
+/** The rotation `degrees` stands for: the nearest quarter turn, from 0 to 270. */
+export const toRotation = (degrees: number): Rotation =>
+  ((((Math.round(degrees / 90) * 90) % 360) + 360) % 360) as Rotation;
+
 /** A page's size as the view shows it: a quarter turn swaps width and height. */
 export const turnedSize = (size: PageSize, rotation: Rotation): PageSize =>
   rotation % 180 === 0 ? size : { width: size.height, height: size.width };

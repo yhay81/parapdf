@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { computeLayout } from "../src/view/layout.ts";
+import { computeLayout, type LayoutOptions } from "../src/view/layout.ts";
 import {
   destinationTarget,
+  flipTarget,
   pageTarget,
   positionAt,
   positionTarget,
@@ -24,6 +25,40 @@ const at = (scrollLeft = 0, scrollTop = 0) => ({
   scrollTop,
   clientWidth: 1000,
   clientHeight: 800,
+});
+
+describe("flipTarget", () => {
+  const letters = Array.from({ length: 5 }, () => ({ width: 612, height: 792 }));
+  const arranged = (options: Partial<LayoutOptions>) =>
+    computeLayout(letters, 1, { gap: 10, ...options });
+
+  it("goes to the page after or before the current page's row", () => {
+    const odd = arranged({ spread: "odd" });
+    assert.equal(flipTarget(odd, "odd", 2, 1), 4);
+    assert.equal(flipTarget(odd, "odd", 3, -1), 1);
+    assert.equal(flipTarget(arranged({ spread: "even" }), "even", 1, 1), 3);
+    // Two pages fit a row of 1500 CSS pixels, three do not.
+    const wrapped = arranged({ scrollMode: "wrapped", viewportWidth: 1500 });
+    assert.equal(flipTarget(wrapped, "none", 0, 1), 2);
+  });
+
+  it("goes by the spread in horizontal mode, where all pages share one row", () => {
+    const horizontal = arranged({ scrollMode: "horizontal", spread: "odd" });
+    assert.equal(flipTarget(horizontal, "odd", 0, 1), 2);
+    assert.equal(flipTarget(horizontal, "none", 0, 1), 1);
+  });
+
+  it("flips from the row page mode shows, which the current page follows later", () => {
+    const paged = arranged({ scrollMode: "page", page: 2 });
+    assert.equal(flipTarget(paged, "none", 0, 1), 3);
+    assert.equal(flipTarget(paged, "none", 0, -1), 1);
+  });
+
+  it("goes nowhere past the first or last page", () => {
+    const vertical = arranged({});
+    assert.equal(flipTarget(vertical, "none", 0, -1), null);
+    assert.equal(flipTarget(vertical, "none", 4, 1), null);
+  });
 });
 
 describe("pageTarget", () => {

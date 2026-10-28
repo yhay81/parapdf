@@ -1,12 +1,13 @@
 import type { PageSize } from "../document/session.ts";
 import type { ResolvedDestination } from "../pdfjs/destinations.ts";
 import { clamp, rowBounds, turnedSize } from "./layout.ts";
+import type { ShownView } from "./options.ts";
 import type { ViewerState, ZoomMode } from "./state.ts";
 
 // The zoom rules: the scale that fits a page or its row to the viewport, and
-// the zoom a destination asks for. A resize runs them up to once a frame, so
-// they allocate nothing the viewer's own methods did not, and read the
-// viewport's size as late as those did, forcing no layout they did not.
+// the zoom a destination or a view asks for. A resize runs them up to once a
+// frame, so they allocate nothing the viewer's own methods did not, and read
+// the viewport's size as late as those did, forcing no layout they did not.
 
 /**
  * The scale a PDF's zoom of 1, a destination's or a script's, stands for:
@@ -116,6 +117,26 @@ export function destinationScale(
         ),
       );
   }
+}
+
+/**
+ * The zoom a view's `scale` asks for: a fitted mode, whose scale the viewer
+ * fits next, or a scale within `minScale` and `maxScale`. Left out, or not
+ * a positive number, it keeps `before`'s.
+ */
+export function requestedZoom(
+  requested: ShownView["scale"],
+  before: Pick<ViewerState, "zoomMode" | "scale">,
+  minScale: number,
+  maxScale: number,
+): { scale: number; mode: ZoomMode } {
+  if (requested === "fit-width" || requested === "fit-page") {
+    return { scale: before.scale, mode: requested };
+  }
+  if (requested !== undefined && Number.isFinite(requested) && requested > 0) {
+    return { scale: clamp(requested, minScale, maxScale), mode: "custom" };
+  }
+  return { scale: before.scale, mode: before.zoomMode };
 }
 
 /**

@@ -12,6 +12,7 @@ import {
   rowStart,
   sameRows,
   showPage,
+  toRotation,
   turnBox,
   turnedSize,
   type Viewport,
@@ -129,6 +130,16 @@ describe("turnBox", () => {
   it("turns back to where it started", () => {
     const turned = turnBox(box, size, 90);
     assert.deepEqual(turnBox(turned, turnedSize(size, 90), 270), box);
+  });
+});
+
+describe("toRotation", () => {
+  it("rounds to the nearest quarter turn, from 0 to 270", () => {
+    assert.equal(toRotation(0), 0);
+    assert.equal(toRotation(80), 90);
+    assert.equal(toRotation(450), 90);
+    assert.equal(toRotation(-90), 270);
+    assert.equal(toRotation(-360), 0);
   });
 });
 
