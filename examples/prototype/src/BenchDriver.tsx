@@ -143,6 +143,12 @@ export function BenchDriver({ viewer, speed, durationMs, idle, commits, label }:
           cancelled: after.cancelled - before.cancelled,
           failed: after.failed - before.failed,
         },
+        // The canvases' pixels: those in the page and those kept for unmounted pages.
+        canvasPixels:
+          [...document.querySelectorAll("canvas")].reduce(
+            (sum, canvas) => sum + canvas.width * canvas.height,
+            0,
+          ) + viewer.keptPixels,
         crossOriginIsolated,
         devicePixelRatio,
       });

@@ -16,8 +16,12 @@
  * demo from before a change, whose twin of every variant is measured in turn with it, job by
  * job), BEFORE_LABEL (its name in the report), QUERY (more demo parameters, such as
  * forms=1&scripts=1), and OUTPUT (the browser name).
+ *
+ * VARIANTS=react-pdf and react-pdf-window, named only, measure the same
+ * document shown with react-pdf instead (compare.html): a <Page> for every
+ * page, or only for the rows react-window mounts.
  */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { arch, cpus, loadavg, platform, release } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -46,6 +50,8 @@ interface Variant {
   scale: string;
   /** Measured on the build in BEFORE. */
   before: boolean;
+  /** The page showing the document with another viewer, instead of the demo. */
+  page?: string;
 }
 
 const beforeDist = process.env.BEFORE;
@@ -56,9 +62,32 @@ const engineVariants = [
   { name: "pdfjs-hwa", engine: "pdfjs", hwa: true },
   { name: "pdfjs-next", engine: "pdfjs-next", hwa: false },
   { name: "pdfjs-next-hwa", engine: "pdfjs-next", hwa: true },
-].filter(
-  (variant) => !process.env.VARIANTS || process.env.VARIANTS.split(",").includes(variant.name),
+  { name: "react-pdf", engine: "pdfjs", hwa: false, page: "compare.html" },
+  { name: "react-pdf-window", engine: "pdfjs", hwa: false, page: "compare.html" },
+].filter((variant) =>
+  process.env.VARIANTS
+    ? process.env.VARIANTS.split(",").includes(variant.name)
+    : variant.page === undefined,
 );
+// The versions the react-pdf variants measure, for the report.
+const prototypePackage = JSON.parse(readFileSync(join(exampleDir, "package.json"), "utf8")) as {
+  dependencies: Record<string, string>;
+  devDependencies: Record<string, string>;
+};
+const versions = {
+  pdfjs: prototypePackage.dependencies["pdfjs-dist"],
+  ...(engineVariants.some((variant) => variant.page)
+    ? {
+        reactPdf: prototypePackage.devDependencies["react-pdf"],
+        reactWindow: prototypePackage.devDependencies["react-window"],
+        reactPdfPdfjs: (
+          JSON.parse(
+            readFileSync(join(exampleDir, "node_modules/react-pdf/package.json"), "utf8"),
+          ) as { dependencies: Record<string, string> }
+        ).dependencies["pdfjs-dist"],
+      }
+    : {}),
+};
 // TEXT=1,0 and LINKS=1,0 measure every engine variant with and without
 // text and annotation layers.
 const textModes = (process.env.TEXT ?? "1").split(",").map((mode) => mode !== "0");
@@ -73,6 +102,19 @@ for (const mode of scrollModes) {
   }
 }
 const scales = (process.env.SCALE ?? "fit-width").split(",");
+// compare.html implements only vertical fit-width. Reject unsupported jobs
+// instead of reporting them under labels for settings it silently ignores.
+if (engineVariants.some((variant) => variant.page)) {
+  const query = new URLSearchParams(process.env.QUERY ?? "");
+  if (
+    scrollModes.some((mode) => mode !== "vertical") ||
+    scales.some((scale) => scale !== "fit-width") ||
+    (query.has("scroll") && query.get("scroll") !== "vertical") ||
+    (query.has("scale") && query.get("scale") !== "fit-width")
+  ) {
+    throw new Error("react-pdf variants support only vertical scrolling at fit-width");
+  }
+}
 const measured: Variant[] = engineVariants.flatMap((variant) =>
   textModes.flatMap((text) =>
     linkModes.flatMap((links) =>
@@ -143,6 +185,8 @@ interface JobResult {
   settleMs?: number;
   lag?: { p95Ms: number; maxMs: number; blockedMs: number };
   frames?: { frames: number; p95Ms: number; maxMs: number; dropped: number };
+  /** Pixels of the canvases in the page and of those kept for unmounted pages, once settled. */
+  canvasPixels?: number;
   renders?: {
     base: number;
     detail: number;
@@ -259,7 +303,8 @@ try {
               for (const [key, value] of new URLSearchParams(process.env.QUERY ?? "")) {
                 query.set(key, value);
               }
-              await page.goto(`${url}?${query}`);
+              if (variant.page) query.set("viewer", variant.name.split(",")[0] ?? "");
+              await page.goto(`${url}${variant.page ?? ""}?${query}`);
               await waitForDone(page);
               const payload = (await page.evaluate(
                 () => (window as { __result?: unknown }).__result,
@@ -333,6 +378,10 @@ const summaries = files.flatMap((file) =>
         annotationLayers: pick((result) => result.renders?.annotations),
         cancelledRenders: pick((result) => result.renders?.cancelled),
         settleMs: pick((result) => result.settleMs),
+        // RGBA bytes, in MiB.
+        canvasMiB: pick((result) =>
+          result.canvasPixels === undefined ? null : (result.canvasPixels * 4) / 2 ** 20,
+        ),
       };
     }),
   ),
@@ -350,6 +399,7 @@ const environment = {
   loadAverage: { start: loadAtStart, end: loadavg()[0] ?? 0 },
   turnTaking: { ...turnTaking },
   before: beforeDist ? beforeLabel : undefined,
+  versions,
   // Medians of the per-job idle baselines from calibrate.html.
   idle: {
     timerLagP50Ms: median(okResults.map((result) => result.idle?.timerLagP50Ms ?? Number.NaN)),
@@ -394,6 +444,7 @@ const reproduceEnv = [
   "DURATION",
   "LATENCY",
   "BANDWIDTH",
+  "MAX_LOAD",
   "OUTPUT",
 ]
   .filter((name) => process.env[name] !== undefined)
@@ -416,6 +467,8 @@ const markdown = [
   "- Blank: share of the viewport covered by pages without pixels, averaged over frames; blank frames: frames where more than 1% was blank.",
   "- Main thread: summed lateness of a 4 ms timer while scrolling, beyond 2 ms or the idle page's 95th percentile, whichever is larger, plus the raw p95 and maximum lateness.",
   "- Dropped frames: animation frames longer than 1.5 idle frame intervals.",
+  "- Canvas memory: the pixels of the canvases in the page and of those kept for pages that unmounted, at 4 bytes each, once the pages settled after scrolling.",
+  `- Versions: pdfjs-dist ${versions.pdfjs}${versions.reactPdf ? `; react-pdf ${versions.reactPdf} (on pdfjs-dist ${versions.reactPdfPdfjs}) and react-window ${versions.reactWindow}, in compare.html, which sizes every page as the first` : ""}.`,
   "- React commits: commits of the viewer's React tree while scrolling, and per second. Store updates: how often the store published while scrolling, and how often that moved the mounted window and the current page, the changes that should make React commit.",
   `- Reproduce: \`pnpm --filter @parapdf/prototype build && BROWSER=${browserName} ${reproduceEnv}pnpm --filter @parapdf/prototype bench\``,
   "",
@@ -423,13 +476,13 @@ const markdown = [
     speeds.flatMap((speed) => [
       `## ${file}, ${speed} CSS px per second`,
       "",
-      "| Variant | First paint (ms) | Pages crossed | Blank (%) | Blank frames (%) | Main thread blocked (ms) | Lag p95 / max (ms) | Dropped frames | React commits (per s) | Store updates (window / current page) | Renders base / detail / text / links / cancelled |",
-      "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+      "| Variant | First paint (ms) | Pages crossed | Blank (%) | Blank frames (%) | Main thread blocked (ms) | Lag p95 / max (ms) | Dropped frames | React commits (per s) | Store updates (window / current page) | Renders base / detail / text / links / cancelled | Canvas memory (MiB) |",
+      "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
       ...summaries
         .filter((summary) => summary.file === file && summary.speed === speed)
         .map(
           (summary) =>
-            `| ${summary.variant} | ${fmt(summary.firstPaintMs)} | ${fmt(summary.pagesCrossed)} | ${fmt(summary.blankMeanPct, 1)} | ${fmt(summary.blankFramesPct, 1)} | ${fmt(summary.blockedMs)} | ${fmt(summary.lagP95Ms, 1)} / ${fmt(summary.lagMaxMs)} | ${fmt(summary.droppedFrames)} / ${fmt(summary.frames)} | ${fmt(summary.commitsDuringScroll)} (${fmt(summary.commitsPerSecond, 1)}) | ${fmt(summary.storeUpdates)} (${fmt(summary.windowChanges)} / ${fmt(summary.currentPageChanges)}) | ${fmt(summary.baseRenders)} / ${fmt(summary.detailRenders)} / ${fmt(summary.textLayers)} / ${fmt(summary.annotationLayers)} / ${fmt(summary.cancelledRenders)} |`,
+            `| ${summary.variant} | ${fmt(summary.firstPaintMs)} | ${fmt(summary.pagesCrossed)} | ${fmt(summary.blankMeanPct, 1)} | ${fmt(summary.blankFramesPct, 1)} | ${fmt(summary.blockedMs)} | ${fmt(summary.lagP95Ms, 1)} / ${fmt(summary.lagMaxMs)} | ${fmt(summary.droppedFrames)} / ${fmt(summary.frames)} | ${fmt(summary.commitsDuringScroll)} (${fmt(summary.commitsPerSecond, 1)}) | ${fmt(summary.storeUpdates)} (${fmt(summary.windowChanges)} / ${fmt(summary.currentPageChanges)}) | ${fmt(summary.baseRenders)} / ${fmt(summary.detailRenders)} / ${fmt(summary.textLayers)} / ${fmt(summary.annotationLayers)} / ${fmt(summary.cancelledRenders)} | ${fmt(summary.canvasMiB)} |`,
         ),
       "",
     ]),
