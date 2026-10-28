@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { DEFAULT_ANNOTATION_SETUP } from "../src/render/dom-layers.ts";
 import type { ViewInput } from "../src/render/planner.ts";
 import { Renderer } from "../src/render/renderer.ts";
 import { computeLayout } from "../src/view/layout.ts";
@@ -322,7 +323,10 @@ describe("Renderer kept canvases", () => {
   it("keeps nothing of pages whose form fields are shown as HTML", async () => {
     for (const forms of [false, true]) {
       const { doc, renders } = await controlledDocument();
-      const renderer = new Renderer(doc, { maxKeptPixels: 4_000_000, forms });
+      const renderer = new Renderer(doc, {
+        maxKeptPixels: 4_000_000,
+        annotationSetup: { ...DEFAULT_ANNOTATION_SETUP, forms },
+      });
       const { base } = mount(renderer, 0);
       // Unsettled, the page draws its base alone, and builds no layers.
       renderer.update({ ...input(1), settled: false });
