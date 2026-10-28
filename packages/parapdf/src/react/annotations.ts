@@ -8,7 +8,7 @@ import type {
   AnnotationTool,
   SavedAnnotation,
   SignatureInput,
-} from "../pdfjs/editor.ts";
+} from "../pdfjs/editor-types.ts";
 import type { Viewer } from "../view/viewer.ts";
 import { useLoadedFeature, useStore } from "./features.ts";
 

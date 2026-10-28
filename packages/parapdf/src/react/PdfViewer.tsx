@@ -16,7 +16,7 @@ import {
 import { createPortal } from "react-dom";
 import { type InitialViewOptions, initialViewOpening } from "../features/initial-view.ts";
 import type { PageColors, Rotation } from "../pdfjs/draw.ts";
-import type { AnnotationLabels } from "../pdfjs/editor.ts";
+import type { AnnotationLabels } from "../pdfjs/editor-types.ts";
 import type { Direction, ScrollMode, SpreadMode } from "../view/layout.ts";
 import type { ViewerOptions } from "../view/options.ts";
 import type { PointerTool, ViewerState } from "../view/state.ts";

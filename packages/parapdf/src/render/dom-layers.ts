@@ -13,7 +13,7 @@ import type {
   AnnotationEditor,
   AnnotationEditorLayerTask,
   AnnotationLayerEditor,
-} from "../pdfjs/editor.ts";
+} from "../pdfjs/editor-types.ts";
 import type { LayerState } from "../pdfjs/layers.ts";
 import { buildTextLayer, type TextLayerHandle, type TextLayerTask } from "../pdfjs/text.ts";
 import type { PageElements } from "./page.ts";

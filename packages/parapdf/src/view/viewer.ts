@@ -5,7 +5,7 @@ import type { DocumentSession, PageSize, PdfPermissions } from "../document/sess
 import type { AnnotationLayerScripting, LinkHandlers } from "../pdfjs/annotation-layer.ts";
 import type { Destination, ResolvedDestination } from "../pdfjs/destinations.ts";
 import type { PageColors, Rotation } from "../pdfjs/draw.ts";
-import type { AnnotationEditor } from "../pdfjs/editor.ts";
+import type { AnnotationEditor } from "../pdfjs/editor-types.ts";
 import type { LayerState } from "../pdfjs/layers.ts";
 import type { TextLayerHandle } from "../pdfjs/text.ts";
 import { type AnnotationSetup, DEFAULT_ANNOTATION_SETUP } from "../render/dom-layers.ts";

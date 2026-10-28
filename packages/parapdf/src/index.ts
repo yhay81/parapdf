@@ -67,7 +67,7 @@ export type {
   SavedAnnotation,
   SelectedAnnotation,
   SignatureInput,
-} from "./pdfjs/editor.ts";
+} from "./pdfjs/editor-types.ts";
 export { pdfjsVersion } from "./pdfjs/files.ts";
 export type { PdfLayer } from "./pdfjs/layers.ts";
 export {

@@ -5,7 +5,7 @@ import { type ReadableStore, Store } from "../document/store.ts";
 import type { AnnotationEditing } from "../features/annotations.ts";
 import type { FormLayers } from "../features/forms/layers.ts";
 import { enforcePermissions } from "../features/permissions.ts";
-import type { AnnotationLabels } from "../pdfjs/editor.ts";
+import type { AnnotationLabels } from "../pdfjs/editor-types.ts";
 import { closeViewer, Viewer } from "../view/viewer.ts";
 
 /**

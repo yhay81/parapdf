@@ -35,7 +35,7 @@ interface Chunk {
 const FEATURES: Record<string, RegExp> = {
   search: /packages\/parapdf\/src\/features\/search\//,
   forms: /packages\/parapdf\/src\/features\/forms\//,
-  annotations: /packages\/parapdf\/src\/(features\/annotations\.ts|pdfjs\/editor\.ts)$/,
+  annotations: /packages\/parapdf\/src\/(features\/annotations\.ts|pdfjs\/editor(-labels)?\.ts)$/,
   print: /packages\/parapdf\/src\/features\/print\//,
 };
 
