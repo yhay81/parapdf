@@ -233,7 +233,7 @@ const FIXED_DATE = new Date("2026-01-01T00:00:00Z");
  * Six pages with what a document viewer shows besides its pages: page
  * labels (i, ii, 1–4), an embedded file, two layers (optional content), one
  * of them hidden at first, a comment (a text annotation with a popup), form
- * fields of every common kind, and text for search options.
+ * fields of every common kind with tooltips, and text for search options.
  */
 async function features(): Promise<Uint8Array> {
   const doc = await PDFDocument.create({ updateMetadata: false });
@@ -327,6 +327,17 @@ async function features(): Promise<Uint8Array> {
   const size = form.createDropdown("size");
   size.addOptions(["small", "medium", "large"]);
   size.addToPage(second, { x: 140, y: 500, width: 120, height: 24, font });
+  // Tooltips (/TU), which pdf.js reads from each widget, name the fields.
+  for (const [field, tooltip] of [
+    [form.getField("name"), "Your name"],
+    [form.getField("agree"), "I agree"],
+    [choice, "Favorite color"],
+    [size, "Size"],
+  ] as const) {
+    for (const widget of field.acroField.getWidgets()) {
+      widget.dict.set(PDFName.of("TU"), PDFString.of(tooltip));
+    }
+  }
   form.updateFieldAppearances(font);
   return doc.save({ useObjectStreams: false });
 }

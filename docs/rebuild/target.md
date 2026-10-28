@@ -48,9 +48,11 @@ Loads pdf.js on first use with the package's worker and files, as 0.x does
 (`engine/bundled.ts`, `scripts/pdfjs-files.ts`, the worker prelude, the
 `?no-inline&url` queries, the legacy build), and holds what is specific to
 how ParaPDF drives pdf.js: drawing a page or a region into a canvas, the
-text layer's language fix, the link service, annotation icons, the
-structure tree, form storage, and the annotation editor. No interface
-stands between this and the rest: callers use pdf.js's types.
+text layer's language fix, the link service, annotation icons and the
+names pdf.js leaves to its viewer's localization (a comment's icon is named
+by the comment, a field by its tooltip, `/TU`, on the control rather than
+its section), the structure tree, form storage, and the annotation editor.
+No interface stands between this and the rest: callers use pdf.js's types.
 
 ### document/
 

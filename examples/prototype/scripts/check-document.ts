@@ -561,6 +561,11 @@ try {
       },
     );
     const loaded = await state(page);
+    await page.waitForSelector(".parapdf-annotation-layer img");
+    const icon = await page.evaluate(
+      () => document.querySelector(".parapdf-annotation-layer img")?.getAttribute("alt") ?? null,
+    );
+    check("a comment's icon is named by the comment", icon === "A comment on the sampler", icon);
     const select = await page.evaluate(() => {
       const span = document.querySelector(".parapdf-text-layer span");
       return span
@@ -628,6 +633,26 @@ try {
           },
         ]),
       JSON.stringify(summary),
+    );
+    const tooltips = await page.evaluate(() =>
+      [...document.querySelectorAll(".parapdf-annotation-layer section[data-annotation-id]")]
+        .filter((section) => section.querySelector("input, select"))
+        .map((section) => [
+          section.getAttribute("title"),
+          section.querySelector("input, select")?.getAttribute("title"),
+        ]),
+    );
+    check(
+      "a field's tooltip names its control, not its section",
+      JSON.stringify(tooltips) ===
+        JSON.stringify([
+          [null, "Your name"],
+          [null, "I agree"],
+          [null, "Favorite color"],
+          [null, "Favorite color"],
+          [null, "Size"],
+        ]),
+      JSON.stringify(tooltips),
     );
     await page.evaluate(() => {
       (window as unknown as Demo).__changes = [];
