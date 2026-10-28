@@ -133,9 +133,9 @@ export class KeptCanvases {
 
   /** Releases the least recently kept while they hold more than `limit` pixels. */
   trim(limit: number): void {
-    for (const index of this.#pages.keys()) {
-      if (this.#pixels <= limit) return;
-      this.#forget(index);
+    while (this.#pixels > limit && this.#pages.size > 0) {
+      const oldest = this.#pages.keys().next();
+      if (!oldest.done) this.#forget(oldest.value);
     }
   }
 
