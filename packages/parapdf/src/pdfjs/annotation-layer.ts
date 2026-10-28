@@ -167,6 +167,38 @@ function placeIcons(container: HTMLElement, base: string, icons: Readonly<Record
 }
 
 /**
+ * Name what pdf.js leaves to its own viewer's Fluent strings, which nothing
+ * translates here: a comment's icon, by the comment's text, its author, or
+ * its kind, so that the trigger is not named by the icon's file name. And
+ * move a form field's tooltip (`/TU`), which pdf.js gives the field's
+ * section, where it names a region around the control, to the control.
+ */
+function nameAnnotations(container: HTMLElement, annotations: readonly AnnotationData[]): void {
+  const icons = container.querySelectorAll<HTMLImageElement>(
+    'img[data-l10n-id="pdfjs-text-annotation-type"]',
+  );
+  for (const image of icons) {
+    const id = image.closest<HTMLElement>("[data-annotation-id]")?.dataset.annotationId;
+    const data = annotations.find((annotation) => annotation.id === id);
+    image.alt = data?.contentsObj?.str || data?.titleObj?.str || data?.name || "";
+  }
+  for (const section of container.querySelectorAll<HTMLElement>("section[title]")) {
+    const control = section.querySelector("input, select, textarea, button");
+    if (!control) continue;
+    if (!control.getAttribute("title")) control.setAttribute("title", section.title);
+    section.removeAttribute("title");
+  }
+}
+
+/** What `nameAnnotations` reads of pdf.js's annotation data. */
+interface AnnotationData {
+  id: string;
+  name?: string;
+  contentsObj?: { str: string };
+  titleObj?: { str: string };
+}
+
+/**
  * Build focusable link elements for the links of `page`, once it has
  * loaded, and its other annotations that are not drawn: comment popups,
  * file attachments, and, with `forms`, form fields.
@@ -234,6 +266,7 @@ export function buildAnnotationLayer(
       ...(layers ? { optionalContentConfig: layers } : {}),
     });
     if (iconUrls) placeIcons(container, imageResourcesPath, iconUrls);
+    nameAnnotations(container, annotations as AnnotationData[]);
     if (form) form.layer = layer;
     return {
       layer,

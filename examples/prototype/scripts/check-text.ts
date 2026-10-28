@@ -336,6 +336,40 @@ try {
     String(semantics.firstPageLabel),
   );
   check("canvases are hidden from assistive technology", semantics.canvasesHidden);
+  // A screen reader's cursor follows the focus: it reads on from the page
+  // shown rather than from the first mounted one.
+  const focusFollows = await page.evaluate(async () => {
+    const viewport = document.querySelector<HTMLElement>(".parapdf-viewport");
+    const viewer = (window as { __viewer?: { store: { get(): { currentPage: number } } } })
+      .__viewer;
+    const focused = () => document.activeElement?.getAttribute("data-page") ?? null;
+    const until = async (done: () => boolean) => {
+      for (let waited = 0; waited < 10_000 && !done(); waited += 100) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    };
+    const pagesTabIndex = document.querySelector<HTMLElement>('section[data-page="1"]')?.tabIndex;
+    viewport?.focus();
+    viewport?.scrollTo({ top: viewport.scrollHeight });
+    await until(() => (viewer?.store.get().currentPage ?? 0) > 100 && focused() !== null);
+    const atEnd = { focused: focused(), current: viewer?.store.get().currentPage };
+    viewport?.scrollTo({ top: 0 });
+    await until(() => focused() === "1");
+    const atStart = focused();
+    // Page 1's text layer, which the checks below read, is built again.
+    await until(
+      () =>
+        document.querySelectorAll('section[data-page="1"] .parapdf-text-layer span').length > 20,
+    );
+    return { pagesTabIndex, atEnd, atStart };
+  });
+  check(
+    "pages are focusable out of the tab order, and the focus follows the page shown",
+    focusFollows.pagesTabIndex === -1 &&
+      focusFollows.atEnd.focused === String((focusFollows.atEnd.current ?? -2) + 1) &&
+      focusFollows.atStart === "1",
+    JSON.stringify(focusFollows),
+  );
   check("structure canvases hold no pixels", semantics.structureUndrawn);
   check(
     "page 1 exposes its text",

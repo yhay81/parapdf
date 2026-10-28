@@ -11,7 +11,8 @@
  * Environment: BROWSER (chromium, webkit, or firefox), VARIANTS, TEXT and LINKS (1, 0, or 1,0),
  * SCROLL (scroll modes: vertical, horizontal, wrapped, or a list; vertical), SCALE (fit-width,
  * fit-page, CSS px per point, or a list; fit-width), FILES, SPEEDS (CSS px per second, 900,3600),
- * RUNS (2), DURATION (ms, 4000), LATENCY (ms added to every request, Chromium only), BANDWIDTH
+ * FOCUS (1 to focus the viewport before scrolling), RUNS (2), DURATION (ms, 4000),
+ * LATENCY (ms added to every request, Chromium only), BANDWIDTH
  * (Mbit/s, Chromium only), DIST (another build of the demo to measure), BEFORE (a build of the
  * demo from before a change, whose twin of every variant is measured in turn with it, job by
  * job), BEFORE_LABEL (its name in the report), QUERY (more demo parameters, such as
@@ -56,6 +57,7 @@ interface Variant {
 
 const beforeDist = process.env.BEFORE;
 const beforeLabel = process.env.BEFORE_LABEL ?? "another build";
+const focusViewport = process.env.FOCUS === "1";
 
 const engineVariants = [
   { name: "pdfjs", engine: "pdfjs", hwa: false },
@@ -69,6 +71,8 @@ const engineVariants = [
     ? process.env.VARIANTS.split(",").includes(variant.name)
     : variant.page === undefined,
 );
+if (focusViewport && engineVariants.some((variant) => variant.page))
+  throw new Error("FOCUS is supported only for ParaPDF variants");
 // The versions the react-pdf variants measure, for the report.
 const prototypePackage = JSON.parse(readFileSync(join(exampleDir, "package.json"), "utf8")) as {
   dependencies: Record<string, string>;
@@ -304,12 +308,30 @@ try {
                 query.set(key, value);
               }
               if (variant.page) query.set("viewer", variant.name.split(",")[0] ?? "");
+              if (focusViewport) {
+                await page.addInitScript(() => {
+                  const observer = new MutationObserver(() => {
+                    const viewport = document.querySelector<HTMLElement>(".parapdf-viewport");
+                    if (!viewport) return;
+                    viewport.focus();
+                    observer.disconnect();
+                  });
+                  observer.observe(document, { childList: true, subtree: true });
+                });
+              }
               await page.goto(`${url}${variant.page ?? ""}?${query}`);
               await waitForDone(page);
               const payload = (await page.evaluate(
                 () => (window as { __result?: unknown }).__result,
               )) as Omit<JobResult, "variant" | "run">;
               const measured: JobResult = { ...payload, ...job, idle };
+              if (
+                focusViewport &&
+                !(await page.evaluate(() =>
+                  document.querySelector(".parapdf-viewport")?.contains(document.activeElement),
+                ))
+              )
+                measured.error = "The viewport did not retain focus";
               const ratio = (payload as { devicePixelRatio?: number }).devicePixelRatio;
               if (ratio !== 2) measured.error = `devicePixelRatio ${ratio}, expected 2`;
               return measured;
@@ -415,6 +437,7 @@ const environment = {
     scales,
     viewport: "1280x900",
     devicePixelRatio: 2,
+    focusViewport,
   },
 };
 const round = (_key: string, value: unknown) =>
@@ -440,6 +463,7 @@ const reproduceEnv = [
   "SCALE",
   "FILES",
   "SPEEDS",
+  "FOCUS",
   "RUNS",
   "DURATION",
   "LATENCY",
@@ -463,6 +487,11 @@ const markdown = [
   `- Machine: ${environment.os}, ${environment.cpu}; ${environment.browser} (Playwright build, ${environment.headless ? "headless" : "headed"}); power: ${power.source === "ac" && !power.lowPowerMode ? "AC" : `**${power.source}${power.lowPowerMode ? ", Low Power Mode" : ""}; not comparable with AC runs**`}; one-minute load average ${environment.loadAverage.start.toFixed(1)} at the start, ${environment.loadAverage.end.toFixed(1)} at the end; ${turnTakingSummary()}`,
   `- Idle baseline (calibrate.html, median of jobs): 4 ms timer late by ${fmt(environment.idle.timerLagP50Ms, 1)} ms (median) / ${fmt(environment.idle.timerLagP95Ms, 1)} ms (p95); animation frames every ${fmt(environment.idle.frameIntervalMs, 1)} ms.`,
   `- Method: 1280×900 viewport at devicePixelRatio 2, ${zoomText}, ${scrollModes.join(" or ")} scroll mode, ${durationMs} ms of scrolling at a constant speed in CSS pixels per second after the first page is painted, sideways in horizontal mode and downward otherwise, median of ${runs} runs.${beforeDist ? ` Variants named "before" ran on ${beforeLabel}, each in turn with its twin, job by job.` : ""}${throttled ? ` Network: ${latencyMs} ms latency, ${bandwidthMbps > 0 ? `${bandwidthMbps} Mbit/s` : "unlimited bandwidth"} (DevTools protocol).` : ""}`,
+  ...(focusViewport
+    ? [
+        "- The viewport takes focus before scrolling, exercising page focus as the current page changes.",
+      ]
+    : []),
   "- First paint: time from navigation start until page 1 shows pixels.",
   "- Blank: share of the viewport covered by pages without pixels, averaged over frames; blank frames: frames where more than 1% was blank.",
   "- Main thread: summed lateness of a 4 ms timer while scrolling, beyond 2 ms or the idle page's 95th percentile, whichever is larger, plus the raw p95 and maximum lateness.",

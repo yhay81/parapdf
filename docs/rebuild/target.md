@@ -53,9 +53,11 @@ Loads pdf.js on first use with the package's worker and files, as 0.x does
 (`engine/bundled.ts`, `scripts/pdfjs-files.ts`, the worker prelude, the
 `?no-inline&url` queries, the legacy build), and holds what is specific to
 how ParaPDF drives pdf.js: drawing a page or a region into a canvas, the
-text layer's language fix, the link service, annotation icons, the
-structure tree, form storage, and the annotation editor. No interface
-stands between this and the rest: callers use pdf.js's types.
+text layer's language fix, the link service, annotation icons and the
+names pdf.js leaves to its viewer's localization (a comment's icon is named
+by the comment, a field by its tooltip, `/TU`, on the control rather than
+its section), the structure tree, form storage, and the annotation editor.
+No interface stands between this and the rest: callers use pdf.js's types.
 
 ### document/
 
@@ -182,6 +184,15 @@ scroll mode, and tool: a split view, or thumbnails beside the pages.
 - Navigation core: `goToPage`, destinations with their zoom, and the
   current page's rules. The back and forward stacks are the history
   feature's.
+- The focus follows the page shown, because a screen reader reads on from
+  where the focus is and otherwise enters the document at its first mounted
+  page. Pages are focusable (`tabindex="-1"`) but not in the tab order.
+  While the focus is on the viewport or on a page, it moves to the current
+  page when that changes; following a link moves it to the page the link
+  goes to; and when the page holding it unmounts, it moves to the current
+  page. Focus elsewhere (the application's controls, a link, a form field)
+  stays where it is, and so does the focus during a drag selecting text,
+  which moving it would end.
 - A viewer has an `AbortController` of its own, aborted when its viewport
   goes.
 

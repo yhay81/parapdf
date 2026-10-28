@@ -47,6 +47,13 @@ const probe = (page: Page): Promise<ViewerProbe> =>
 const pageLinks = (page: Page, pageNumber: number) =>
   page.locator(`section[data-page="${pageNumber}"] .parapdf-annotation-layer a`);
 
+/** The number of the page whose section has the focus, or null. */
+const focusedPage = (page: Page): Promise<number | null> =>
+  page.evaluate(() => {
+    const page = document.activeElement?.closest("section[data-page]");
+    return page === document.activeElement ? Number(page?.getAttribute("data-page")) : null;
+  });
+
 const SECTION = "2 Creating document commands and environments";
 
 /** Four blank pages with the PDF's own rotation, independent of view rotation. */
@@ -56,8 +63,9 @@ function rotatedPages(): string {
     "<< /Type /Pages /Count 4 /Kids [3 0 R 4 0 R 5 0 R 6 0 R] >>",
     ...[0, 90, 180, 270].map(
       (rotation) =>
-        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Rotate ${rotation} /Resources << >> >>`,
+        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Rotate ${rotation} /Resources << >> ${rotation === 0 ? "/Annots [7 0 R]" : ""} >>`,
     ),
+    "<< /Type /Annot /Subtype /Link /Rect [72 700 172 740] /Border [0 0 0] /A << /S /Named /N /NextPage >> >>",
   ];
   let pdf = "%PDF-1.7\n";
   const offsets = [0];
@@ -120,6 +128,10 @@ try {
     afterClick.currentPage > start.currentPage && afterClick.canGoBack,
     `page ${start.currentPage + 1} -> ${afterClick.currentPage + 1}`,
   );
+  check(
+    "clicking an internal link moves the focus to its page",
+    (await focusedPage(page)) === afterClick.currentPage + 1,
+  );
   // The landing page's text layer is built once scrolling settles.
   await page.waitForTimeout(1200);
   const landedText = await page
@@ -149,6 +161,13 @@ try {
     "Enter on a focused link follows it",
     Math.abs(afterEnter.scrollTop - afterClick.scrollTop) <= 2,
     `${afterClick.scrollTop} vs ${afterEnter.scrollTop}`,
+  );
+  // A screen reader, whose cursor follows the focus, reads on there.
+  const focusedAfterEnter = await focusedPage(page);
+  check(
+    "following a link moves the focus to the page it goes to",
+    focusedAfterEnter === afterEnter.currentPage + 1,
+    `focus on ${focusedAfterEnter}, page ${afterEnter.currentPage + 1} shown`,
   );
   await page.keyboard.press("Alt+ArrowLeft");
   await page.waitForTimeout(400);
@@ -187,6 +206,21 @@ try {
     JSON.stringify(attributes),
   );
 
+  // The focus a page holds as it unmounts moves to the current page
+  // instead of falling to the body.
+  await external.focus();
+  await page.evaluate(() => {
+    (window as { __viewer?: { goToPage(index: number): void } }).__viewer?.goToPage(0);
+  });
+  await page.waitForFunction(() => !document.querySelector('section[data-page="26"]'));
+  await page.waitForTimeout(100);
+  const focusedAfterUnmount = await focusedPage(page);
+  check(
+    "focus on a page that unmounts moves to the current page",
+    focusedAfterUnmount === 1,
+    `focus on ${focusedAfterUnmount}`,
+  );
+
   const rotatedContext = await launched.browser.newContext();
   const rotated = await rotatedContext.newPage();
   await rotated.route("**/corpus/rotated-destinations.pdf", (route) =>
@@ -197,6 +231,15 @@ try {
   // after the document is ready.
   await rotated.waitForFunction(
     () => (window as { __viewer?: { session: unknown } }).__viewer?.session != null,
+  );
+  const nextPageLink = pageLinks(rotated, 1).first();
+  await nextPageLink.focus();
+  await nextPageLink.press("Enter");
+  await rotated.waitForFunction(() => window.__viewer?.store.get().currentPage === 1);
+  await rotated.waitForTimeout(100);
+  check(
+    "following a named page action moves the focus to its page",
+    (await focusedPage(rotated)) === 2,
   );
   const destinations = await rotated.evaluate(async () => {
     // The loaded session, which resolves destinations for the viewer.
