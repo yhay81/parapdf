@@ -28,6 +28,7 @@ for the direction of the rebuild gets a new record, numbered next.
 | [0017](0017-measured-against-react-pdf.md) | ParaPDF is measured against react-pdf | adopted |
 | [0018](0018-keep-the-size-query-container.md) | The scroller stays a size query container | rejected |
 | [0019](0019-pdfjs-viewer-parity.md) | What ParaPDF takes from pdf.js's viewer, and what it leaves | adopted |
+| [0020](0020-text-layers-built-in-the-document.md) | Text layers are built in the document | rejected |
 
 ## Template
 

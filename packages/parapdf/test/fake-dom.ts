@@ -38,15 +38,6 @@ export class FakeElement {
     return this.parent;
   }
 
-  get parentNode(): FakeElement | null {
-    return this.parent;
-  }
-
-  get previousSibling(): FakeElement | null {
-    const siblings = this.parent?.children ?? [];
-    return siblings[siblings.indexOf(this) - 1] ?? null;
-  }
-
   setAttribute(name: string, value: string): void {
     this.attributes.set(name, value);
   }
