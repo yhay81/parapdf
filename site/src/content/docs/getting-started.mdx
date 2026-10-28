@@ -59,8 +59,8 @@ export function App() {
 - The first `PdfDocument` to render loads pdf.js and starts its worker, and
   each one starts downloading its PDF while it renders, from the page's head
   when the page is rendered on the server. pdf.js takes the preloaded
-  response, so the PDF downloads once (Safari is [not verified
-  yet](/about/limitations/)).
+  response, so the PDF downloads once. Safari takes it only once it has
+  finished, so there is no preload there ([limitations](/about/limitations/)).
 - This works as it is with bundlers that emit files referenced with
   `new URL(…, import.meta.url)`, such as Vite, webpack, Rsbuild, and Next.js:
   see [Bundlers](/setup/bundlers/) for the others.

@@ -22,6 +22,7 @@ for the direction of the rebuild gets a new record, numbered next.
 | [0011](0011-react-api.md) | The React API: viewers of their own, live options, the session's state | adopted |
 | [0012](0012-demote-small-whole-page-detail.md) | A whole-page detail no larger than a base becomes the base | adopted |
 | [0013](0013-path-text.md) | Text drawn as paths (`disableFontFace`) by default | rejected |
+| [0014](0014-no-preload-in-webkit.md) | No PDF preload in WebKit browsers | adopted |
 
 ## Template
 

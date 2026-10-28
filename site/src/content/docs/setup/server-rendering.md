@@ -27,6 +27,10 @@ The preload matches the CORS mode pdf.js fetches with, including a source's
 There is no preload when the request has `httpHeaders`, which no preload can
 carry, whether the source or `configurePdfjs({ documentOptions })` sets them,
 or with `disableStream`, with which pdf.js reads only the ranges it needs.
+A provider rendered in Safari or another WebKit browser does not preload
+either, but the server's page still does: Safari gives pdf.js the response
+only once it has finished, and downloads a PDF pdf.js asks for earlier
+again ([limitations](/about/limitations/)).
 
 Hooks such as `useViewer()`, `useViewState()`, and `useDocumentState()`
 belong in Client Components: put the toolbar and other controls in a file

@@ -43,9 +43,11 @@ builds so far.
 - Whether iOS Safari counts the canvases pages keep when they unmount
   (`maxKeptPixels`) toward its canvas memory cap is not verified; it needs a
   device.
-- Chromium and Firefox give pdf.js the PDF's preloaded download. Whether
-  Safari does is not verified; where a browser does not, the PDF downloads
-  twice.
+- Safari gives pdf.js a preloaded download only once it has finished, so
+  ParaPDF does not preload the PDF in Safari or other WebKit browsers. A
+  page rendered on the server still preloads it there, since the server
+  cannot tell the browser: a PDF that takes longer to download than pdf.js
+  to load downloads twice in Safari.
 - In Safari on iPadOS, a pinch that starts while a fling still scrolls does
   not reach the page; the next pinch zooms.
 

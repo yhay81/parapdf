@@ -142,17 +142,29 @@ export function preloadPdfjs(): void {
  * The CORS mode of pdf.js's request for a URL source, which a preload must
  * match to be reused. The source's own headers and credentials replace those
  * of `documentOptions`, as they do in the request. Null when there is nothing
- * to preload: no preload carries headers, and without streaming pdf.js reads
- * only the ranges it needs.
+ * to preload: no preload carries headers, without streaming pdf.js reads
+ * only the ranges it needs, and WebKit downloads it again (decision 0014).
  */
-export function documentRequestMode(source: {
-  readonly httpHeaders?: Readonly<Record<string, string>>;
-  readonly withCredentials?: boolean;
-}): "anonymous" | "use-credentials" | null {
+export function documentRequestMode(
+  source: {
+    readonly httpHeaders?: Readonly<Record<string, string>>;
+    readonly withCredentials?: boolean;
+  },
+  userAgent: string | undefined = globalThis.navigator?.userAgent,
+): "anonymous" | "use-credentials" | null {
   const options = config.documentOptions;
   if ((source.httpHeaders ?? options?.httpHeaders) || options?.disableStream) return null;
+  if (userAgent && isWebKit(userAgent)) return null;
   return (source.withCredentials ?? options?.withCredentials) ? "use-credentials" : "anonymous";
 }
+
+/**
+ * Whether a user agent is WebKit's, every browser on iOS and iPadOS among
+ * them, which gives a fetch a preloaded response only once it has finished
+ * downloading: a fetch while it downloads starts another download.
+ */
+const isWebKit = (userAgent: string): boolean =>
+  /\bAppleWebKit\//.test(userAgent) && !/\b(?:Chrome|Chromium)\//.test(userAgent);
 
 const absolute = (url: URL | string): string => new URL(String(url), document.baseURI).href;
 

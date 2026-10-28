@@ -12,7 +12,8 @@
  *
  * Usage: pnpm --filter @parapdf/prototype build && node scripts/preload-reuse.ts
  * Environment: BROWSER (chromium, webkit, firefox, or safari), ENGINE
- * (pdfjs-next), DIST, FILE (bill-hr815.pdf).
+ * (pdfjs-next), DIST, FILE (bill-hr815.pdf), RATE (the bytes per second
+ * the responses of the PDF share; unlimited by default).
  */
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -31,6 +32,13 @@ interface Served {
   range: string | null;
 }
 
+const rate = Number(process.env.RATE ?? 0);
+/** The responses still sending, which share the rate. */
+const sending = new Set<(share: number) => void>();
+if (rate)
+  setInterval(() => {
+    for (const drain of sending) drain(Math.floor(rate / 10 / sending.size));
+  }, 100).unref();
 let cache = "no-cache";
 const served: Served[] = [];
 const count: Connect.NextHandleFunction = (request, response, next) => {
@@ -44,18 +52,45 @@ const count: Connect.NextHandleFunction = (request, response, next) => {
   served.push(entry);
   const write = response.write.bind(response);
   const end = response.end.bind(response);
-  const add = (chunk: unknown) => {
-    if (chunk && typeof chunk !== "function") entry.bytes += Buffer.byteLength(chunk as Buffer);
+  // With RATE, the responses share that many bytes a second, sent a tenth
+  // each 100 ms, as downloads share a network.
+  const queue: Buffer[] = [];
+  let ending = false;
+  const drain = (share: number) => {
+    let budget = share;
+    while (budget > 0 && queue.length > 0) {
+      const chunk = queue[0] as Buffer;
+      const part = chunk.subarray(0, budget);
+      if (part.length === chunk.length) queue.shift();
+      else queue[0] = chunk.subarray(part.length);
+      budget -= part.length;
+      if (!response.destroyed) write(part);
+    }
+    if (ending && queue.length === 0) {
+      sending.delete(drain);
+      end();
+    }
   };
-  response.write = ((chunk: unknown, ...rest: never[]) => {
+  const add = (chunk: unknown) => {
+    if (!chunk || typeof chunk === "function") return;
+    const bytes = Buffer.from(chunk as Buffer);
+    entry.bytes += bytes.length;
+    if (rate) queue.push(bytes);
+    else write(bytes);
+  };
+  if (rate) sending.add(drain);
+  response.write = ((chunk: unknown) => {
     add(chunk);
-    return write(chunk as Buffer, ...rest);
+    return true;
   }) as typeof response.write;
-  response.end = ((chunk: unknown, ...rest: never[]) => {
+  response.end = ((chunk: unknown) => {
     add(chunk);
     entry.status = response.statusCode;
-    return end(chunk as Buffer, ...rest);
+    if (!rate) return end();
+    ending = true;
+    return response;
   }) as typeof response.end;
+  response.on("close", () => sending.delete(drain));
   // Sirv, which serves the preview, sets its own Cache-Control first.
   const setHeader = response.setHeader.bind(response);
   response.setHeader = ((name: string, value: string) =>
@@ -75,7 +110,7 @@ const server = await preview({
 });
 const baseUrl = server.resolvedUrls?.local[0] ?? "http://127.0.0.1:4185/";
 const launched = await launchBrowser();
-console.log(`${launched.label}, engine ${engine}, ${file}`);
+console.log(`${launched.label}, engine ${engine}, ${file}${rate ? `, ${rate} B/s` : ""}`);
 
 async function job(browser: Browser, header: string): Promise<void> {
   cache = header;
