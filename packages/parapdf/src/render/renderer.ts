@@ -1,7 +1,7 @@
 "use client";
 
 import type { DocumentSession } from "../document/session.ts";
-import type { LinkHandlers } from "../pdfjs/annotation-layer.ts";
+import type { AnnotationLayerScripting, LinkHandlers } from "../pdfjs/annotation-layer.ts";
 import {
   copyDrawing,
   type DrawRequest,
@@ -108,6 +108,8 @@ export interface RendererOptions extends Partial<Budgets> {
   links?: LinkHandlers;
   /** Annotation layers show form fields the reader can fill in; the drawings leave them out. */
   forms?: boolean;
+  /** The document's scripts, which those fields run; see `setFormScripting`. */
+  formScripting?: AnnotationLayerScripting | null;
   /** Colors pages are drawn in instead of their own. */
   pageColors?: PageColors;
   /** Which layers drawings and annotation layers show; see `invalidateContent`. */
@@ -239,6 +241,7 @@ export class Renderer {
       {
         links: options.links,
         forms: options.forms,
+        formScripting: options.formScripting,
         layers: options.layers,
         selection: options.selection,
         annotationEditor: options.annotationEditor,
@@ -492,6 +495,19 @@ export class Renderer {
   setLayers(layers: LayerState): void {
     this.#options.layers = layers;
     this.#layers.setLayerState(layers);
+  }
+
+  /**
+   * Build annotation layers whose form fields run `scripting`, the
+   * document's scripts, or, with null, none: those built are built again.
+   */
+  setFormScripting(scripting: AnnotationLayerScripting | null): void {
+    if ((this.#options.formScripting ?? null) === scripting) return;
+    this.#options.formScripting = scripting;
+    this.#layers.setFormScripting(scripting);
+    if (!this.#options.forms) return;
+    this.#layers.invalidateAnnotations();
+    this.#layers.schedule();
   }
 
   /**

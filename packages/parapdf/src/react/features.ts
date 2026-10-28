@@ -20,6 +20,8 @@ export interface LoadedFeatures {
 /** The options of `<PdfViewer>` that attach features to its viewer. */
 export interface FeatureOptions {
   forms: boolean;
+  /** Run the document's scripts in the form fields, with `forms`. */
+  formScripts: boolean;
   annotationEditing: boolean;
   annotationLabels: Partial<AnnotationLabels> | undefined;
   enforcePermissions: boolean;
@@ -27,6 +29,7 @@ export interface FeatureOptions {
 
 const OFF: FeatureOptions = {
   forms: false,
+  formScripts: false,
   annotationEditing: false,
   annotationLabels: undefined,
   enforcePermissions: false,
@@ -99,10 +102,14 @@ export function setFeatureOptions(viewer: Viewer, options: FeatureOptions): void
     if (options.forms) {
       viewer.defer(
         import("../features/forms/layers.ts").then(({ attachFormLayers }) => {
-          if (entry.formsTurn === turn) entry.loaded.set({ formLayers: attachFormLayers(viewer) });
+          if (entry.formsTurn !== turn) return;
+          const scripts = entry.options.formScripts;
+          entry.loaded.set({ formLayers: attachFormLayers(viewer, { scripts }) });
         }),
       );
     }
+  } else if (options.formScripts !== previous.formScripts) {
+    entry.loaded.get().formLayers?.setScripts(options.formScripts);
   }
   if (options.annotationEditing !== previous.annotationEditing) {
     const turn = ++entry.annotationsTurn;

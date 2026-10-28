@@ -6,6 +6,16 @@ change the API.
 
 ## Unreleased
 
+- `PdfViewer`'s new `formScripts` prop, with `forms`, runs the document's
+  scripts in its form fields as pdf.js's viewer does: calculated fields,
+  validation, formatting and keystroke rules, the actions of buttons, and
+  the scripts of the document and its pages. They run in pdf.js's sandbox,
+  QuickJS compiled to WebAssembly, which the package now ships and loads
+  only for a document with scripts: 66 KB of sandbox and 475 KB of QuickJS
+  (20 KB and 220 KB with gzip). The viewers of one document share its
+  sandbox, and what the scripts change reaches `useFormChange()`.
+  `setFormValues()` does not run them (#7).
+
 - With `annotationEditing`, the annotation editing state has `selected`: the
   annotation selected when one alone is, with its `id`, `pageIndex`, `type`,
   `comment`, and, for an image, `altText`. `setComment()` sets or removes its

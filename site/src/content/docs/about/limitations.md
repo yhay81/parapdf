@@ -7,7 +7,8 @@ description: What ParaPDF does not do yet, and what has not been verified.
 
 - Editing the annotations a PDF already holds other than text, drawings,
   highlights, and images: those stay as they are drawn.
-- Form scripts (calculations, validation, and button actions), and XFA forms.
+- XFA forms, and the `WillSave`, `DidSave`, `WillPrint`, and `DidPrint`
+  scripts of AcroForms.
 - Text layers for pages outside the mounted window, so the browser's own find
   and assistive technology see only mounted pages; use `useSearch()` and
   `getText()` for the whole document.

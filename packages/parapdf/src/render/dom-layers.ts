@@ -3,6 +3,7 @@
 import type { DocumentSession } from "../document/session.ts";
 import {
   type AnnotationLayerHandle,
+  type AnnotationLayerScripting,
   type AnnotationLayerTask,
   buildAnnotationLayer,
   type LinkHandlers,
@@ -66,6 +67,8 @@ export interface DomLayerOptions {
   links?: LinkHandlers | undefined;
   /** Annotation layers show form fields the reader can fill in. */
   forms?: boolean | undefined;
+  /** The document's scripts, which those fields run. */
+  formScripting?: AnnotationLayerScripting | null | undefined;
   /** Which layers annotation layers show. */
   layers?: LayerState | undefined;
   /** Keeps drag selections inside built text layers. */
@@ -222,6 +225,10 @@ export class DomLayers {
 
   setForms(forms: boolean): void {
     this.#options.forms = forms;
+  }
+
+  setFormScripting(scripting: AnnotationLayerScripting | null): void {
+    this.#options.formScripting = scripting;
   }
 
   setLayerState(layers: LayerState): void {
@@ -434,6 +441,7 @@ export class DomLayers {
       // The structure tree built with the page's text layer labels its annotations.
       structTree: page.textHandle?.structTree ?? null,
       editor: this.#options.annotationEditor?.layerEditing ?? null,
+      scripting: this.#options.formScripting ?? null,
     });
     page.annotationTask = task;
     this.#running = true;

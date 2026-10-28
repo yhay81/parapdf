@@ -32,6 +32,8 @@ export interface ViewerExtension {
    * goes. The `ready` signal aborts right after.
    */
   closed?(): void;
+  /** The document's pages first showed pixels, once each time it is shown. */
+  painted?(): void;
   /** A page's text layer was built, or, with null, removed. */
   textLayer?(pageIndex: number, handle: TextLayerHandle | null): void;
   /** A link, outline entry, or named action is about to jump. */
@@ -53,6 +55,7 @@ export class ExtensionSet {
   readonly #deferred = new Set<Promise<unknown>>();
   /** The document whose `ready` hooks ran and the signal they got, which `add()` replays. */
   #ready: { session: DocumentSession; signal: AbortSignal } | null = null;
+  #painted = false;
 
   /**
    * Register `extension`; returns the function that removes it. It hears
@@ -70,6 +73,7 @@ export class ExtensionSet {
       extension.ready?.(ready.session, ready.signal);
     }
     if (viewport) extension.viewport?.(viewport.scroller, viewport.content, viewport.signal);
+    if (ready && !ready.signal.aborted && this.#painted) extension.painted?.();
     return () => {
       this.#extensions.delete(extension);
     };
@@ -104,12 +108,19 @@ export class ExtensionSet {
   /** The viewport is about to detach; with `rebuilding`, the document is shown again after. */
   detaching(rebuilding = false): void {
     for (const extension of this.#extensions) extension.detaching?.();
+    this.#painted = false;
     if (rebuilding) this.#ready = null;
   }
 
   closed(): void {
     for (const extension of this.#extensions) extension.closed?.();
     this.#ready = null;
+    this.#painted = false;
+  }
+
+  painted(): void {
+    this.#painted = true;
+    for (const extension of this.#extensions) extension.painted?.();
   }
 
   textLayer(pageIndex: number, handle: TextLayerHandle | null): void {

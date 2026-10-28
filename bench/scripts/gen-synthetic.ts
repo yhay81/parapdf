@@ -626,6 +626,76 @@ async function annotations(): Promise<Uint8Array> {
   return doc.save({ useObjectStreams: false });
 }
 
+/**
+ * A form whose scripts calculate, validate, format, and act, as Acrobat's
+ * built-in functions do: price and quantity formatted as numbers, the
+ * quantity kept between 1 and 100, the total their product, a button that
+ * sets the status, and a document script that marks the form opened. Two
+ * pages, the second with a page script that counts its openings.
+ */
+async function scripts(): Promise<Uint8Array> {
+  const doc = await PDFDocument.create({ updateMetadata: false });
+  doc.setTitle("ParaPDF form scripts");
+  doc.setCreationDate(FIXED_DATE);
+  doc.setModificationDate(FIXED_DATE);
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const { context } = doc;
+  const first = doc.addPage([612, 792]);
+  const second = doc.addPage([612, 792]);
+  first.drawText("Form scripts", { x: 72, y: 720, size: 20, font });
+  second.drawText("The second page", { x: 72, y: 720, size: 20, font });
+  const form = doc.getForm();
+  const js = (code: string) => context.obj({ S: "JavaScript", JS: PDFString.of(code) });
+  const text = (name: string, label: string, y: number, actions: Record<string, string>) => {
+    first.drawText(label, { x: 72, y: y + 8, size: 12, font });
+    const field = form.createTextField(name);
+    field.addToPage(first, { x: 180, y, width: 200, height: 24, font });
+    const aa = Object.fromEntries(Object.entries(actions).map(([key, code]) => [key, js(code)]));
+    field.acroField.dict.set(PDFName.of("AA"), context.obj(aa));
+    return field;
+  };
+  const number = {
+    K: 'AFNumber_Keystroke(2, 0, 0, 0, "", true);',
+    F: 'AFNumber_Format(2, 0, 0, 0, "", true);',
+  };
+  text("price", "Price", 640, number);
+  text("quantity", "Quantity", 600, {
+    ...number,
+    V: "AFRange_Validate(true, 1, true, 100);",
+  });
+  const total = text("total", "Total", 560, {
+    ...number,
+    C: 'AFSimple_Calculate("PRD", new Array("price", "quantity"));',
+  });
+  text("status", "Status", 520, {});
+  text("opened", "Opened", 480, {});
+  text("visits", "Visits", 440, {});
+  const button = form.createButton("apply");
+  button.addToPage("Apply", first, { x: 180, y: 390, width: 100, height: 28, font });
+  // The button's action, on its widget as pdf.js expects of push buttons.
+  button.acroField
+    .getWidgets()[0]
+    ?.dict.set(PDFName.of("A"), js('this.getField("status").value = "Applied";'));
+  form.updateFieldAppearances(font);
+  // The total is calculated after its inputs change.
+  form.acroForm.dict.set(PDFName.of("CO"), context.obj([total.acroField.ref]));
+  // A document script runs as the document opens.
+  const names = context.obj({
+    JavaScript: {
+      Names: [PDFString.of("open"), js('this.getField("opened").value = "yes";')],
+    },
+  });
+  doc.catalog.set(PDFName.of("Names"), names);
+  // A page script runs each time the second page opens.
+  second.node.set(
+    PDFName.of("AA"),
+    context.obj({
+      O: js('var v = this.getField("visits"); v.value = Number(v.value || 0) + 1;'),
+    }),
+  );
+  return doc.save({ useObjectStreams: false });
+}
+
 mkdirSync(outDir, { recursive: true });
 for (const [name, build] of [
   ["synthetic-text-1000.pdf", longText],
@@ -639,6 +709,7 @@ for (const [name, build] of [
   ["synthetic-navigation.pdf", navigation],
   ["synthetic-rtl.pdf", rightToLeft],
   ["synthetic-annotations.pdf", annotations],
+  ["synthetic-scripts.pdf", scripts],
 ] as const) {
   const bytes = await build();
   writeFileSync(join(outDir, name), bytes);

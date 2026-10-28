@@ -14,7 +14,8 @@
  * RUNS (2), DURATION (ms, 4000), LATENCY (ms added to every request, Chromium only), BANDWIDTH
  * (Mbit/s, Chromium only), DIST (another build of the demo to measure), BEFORE (a build of the
  * demo from before a change, whose twin of every variant is measured in turn with it, job by
- * job), BEFORE_LABEL (its name in the report), and OUTPUT (the browser name).
+ * job), BEFORE_LABEL (its name in the report), QUERY (more demo parameters, such as
+ * forms=1&scripts=1), and OUTPUT (the browser name).
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { arch, cpus, loadavg, platform, release } from "node:os";
@@ -255,6 +256,9 @@ try {
                 idleLag: String(idle.timerLagP95Ms),
                 idleFrame: String(idle.frameIntervalMs),
               });
+              for (const [key, value] of new URLSearchParams(process.env.QUERY ?? "")) {
+                query.set(key, value);
+              }
               await page.goto(`${url}?${query}`);
               await waitForDone(page);
               const payload = (await page.evaluate(
@@ -379,6 +383,7 @@ const fmt = (value: number, digits = 0) => (Number.isFinite(value) ? value.toFix
 // The settings this run was given, so the report says how to repeat it.
 const reproduceEnv = [
   "VARIANTS",
+  "QUERY",
   "TEXT",
   "LINKS",
   "SCROLL",

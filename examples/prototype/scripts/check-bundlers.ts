@@ -241,13 +241,19 @@ import { PdfDocument, PdfViewer, useViewer } from "parapdf";
 
 export function Viewer() {
   const viewer = useViewer();
-  const [file, setFile] = useState(null);
+  const [params, setParams] = useState(null);
   useEffect(() => {
     window.__viewer = viewer;
-    setFile(new URLSearchParams(location.search).get("file"));
+    setParams(new URLSearchParams(location.search));
   }, [viewer]);
+  const file = params?.get("file");
   if (!file) return null;
-  return h(PdfDocument, { source: "/" + file }, h(PdfViewer, { viewer, style: { height: "100vh" } }));
+  const options = params.get("scripts") === "1" ? { forms: true, formScripts: true } : {};
+  return h(
+    PdfDocument,
+    { source: "/" + file },
+    h(PdfViewer, { viewer, style: { height: "100vh" }, ...options }),
+  );
 }
 `,
   );

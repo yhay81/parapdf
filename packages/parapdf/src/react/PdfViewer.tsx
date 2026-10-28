@@ -102,6 +102,14 @@ export interface PdfViewerProps extends InitialViewOptions {
    */
   forms?: boolean;
   /**
+   * Run the document's scripts in its form fields (default false), with
+   * `forms`: calculations, validation, formatting, and the actions of
+   * buttons, as in pdf.js. They run in pdf.js's sandbox, QuickJS compiled
+   * to WebAssembly, which loads, with its 0.5 MB, only for a document that
+   * has scripts. What they change reaches `useFormChange()`.
+   */
+  formScripts?: boolean;
+  /**
    * Let the reader create highlights, text, drawings, images, and
    * signatures on the pages (default false); see `useAnnotations()`.
    * `save()` writes them into the document, with those other viewers of it
@@ -282,6 +290,7 @@ function ViewerViewport({
   initialView,
   initialViewState,
   forms = false,
+  formScripts = false,
   annotationEditing = false,
   annotationLabels,
   enforcePermissions = false,
@@ -376,7 +385,13 @@ function ViewerViewport({
   // those that change how pages are drawn.
   useLayoutEffect(() => {
     setViewerOptions(viewer, options);
-    setFeatureOptions(viewer, { forms, annotationEditing, annotationLabels, enforcePermissions });
+    setFeatureOptions(viewer, {
+      forms,
+      formScripts,
+      annotationEditing,
+      annotationLabels,
+      enforcePermissions,
+    });
     latest.current = { controlled, callbacks };
     reported.current = { ...(reported.current ?? viewOf(viewer.store.get())), ...controlled };
     applyControlled(viewer, controlled);
