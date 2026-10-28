@@ -36,12 +36,15 @@ describe("documentRequestMode", () => {
         "Mozilla/5.0 (iPhone; CPU iPhone OS 27_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/156.0.0.0 Mobile/15E148 Safari/604.1",
       chrome:
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+      headlessChrome:
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.8078.4 Safari/537.36",
       firefox:
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:157.0) Gecko/20100101 Firefox/157.0",
     };
     assert.equal(documentRequestMode({}, agents.safari), null);
     assert.equal(documentRequestMode({}, agents.iosChrome), null);
     assert.equal(documentRequestMode({}, agents.chrome), "anonymous");
+    assert.equal(documentRequestMode({}, agents.headlessChrome), "anonymous");
     assert.equal(documentRequestMode({}, agents.firefox), "anonymous");
     // A server, which cannot tell the browser, keeps it.
     assert.equal(documentRequestMode({}, undefined), "anonymous");

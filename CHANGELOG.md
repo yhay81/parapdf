@@ -24,6 +24,10 @@ change the API.
   saved PDF has the comment as the annotation's popup note; `export()` and
   `import()` keep both. `SelectedAnnotation` and `AnnotationAltText` are
   exported (#5, #6).
+- Headless Chromium preloads a URL source again: its user agent, with
+  `HeadlessChrome/`, was taken for WebKit's (decision 0014), so pages
+  rendered by Playwright, Puppeteer, or a prerenderer started the download
+  only once pdf.js had loaded.
 
 ## 0.7.0 — 2026-10-27
 
