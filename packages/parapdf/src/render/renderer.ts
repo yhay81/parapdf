@@ -1,7 +1,7 @@
 "use client";
 
 import type { DocumentSession } from "../document/session.ts";
-import type { AnnotationLayerScripting, LinkHandlers } from "../pdfjs/annotation-layer.ts";
+import type { LinkHandlers } from "../pdfjs/annotation-layer.ts";
 import {
   copyDrawing,
   type DrawRequest,
@@ -11,11 +11,16 @@ import {
   type PageColors,
   type Rotation,
 } from "../pdfjs/draw.ts";
-import type { AnnotationEditor } from "../pdfjs/editor.ts";
 import type { LayerState } from "../pdfjs/layers.ts";
 import type { TextLayerHandle } from "../pdfjs/text.ts";
 import { type PageArea, turnedSize } from "../view/layout.ts";
-import { type DomLayerStats, DomLayers } from "./dom-layers.ts";
+import {
+  type AnnotationSetup,
+  DEFAULT_ANNOTATION_SETUP,
+  type DomLayerOptions,
+  type DomLayerStats,
+  DomLayers,
+} from "./dom-layers.ts";
 import {
   addEditorLayer,
   mountPage,
@@ -102,22 +107,18 @@ export interface RendererOptions extends Partial<Budgets> {
   maxConcurrent?: number;
   /** Pages get a text layer, and a tagged page the structure that goes with it. */
   textLayer?: boolean;
-  /** Pages get an annotation layer: links, and form fields with `forms`. */
+  /** Pages get an annotation layer: links, and form fields with the setup's `forms`. */
   annotationLayer?: boolean;
   /** Where activated links in annotation layers go. */
   links?: LinkHandlers;
-  /** Annotation layers show form fields the reader can fill in; the drawings leave them out. */
-  forms?: boolean;
-  /** The document's scripts, which those fields run; see `setFormScripting`. */
-  formScripting?: AnnotationLayerScripting | null;
+  /** How pages show annotations, DEFAULT_ANNOTATION_SETUP by default; see `setAnnotationSetup`. */
+  annotationSetup?: AnnotationSetup;
   /** Colors pages are drawn in instead of their own. */
   pageColors?: PageColors;
   /** Which layers drawings and annotation layers show; see `invalidateContent`. */
   layers?: LayerState;
   /** Keeps drag selections inside built text layers. */
   selection?: TextSelectionTracker;
-  /** Edits annotations on the pages; see `setAnnotationEditor`. */
-  annotationEditor?: AnnotationEditor;
   /**
    * The most pixels kept of the canvases of pages that unmount, so that a
    * page coming back shows its drawing at once, its canvases moved into its
@@ -206,7 +207,8 @@ export class Renderer {
   readonly #slots = new Map<number, Slot>();
   readonly #maxConcurrent: number;
   readonly #budgets: Budgets;
-  readonly #options: RendererOptions;
+  /** Its own copy of the options, which the DOM layers read as the renderer changes it. */
+  readonly #options: RendererOptions & DomLayerOptions;
   readonly #layers: DomLayers;
   /** `maxKeptPixels`; undefined follows the viewport. */
   #maxKeptPixels: number | undefined;
@@ -234,22 +236,13 @@ export class Renderer {
       maxBasePixels: options.maxBasePixels ?? DEFAULT_BUDGETS.maxBasePixels,
       maxCanvasPixels: options.maxCanvasPixels ?? DEFAULT_BUDGETS.maxCanvasPixels,
     };
-    this.#options = options;
+    this.#options = {
+      ...options,
+      annotationSetup: options.annotationSetup ?? DEFAULT_ANNOTATION_SETUP,
+    };
     this.#maxKeptPixels = options.maxKeptPixels;
-    this.#layers = new DomLayers(
-      session,
-      {
-        links: options.links,
-        forms: options.forms,
-        formScripting: options.formScripting,
-        layers: options.layers,
-        selection: options.selection,
-        annotationEditor: options.annotationEditor,
-        onTextReady: options.onTextReady,
-        onTextRemoved: options.onTextRemoved,
-      },
-      this.stats,
-      () => this.#waitingForPixels(),
+    this.#layers = new DomLayers(session, this.#options, this.stats, () =>
+      this.#waitingForPixels(),
     );
     options.signal?.addEventListener("abort", () => this.dispose(), { once: true });
   }
@@ -297,7 +290,7 @@ export class Renderer {
       {
         text: this.#options.textLayer ?? true,
         annotations: this.#options.annotationLayer ?? true,
-        editor: this.#layers.annotationEditor !== undefined,
+        editor: this.#options.annotationSetup.editor !== null,
       },
       { base: kept?.base?.canvas, detail: kept?.detail?.canvas },
     );
@@ -337,7 +330,7 @@ export class Renderer {
     // buttons, and some fields into canvases of their own, which only a
     // drawing hands to the page's annotation layer: shown again, the page
     // would show them empty, as copyPage() knows.
-    if (this.#options.forms && slot.elements.annotations) return keep;
+    if (this.#options.annotationSetup.forms && slot.elements.annotations) return keep;
     const { elements } = slot;
     const detail =
       slot.detailScale > 0 && slot.detailVersion === this.#version
@@ -470,21 +463,28 @@ export class Renderer {
   }
 
   /**
-   * Build the layers of the annotations `editor` edits on the mounted pages
-   * from now on, or, with null, take them down.
+   * Show annotations as `setup` says from now on. Pages drawn with form
+   * fields the other way, or without the annotations an editor was editing,
+   * are drawn again; annotation layers whose fields ran other scripts are
+   * built again; and the mounted pages get the new editor's layers, or, with
+   * none, lose their editor containers.
    */
-  setAnnotationEditor(editor: AnnotationEditor | null): void {
-    if (this.#layers.annotationEditor === (editor ?? undefined)) return;
-    // Pages drawn without the annotations an editor was editing show them again.
-    const editing = this.#layers.annotationEditor?.layerEditing.editing ?? false;
-    for (const slot of this.#slots.values()) {
-      if (editor) addEditorLayer(slot.elements);
+  setAnnotationSetup(setup: AnnotationSetup): void {
+    const before = this.#options.annotationSetup;
+    this.#options.annotationSetup = setup;
+    let redraw = setup.forms !== before.forms;
+    if (setup.editor !== before.editor) {
+      // Pages drawn without the annotations an editor was editing show them again.
+      redraw ||= before.editor?.layerEditing.editing ?? false;
+      if (setup.editor) for (const slot of this.#slots.values()) addEditorLayer(slot.elements);
+      this.#layers.editorChanged();
+      if (!setup.editor) for (const slot of this.#slots.values()) removeEditorLayer(slot.elements);
     }
-    this.#layers.setAnnotationEditor(editor ?? undefined);
-    if (!editor) {
-      for (const slot of this.#slots.values()) removeEditorLayer(slot.elements);
+    if (redraw) this.invalidateContent();
+    else if (setup.forms && setup.scripting !== before.scripting) {
+      this.#layers.invalidateAnnotations();
+      this.#layers.schedule();
     }
-    if (editing) this.invalidateContent();
   }
 
   /**
@@ -494,31 +494,6 @@ export class Renderer {
    */
   setLayers(layers: LayerState): void {
     this.#options.layers = layers;
-    this.#layers.setLayerState(layers);
-  }
-
-  /**
-   * Build annotation layers whose form fields run `scripting`, the
-   * document's scripts, or, with null, none: those built are built again.
-   */
-  setFormScripting(scripting: AnnotationLayerScripting | null): void {
-    if ((this.#options.formScripting ?? null) === scripting) return;
-    this.#options.formScripting = scripting;
-    this.#layers.setFormScripting(scripting);
-    if (!this.#options.forms) return;
-    this.#layers.invalidateAnnotations();
-    this.#layers.schedule();
-  }
-
-  /**
-   * Show form fields as HTML in annotation layers, or leave them in the
-   * drawings: pages drawn the other way are drawn again.
-   */
-  setForms(forms: boolean): void {
-    if ((this.#options.forms ?? false) === forms) return;
-    this.#options.forms = forms;
-    this.#layers.setForms(forms);
-    this.invalidateContent();
   }
 
   /**
@@ -578,7 +553,7 @@ export class Renderer {
     const { elements } = slot;
     // With form fields shown as HTML, the drawing leaves them out, as pdf.js's
     // viewer knows when it declines to reuse such a drawing for a thumbnail.
-    if (this.#options.forms && elements.annotations) return false;
+    if (this.#options.annotationSetup.forms && elements.annotations) return false;
     // A layer being drawn in place holds no finished drawing.
     const source =
       slot.detailScale > 0 &&
@@ -796,15 +771,15 @@ export class Renderer {
         slot.detailRegion = null;
       }
     } else slot.baseScale = 0;
-    const { forms, pageColors, layers } = this.#options;
+    const { annotationSetup, pageColors, layers } = this.#options;
     const task = drawPage(this.#session.pdfjs, this.#session.page(slot.index), {
       scale,
       rotation: layout?.rotation ?? 0,
       canvas,
       ...(drawing.pixels ? { region: drawing.pixels } : {}),
-      ...(forms && elements.annotations ? { formLayer: elements.annotations } : {}),
+      ...(annotationSetup.forms && elements.annotations ? { formLayer: elements.annotations } : {}),
       // The annotation layer makes editors of what the drawing leaves out.
-      ...(this.#layers.annotationEditor?.layerEditing.editing && elements.annotations
+      ...(annotationSetup.editor?.layerEditing.editing && elements.annotations
         ? { editing: elements.annotations }
         : {}),
       ...(pageColors ? { colors: pageColors } : {}),
