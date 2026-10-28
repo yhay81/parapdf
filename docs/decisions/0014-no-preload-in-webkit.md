@@ -16,7 +16,8 @@ download. Issue #14 asked whether Safari does.
 A provider rendered in a WebKit browser does not preload its source:
 `documentRequestMode()` returns null for a user agent with `AppleWebKit/`
 and without `Chrome/` or `Chromium/`, which covers Safari and every browser
-on iOS and iPadOS. A page rendered on the server keeps the preload, since
+on iOS and iPadOS. Headless Chromium identifies itself as `HeadlessChrome/`
+and is preloaded too. A page rendered on the server keeps the preload, since
 the server cannot tell the browser (target.md, "Server rendering").
 
 ## Evidence
@@ -48,6 +49,18 @@ WebKit cold 1221 → 950 ms, WebKit warm 904 → 616 ms): the two downloads no
 longer share the network. One job lost, Safari's first cold one after the
 change (2636 ms); its other two are the fastest cold ones of all. Chromium
 does not change.
+
+Headless Chromium was mistakenly classified as WebKit because the `Chrome/`
+token in `HeadlessChrome/` has no word boundary before it. After correcting
+the detection, `scroll-bench.ts` compared the fix and the preceding build in
+alternating jobs on Chromium 156, macOS, AC power, seven runs
+(`examples/prototype/results/headless-chrome-preload{,-throttled}-chromium.md`).
+With 100 ms latency and 20 Mbit/s, median first paint improved from 993 to
+893 ms for bill-hr815.pdf and from 985 to 879 ms for f1040.pdf. On
+localhost it changed from 141 to 152 ms, 180 to 178 ms, and 213 to 214 ms
+for bill-hr815.pdf, synthetic-text-1000.pdf, and f1040.pdf respectively.
+The first localhost result is 11 ms slower; these measurements do not
+establish why. The change affects headless Chromium, not headed Chrome.
 
 ## Consequences
 
