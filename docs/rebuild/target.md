@@ -440,7 +440,7 @@ them in passing:
 
 ## Toward 1.0
 
-1.0 promises a stable API (decision 0015, proposed). It waits for:
+Decision 0015 proposes a stable API for 1.0 and these prerequisites:
 
 - Safari: the functional checks in Safari on macOS, and reading, touch,
   annotations, and saving tried on a real iPhone and iPad, with the
@@ -450,10 +450,11 @@ them in passing:
   with VoiceOver in Safari and NVDA in Firefox, with the results published
   (#32).
 
-pdf.js's renderer worker (#20) and the open questions below do not block
-it. From 1.0, breaks need a major release, and decision 0015 succeeds
-decision 0002. Not planned: XFA forms, and search highlights without the
-CSS Custom Highlight API.
+The proposal would defer pdf.js's renderer worker (#20) and the open
+questions below past 1.0. It would require a major release for breaks from
+1.0 and succeed decision 0002; it also proposes not to support XFA forms
+or search highlights without the CSS Custom Highlight API. These remain
+proposals until decision 0015 is adopted.
 
 ## Open questions
 
