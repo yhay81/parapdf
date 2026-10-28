@@ -167,8 +167,9 @@ export class Viewer {
   #sizes: PageSize[] = [];
   /** The hosts of the mounted pages, by page. */
   #pageHosts = new Map<number, HTMLElement>();
-  /** The page that takes the focus once its host mounts (`#focusPage()`), or -1. */
+  /** The page that takes the focus at the next frame (`#focusPage()`), or -1. */
   #pendingFocus = -1;
+  #focusFrame = 0;
   #textPages = new Map<number, TextLayerHandle>();
   #scroller: HTMLElement | null = null;
   #content: HTMLElement | null = null;
@@ -659,6 +660,8 @@ export class Viewer {
       detachSelection();
       unfollow();
       this.#pendingFocus = -1;
+      if (this.#focusFrame) cancelAnimationFrame(this.#focusFrame);
+      this.#focusFrame = 0;
       if (this.#frame) cancelAnimationFrame(this.#frame);
       this.#frame = 0;
       if (this.#scroller === scroller) {
@@ -679,14 +682,7 @@ export class Viewer {
   #attachPage(index: number, host: HTMLElement): () => void {
     this.#shown?.renderer?.attach(index, host);
     this.#pageHosts.set(index, host);
-    if (index === this.#pendingFocus) {
-      // Unless the reader took the focus elsewhere meanwhile.
-      const active = host.ownerDocument.activeElement;
-      const scroller = this.#scroller;
-      if (!active || active === host.ownerDocument.body || scroller?.contains(active)) {
-        this.#focusPage(index);
-      } else this.#pendingFocus = -1;
-    }
+    if (index === this.#pendingFocus) this.#focusPage(index);
     return () => {
       // React removes the host after this, and browsers move the focus it
       // holds to the body without telling anyone.
@@ -724,13 +720,25 @@ export class Viewer {
   }
 
   /**
-   * Move the focus to page `index`, now or, when it is not mounted yet, once
-   * it mounts, without scrolling: the view already shows it.
+   * Move the focus to page `index` at the next frame, once React has shown
+   * it (a hidden page takes no focus, and the page that held it may be
+   * hidden by then), or, when it is not mounted yet, once it mounts; without
+   * scrolling: the view already shows it.
    */
   #focusPage(index: number): void {
-    const host = this.#pageHosts.get(index);
-    this.#pendingFocus = host ? -1 : index;
-    host?.focus({ preventScroll: true });
+    this.#pendingFocus = index;
+    if (this.#focusFrame) return;
+    this.#focusFrame = requestAnimationFrame(() => {
+      this.#focusFrame = 0;
+      const host = this.#pageHosts.get(this.#pendingFocus);
+      if (!host) return;
+      this.#pendingFocus = -1;
+      // Unless the reader took the focus out of the viewer meanwhile.
+      const document = host.ownerDocument;
+      const active = document.activeElement;
+      if (active && active !== document.body && !this.#scroller?.contains(active)) return;
+      host.focus({ preventScroll: true });
+    });
   }
 
   hasPixels(index: number): boolean {

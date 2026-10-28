@@ -563,7 +563,8 @@ try {
     const loaded = await state(page);
     await page.waitForSelector(".parapdf-annotation-layer img");
     const icon = await page.evaluate(
-      () => document.querySelector(".parapdf-annotation-layer img")?.getAttribute("alt") ?? null,
+      () =>
+        document.querySelector(".parapdf-annotation-layer img")?.getAttribute("alt") ?? undefined,
     );
     check("a comment's icon is named by the comment", icon === "A comment on the sampler", icon);
     const select = await page.evaluate(() => {
