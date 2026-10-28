@@ -172,8 +172,11 @@ export function joinScripting(session: DocumentSession, member: ScriptingViewer)
     layer: {
       dispatch(event) {
         if (left) return;
-        joined.last = member;
-        joined.scripting.dispatch(event);
+        joined.scripting.dispatch(event, () => {
+          if (left) return false;
+          joined.last = member;
+          return true;
+        });
       },
     },
     leave() {

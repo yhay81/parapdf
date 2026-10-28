@@ -17,7 +17,7 @@ export interface ScriptingHandlers {
 /** The document's scripts running in pdf.js's sandbox. */
 export interface DocumentScripting {
   /** Hand the scripts an event, as a field's element dispatches it. */
-  dispatch(event: object): void;
+  dispatch(event: object, before?: () => boolean): void;
   /** The reader turned to page `index`, or, with null, left the pages. */
   showPage(index: number | null): void;
   /** Stop the scripts and free the sandbox. */
@@ -168,14 +168,16 @@ export function startScripting(
 
   /** Events reach the sandbox in order, each in a task of its own, as in pdf.js's viewer. */
   let queue: Promise<unknown> = sandbox;
-  const send = (event: object | (() => Promise<object | null>)) => {
-    queue = queue.then(async () => {
-      const ready = await sandbox;
-      const detail = typeof event === "function" ? await event() : event;
-      if (!ready || !detail || destroyed) return;
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      if (!destroyed) ready.dispatchEvent(detail);
-    });
+  const send = (event: object | (() => Promise<object | null>), before?: () => boolean) => {
+    queue = queue
+      .then(async () => {
+        const ready = await sandbox;
+        const detail = typeof event === "function" ? await event() : event;
+        if (!ready || !detail || destroyed) return;
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        if (!destroyed && (!before || before())) ready.dispatchEvent(detail);
+      })
+      .catch((error: unknown) => console.error("dispatching a document script failed", error));
   };
 
   send({ id: "doc", name: "Open" });
