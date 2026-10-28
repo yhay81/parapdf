@@ -63,8 +63,9 @@ function rotatedPages(): string {
     "<< /Type /Pages /Count 4 /Kids [3 0 R 4 0 R 5 0 R 6 0 R] >>",
     ...[0, 90, 180, 270].map(
       (rotation) =>
-        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Rotate ${rotation} /Resources << >> >>`,
+        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Rotate ${rotation} /Resources << >> ${rotation === 0 ? "/Annots [7 0 R]" : ""} >>`,
     ),
+    "<< /Type /Annot /Subtype /Link /Rect [72 700 172 740] /Border [0 0 0] /A << /S /Named /N /NextPage >> >>",
   ];
   let pdf = "%PDF-1.7\n";
   const offsets = [0];
@@ -126,6 +127,10 @@ try {
     "clicking an internal link jumps forward",
     afterClick.currentPage > start.currentPage && afterClick.canGoBack,
     `page ${start.currentPage + 1} -> ${afterClick.currentPage + 1}`,
+  );
+  check(
+    "clicking an internal link moves the focus to its page",
+    (await focusedPage(page)) === afterClick.currentPage + 1,
   );
   // The landing page's text layer is built once scrolling settles.
   await page.waitForTimeout(1200);
@@ -226,6 +231,15 @@ try {
   // after the document is ready.
   await rotated.waitForFunction(
     () => (window as { __viewer?: { session: unknown } }).__viewer?.session != null,
+  );
+  const nextPageLink = pageLinks(rotated, 1).first();
+  await nextPageLink.focus();
+  await nextPageLink.press("Enter");
+  await rotated.waitForFunction(() => window.__viewer?.store.get().currentPage === 1);
+  await rotated.waitForTimeout(100);
+  check(
+    "following a named page action moves the focus to its page",
+    (await focusedPage(rotated)) === 2,
   );
   const destinations = await rotated.evaluate(async () => {
     // The loaded session, which resolves destinations for the viewer.

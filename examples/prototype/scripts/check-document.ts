@@ -655,6 +655,23 @@ try {
         ]),
       JSON.stringify(tooltips),
     );
+    const keepsFieldFocus = await page.evaluate(async () => {
+      const viewer = (window as unknown as Demo).__viewer;
+      const field = document.querySelector<HTMLInputElement>(
+        '.parapdf-annotation-layer input[name="name"]',
+      );
+      viewer?.scroller?.focus();
+      viewer?.goToPage(2);
+      // The reader chooses a field before the pending page focus runs.
+      field?.focus({ preventScroll: true });
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      );
+      const kept = !!field && document.activeElement === field;
+      viewer?.goToPage(1);
+      return kept;
+    });
+    check("pending page focus keeps a field the reader focused meanwhile", keepsFieldFocus);
     await page.evaluate(() => {
       (window as unknown as Demo).__changes = [];
       (window as unknown as Demo).__onFormChange = (change) =>

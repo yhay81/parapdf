@@ -136,11 +136,21 @@ export class Viewer {
   #maxScale = 10;
   readonly #links: LinkHandlers = {
     // Reading goes on at the page a link goes to.
-    navigate: (dest) =>
+    navigate: (dest) => {
+      const source = this.#scroller?.ownerDocument.activeElement ?? null;
+      const signal = this.workSignal;
       void this.goToDestination(dest).then((went) => {
-        if (went) this.#focusPage(this.store.get().currentPage);
-      }),
-    namedAction: (action) => this.#namedAction(action),
+        if (went && signal && !signal.aborted)
+          this.#focusPage(this.store.get().currentPage, source);
+      });
+    },
+    namedAction: (action) => {
+      const source = this.#scroller?.ownerDocument.activeElement ?? null;
+      const page = this.store.get().currentPage;
+      this.#namedAction(action);
+      const current = this.store.get().currentPage;
+      if (current !== page) this.#focusPage(current, source);
+    },
     externalLinks: "new-tab",
     openAttachment: (file) => this.openFile(file),
     setLayers: (action) => this.#shown?.layers?.apply(action),
@@ -167,8 +177,8 @@ export class Viewer {
   #sizes: PageSize[] = [];
   /** The hosts of the mounted pages, by page. */
   #pageHosts = new Map<number, HTMLElement>();
-  /** The page that takes the focus at the next frame (`#focusPage()`), or -1. */
-  #pendingFocus = -1;
+  /** The page that takes the focus next, and the element it moves from. */
+  #pendingFocus: { index: number; source: Element } | null = null;
   #focusFrame = 0;
   #textPages = new Map<number, TextLayerHandle>();
   #scroller: HTMLElement | null = null;
@@ -659,7 +669,7 @@ export class Viewer {
       resize.disconnect();
       detachSelection();
       unfollow();
-      this.#pendingFocus = -1;
+      this.#pendingFocus = null;
       if (this.#focusFrame) cancelAnimationFrame(this.#focusFrame);
       this.#focusFrame = 0;
       if (this.#frame) cancelAnimationFrame(this.#frame);
@@ -682,18 +692,22 @@ export class Viewer {
   #attachPage(index: number, host: HTMLElement): () => void {
     this.#shown?.renderer?.attach(index, host);
     this.#pageHosts.set(index, host);
-    if (index === this.#pendingFocus) this.#focusPage(index);
+    if (index === this.#pendingFocus?.index) this.#focusPage(index, this.#pendingFocus.source);
     return () => {
+      if (this.#pageHosts.get(index) !== host) return;
       // React removes the host after this, and browsers move the focus it
       // holds to the body without telling anyone.
       const document = host.ownerDocument;
-      if (host.contains(document.activeElement)) {
+      const source = document.activeElement;
+      const signal = this.signal;
+      if (source && host.contains(source)) {
         queueMicrotask(() => {
+          if (signal.aborted) return;
           const active = document.activeElement;
-          if (!active || active === document.body) this.#focusPage(this.store.get().currentPage);
+          if (!active || active === document.body)
+            this.#focusPage(this.store.get().currentPage, source);
         });
       }
-      if (this.#pageHosts.get(index) !== host) return;
       this.#pageHosts.delete(index);
       this.#shown?.renderer?.detach(index);
     };
@@ -725,20 +739,29 @@ export class Viewer {
    * hidden by then), or, when it is not mounted yet, once it mounts; without
    * scrolling: the view already shows it.
    */
-  #focusPage(index: number): void {
-    this.#pendingFocus = index;
+  #focusPage(
+    index: number,
+    source: Element | null = this.#scroller?.ownerDocument.activeElement ?? null,
+  ): void {
+    if (!this.#scroller || this.signal.aborted || !source) return;
+    this.#pendingFocus = { index, source };
     if (this.#focusFrame) return;
     this.#focusFrame = requestAnimationFrame(() => {
       this.#focusFrame = 0;
-      const host = this.#pageHosts.get(this.#pendingFocus);
+      const pending = this.#pendingFocus;
+      if (!pending) return;
+      const host = this.#pageHosts.get(pending.index);
       if (!host) return;
-      this.#pendingFocus = -1;
+      this.#pendingFocus = null;
       // Moving the focus would end a drag selecting text.
       if (this.#selection.dragging) return;
-      // Unless the reader took the focus out of the viewer meanwhile.
+      // Keep anything the reader focused meanwhile, inside the viewer too.
+      // A move to the body is expected when the original element unmounted.
       const document = host.ownerDocument;
       const active = document.activeElement;
-      if (active && active !== document.body && !this.#scroller?.contains(active)) return;
+      const from = pending.source;
+      if (active !== from && !(active === document.body && !from.isConnected)) return;
+      if (from.isConnected && from !== document.body && !this.#scroller?.contains(from)) return;
       host.focus({ preventScroll: true });
     });
   }
