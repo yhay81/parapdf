@@ -207,6 +207,7 @@ async function drive(pageCount: number, geometry: Geometry) {
   try {
     const waitStart = performance.now();
     while (!pixels.has(0) && performance.now() - waitStart < 30_000) await nextFrame();
+    if (!pixels.has(0)) throw new Error("first page did not paint within 30 seconds");
     const firstPaintMs = counts.firstPaintMs;
     await sleep(600);
     const scroller = [...document.querySelectorAll<HTMLElement>(".viewport")].at(-1);

@@ -102,6 +102,19 @@ for (const mode of scrollModes) {
   }
 }
 const scales = (process.env.SCALE ?? "fit-width").split(",");
+// compare.html implements only vertical fit-width. Reject unsupported jobs
+// instead of reporting them under labels for settings it silently ignores.
+if (engineVariants.some((variant) => variant.page)) {
+  const query = new URLSearchParams(process.env.QUERY ?? "");
+  if (
+    scrollModes.some((mode) => mode !== "vertical") ||
+    scales.some((scale) => scale !== "fit-width") ||
+    (query.has("scroll") && query.get("scroll") !== "vertical") ||
+    (query.has("scale") && query.get("scale") !== "fit-width")
+  ) {
+    throw new Error("react-pdf variants support only vertical scrolling at fit-width");
+  }
+}
 const measured: Variant[] = engineVariants.flatMap((variant) =>
   textModes.flatMap((text) =>
     linkModes.flatMap((links) =>
