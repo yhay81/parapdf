@@ -47,6 +47,13 @@ const probe = (page: Page): Promise<ViewerProbe> =>
 const pageLinks = (page: Page, pageNumber: number) =>
   page.locator(`section[data-page="${pageNumber}"] .parapdf-annotation-layer a`);
 
+/** The number of the page whose section has the focus, or null. */
+const focusedPage = (page: Page): Promise<number | null> =>
+  page.evaluate(() => {
+    const page = document.activeElement?.closest("section[data-page]");
+    return page === document.activeElement ? Number(page?.getAttribute("data-page")) : null;
+  });
+
 const SECTION = "2 Creating document commands and environments";
 
 /** Four blank pages with the PDF's own rotation, independent of view rotation. */
@@ -150,6 +157,13 @@ try {
     Math.abs(afterEnter.scrollTop - afterClick.scrollTop) <= 2,
     `${afterClick.scrollTop} vs ${afterEnter.scrollTop}`,
   );
+  // A screen reader, whose cursor follows the focus, reads on there.
+  const focusedAfterEnter = await focusedPage(page);
+  check(
+    "following a link moves the focus to the page it goes to",
+    focusedAfterEnter === afterEnter.currentPage + 1,
+    `focus on ${focusedAfterEnter}, page ${afterEnter.currentPage + 1} shown`,
+  );
   await page.keyboard.press("Alt+ArrowLeft");
   await page.waitForTimeout(400);
   check("Alt+Left goes back", Math.abs((await probe(page)).scrollTop - start.scrollTop) <= 2);
@@ -185,6 +199,21 @@ try {
       attributes.target === "_blank" &&
       (attributes.rel ?? "").includes("noopener"),
     JSON.stringify(attributes),
+  );
+
+  // The focus a page holds as it unmounts moves to the current page
+  // instead of falling to the body.
+  await external.focus();
+  await page.evaluate(() => {
+    (window as { __viewer?: { goToPage(index: number): void } }).__viewer?.goToPage(0);
+  });
+  await page.waitForFunction(() => !document.querySelector('section[data-page="26"]'));
+  await page.waitForTimeout(100);
+  const focusedAfterUnmount = await focusedPage(page);
+  check(
+    "focus on a page that unmounts moves to the current page",
+    focusedAfterUnmount === 1,
+    `focus on ${focusedAfterUnmount}`,
   );
 
   const rotatedContext = await launched.browser.newContext();

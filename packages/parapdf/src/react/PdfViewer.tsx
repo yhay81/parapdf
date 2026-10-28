@@ -584,6 +584,9 @@ const PdfPage = memo(function PdfPage({
       ref={hostRef}
       data-page={index + 1}
       aria-label={label}
+      // Focusable, out of the tab order: the viewer moves the focus to the
+      // page shown, and a screen reader reads on from it.
+      tabIndex={-1}
       style={
         {
           position: "absolute",

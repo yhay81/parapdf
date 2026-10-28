@@ -134,7 +134,11 @@ export class Viewer {
   #minScale = 0.25;
   #maxScale = 10;
   readonly #links: LinkHandlers = {
-    navigate: (dest) => void this.goToDestination(dest),
+    // Reading goes on at the page a link goes to.
+    navigate: (dest) =>
+      void this.goToDestination(dest).then((went) => {
+        if (went) this.#focusPage(this.store.get().currentPage);
+      }),
     namedAction: (action) => this.#namedAction(action),
     externalLinks: "new-tab",
     openAttachment: (file) => this.openFile(file),
@@ -163,6 +167,8 @@ export class Viewer {
   #sizes: PageSize[] = [];
   /** The hosts of the mounted pages, by page. */
   #pageHosts = new Map<number, HTMLElement>();
+  /** The page that takes the focus once its host mounts (`#focusPage()`), or -1. */
+  #pendingFocus = -1;
   #textPages = new Map<number, TextLayerHandle>();
   #scroller: HTMLElement | null = null;
   #content: HTMLElement | null = null;
@@ -628,6 +634,7 @@ export class Viewer {
     const resize = new ResizeObserver(this.#onResize);
     resize.observe(scroller);
     const detachSelection = this.#selection.attachPages(content);
+    const unfollow = this.#followFocus();
     this.#requestUpdate();
     this.#extensions.viewport(scroller, content, control.signal);
     let detached = false;
@@ -650,6 +657,8 @@ export class Viewer {
       scroller.classList.remove("parapdf-hand");
       resize.disconnect();
       detachSelection();
+      unfollow();
+      this.#pendingFocus = -1;
       if (this.#frame) cancelAnimationFrame(this.#frame);
       this.#frame = 0;
       if (this.#scroller === scroller) {
@@ -670,11 +679,58 @@ export class Viewer {
   #attachPage(index: number, host: HTMLElement): () => void {
     this.#shown?.renderer?.attach(index, host);
     this.#pageHosts.set(index, host);
+    if (index === this.#pendingFocus) {
+      // Unless the reader took the focus elsewhere meanwhile.
+      const active = host.ownerDocument.activeElement;
+      const scroller = this.#scroller;
+      if (!active || active === host.ownerDocument.body || scroller?.contains(active)) {
+        this.#focusPage(index);
+      } else this.#pendingFocus = -1;
+    }
     return () => {
+      // React removes the host after this, and browsers move the focus it
+      // holds to the body without telling anyone.
+      const document = host.ownerDocument;
+      if (host.contains(document.activeElement)) {
+        queueMicrotask(() => {
+          const active = document.activeElement;
+          if (!active || active === document.body) this.#focusPage(this.store.get().currentPage);
+        });
+      }
       if (this.#pageHosts.get(index) !== host) return;
       this.#pageHosts.delete(index);
       this.#shown?.renderer?.detach(index);
     };
+  }
+
+  /**
+   * Keep the focus on the current page while it is on the viewport or on a
+   * page, so that a screen reader, whose cursor follows the focus, reads on
+   * from the page shown rather than from the first mounted one. Returns the
+   * function that stops.
+   */
+  #followFocus(): () => void {
+    let page = this.store.get().currentPage;
+    return this.store.subscribe(() => {
+      const { currentPage } = this.store.get();
+      if (currentPage === page) return;
+      page = currentPage;
+      const scroller = this.#scroller;
+      const active = scroller?.ownerDocument.activeElement;
+      if (!scroller || !active) return;
+      if (active === scroller || active.parentElement === this.#content)
+        this.#focusPage(currentPage);
+    });
+  }
+
+  /**
+   * Move the focus to page `index`, now or, when it is not mounted yet, once
+   * it mounts, without scrolling: the view already shows it.
+   */
+  #focusPage(index: number): void {
+    const host = this.#pageHosts.get(index);
+    this.#pendingFocus = host ? -1 : index;
+    host?.focus({ preventScroll: true });
   }
 
   hasPixels(index: number): boolean {

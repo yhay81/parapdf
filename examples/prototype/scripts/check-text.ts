@@ -336,6 +336,30 @@ try {
     String(semantics.firstPageLabel),
   );
   check("canvases are hidden from assistive technology", semantics.canvasesHidden);
+  // A screen reader's cursor follows the focus: it reads on from the page
+  // shown rather than from the first mounted one.
+  const focusFollows = await page.evaluate(async () => {
+    const viewport = document.querySelector<HTMLElement>(".parapdf-viewport");
+    const viewer = (window as { __viewer?: { store: { get(): { currentPage: number } } } })
+      .__viewer;
+    const focused = () => document.activeElement?.getAttribute("data-page") ?? null;
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 600));
+    const pagesTabIndex = document.querySelector<HTMLElement>('section[data-page="1"]')?.tabIndex;
+    viewport?.focus();
+    viewport?.scrollTo({ top: viewport.scrollHeight });
+    await settle();
+    const atEnd = { focused: focused(), current: viewer?.store.get().currentPage };
+    viewport?.scrollTo({ top: 0 });
+    await settle();
+    return { pagesTabIndex, atEnd, atStart: focused() };
+  });
+  check(
+    "pages are focusable out of the tab order, and the focus follows the page shown",
+    focusFollows.pagesTabIndex === -1 &&
+      focusFollows.atEnd.focused === String((focusFollows.atEnd.current ?? -2) + 1) &&
+      focusFollows.atStart === "1",
+    JSON.stringify(focusFollows),
+  );
   check("structure canvases hold no pixels", semantics.structureUndrawn);
   check(
     "page 1 exposes its text",
