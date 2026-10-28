@@ -6,6 +6,14 @@ change the API.
 
 ## Unreleased
 
+- Screen readers read on from the page shown (#32). Pages are focusable
+  (`tabindex="-1"`) but not in the tab order. While the focus is on the
+  viewport or a page, it moves to the current page when that changes;
+  following a link moves it to the page the link goes to; and when the page
+  holding it unmounts, it moves to the current page instead of the body. A
+  comment's icon is named by the comment instead of its image's file name,
+  and a field's tooltip (`/TU`) names its control instead of its section.
+
 - `PdfViewer`'s new `formScripts` prop, with `forms`, runs the document's
   scripts in its form fields as pdf.js's viewer does: calculated fields,
   validation, formatting and keystroke rules, the actions of buttons, and
