@@ -44,6 +44,15 @@
   cursor: pointer;
 }
 
+/* A select as wide as its longest option shrinks to the toolbar on a narrow window. */
+.example-toolbar label {
+  min-width: 0;
+}
+
+.example-toolbar select {
+  max-width: 100%;
+}
+
 .example-toolbar :is(button, select):hover:not(:disabled) {
   border-color: var(--sl-color-gray-3);
 }
