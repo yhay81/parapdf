@@ -1,6 +1,6 @@
 # 0019. What ParaPDF takes from pdf.js's viewer, and what it leaves
 
-- Status: proposed
+- Status: adopted
 - Date: 2026-10-29
 
 ## Context
