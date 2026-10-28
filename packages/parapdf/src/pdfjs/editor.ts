@@ -50,6 +50,30 @@ export interface AnnotationEditingState {
   hasSelection: boolean;
   /** None was created, or every one created was deleted. */
   isEmpty: boolean;
+  /** The annotation selected when the reader selected one alone, else null. */
+  selected: SelectedAnnotation | null;
+}
+
+/** What an image says to assistive technology, in the PDF too. */
+export interface AnnotationAltText {
+  text: string;
+  /** The image only decorates the page: assistive technology skips it. */
+  decorative: boolean;
+}
+
+/** The one annotation selected: what `setComment` and `setAltText` change. */
+export interface SelectedAnnotation {
+  /** Its id while this viewer edits it, to tell one selected from another. */
+  id: string;
+  pageIndex: number;
+  type: AnnotationType;
+  /**
+   * Its comment, which the PDF saves as the annotation's popup note; null
+   * without one, and for text annotations, whose text is their content.
+   */
+  comment: string | null;
+  /** Images' alone: their alternative text, null for other kinds. */
+  altText: AnnotationAltText | null;
 }
 
 /**
@@ -193,6 +217,17 @@ export interface AnnotationEditor {
   redo(): void;
   deleteSelected(): void;
   selectAll(): void;
+  /**
+   * Set the selected annotation's comment, or with null or "", remove it,
+   * as one undo step; false when one annotation alone is not selected, or
+   * it is text, which takes no comment.
+   */
+  setComment(comment: string | null): boolean;
+  /**
+   * Set the selected image's alternative text, as one undo step; false
+   * when one image alone is not selected.
+   */
+  setAltText(altText: AnnotationAltText): boolean;
   /** Finish the annotation being typed or drawn, before saving or printing. */
   commit(): void;
   /**
@@ -244,7 +279,13 @@ interface PdfjsEditor {
   isClone?: boolean;
   serialize(isForCopying?: boolean): Record<string, unknown> | null;
   isEmpty(): boolean;
-  altTextData: unknown;
+  readonly isSelected: boolean;
+  /** Text annotations take no comment: their text is their content. */
+  readonly canAddComment: boolean;
+  /** Its comment, which pdf.js keeps whenever one was set; `text` "" or `deleted` when removed. */
+  comment: { text: string | null; deleted: boolean } | string | null;
+  readonly hasComment: boolean;
+  altTextData: { altText: string | null; decorative: boolean } | undefined;
   createAltText(): unknown;
   addSignature(data: unknown, heightInPage: number, description: string, uuid: string | null): void;
   getFromText(text: string, font: object): unknown;
@@ -291,6 +332,12 @@ interface PdfjsUIManager {
   removeDeletedAnnotationElement(editor: PdfjsEditor): void;
   getLayer(pageIndex: number): PdfjsEditorLayer | undefined;
   getEditors(pageIndex: number): Iterable<PdfjsEditor>;
+  readonly hasSelection: boolean;
+  readonly firstSelectedEditor: PdfjsEditor | undefined;
+  setSelected(editor: PdfjsEditor): void;
+  toggleSelected(editor: PdfjsEditor): void;
+  unselect(editor: PdfjsEditor): void;
+  unselectAll(): void;
   undo(): void;
   redo(): void;
   delete(): void;
@@ -520,6 +567,52 @@ const NO_STRUCTURE = { getAriaAttributes: async () => null };
 /** The next editor id of each document, for every editor of it. */
 const editorIds = new WeakMap<Pdfjs.PDFDocumentProxy, { next: number }>();
 
+/** `editor`'s comment, null without one. */
+function commentOf(editor: PdfjsEditor): string | null {
+  if (!editor.canAddComment || !editor.hasComment) return null;
+  const { comment } = editor;
+  const text = typeof comment === "object" ? comment?.text : comment;
+  return text || null;
+}
+
+/** Sets `editor`'s comment; null removes it, which the PDF saves too. */
+function setCommentOf(editor: PdfjsEditor, comment: string | null): void {
+  // pdf.js restores a comment from an object, and takes a string as an edit.
+  editor.comment = comment;
+}
+
+/** An image editor's alternative text, which pdf.js reads from the file or data on demand. */
+function altTextOf(editor: PdfjsEditor): AnnotationAltText {
+  editor.createAltText();
+  const data = editor.altTextData;
+  return { text: data?.altText ?? "", decorative: data?.decorative ?? false };
+}
+
+/** What `state.selected` says of `editor`. */
+function describe(editor: PdfjsEditor | null): SelectedAnnotation | null {
+  if (!editor || !isAnnotationType(editor.editorType)) return null;
+  return {
+    id: editor.id,
+    pageIndex: editor.pageIndex,
+    type: editor.editorType,
+    comment: commentOf(editor),
+    altText: editor.editorType === "stamp" ? altTextOf(editor) : null,
+  };
+}
+
+function sameSelection(a: SelectedAnnotation | null, b: SelectedAnnotation | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return (
+    a.id === b.id &&
+    a.pageIndex === b.pageIndex &&
+    a.type === b.type &&
+    a.comment === b.comment &&
+    a.altText?.text === b.altText?.text &&
+    a.altText?.decorative === b.altText?.decorative
+  );
+}
+
 /** Builds annotation editing on pdf.js's display API for one viewer of `doc`. */
 export function createPdfjsAnnotationEditor(
   pdfjs: typeof Pdfjs,
@@ -557,7 +650,10 @@ export function createPdfjsAnnotationEditor(
     canRedo: false,
     hasSelection: false,
     isEmpty: true,
+    selected: null,
   };
+  /** The manager exists: its selection can be read. */
+  let managerReady = false;
   const eventBus = new EditorEventBus();
   eventBus.on("editingstateschanged", ({ details }) => {
     const changed = details as Record<string, boolean>;
@@ -566,9 +662,17 @@ export function createPdfjsAnnotationEditor(
       canRedo: changed.hasSomethingToRedo ?? state.canRedo,
       hasSelection: changed.hasSelectedEditor ?? state.hasSelection,
       isEmpty: changed.isEmpty ?? state.isEmpty,
+      selected: describe(selectedAlone()),
     };
     options.onStateChange(state);
   });
+  /** Report the selected annotation again: the selection, a comment, or an alt text changed. */
+  const selectionChanged = () => {
+    const selected = describe(selectedAlone());
+    if (sameSelection(selected, state.selected)) return;
+    state = { ...state, selected };
+    options.onStateChange(state);
+  };
   eventBus.on("annotationeditorparamschanged", ({ details }) => {
     let next = styles;
     for (const [type, value] of details as [number, unknown][]) {
@@ -779,6 +883,52 @@ export function createPdfjsAnnotationEditor(
     return signal;
   };
 
+  managerReady = true;
+  // pdf.js reports only whether some annotation is selected; selecting
+  // another one, alone, changes what `selected` describes too.
+  for (const name of [
+    "setSelected",
+    "toggleSelected",
+    "unselect",
+    "unselectAll",
+    "selectAll",
+  ] as const) {
+    const method = manager[name].bind(manager) as (editor?: PdfjsEditor) => void;
+    manager[name] = (editor?: PdfjsEditor) => {
+      method(editor);
+      if (!destroyed) selectionChanged();
+    };
+  }
+
+  /** The one annotation selected, if one alone is. */
+  function selectedAlone(): PdfjsEditor | null {
+    // The manager may report its first states as it is created.
+    if (!managerReady) return null;
+    const editor = manager.firstSelectedEditor;
+    if (!editor || !manager.hasSelection) return null;
+    for (let pageIndex = 0; pageIndex < doc.numPages; pageIndex++) {
+      for (const other of manager.getEditors(pageIndex)) {
+        if (other !== editor && other.isSelected) return null;
+      }
+    }
+    return editor;
+  }
+
+  /** Run `change`, and `undo` to take it back, as one undo step. */
+  function step(change: () => void, undo: () => void): void {
+    manager.addCommands({
+      cmd: () => {
+        change();
+        selectionChanged();
+      },
+      undo: () => {
+        undo();
+        selectionChanged();
+      },
+      mustExec: true,
+    });
+  }
+
   // pdf.js numbers each manager's editors from 0, and the editors of every
   // viewer of a document share its annotation storage, where two of the
   // same id would replace each other: ids are the document's, and each
@@ -968,6 +1118,33 @@ export function createPdfjsAnnotationEditor(
     redo: () => manager.redo(),
     deleteSelected: () => manager.delete(),
     selectAll: () => manager.selectAll(),
+    setComment(comment) {
+      const editor = selectedAlone();
+      if (destroyed || !editor?.canAddComment) return false;
+      const before = commentOf(editor);
+      const after = comment || null;
+      if (after === before) return true;
+      step(
+        () => setCommentOf(editor, after),
+        () => setCommentOf(editor, before),
+      );
+      return true;
+    },
+    setAltText(altText) {
+      const editor = selectedAlone();
+      if (destroyed || editor?.editorType !== "stamp") return false;
+      const before = altTextOf(editor);
+      const after = { text: altText.text, decorative: altText.decorative };
+      if (before.text === after.text && before.decorative === after.decorative) return true;
+      const apply = ({ text, decorative }: AnnotationAltText) => {
+        editor.altTextData = { altText: text, decorative };
+      };
+      step(
+        () => apply(after),
+        () => apply(before),
+      );
+      return true;
+    },
     commit: () => manager.endCurrentEditing(),
     async addImage(pageIndex, image, altText) {
       if (destroyed) return false;
@@ -1099,6 +1276,16 @@ export function createPdfjsAnnotationEditor(
             const editor = item ? await layer.deserialize({ ...rest, pageIndex }) : null;
             if (editor && typeof id === "string")
               replacing.set(editor, { id, popupRef: rest.popupRef });
+            // pdf.js saves a comment as the popup it serializes, and reads
+            // one back only from the file's annotations.
+            const popup = rest.popup as { contents?: unknown; deleted?: unknown } | undefined;
+            if (editor?.canAddComment && popup) {
+              if (popup.deleted) {
+                if (typeof id === "string") setCommentOf(editor, null);
+              } else if (typeof popup.contents === "string" && popup.contents) {
+                setCommentOf(editor, popup.contents);
+              }
+            }
             // In place: pdf.js moves a pasted copy beside its original,
             // except a clone.
             if (editor) editor.isClone = true;

@@ -58,12 +58,14 @@ export { getViewState, setViewState, type ViewState } from "./features/view-stat
 export type { Destination } from "./pdfjs/destinations.ts";
 export type { PageColors, Rotation } from "./pdfjs/draw.ts";
 export type {
+  AnnotationAltText,
   AnnotationEditingState,
   AnnotationLabels,
   AnnotationStyles,
   AnnotationTool,
   AnnotationType,
   SavedAnnotation,
+  SelectedAnnotation,
   SignatureInput,
 } from "./pdfjs/editor.ts";
 export { pdfjsVersion } from "./pdfjs/files.ts";
