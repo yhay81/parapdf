@@ -34,6 +34,8 @@ export function attachFormLayers(viewer: Viewer, { scripts = false } = {}): Form
   let open: { session: DocumentSession; signal: AbortSignal } | null = null;
   /** The session whose scripts the fields run, and how to stop, once they do. */
   let scripting: { session: DocumentSession; leave: (() => void) | null } | null = null;
+  /** Whether the open document's pages showed pixels, which the scripts wait for. */
+  let painted = false;
 
   /** Tell the listeners the new value of the field `id`. */
   const report = (session: DocumentSession, signal: AbortSignal, id: string): void => {
@@ -50,12 +52,14 @@ export function attachFormLayers(viewer: Viewer, { scripts = false } = {}): Form
 
   /**
    * Run the scripts of the open document, if it has any: their module and
-   * pdf.js's sandbox load only then. They keep running while the viewport
+   * pdf.js's sandbox load only then, and only once its pages show pixels,
+   * since reading its fields keeps pdf.js's worker from the first page and
+   * QuickJS takes the network and the main thread. They keep running while the viewport
    * detaches, since the sandbox keeps the fields' values, until the
    * document closes or scripts are turned off.
    */
   const startScripts = (): void => {
-    if (!scripts || !open || scripting?.session === open.session) return;
+    if (!scripts || !open || !painted || scripting?.session === open.session) return;
     stopScripts();
     const { session } = open;
     const current = { session, leave: null as (() => void) | null };
@@ -115,7 +119,12 @@ export function attachFormLayers(viewer: Viewer, { scripts = false } = {}): Form
       open = { session, signal };
       startScripts();
     },
+    painted() {
+      painted = true;
+      startScripts();
+    },
     closed() {
+      painted = false;
       stopScripts();
     },
     viewport(_scroller, content, signal) {

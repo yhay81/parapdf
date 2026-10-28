@@ -32,6 +32,8 @@ export interface ViewerExtension {
    * goes. The `ready` signal aborts right after.
    */
   closed?(): void;
+  /** The document's pages first showed pixels, once each time it is shown. */
+  painted?(): void;
   /** A page's text layer was built, or, with null, removed. */
   textLayer?(pageIndex: number, handle: TextLayerHandle | null): void;
   /** A link, outline entry, or named action is about to jump. */
@@ -110,6 +112,10 @@ export class ExtensionSet {
   closed(): void {
     for (const extension of this.#extensions) extension.closed?.();
     this.#ready = null;
+  }
+
+  painted(): void {
+    for (const extension of this.#extensions) extension.painted?.();
   }
 
   textLayer(pageIndex: number, handle: TextLayerHandle | null): void {

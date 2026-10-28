@@ -1,0 +1,101 @@
+{
+  "environment": {
+    "runAt": "2026-10-28T05:08:19.211Z",
+    "os": "darwin 27.0.0 arm64",
+    "cpu": "Apple M2 Pro (12 logical cores)",
+    "browserName": "chromium",
+    "browser": "Chromium 156.0.8078.4",
+    "headless": true,
+    "power": {
+      "source": "ac",
+      "lowPowerMode": false
+    },
+    "loadAverage": {
+      "start": 9.7,
+      "end": 9.2
+    },
+    "turnTaking": {
+      "waits": 0,
+      "waitedMs": 0,
+      "repeatedJobs": 0
+    },
+    "before": "main",
+    "idle": {
+      "timerLagP50Ms": 0.5,
+      "timerLagP95Ms": 1.2,
+      "frameIntervalMs": 16.7
+    },
+    "settings": {
+      "runs": 5,
+      "durationMs": 4000,
+      "latencyMs": 0,
+      "bandwidthMbps": 0,
+      "scrollModes": [
+        "vertical"
+      ],
+      "scales": [
+        "fit-width"
+      ],
+      "viewport": "1280x900",
+      "devicePixelRatio": 2
+    }
+  },
+  "summaries": [
+    {
+      "file": "f1040.pdf",
+      "speed": 3600,
+      "variant": "pdfjs-hwa",
+      "runs": 5,
+      "scrollMode": "vertical",
+      "scale": "fit-width",
+      "firstPaintMs": 202.9,
+      "pagesCrossed": 1,
+      "commitsDuringScroll": 1,
+      "commitsPerSecond": 1.4,
+      "storeUpdates": 1,
+      "windowChanges": 0,
+      "currentPageChanges": 1,
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "blockedMs": 0,
+      "lagP95Ms": 1.2,
+      "lagMaxMs": 1.4,
+      "droppedFrames": 0,
+      "frames": 42,
+      "baseRenders": 0,
+      "detailRenders": 0,
+      "textLayers": 0,
+      "annotationLayers": 0,
+      "cancelledRenders": 0,
+      "settleMs": 0
+    },
+    {
+      "file": "f1040.pdf",
+      "speed": 3600,
+      "variant": "pdfjs-hwa, before",
+      "runs": 5,
+      "scrollMode": "vertical",
+      "scale": "fit-width",
+      "firstPaintMs": 194.6,
+      "pagesCrossed": 1,
+      "commitsDuringScroll": 1,
+      "commitsPerSecond": 1.4,
+      "storeUpdates": 1,
+      "windowChanges": 0,
+      "currentPageChanges": 1,
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "blockedMs": 0.1,
+      "lagP95Ms": 1.2,
+      "lagMaxMs": 2.1,
+      "droppedFrames": 0,
+      "frames": 42,
+      "baseRenders": 0,
+      "detailRenders": 0,
+      "textLayers": 0,
+      "annotationLayers": 0,
+      "cancelledRenders": 0,
+      "settleMs": 0
+    }
+  ]
+}

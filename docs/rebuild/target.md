@@ -268,7 +268,8 @@ How features reach the core (M4):
   sandbox and 475 KB of QuickJS, loaded on demand, never by a viewer
   without the option. One sandbox per session serves every viewer of it
   with the option, since the sandbox keeps the fields' values: it starts
-  as the first of them opens the document, and goes once the last
+  once the first of them shows the document's pages (decision 0016), and
+  goes once the last
   detaches or the document closes. The annotation layers of those viewers
   are built with scripting, and what the scripts change reaches the
   fields in each of them, the session's annotation storage, and

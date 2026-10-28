@@ -515,6 +515,7 @@ export class Viewer {
     this.#sizes = [...sizes];
     this.#extensions.prepare(session, signal);
     signal.throwIfAborted();
+    let painted = false;
     const renderer = new Renderer(session, {
       ...rendererOptions(this.#options),
       links: this.#links,
@@ -525,6 +526,10 @@ export class Viewer {
       onPainted: (pageIndex) => {
         if (pageIndex === 0 && this.#firstPaintAt === null) {
           this.#firstPaintAt = performance.now();
+        }
+        if (!painted) {
+          painted = true;
+          this.#extensions.painted();
         }
       },
       onTextReady: (pageIndex, handle) => {
