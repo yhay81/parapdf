@@ -481,7 +481,14 @@ try {
         .then(() => "printed")
         .catch((error: unknown) => String(error));
       window.dispatchEvent(new Event("afterprint"));
-      return { select: span ? getComputedStyle(span).userSelect : null, printed };
+      // Safari 27 computes only the prefixed property; `userSelect` is undefined.
+      return {
+        select: span
+          ? getComputedStyle(span).userSelect ||
+            getComputedStyle(span).getPropertyValue("-webkit-user-select")
+          : null,
+        printed,
+      };
     });
     check(
       "without enforcePermissions, the viewer only reports them",
@@ -508,7 +515,10 @@ try {
         .catch((error: unknown) => String(error));
       await (window as unknown as Demo).__annotations?.setTool("ink");
       return {
-        select: span ? getComputedStyle(span).userSelect : null,
+        select: span
+          ? getComputedStyle(span).userSelect ||
+            getComputedStyle(span).getPropertyValue("-webkit-user-select")
+          : null,
         copyPrevented: copy.defaultPrevented,
         printed,
         editing: (window as unknown as Demo).__annotations?.store.get().state ?? null,
@@ -552,7 +562,10 @@ try {
     const loaded = await state(page);
     const select = await page.evaluate(() => {
       const span = document.querySelector(".parapdf-text-layer span");
-      return span ? getComputedStyle(span).userSelect : null;
+      return span
+        ? getComputedStyle(span).userSelect ||
+            getComputedStyle(span).getPropertyValue("-webkit-user-select")
+        : null;
     });
     check(
       "an unencrypted document permits everything",

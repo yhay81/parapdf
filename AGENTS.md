@@ -140,7 +140,9 @@ when the choice matters for performance or direction.
   engine (`src/engines/`), the corpus (`corpus/`, sources and licenses in
   its README), the synthetic corpus generator, the Playwright runner,
   reports, `bench/scripts/browsers.ts`, the launcher every Playwright
-  script shares, and `bench/scripts/isolation.ts`, the cross-origin
+  script shares, `bench/scripts/safari.ts`, the Safari on macOS it gives
+  them through safaridriver (`BROWSER=safari`), and
+  `bench/scripts/isolation.ts`, the cross-origin
   isolation the benchmark's and the demo's Vite servers send with every
   response, 304s included. Results in `results/`.
 - `site/` — the documentation site (Astro with Starlight), deployed by
@@ -194,7 +196,18 @@ when the choice matters for performance or direction.
   `DIAGNOSTICS=<dir>`, the launcher keeps every page's console, page errors,
   and failed requests and screenshots of the failures, which a failing CI job
   uploads. CI's runners have no GPU and are not macOS, so releases still run
-  the checks on macOS. What each covers is listed in
+  the checks on macOS. `BROWSER=safari` runs them in Safari on macOS
+  (Safari's Settings, Developer, "Allow remote automation"; Safari in front,
+  the Mac otherwise left alone), up to the parts that need touch, routes,
+  or request and download events, which throw there (`pinch`, `bundle`,
+  `bundlers`, and the ends of `scroll`, `links`, `features`, and
+  `annotations`). safaridriver cannot read the page during a drag, sends
+  Alt with an arrow as another key, and delivers clicks after typing out of
+  order, so the checks that do so fail there
+  (`examples/prototype/results/safari-macos.md`). `preload-reuse.ts`
+  counts, on the server, the PDF's downloads with React's preload, and
+  `preload-timing.ts` whether a fetch takes a preload still downloading, in
+  any of them. What each covers is listed in
   `docs/history/AGENTS-v0.md`, "Commands".
 - Runtime benchmarks in `examples/prototype/scripts/`: `scroll-bench.ts`
   (also `pnpm --filter @parapdf/prototype bench`), `commit-bench.ts` (zoom
