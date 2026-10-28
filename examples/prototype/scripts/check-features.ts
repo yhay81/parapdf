@@ -708,6 +708,15 @@ try {
     // With forms, the fields the tree names exist as elements too.
     const { page, errors } = await open(launched.browser, demo("file=f1040.pdf&forms=1"));
     await settle(page);
+    // The structure follows the text layer, after pdf.js reads the page's
+    // tree: Firefox on CI had none yet once the render counts held still.
+    await page
+      .waitForFunction(
+        () => document.querySelector('section[data-page="1"] .parapdf-structure [role]') !== null,
+        null,
+        { timeout: 10_000 },
+      )
+      .catch(() => {});
     const structure = await page.evaluate(() => {
       const tree = document.querySelector('section[data-page="1"] .parapdf-structure');
       const owners = [...(tree?.querySelectorAll("[aria-owns]") ?? [])];
