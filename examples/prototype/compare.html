@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>react-pdf comparison</title>
+    <style>
+      html, body, #root { margin: 0; height: 100%; }
+      body { font: 13px system-ui, sans-serif; background: #525659; }
+      .viewport { position: absolute; inset: 40px 0 0 0; overflow: auto; background: #525659; }
+      .page { position: absolute; left: 0; right: 0; display: flex; justify-content: center; }
+      .page > .react-pdf__Page { background: white; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/compare.tsx"></script>
+  </body>
+</html>

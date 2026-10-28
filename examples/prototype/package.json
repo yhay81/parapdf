@@ -36,6 +36,8 @@
     "@vitejs/plugin-react": "^6.1.2",
     "next": "16.4.3",
     "playwright": "^1.64.1",
+    "react-pdf": "11.0.0",
+    "react-window": "2.5.1",
     "vite": "^8.3.4",
     "webpack": "5.112.0"
   }
