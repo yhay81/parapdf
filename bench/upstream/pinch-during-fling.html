@@ -10,15 +10,59 @@ body{margin:0;font:14px system-ui}
 <div id="log"></div>
 <div id="scroller"></div>
 <script>
-const scroller=document.getElementById("scroller"),log=document.getElementById("log");
-for(let i=0;i<40;i++){const d=document.createElement("div");d.className="page";d.textContent="page "+(i+1);scroller.append(d)}
-const t0=performance.now();let lastScroll=0,scrolls=0;
-const out=(s)=>{log.textContent=((performance.now()-t0)|0)+" "+s+"\n"+log.textContent};
-scroller.addEventListener("scroll",()=>{scrolls++;lastScroll=performance.now()},{passive:true});
-setInterval(()=>{if(scrolls){out("scroll x"+scrolls+" top="+(scroller.scrollTop|0));scrolls=0}},250);
-for(const type of ["touchstart","touchend","touchcancel"]) scroller.addEventListener(type,(e)=>out(type+" touches="+e.touches.length+" changed="+e.changedTouches.length+" sinceScroll="+((performance.now()-lastScroll)|0)),{passive:true});
-let moves=0;scroller.addEventListener("touchmove",(e)=>{if(e.touches.length>1||++moves%10==1)out("touchmove touches="+e.touches.length)},{passive:true});
-for(const type of ["gesturestart","gesturechange","gestureend"]) scroller.addEventListener(type,(e)=>{if(type!=="gesturechange"||Math.random()<.2)out(type+" scale="+e.scale.toFixed(2))});
-for(const type of ["pointerdown","pointercancel"]) scroller.addEventListener(type,(e)=>out(type+" id="+e.pointerId));
+const scroller = document.getElementById("scroller");
+const log = document.getElementById("log");
+for (let i = 0; i < 40; i++) {
+  const page = document.createElement("div");
+  page.className = "page";
+  page.textContent = `page ${i + 1}`;
+  scroller.append(page);
+}
+const t0 = performance.now();
+let lastScroll = 0;
+let scrolls = 0;
+const out = (line) => {
+  log.textContent = `${Math.round(performance.now() - t0)} ${line}\n${log.textContent}`;
+};
+const sinceScroll = () => Math.round(performance.now() - lastScroll);
+scroller.addEventListener(
+  "scroll",
+  () => {
+    scrolls++;
+    lastScroll = performance.now();
+  },
+  { passive: true },
+);
+setInterval(() => {
+  if (!scrolls) return;
+  out(`scroll x${scrolls} top=${Math.round(scroller.scrollTop)}`);
+  scrolls = 0;
+}, 250);
+for (const type of ["touchstart", "touchend", "touchcancel"]) {
+  scroller.addEventListener(
+    type,
+    (event) =>
+      out(
+        `${type} touches=${event.touches.length} changed=${event.changedTouches.length} sinceScroll=${sinceScroll()}`,
+      ),
+    { passive: true },
+  );
+}
+let moves = 0;
+scroller.addEventListener(
+  "touchmove",
+  (event) => {
+    if (event.touches.length > 1 || ++moves % 10 === 1) out(`touchmove touches=${event.touches.length}`);
+  },
+  { passive: true },
+);
+for (const type of ["gesturestart", "gesturechange", "gestureend"]) {
+  scroller.addEventListener(type, (event) => {
+    if (type !== "gesturechange" || Math.random() < 0.2) out(`${type} scale=${event.scale.toFixed(2)}`);
+  });
+}
+for (const type of ["pointerdown", "pointercancel"]) {
+  scroller.addEventListener(type, (event) => out(`${type} id=${event.pointerId}`));
+}
 out("ready");
 </script></body></html>
