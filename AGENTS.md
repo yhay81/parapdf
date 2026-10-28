@@ -111,8 +111,8 @@ when the choice matters for performance or direction.
   function that decides what each page draws (`planner.ts`), and the
   renderer, which builds each page's canvases and layer containers inside
   the host React places, carries out the plans, keeps the canvases of pages
-  that unmount, and builds the DOM layers; with them, the text selection
-  tracker the viewer keeps drags in text layers with
+  that unmount (`kept-canvases.ts`), and builds the DOM layers; with them,
+  the text selection tracker the viewer keeps drags in text layers with
   (`src/render/`); the features, each attaching to a
   viewer or a session and imported by nothing in the core (`src/features/`);
   React bindings: `PdfDocument`, `PdfViewer`, which sets its viewer's live
