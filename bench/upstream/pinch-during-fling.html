@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pinch during fling</title>
+<style>
+body{margin:0;font:14px system-ui}
+#log{position:fixed;top:0;left:0;right:0;height:38vh;overflow:auto;background:#111;color:#0f0;font:12px monospace;z-index:2;white-space:pre}
+#scroller{position:fixed;top:38vh;bottom:0;left:0;right:0;overflow:auto;touch-action:pan-x pan-y}
+.page{height:900px;margin:12px;background:linear-gradient(#eef,#ccf);border:1px solid #88a}
+</style></head><body>
+<div id="log"></div>
+<div id="scroller"></div>
+<script>
+const scroller=document.getElementById("scroller"),log=document.getElementById("log");
+for(let i=0;i<40;i++){const d=document.createElement("div");d.className="page";d.textContent="page "+(i+1);scroller.append(d)}
+const t0=performance.now();let lastScroll=0,scrolls=0;
+const out=(s)=>{log.textContent=((performance.now()-t0)|0)+" "+s+"\n"+log.textContent};
+scroller.addEventListener("scroll",()=>{scrolls++;lastScroll=performance.now()},{passive:true});
+setInterval(()=>{if(scrolls){out("scroll x"+scrolls+" top="+(scroller.scrollTop|0));scrolls=0}},250);
+for(const type of ["touchstart","touchend","touchcancel"]) scroller.addEventListener(type,(e)=>out(type+" touches="+e.touches.length+" changed="+e.changedTouches.length+" sinceScroll="+((performance.now()-lastScroll)|0)),{passive:true});
+let moves=0;scroller.addEventListener("touchmove",(e)=>{if(e.touches.length>1||++moves%10==1)out("touchmove touches="+e.touches.length)},{passive:true});
+for(const type of ["gesturestart","gesturechange","gestureend"]) scroller.addEventListener(type,(e)=>{if(type!=="gesturechange"||Math.random()<.2)out(type+" scale="+e.scale.toFixed(2))});
+for(const type of ["pointerdown","pointercancel"]) scroller.addEventListener(type,(e)=>out(type+" id="+e.pointerId));
+out("ready");
+</script></body></html>
