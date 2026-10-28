@@ -135,7 +135,11 @@ when the choice matters for performance or direction.
   `__annotations`), lets them change `PdfViewer`'s props
   (`__setViewerProps`), and, through `src/internals.ts`, show a document a
   pdf.js of their own opens (`__showWith`). `minimal.html` is the demo
-  without search, forms, annotation editing, and print.
+  without search, forms, annotation editing, and print. `compare.html` shows
+  a document with react-pdf (with or without react-window), which
+  `scroll-bench.ts` measures against ParaPDF with `VARIANTS=react-pdf` and
+  `react-pdf-window`; react-pdf and react-window are pinned devDependencies
+  of the demo only.
 - `bench/` — the engine benchmark (research, decision 0001): an adapter per
   engine (`src/engines/`), the corpus (`corpus/`, sources and licenses in
   its README), the synthetic corpus generator, the Playwright runner,

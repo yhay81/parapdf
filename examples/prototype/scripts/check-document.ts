@@ -5,10 +5,10 @@
  * forward through link jumps with their zoom, the document's initial view
  * (/OpenAction, /PageLayout, /PageMode) and the options that win over it,
  * permissions, followed or only reported, form fields read, set, saved,
- * and heard as the reader fills them in, and view states kept and shown
- * again, at open and later, in another viewport. They run on the synthetic
- * navigation, restricted, and feature sampler documents and on
- * usrguide.pdf.
+ * and heard as the reader fills them in, view states kept and shown again,
+ * at open and later, in another viewport, and the PDF's preload. They run
+ * on the synthetic navigation, restricted, and feature sampler documents
+ * and on usrguide.pdf.
  *
  * Usage: pnpm --filter @parapdf/bench corpus && pnpm --filter @parapdf/prototype build &&
  *   pnpm --filter @parapdf/prototype check:document
@@ -1014,6 +1014,32 @@ try {
         close(view?.y, 100, 1),
       JSON.stringify({ page: opened?.currentPage, mode: opened?.zoomMode, view }),
     );
+    await page.context().close();
+  }
+
+  // --- The PDF downloads once, from React's preload outside WebKit (decision 0014) ---
+  {
+    const { page, errors } = await open(launched.browser, demo("file=usrguide.pdf"));
+    const loaded = await page.evaluate(() => ({
+      preloads: document.querySelectorAll('link[rel="preload"][as="fetch"][href$="usrguide.pdf"]')
+        .length,
+      downloads: (performance.getEntriesByType("resource") as PerformanceResourceTiming[])
+        .filter((entry) => entry.name.endsWith("usrguide.pdf"))
+        .map((entry) => entry.initiatorType),
+    }));
+    const webkit = launched.name === "webkit" || launched.name === "safari";
+    check(
+      webkit
+        ? "WebKit does not preload the PDF"
+        : "the PDF downloads once, from React's preload, before pdf.js asks for it",
+      webkit
+        ? loaded.preloads === 0
+        : loaded.preloads === 1 &&
+            (launched.name !== "chromium" ||
+              (loaded.downloads.length === 1 && loaded.downloads[0] === "link")),
+      JSON.stringify(loaded),
+    );
+    check("no errors with the preload", errors.length === 0, errors.join(" | "));
     await page.context().close();
   }
 } finally {
