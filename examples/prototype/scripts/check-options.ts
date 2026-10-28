@@ -751,6 +751,13 @@ try {
       onRotationChange: (rotation: number) => demo.__reported?.rotations.push(rotation),
     });
   });
+  // settle() holds since the pages last were sharp, so it can return before
+  // React commits the prop: Playwright's WebKit on Linux saw rotation 0 here.
+  await live
+    .waitForFunction(() => (window as unknown as Demo).__viewer.store.get().rotation === 90, null, {
+      timeout: 5_000,
+    })
+    .catch(() => {});
   await settle(live);
   const controlled = await viewState(live);
   await live.evaluate(() => (window as unknown as Demo).__viewer.rotate(90));
