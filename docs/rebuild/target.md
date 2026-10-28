@@ -23,6 +23,11 @@ follows it. `docs/decisions/` records why things are as they are.
 - Compatibility with 0.x APIs, deprecations, or shims (decision 0002).
 - Anything of a domain: scales, measurement, CAD layers. ParaPDF shows PDFs
   as documents: reading, search, selection, links, annotations, forms.
+- An application's own interface: toolbars, sidebars, a find bar, dialogs,
+  a presentation mode, shortcuts beyond the viewport's keys, and their
+  translations. ParaPDF matches pdf.js's viewer in what a document can do,
+  not in its chrome; applications build theirs from the data and the
+  actions ParaPDF gives (decision 0019).
 
 ## Layers
 
@@ -32,8 +37,8 @@ feature, and React is used only in `react/`.
 ```
 react/      PdfDocument, PdfViewer, PdfThumbnails, hooks; overlays through portals
 features/   search, history, viewState, initialView, permissions, forms,
-            annotations (editing), print, download, thumbnails, layers,
-            attachments, selection, text (getText)
+            annotations (editing), autoLinks, print, download, thumbnails,
+            layers, attachments, selection, text (getText)
 render/     planner (pure), renderer (page DOM, canvases, kept canvases),
             DOM layer pipeline (text, links, editor, structure)
 view/       Viewer: layout, scrolling, zoom, rotation, spreads, scroll modes,
@@ -59,14 +64,31 @@ No interface stands between this and the rest: callers use pdf.js's types.
 `DocumentSession` is one open document: pdf.js's `PDFDocumentProxy`, its
 pages' `PDFPageProxy` objects, the pages' sizes (the first page's size for
 all at once, then the real ones in the background), page labels, outline,
-metadata, attachments, permissions, the document's initial view, layer
-state (`OptionalContentConfig` and its print copy), and the text of pages
-read for search and `getText()`.
+metadata, attachments, comments, permissions, the document's initial view,
+layer state (`OptionalContentConfig` and its print copy), and the text of
+pages read for search and `getText()`.
 
+- A source is a URL, with request headers and credentials; bytes; or
+  pdf.js's `PDFDataRangeTransport`, through which the application hands
+  pdf.js the ranges it asks for, for documents it fetches with code of its
+  own (from a store of its own, or with authentication that request
+  headers cannot carry). A transport is identified as bytes are, by itself;
+  a URL without its fragment, which says where to open (see the opening
+  view under "features/").
 - Sessions are shared by every viewer of the same source through a
   registry keyed by the source, released one second after the last viewer
   leaves, so StrictMode and quick remounts open once (0.x
   `runtime/documents.ts`).
+- Metadata is the information dictionary and XMP, with what pdf.js reads
+  beside them: the file name the server gives (`Content-Disposition`),
+  which `download()` prefers to the URL's, the file's length, whether it
+  is linearized (Fast Web View), and its fingerprint, which identifies the
+  document for a view an application keeps.
+- Comments are the file's markup annotations that carry one (a note's
+  text, another markup's popup note), with their page, rectangle, author,
+  and date, which pdf.js reads across the pages at once
+  (`getAnnotationsByType()`), read once like the outline. Those the
+  viewers' editors add are the annotation editing feature's.
 - A session owns an `AbortController`. Everything started for it (drawing,
   text, searches, background passes, the editor) takes its signal, and
   closing aborts it all: no generation counters, no "is this still the
@@ -114,11 +136,11 @@ The session's state and its public surface (M6):
   its `state`, a `submitPassword()` that answers the request any viewer of
   the document may answer, pdf.js's `proxy` once ready, a `signal` that
   aborts when the provider lets the session go, and the promises of its
-  secondary data (outline, page labels, metadata, attachments, layers,
-  form fields, the initial view), each read once and settled with an empty
-  value when the read or the document fails (or, without a prompt, once
-  the state shows the request as an error). The provider creates it as it
-  renders and holds the registry's session for it while mounted; held again
+  secondary data (outline, page labels, metadata, attachments, comments,
+  layers, form fields, the initial view), each read once and settled with
+  an empty value when the read or the document fails (or, without a prompt,
+  once the state shows the request as an error). The provider creates it as
+  it renders and holds the registry's session for it while mounted; held again
   after the registry closed that session, it follows the one opened anew.
   A `PdfSession` has no method
   that opens, closes, or releases anything: `PdfDocument` holds its lease
@@ -141,6 +163,11 @@ scroll mode, and tool: a split view, or thumbnails beside the pages.
 - Layout stays pure and immutable per zoom (typed arrays, rows, spreads,
   scroll modes, `pageLeft`/`pageTop`, `zoomTarget`), as in 0.x
   `runtime/layout.ts`.
+- A zoom mode fits again as the viewport resizes: "fit-width", "fit-page",
+  and "auto", the default of pdf.js's viewer, which fits a portrait page's
+  width and a landscape page whole, never above its 125%: a scale of 5/3
+  (1.25 × 96/72 CSS pixels per point). A viewer opens at "fit-width"
+  unless told otherwise.
 - Page order follows a direction, "ltr" or "rtl": the `direction` option,
   or, left unset, the document's `/ViewerPreferences /Direction` (`R2L` is
   "rtl"), else "ltr". The layout mirrors every row for "rtl": in a spread
@@ -237,11 +264,16 @@ loads it when set; any other feature is included by importing its hook.
 
 Features: search (index, matches, highlights), history (back, forward),
 view state (get and set), initial view (`/OpenAction`, `/PageLayout`,
-`/PageMode`), permissions, forms (fields, values, changes, scripts, saving),
-annotations (editing, comments, images' alternative text, import, export),
-print, download, thumbnails, layers
-(optional content), attachments, selection (in PDF points), and text
-(`getText()`).
+`/PageMode`, a URL's open parameters), permissions, forms (fields, values,
+changes, scripts, saving), annotations (editing, comments, images'
+alternative text, import, export), links found in the text (`autoLinks`),
+print (a page whose orientation differs from the first page's turned to
+the sheet's, as pdf.js's viewer prints it, unless the application says
+not to), download and save (the whole document, or the pages chosen as
+pdf.js's `extractPages()` takes them: ranges of its pages, pages of other
+documents, and images as pages, with the form values and annotations
+saving keeps), thumbnails, layers (optional content), attachments,
+selection (in PDF points), and text (`getText()`).
 
 How features reach the core (M4):
 
@@ -259,10 +291,10 @@ How features reach the core (M4):
   with `useSyncExternalStore`: search, history, and annotation editing. The
   viewer's store keeps its view state, the session's the document's state.
 - The document's own data is read by the session (outline, labels,
-  metadata, attachments, layers, permissions, the initial view) and read
-  by React with `use()`; the features are what is done with it: following
-  permissions, opening attachments, showing and hiding layers, arranging
-  the pages as the document asks.
+  metadata, attachments, comments, layers, permissions, the initial view)
+  and read by React with `use()`; the features are what is done with it:
+  following permissions, opening attachments, showing and hiding layers,
+  arranging the pages as the document asks.
 - Forms and annotation editing, which change how pages are drawn, are
   options of `PdfViewer`, which imports their module when one is set and,
   when it is set as the viewer opens a document, makes the viewer wait for
@@ -286,12 +318,30 @@ How features reach the core (M4):
   fields in each of them, the session's annotation storage, and
   `onFormChange`. Scripts' requests to change the page or the zoom act on
   the viewer whose field ran them; printing and saving from a script
-  print and download through that viewer. pdf.js's viewer component
+  print and download through that viewer. Saving and printing, from a
+  script or the application, send the document's `WillSave` and `DidSave`,
+  or `WillPrint` and `DidPrint`, around them, and printing draws the pages
+  once what `WillPrint` changed has reached the fields; closing the
+  document sends `WillClose`. pdf.js's viewer component
   (`PDFScriptingManager`) is the reference for the events it sends.
+- Links found in the text are an option of `PdfViewer`, `autoLinks`, off
+  by default and loaded when set: once a page's text layer is built, the
+  URLs and e-mail addresses in its text, found as pdf.js's viewer finds
+  them (its `Autolinker`, on the find normalization search ports), become
+  links of the page's annotation layer (`addLinkAnnotations()`), leaving
+  out those a link of the file already covers, as pdf.js's viewer does.
+  They need the text and annotation layers, and follow `externalLinks`.
 - The opening view is an option of the viewer, a function of the session
   that the initial view feature makes from `initialView` and
   `initialViewState`, applied once per document; a viewport that reattaches
   returns to its position instead.
+- A URL source's fragment opens its document where it points, with the
+  open parameters of RFC 8118 that pdf.js's viewer reads: `page` and
+  `zoom` make the destination that viewer makes of them, and `nameddest`
+  names one. It wins over the document's own opening, as
+  `initialViewState` does, which wins over it. `search`, and the
+  `pagemode` pdf.js's viewer reads beside them, are left to the
+  application, whose find bar and sidebars they address.
 
 ### State
 
@@ -301,8 +351,8 @@ How features reach the core (M4):
   direction it resolved).
 - Each session publishes its document state (status, progress, password
   request, page count, permissions) and loads its secondary data (outline,
-  labels, metadata, attachments, layers, form fields, the initial view) as
-  promises that React reads with `use()`.
+  labels, metadata, attachments, comments, layers, form fields, the initial
+  view) as promises that React reads with `use()`.
 - Each feature publishes its own state.
 - React reads all of it through `useSyncExternalStore` selectors, and
   commits only when a selected value changes: in the hot path, when the
@@ -341,16 +391,18 @@ Components:
   session of `source` and renders its children at once, giving them its
   `PdfSession`; nothing suspends before the first page draws (0.x measured
   270 ms lost when the demo waited for pdf.js in a Suspense boundary). A
-  source with another URL, request headers, bytes, or password opens
-  another; an equal new object keeps the open one.
+  source with another URL, request headers, bytes, transport, or password
+  opens another; an equal new object keeps the open one. A URL's fragment
+  is not part of it: a new fragment moves the provider's viewers where it
+  points, as a link would.
 - `PdfViewer` is one viewport. `viewer` is the `useViewer()` it shows the
   document with; without it, it uses one of its own. Its other props:
   - View state, each either controlled, by its value and its change
     callback, or uncontrolled, by its default: `zoom`, `defaultZoom`,
-    `onZoomChange` (a scale in CSS pixels per point, `"fit-width"`, or
-    `"fit-page"`), and `rotation`, `spread`, `scrollMode`, and `tool`
-    likewise (`defaultRotation`, `onRotationChange`, …). A controlled value
-    is what the viewer shows: it applies the value as it changes, reports
+    `onZoomChange` (a scale in CSS pixels per point, `"fit-width"`,
+    `"fit-page"`, or `"auto"`), and `rotation`, `spread`, `scrollMode`, and
+    `tool` likewise (`defaultRotation`, `onRotationChange`, …). A controlled
+    value is what the viewer shows: it applies the value as it changes, reports
     every change of its own (the reader's gestures and keys, the viewer's
     methods) through the callback, and returns to the value once React has
     rendered without taking the change up. Defaults apply as the viewer
@@ -361,8 +413,9 @@ Components:
     sets state in them.
   - The opening: `initialView` and `initialViewState`, as the initial view
     feature reads them; the props above that the application sets win.
-  - Live options: `textLayer`, `annotationLayer`, `forms`, `formScripts`,
-    `annotationEditing`, `annotationLabels`, `enforcePermissions`, `direction`,
+  - Live options: `textLayer`, `annotationLayer`, `autoLinks`, `forms`,
+    `formScripts`, `annotationEditing`, `annotationLabels`,
+    `enforcePermissions`, `direction`,
     `destinationZoom`, `externalLinks`, `openAttachment`, `pageColors`,
     `gap`, `overscan`, `minScale`, `maxScale`, `maxConcurrentRenders`, and
     the budgets (`maxDetailPixels`, `maxDetailViewports`, `maxBasePixels`,
@@ -390,8 +443,9 @@ Hooks, named without a `Pdf` prefix:
 - `useSession()`: the nearest `PdfDocument`'s `PdfSession`.
 - `useDocumentState(selector)`: the session's document state.
 - `useOutline()`, `usePageLabels()`, `useMetadata()`, `useAttachments()`,
-  `useLayers()`, `useFormFields()`, `useInitialView()`: secondary data,
-  read with `use()` under the application's own Suspense boundaries.
+  `useComments()`, `useLayers()`, `useFormFields()`, `useInitialView()`:
+  secondary data, read with `use()` under the application's own Suspense
+  boundaries.
   Layers follow their visibility as it changes; form fields are their
   values as first read, which `getFormFields()` reads again.
 - A viewer's features: `useSearch(viewer)`, `useHistory(viewer)` (back and
@@ -494,3 +548,15 @@ proposals until decision 0015 is adopted.
   or change as they edit, beyond saving and printing them together (M4
   shows each viewer's own; another viewer leaves a changed annotation of
   the file out once it draws the page again).
+- pdf.js's drawing of mesh shadings with WebGPU (`enableWebGPU`, on in its
+  current viewer, absent from 6.4.299's types): measure it on documents
+  with mesh shadings in each browser, with their fidelity, then decide.
+- Digital signatures: pdf.js 6.4 reads them (`getSignatures()`,
+  `getSignatureData()`) but verifies them only inside Firefox. Whether
+  ParaPDF gives them, unverified, with the bytes an application verifies
+  itself, waits for a way to show a signer that no reader can take for a
+  verified one.
+- Reordering, removing, and copying pages in a viewer (pdf.js's
+  `pagesMapper`), and a comment of its own on a page (the editor's
+  `COMMENT` tool): pdf.js's generic viewer leaves both off in its release
+  builds; decide once it turns them on.

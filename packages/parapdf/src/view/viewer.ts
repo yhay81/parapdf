@@ -8,6 +8,7 @@ import type { PageColors, Rotation } from "../pdfjs/draw.ts";
 import type { AnnotationEditor } from "../pdfjs/editor.ts";
 import type { LayerState } from "../pdfjs/layers.ts";
 import type { TextLayerHandle } from "../pdfjs/text.ts";
+import { type AnnotationSetup, DEFAULT_ANNOTATION_SETUP } from "../render/dom-layers.ts";
 import { Renderer, type RenderStats } from "../render/renderer.ts";
 import { TextSelectionTracker } from "../render/selection.ts";
 import { ExtensionSet, type ViewerExtension } from "./extensions.ts";
@@ -146,12 +147,11 @@ export class Viewer {
   };
   /** What the features attached hear. */
   readonly #extensions = new ExtensionSet();
-  /** Whether annotation layers show form fields (`setFormLayers()`). */
-  #formLayers = false;
-  /** The document's scripts, which those fields run (`setFormScripting()`). */
-  #formScripting: AnnotationLayerScripting | null = null;
-  /** The annotation editor a feature gave, whose layers pages get. */
-  #annotationEditor: AnnotationEditor | null = null;
+  /**
+   * How pages show annotations, as features set it (`setFormLayers()`,
+   * `setFormScripting()`, `setAnnotationEditor()`); every renderer starts with it.
+   */
+  #annotationSetup: AnnotationSetup = DEFAULT_ANNOTATION_SETUP;
   /** A feature took the pointer, which the hand tool then leaves alone. */
   #pointerClaimed = false;
   readonly #selection = new TextSelectionTracker();
@@ -389,8 +389,7 @@ export class Viewer {
    * instead of drawing them: pages already drawn are drawn again.
    */
   setFormLayers(enabled: boolean): void {
-    this.#formLayers = enabled;
-    this.#shown?.renderer?.setForms(enabled);
+    this.#setAnnotationSetup({ forms: enabled });
   }
 
   /**
@@ -398,8 +397,7 @@ export class Viewer {
    * document's scripts, or, with null, none: those built are built again.
    */
   setFormScripting(scripting: AnnotationLayerScripting | null): void {
-    this.#formScripting = scripting;
-    this.#shown?.renderer?.setFormScripting(scripting);
+    this.#setAnnotationSetup({ scripting });
   }
 
   /**
@@ -407,8 +405,12 @@ export class Viewer {
    * that have an editor container, or, with null, take them down.
    */
   setAnnotationEditor(editor: AnnotationEditor | null): void {
-    this.#annotationEditor = editor;
-    this.#shown?.renderer?.setAnnotationEditor(editor);
+    this.#setAnnotationSetup({ editor });
+  }
+
+  #setAnnotationSetup(changes: Partial<AnnotationSetup>): void {
+    this.#annotationSetup = { ...this.#annotationSetup, ...changes };
+    this.#shown?.renderer?.setAnnotationSetup(this.#annotationSetup);
   }
 
   /** While claimed, a mouse drag is a feature's, such as an annotation tool's, not the hand tool's. */
@@ -526,9 +528,7 @@ export class Viewer {
     const renderer = new Renderer(session, {
       ...rendererOptions(this.#options),
       links: this.#links,
-      forms: this.#formLayers,
-      formScripting: this.#formScripting,
-      ...(this.#annotationEditor ? { annotationEditor: this.#annotationEditor } : {}),
+      annotationSetup: this.#annotationSetup,
       selection: this.#selection,
       onPainted: (pageIndex) => {
         if (pageIndex === 0 && this.#firstPaintAt === null) {

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { type AnnotationSetup, DEFAULT_ANNOTATION_SETUP } from "../src/render/dom-layers.ts";
 import type { ViewInput } from "../src/render/planner.ts";
 import { Renderer } from "../src/render/renderer.ts";
 import { computeLayout } from "../src/view/layout.ts";
@@ -103,15 +104,14 @@ describe("Renderer page DOM", () => {
     const host = fakeHost("parapdf-overlay-layer");
     renderer.attach(0, host);
     const classes = () => (host as unknown as FakeElement).children.map((child) => child.className);
-    const editor = { layerEditing: { editing: false } } as Parameters<
-      Renderer["setAnnotationEditor"]
-    >[0];
-    renderer.setAnnotationEditor(editor);
+    const editor = { layerEditing: { editing: false } } as AnnotationSetup["editor"];
+    const editing = { ...DEFAULT_ANNOTATION_SETUP, editor };
+    renderer.setAnnotationSetup(editing);
     assert.deepEqual(classes().slice(-2), ["parapdf-editor-layer", "parapdf-overlay-layer"]);
-    renderer.setAnnotationEditor(null);
+    renderer.setAnnotationSetup(DEFAULT_ANNOTATION_SETUP);
     assert.ok(!classes().includes("parapdf-editor-layer"));
 
-    renderer.setAnnotationEditor(editor);
+    renderer.setAnnotationSetup(editing);
     const later = fakeHost();
     renderer.attach(1, later);
     assert.deepEqual(
@@ -119,7 +119,7 @@ describe("Renderer page DOM", () => {
       "parapdf-editor-layer",
       "pages mounting while it edits get one at once",
     );
-    renderer.setAnnotationEditor(null);
+    renderer.setAnnotationSetup(DEFAULT_ANNOTATION_SETUP);
   });
 });
 

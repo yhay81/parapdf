@@ -62,19 +62,37 @@ export interface DomLayerStats {
   failed: number;
 }
 
+/**
+ * How pages show their annotations besides drawing them, as features set
+ * it: form fields as HTML, which the drawings then leave out, the scripts
+ * those fields run, and the editor whose layers pages get. The renderer
+ * holds it and changes it whole (`setAnnotationSetup`).
+ */
+export interface AnnotationSetup {
+  /** Annotation layers show form fields the reader can fill in; the drawings leave them out. */
+  readonly forms: boolean;
+  /** The document's scripts, which those fields run. */
+  readonly scripting: AnnotationLayerScripting | null;
+  /** Edits annotations on the pages: they get its layers, and drawings leave out what it edits. */
+  readonly editor: AnnotationEditor | null;
+}
+
+/** Pages draw their annotations: no form fields, scripts, or editor. */
+export const DEFAULT_ANNOTATION_SETUP: AnnotationSetup = {
+  forms: false,
+  scripting: null,
+  editor: null,
+};
+
 export interface DomLayerOptions {
   /** Where activated links in annotation layers go. */
   links?: LinkHandlers | undefined;
-  /** Annotation layers show form fields the reader can fill in. */
-  forms?: boolean | undefined;
-  /** The document's scripts, which those fields run. */
-  formScripting?: AnnotationLayerScripting | null | undefined;
+  /** How annotation layers show annotations. */
+  annotationSetup: AnnotationSetup;
   /** Which layers annotation layers show. */
   layers?: LayerState | undefined;
   /** Keeps drag selections inside built text layers. */
   selection?: TextSelectionTracker | undefined;
-  /** Edits annotations on the pages. */
-  annotationEditor?: AnnotationEditor | undefined;
   onTextReady?: ((pageIndex: number, handle: TextLayerHandle) => void) | undefined;
   onTextRemoved?: ((pageIndex: number) => void) | undefined;
 }
@@ -118,7 +136,8 @@ const whenIdle: (callback: () => void) => void =
 /** Builds the mounted pages' DOM layers, one at a time, in idle periods. */
 export class DomLayers {
   readonly #session: DocumentSession;
-  readonly #options: DomLayerOptions;
+  /** The renderer's, which it changes as features and the document do; layers built later follow. */
+  readonly #options: Readonly<DomLayerOptions>;
   readonly #stats: DomLayerStats;
   /** Whether a visible page waits for its first pixels, which DOM layers never delay. */
   readonly #waiting: () => boolean;
@@ -139,10 +158,6 @@ export class DomLayers {
     this.#options = options;
     this.#stats = stats;
     this.#waiting = waiting;
-  }
-
-  get annotationEditor(): AnnotationEditor | undefined {
-    return this.#options.annotationEditor;
   }
 
   attach(index: number, elements: PageElements): void {
@@ -211,28 +226,15 @@ export class DomLayers {
   }
 
   /**
-   * Build the layers of the annotations `editor` edits on the mounted pages
-   * from now on, or, with undefined, take them down. The pages' editor
-   * containers are the renderer's to add or remove.
+   * The setup's editor changed: the old one's layers go, and the new one's
+   * are built on the mounted pages from now on. The pages' editor containers
+   * are the renderer's to add or remove.
    */
-  setAnnotationEditor(editor: AnnotationEditor | undefined): void {
+  editorChanged(): void {
     for (const index of [...this.#editorWaiters.keys()]) this.#editorBuilt(index, false);
-    this.#options.annotationEditor = editor;
     // Annotation layers report the file's annotations to the editor they were built with.
     this.invalidateAnnotations();
     this.schedule();
-  }
-
-  setForms(forms: boolean): void {
-    this.#options.forms = forms;
-  }
-
-  setFormScripting(scripting: AnnotationLayerScripting | null): void {
-    this.#options.formScripting = scripting;
-  }
-
-  setLayerState(layers: LayerState): void {
-    this.#options.layers = layers;
   }
 
   /**
@@ -293,7 +295,7 @@ export class DomLayers {
     // The editor layer takes the file's annotations from the annotation layer.
     const needsEditor = (page: PageLayerState) =>
       page.elements.editor !== null &&
-      this.#options.annotationEditor !== undefined &&
+      this.#options.annotationSetup.editor !== null &&
       !page.editorHandle &&
       !page.editorTask &&
       (page.elements.annotations === null || page.annotationHandle !== undefined);
@@ -350,7 +352,7 @@ export class DomLayers {
    */
   whenEditable(index: number): Promise<boolean> {
     if (this.#pages.get(index)?.editorHandle) return Promise.resolve(true);
-    if (!this.#options.annotationEditor) return Promise.resolve(false);
+    if (!this.#options.annotationSetup.editor) return Promise.resolve(false);
     return new Promise((resolve) => {
       const waiters = this.#editorWaiters.get(index) ?? new Set();
       this.#editorWaiters.set(index, waiters);
@@ -390,7 +392,7 @@ export class DomLayers {
 
   #startEditor(page: PageLayerState, cssScale: number, rotation: Rotation): void {
     const { editor: container, drawings, text } = page.elements;
-    const editor = this.#options.annotationEditor;
+    const { editor } = this.#options.annotationSetup;
     if (!container || !editor) return;
     const task = editor.renderLayer({
       pageIndex: page.index,
@@ -431,17 +433,18 @@ export class DomLayers {
     if (!container || !links) return;
     container.replaceChildren();
     const session = this.#session;
+    const { forms, scripting, editor } = this.#options.annotationSetup;
     const task = buildAnnotationLayer(session.pdfjs, session.proxy, session.page(page.index), {
       container,
       cssScale,
       rotation,
       links,
-      forms: this.#options.forms ?? false,
+      forms,
       ...(this.#options.layers ? { layers: this.#options.layers.config } : {}),
       // The structure tree built with the page's text layer labels its annotations.
       structTree: page.textHandle?.structTree ?? null,
-      editor: this.#options.annotationEditor?.layerEditing ?? null,
-      scripting: this.#options.formScripting ?? null,
+      editor: editor?.layerEditing ?? null,
+      scripting,
     });
     page.annotationTask = task;
     this.#running = true;
