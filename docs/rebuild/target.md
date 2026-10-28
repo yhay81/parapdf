@@ -164,7 +164,8 @@ scroll mode, and tool: a split view, or thumbnails beside the pages.
   page when that changes; following a link moves it to the page the link
   goes to; and when the page holding it unmounts, it moves to the current
   page. Focus elsewhere (the application's controls, a link, a form field)
-  stays where it is.
+  stays where it is, and so does the focus during a drag selecting text,
+  which moving it would end.
 - A viewer has an `AbortController` of its own, aborted when its viewport
   goes.
 

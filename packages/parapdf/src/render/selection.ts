@@ -64,6 +64,11 @@ export class TextSelectionTracker {
   #quirks: SelectionQuirks | undefined;
   #pages: HTMLElement | null = null;
 
+  /** Whether a drag is selecting text. */
+  get dragging(): boolean {
+    return this.#dragging;
+  }
+
   /** Binds the element that holds the pages; returns the function that releases it. */
   attachPages(pages: HTMLElement): () => void {
     this.#pages = pages;

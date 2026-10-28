@@ -733,6 +733,8 @@ export class Viewer {
       const host = this.#pageHosts.get(this.#pendingFocus);
       if (!host) return;
       this.#pendingFocus = -1;
+      // Moving the focus would end a drag selecting text.
+      if (this.#selection.dragging) return;
       // Unless the reader took the focus out of the viewer meanwhile.
       const document = host.ownerDocument;
       const active = document.activeElement;
