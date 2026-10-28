@@ -120,9 +120,9 @@ function Pages({ pageCount, geometry }: { pageCount: number; geometry: Geometry 
   return (
     <div className="viewport">
       <div style={{ position: "relative", height: pageCount * rowHeight + GAP }}>
-        {Array.from({ length: pageCount }, (_, index) => (
+        {Array.from({ length: pageCount }, (_, index) => index).map((index) => (
           <div
-            key={`page-${index + 1}`}
+            key={index}
             className="page"
             style={{ top: index * rowHeight + GAP, height: geometry.pageHeight }}
           >
