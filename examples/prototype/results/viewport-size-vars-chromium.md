@@ -9,7 +9,7 @@
 - Main thread: summed lateness of a 4 ms timer while scrolling, beyond 2 ms or the idle page's 95th percentile, whichever is larger, plus the raw p95 and maximum lateness.
 - Dropped frames: animation frames longer than 1.5 idle frame intervals.
 - React commits: commits of the viewer's React tree while scrolling, and per second. Store updates: how often the store published while scrolling, and how often that moved the mounted window and the current page, the changes that should make React commit.
-- Reproduce: `pnpm --filter @parapdf/prototype build && BROWSER=chromium VARIANTS=pdfjs-hwa FILES=bill-hr815.pdf,synthetic-text-1000.pdf SPEEDS=900,3600 RUNS=5 OUTPUT=viewport-size-vars-chromium pnpm --filter @parapdf/prototype bench`
+- Reproduction: the experimental source and builds were not retained. Recreate the variant, build it and the baseline separately, and supply the baseline build as `BEFORE`; see decision 0018 for the job settings.
 
 ## bill-hr815.pdf, 900 CSS px per second
 
