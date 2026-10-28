@@ -25,6 +25,7 @@ for the direction of the rebuild gets a new record, numbered next.
 | [0014](0014-no-preload-in-webkit.md) | No PDF preload in WebKit browsers | adopted |
 | [0015](0015-toward-1.0.md) | What 1.0 requires, and what 1.x promises | proposed |
 | [0016](0016-form-scripts-after-first-paint.md) | Form scripts start after the first paint | adopted |
+| [0017](0017-measured-against-react-pdf.md) | ParaPDF is measured against react-pdf | proposed |
 
 ## Template
 
