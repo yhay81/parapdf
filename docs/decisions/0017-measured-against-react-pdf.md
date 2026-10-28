@@ -7,9 +7,10 @@
 
 ParaPDF aims to be the fastest React PDF viewer, yet every benchmark so far
 compared ParaPDF with itself or engines with each other. react-pdf is the
-most used React PDF component, built on the same pdf.js, so a comparison
-with it isolates what the viewer adds: when pages draw, how much the main
-thread does while scrolling, and how many canvases stay in memory.
+most used React PDF component, also built on pdf.js. A comparison measures
+the complete viewer stacks: when pages draw, how much the main thread does
+while scrolling, and how many canvases stay in memory. Their pdf.js versions
+differ, so the results cannot isolate the viewer from the engine version.
 
 ## Decision
 
@@ -31,45 +32,47 @@ ParaPDF, those it keeps for pages that unmounted, at 4 bytes a pixel.
 
 react-pdf 11.0.0 (with its own pdfjs-dist 6.3.289) and react-window 2.5.1
 are exact-pinned devDependencies of the demo; the published package does
-not depend on them.
+not depend on them. The comparison supports vertical scrolling at fit-width;
+the benchmark rejects other scroll modes or scales for these variants.
 
 ## Evidence
 
 `scroll-bench.ts`, 3 runs, 900 and 3600 CSS px/s for 4 s, variants
 following each other job by job; Chromium 156, macOS on an Apple M2 Pro on
-AC power, one-minute load average 4 to 5. Medians
-(`examples/prototype/results/compare-react-pdf-{110,1000}-chromium.md`):
+AC power. These jobs use the headless Chromium preload fix in decision 0014.
+The one-minute load average was 12.1 at the start and 4.1 at the end of the
+110-page run, and 4.1 to 6.2 for the 1000-page run. The high starting load
+and differences from the earlier run make timing conclusions provisional;
+repeat under lower, stable load (`examples/prototype/results/compare-react-pdf-{110,1000}-chromium.md`).
+Medians:
 
 bill-hr815.pdf (110 pages):
 
 | Speed | Variant | First paint | Blocked | Lag max | Dropped frames | Commits | Canvas memory |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| 900 | ParaPDF | 159 ms | 12 ms | 10 ms | 0 / 241 | 4 | 183 MiB |
-| 900 | react-pdf, windowed | 216 ms | 11 ms | 8 ms | 0 / 241 | 10 | 217 MiB |
-| 900 | react-pdf, every page | 342 ms | 495 ms | 181 ms | 5 / 219 | 3 | 3972 MiB |
-| 3600 | ParaPDF | 161 ms | 28 ms | 10 ms | 0 / 241 | 20 | 127 MiB |
-| 3600 | react-pdf, windowed | 185 ms | 53 ms | 11 ms | 0 / 241 | 45 | 289 MiB |
-| 3600 | react-pdf, every page | 277 ms | 506 ms | 164 ms | 4 / 222 | 1 | 3972 MiB |
+| 900 | ParaPDF | 159 ms | 16 ms | 9 ms | 0 / 241 | 4 | 183 MiB |
+| 900 | react-pdf, every page | 294 ms | 230 ms | 104 ms | 3 / 237 | 1 | 3972 MiB |
+| 900 | react-pdf, windowed | 191 ms | 8 ms | 7 ms | 0 / 241 | 10 | 217 MiB |
+| 3600 | ParaPDF | 140 ms | 46 ms | 9 ms | 0 / 241 | 20 | 126 MiB |
+| 3600 | react-pdf, every page | 286 ms | 311 ms | 105 ms | 3 / 235 | 0 | 3972 MiB |
+| 3600 | react-pdf, windowed | 180 ms | 31 ms | 9 ms | 0 / 241 | 46 | 289 MiB |
 
-synthetic-text-1000.pdf (1000 pages; react-pdf with every page mounted did
-not draw its first page within 120 s, so it is left out):
+synthetic-text-1000.pdf (1000 pages; windowed variants only):
 
 | Speed | Variant | First paint | Blocked | Lag max | Dropped frames | Commits | Canvas memory |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| 900 | ParaPDF | 178 ms | 7 ms | 5 ms | 0 / 241 | 4 | 156 MiB |
-| 900 | react-pdf, windowed | 193 ms | 7 ms | 7 ms | 0 / 241 | 10 | 187 MiB |
-| 3600 | ParaPDF | 199 ms | 22 ms | 11 ms | 1 / 240 | 24 | 111 MiB |
-| 3600 | react-pdf, windowed | 213 ms | 31 ms | 9 ms | 0 / 241 | 43 | 249 MiB |
+| 900 | ParaPDF | 231 ms | 6 ms | 5 ms | 0 / 241 | 4 | 156 MiB |
+| 900 | react-pdf, windowed | 197 ms | 6 ms | 5 ms | 0 / 241 | 10 | 187 MiB |
+| 3600 | ParaPDF | 162 ms | 45 ms | 10 ms | 0 / 241 | 24 | 111 MiB |
+| 3600 | react-pdf, windowed | 179 ms | 12 ms | 5 ms | 0 / 241 | 45 | 249 MiB |
 
-No variant left the visible pages blank on this machine at these speeds.
-ParaPDF paints first 14 to 57 ms sooner, blocks the main thread as much or
-less, commits React less than half as often, and holds 16 to 56% less canvas
-memory; react-pdf with every page mounted holds every page's canvas
-(3972 MiB for 110 pages) and blocks the main thread ten to forty times
-longer. Where ParaPDF loses: at 3600 px/s it built no text or link layers
-while the pages flew past, which react-pdf-window did (8 to 9 of each), so
-part of its smaller main-thread cost is work it postpones until scrolling
-slows; and its maximum lag on the 1000-page document was 11 ms against 9 ms.
+No variant left the visible pages blank in these runs. ParaPDF committed
+React less often and used less canvas memory than the windowed comparison;
+its first paint and main-thread blocked time were not consistently lower.
+At 3600 px/s ParaPDF postponed text and link layers while react-pdf-window
+built them, so their work during scrolling differs. An earlier run without
+the headless preload fix did not draw the 1000-page document with every page
+mounted within 120 s; that case was not rerun here.
 
 WebKit 27.2 and Firefox 157 (Playwright's builds, not Safari), the same
 jobs with 5 runs, on AC power
@@ -102,7 +105,7 @@ run. Medians:
 react-pdf with every page mounted did not finish a single Firefox job on
 bill-hr815.pdf within 120 s. Again no variant left visible pages blank.
 
-ParaPDF paints first sooner in every job but one (WebKit, 1000 pages,
+In these WebKit and Firefox runs, ParaPDF paints first sooner in every job but one (WebKit, 1000 pages,
 3600 px/s: 212 against 203 ms), commits React less than half as often, and
 holds less canvas memory everywhere. In WebKit it blocks the main thread as
 much or less. In Firefox it blocks less at 3600 px/s, where it postpones
@@ -120,7 +123,8 @@ runs, on battery), so it is not adopted; the cause stays open.
 
 - Speed claims against other viewers point at these results, and change
   with them. They do not support "faster in every browser": Firefox's text
-  layers at reading speed cost ParaPDF more than react-pdf.
+  layers at reading speed cost ParaPDF more than react-pdf, and the updated
+  Chromium timing results need a repeat under lower, stable load.
 - `pnpm --filter @parapdf/prototype build` stages react-pdf's pdf.js files
   under `public/react-pdf/`.
 
