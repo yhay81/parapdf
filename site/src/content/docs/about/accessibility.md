@@ -32,8 +32,21 @@ description: How ParaPDF exposes documents to assistive technology.
   pages near the viewport, not the whole document at once (see
   [Limitations](/about/limitations/)).
 
-The functional checks verify what the page exposes; no screen reader has
-been tried with it yet
+The functional checks verify what the page exposes. VoiceOver in Safari on
+macOS has been tried with the demo
+([results](https://github.com/yhay81/parapdf/blob/main/examples/prototype/results/voiceover-safari-macos.md)):
+it reads the text in order, the tagged lists, links, form fields, the
+thumbnails, and continues into pages as they mount. Where it falls short:
+
+- After the view moves (keys, thumbnails, links), VoiceOver starts reading
+  at the first mounted page, not at the page shown, and following a link
+  leaves the focus on the link.
+- Focus falls back to the page's body when the page holding it unmounts.
+- Links are read after their page's text, and a field's tooltip names the
+  region around the field rather than the field.
+- A comment's icon is announced by its file name.
+
+NVDA has not been tried yet
 ([#32](https://github.com/yhay81/parapdf/issues/32)).
 
 Applications own the rest of the interface: label your toolbar, announce
