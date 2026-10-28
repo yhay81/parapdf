@@ -1064,9 +1064,10 @@ with `PdfThumbnails`'s.
   and `viewer.goToPage()` sets it.
 - A viewer shows the annotations it created, not those other viewers of the
   document create, though saving and printing include them all.
-- Chromium and Firefox give pdf.js the PDF's preloaded download. Whether
-  Safari does is not verified yet; where a browser does not, the PDF
-  downloads twice.
+- Safari gives pdf.js a preloaded download only once it has finished, so
+  ParaPDF does not preload the PDF in WebKit browsers. A page rendered on
+  the server still preloads it, so there a PDF that takes longer to
+  download than pdf.js to load downloads twice in Safari.
 - Text layers exist only for mounted pages, so the browser's own find and
   selection see only those; use `useSearch()` and `getText()`.
 - Search highlights need the CSS Custom Highlight API; browsers without it
