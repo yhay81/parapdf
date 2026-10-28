@@ -69,8 +69,52 @@ function AnnotationTools({ viewer }: { viewer: Viewer }) {
   selected annotation's.
 - `undo()`, `redo()`, `deleteSelected()`, and `selectAll()`; `state` says
   whether there is something to undo or redo (`canUndo`, `canRedo`), whether
-  annotations are selected (`hasSelection`), and whether there are any
-  (`isEmpty`). `state` and `styles` are null until editing starts.
+  annotations are selected (`hasSelection`), whether there are any
+  (`isEmpty`), and which one is selected when one alone is (`selected`).
+  `state` and `styles` are null until editing starts.
+
+## Comments and alternative text
+
+`state.selected` describes the annotation selected, when one alone is: its
+`id`, `pageIndex`, `type`, `comment` (null without one), and, for an image,
+`altText` (`{ text, decorative }`). The application shows and edits them in
+its own controls; ParaPDF shows no comment or alt text dialog.
+
+- `setComment(comment)` sets the selected annotation's comment, or with
+  null or `""` removes it. Text annotations take none: their text is their
+  content.
+- `setAltText({ text, decorative })` sets the selected image's alternative
+  text; a decorative image is skipped by assistive technology.
+
+Each is one undo step, and returns false unless one annotation alone, an
+image for `setAltText()`, is selected. Typing in the application's own form
+keeps the annotation selected. The saved PDF has the comment as the
+annotation's popup note and the alternative text in its structure;
+`export()` and `import()` keep both.
+
+```tsx
+function SelectedAnnotation({ viewer }: { viewer: Viewer }) {
+  const annotations = useAnnotations(viewer);
+  const selected = annotations?.state?.selected;
+  if (!annotations || !selected || selected.type === "freetext") return null;
+  return (
+    <form
+      // Starts again when another annotation is selected, or undo changes it.
+      key={JSON.stringify(selected)}
+      aria-label="Comment"
+      onSubmit={(event) => {
+        event.preventDefault();
+        const text = new FormData(event.currentTarget).get("comment");
+        annotations.setComment(typeof text === "string" ? text : null);
+      }}
+    >
+      <textarea name="comment" aria-label="Comment" defaultValue={selected.comment ?? ""} />
+      <button type="submit">Apply</button>
+      <button type="reset">Cancel</button>
+    </form>
+  );
+}
+```
 
 ## Images and signatures
 
@@ -154,4 +198,3 @@ Label the editor's controls in the application's language with
 `annotationLabels`; the defaults are pdf.js's English names. New labels
 apply without losing the annotations created.
 
-Comments on created annotations are not shown.

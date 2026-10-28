@@ -85,4 +85,4 @@ A `PdfSession` has no method that opens, closes, or releases anything:
 |---|---|
 | `searchOf(viewer).store`, `useSearch(viewer)` | `query`, `options`, `status` (`"idle"`, `"searching"`, or `"done"`), `matches` in page order, `current` (the selected match's index, -1 for none), and `pagesSearched` (see [Search](/guides/search/)). |
 | `historyOf(viewer).store`, `useHistory(viewer)` | `canGoBack` and `canGoForward` (see [Navigation](/guides/navigation/)). |
-| `useAnnotationEditing(viewer)?.store`, `useAnnotations(viewer)` | `tool`; `state`, with `canUndo`, `canRedo`, `hasSelection`, and `isEmpty`; and `styles`, each tool's style; the last two null until editing starts (see [Annotations](/guides/annotations/)). |
+| `useAnnotationEditing(viewer)?.store`, `useAnnotations(viewer)` | `tool`; `state`, with `canUndo`, `canRedo`, `hasSelection`, `isEmpty`, and `selected`; and `styles`, each tool's style; the last two null until editing starts (see [Annotations](/guides/annotations/)). |

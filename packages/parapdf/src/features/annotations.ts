@@ -3,6 +3,7 @@
 import type { DocumentSession } from "../document/session.ts";
 import { type ReadableStore, Store } from "../document/store.ts";
 import {
+  type AnnotationAltText,
   type AnnotationEditingState,
   type AnnotationEditor,
   type AnnotationLabels,
@@ -57,6 +58,21 @@ export interface AnnotationEditing {
   redo(): void;
   deleteSelected(): void;
   selectAll(): void;
+  /**
+   * Set the comment of the annotation selected, one alone (the store's
+   * `state.selected`), or with null or "", remove it, as one undo step. The
+   * PDF saves it as the annotation's popup note, and `export()` keeps it.
+   * False when one annotation alone is not selected, or it is text, whose
+   * text is its content. Showing and editing comments is the application's.
+   */
+  setComment(comment: string | null): boolean;
+  /**
+   * Set the alternative text of the image selected, one alone, as one undo
+   * step: what assistive technology reads of it, in the PDF too, or with
+   * `decorative`, that it skips it. False when one image alone is not
+   * selected.
+   */
+  setAltText(altText: AnnotationAltText): boolean;
   /**
    * Add an image, from a Blob or a URL the page may fetch, to page
    * `pageIndex` (default: the current page), in the middle of its visible
@@ -340,6 +356,12 @@ export function attachAnnotationEditing(
     },
     selectAll() {
       editor?.selectAll();
+    },
+    setComment(comment) {
+      return editor?.setComment(comment) ?? false;
+    },
+    setAltText(altText) {
+      return editor?.setAltText(altText) ?? false;
     },
     async addImage(image, { pageIndex, altText } = {}) {
       const page = await editablePage(pageIndex);
