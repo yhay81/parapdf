@@ -1,4 +1,12 @@
-import { type AnnotationTool, getText, useAnnotations, useViewState, type Viewer } from "parapdf";
+import {
+  type AnnotationControls,
+  type AnnotationTool,
+  getText,
+  type SelectedAnnotation,
+  useAnnotations,
+  useViewState,
+  type Viewer,
+} from "parapdf";
 import { useRef, useState } from "react";
 
 const TOOLS: [AnnotationTool, string][] = [
@@ -16,8 +24,9 @@ const storageKey = (file: string) => `parapdf-annotations:${file}`;
 /**
  * The tools of annotation editing (`?annotations=1`): the tool, the style
  * of the one chosen, undo and redo, adding images and typed signatures,
- * keeping annotations in localStorage and restoring them, and copying the
- * whole document's text.
+ * keeping annotations in localStorage and restoring them, copying the
+ * whole document's text, and the comment and alternative text of the
+ * annotation selected.
  */
 export function AnnotationToolbar({ viewer, file }: { viewer: Viewer; file: string }) {
   const annotations = useAnnotations(viewer);
@@ -139,6 +148,79 @@ export function AnnotationToolbar({ viewer, file }: { viewer: Viewer; file: stri
         Copy text
       </button>
       <output>{message}</output>
+      {annotations && editing?.selected ? (
+        <SelectedAnnotationForm
+          // Starts again when another is selected, or undo changes this one.
+          key={JSON.stringify(editing.selected)}
+          annotations={annotations}
+          selected={editing.selected}
+        />
+      ) : null}
     </div>
+  );
+}
+
+/**
+ * The comment and, for an image, the alternative text of the annotation
+ * selected, applied together; Cancel puts back what it has, and the
+ * annotation stays selected either way.
+ */
+function SelectedAnnotationForm({
+  annotations,
+  selected,
+}: {
+  annotations: AnnotationControls;
+  selected: SelectedAnnotation;
+}) {
+  const [comment, setComment] = useState(selected.comment ?? "");
+  const [altText, setAltText] = useState(selected.altText?.text ?? "");
+  const [decorative, setDecorative] = useState(selected.altText?.decorative ?? false);
+  const cancel = () => {
+    setComment(selected.comment ?? "");
+    setAltText(selected.altText?.text ?? "");
+    setDecorative(selected.altText?.decorative ?? false);
+  };
+  const commentable = selected.type !== "freetext";
+  return (
+    <form
+      className="selected-annotation"
+      aria-label="Selected annotation"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (commentable) annotations.setComment(comment);
+        if (selected.altText) annotations.setAltText({ text: altText, decorative });
+      }}
+    >
+      {commentable ? (
+        <label>
+          Comment
+          <textarea rows={1} value={comment} onChange={(event) => setComment(event.target.value)} />
+        </label>
+      ) : null}
+      {selected.altText ? (
+        <>
+          <label>
+            Alternative text
+            <input
+              value={altText}
+              disabled={decorative}
+              onChange={(event) => setAltText(event.target.value)}
+            />
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={decorative}
+              onChange={(event) => setDecorative(event.target.checked)}
+            />
+            Decorative
+          </label>
+        </>
+      ) : null}
+      <button type="submit">Apply</button>
+      <button type="button" onClick={cancel}>
+        Cancel
+      </button>
+    </form>
   );
 }

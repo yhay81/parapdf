@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import type { AnnotationEditing, AnnotationEditingStore } from "../features/annotations.ts";
 import type {
+  AnnotationAltText,
   AnnotationStyles,
   AnnotationTool,
   SavedAnnotation,
@@ -18,6 +19,8 @@ export interface AnnotationControls extends AnnotationEditingStore {
   redo(): void;
   deleteSelected(): void;
   selectAll(): void;
+  setComment(comment: string | null): boolean;
+  setAltText(altText: AnnotationAltText): boolean;
   addImage(
     image: Blob | string,
     options?: { pageIndex?: number; altText?: string },
@@ -59,6 +62,8 @@ export function useAnnotations(viewer: Viewer): AnnotationControls | null {
             redo: () => editing.redo(),
             deleteSelected: () => editing.deleteSelected(),
             selectAll: () => editing.selectAll(),
+            setComment: (comment) => editing.setComment(comment),
+            setAltText: (altText) => editing.setAltText(altText),
             addImage: (image, options) => editing.addImage(image, options),
             addSignature: (signature, options) => editing.addSignature(signature, options),
             export: () => editing.export(),

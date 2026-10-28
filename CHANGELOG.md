@@ -4,6 +4,17 @@ Changes to the `parapdf` package. It follows
 [Semantic Versioning](https://semver.org/); until 1.0, a minor release may
 change the API.
 
+## Unreleased
+
+- With `annotationEditing`, the annotation editing state has `selected`: the
+  annotation selected when one alone is, with its `id`, `pageIndex`, `type`,
+  `comment`, and, for an image, `altText`. `setComment()` sets or removes its
+  comment, and `setAltText()` an image's alternative text and whether it is
+  decorative, each as one undo step, in the application's own controls. The
+  saved PDF has the comment as the annotation's popup note; `export()` and
+  `import()` keep both. `SelectedAnnotation` and `AnnotationAltText` are
+  exported (#5, #6).
+
 ## 0.7.0 — 2026-10-27
 
 - In WebKit and Firefox, a quick drag up from a page's text into the blank
