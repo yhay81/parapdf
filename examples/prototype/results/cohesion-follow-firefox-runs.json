@@ -1,0 +1,1269 @@
+{
+  "environment": {
+    "runAt": "2026-10-28T23:57:36.361Z",
+    "os": "darwin 27.0.0 arm64",
+    "cpu": "Apple M2 Pro (12 logical cores)",
+    "browserName": "firefox",
+    "browser": "Firefox 157.0",
+    "headless": true,
+    "power": {
+      "source": "ac",
+      "lowPowerMode": false
+    },
+    "loadAverage": {
+      "start": 6,
+      "end": 6.2
+    },
+    "turnTaking": {
+      "waits": 0,
+      "waitedMs": 0,
+      "repeatedJobs": 0
+    },
+    "before": "d89fddb",
+    "versions": {
+      "pdfjs": "6.4.299"
+    },
+    "idle": {
+      "timerLagP50Ms": 1,
+      "timerLagP95Ms": 1.1,
+      "frameIntervalMs": 16.7
+    },
+    "settings": {
+      "runs": 3,
+      "durationMs": 4000,
+      "latencyMs": 0,
+      "bandwidthMbps": 0,
+      "scrollModes": ["vertical"],
+      "scales": ["fit-width"],
+      "viewport": "1280x900",
+      "devicePixelRatio": 2,
+      "focusViewport": true
+    }
+  },
+  "results": [
+    {
+      "file": "synthetic-text-1000.pdf",
+      "engineKind": "pdfjs",
+      "hwa": false,
+      "text": true,
+      "links": true,
+      "speed": 900,
+      "scrollMode": "vertical",
+      "scale": 2.1,
+      "firstPaintMs": 271.9,
+      "scrollMs": 4012.1,
+      "pagesCrossed": 2,
+      "commitsDuringScroll": 4,
+      "published": {
+        "updates": 4,
+        "windows": 2,
+        "currentPages": 2
+      },
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "settleMs": 0,
+      "lag": {
+        "p95Ms": 2.1,
+        "maxMs": 15.6,
+        "blockedMs": 52.5
+      },
+      "frames": {
+        "frames": 241,
+        "p95Ms": 16.9,
+        "maxMs": 17.4,
+        "dropped": 0
+      },
+      "renders": {
+        "base": 0,
+        "detail": 2,
+        "text": 2,
+        "annotations": 2,
+        "cancelled": 0,
+        "failed": 0
+      },
+      "canvasPixels": 40865000,
+      "crossOriginIsolated": true,
+      "devicePixelRatio": 2,
+      "variant": "pdfjs",
+      "run": 0,
+      "idle": {
+        "timerLagP50Ms": 0.8,
+        "timerLagP95Ms": 1.1,
+        "frameIntervalMs": 16.7
+      }
+    },
+    {
+      "file": "synthetic-text-1000.pdf",
+      "engineKind": "pdfjs",
+      "hwa": false,
+      "text": true,
+      "links": true,
+      "speed": 900,
+      "scrollMode": "vertical",
+      "scale": 2.1,
+      "firstPaintMs": 259.4,
+      "scrollMs": 4015.9,
+      "pagesCrossed": 2,
+      "commitsDuringScroll": 4,
+      "published": {
+        "updates": 4,
+        "windows": 2,
+        "currentPages": 2
+      },
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "settleMs": 0,
+      "lag": {
+        "p95Ms": 1.8,
+        "maxMs": 9.3,
+        "blockedMs": 32.3
+      },
+      "frames": {
+        "frames": 241,
+        "p95Ms": 16.9,
+        "maxMs": 17.6,
+        "dropped": 0
+      },
+      "renders": {
+        "base": 0,
+        "detail": 2,
+        "text": 2,
+        "annotations": 2,
+        "cancelled": 0,
+        "failed": 0
+      },
+      "canvasPixels": 40865000,
+      "crossOriginIsolated": true,
+      "devicePixelRatio": 2,
+      "variant": "pdfjs, before",
+      "run": 0,
+      "idle": {
+        "timerLagP50Ms": 1,
+        "timerLagP95Ms": 1.1,
+        "frameIntervalMs": 16.7
+      }
+    },
+    {
+      "file": "synthetic-text-1000.pdf",
+      "engineKind": "pdfjs",
+      "hwa": false,
+      "text": true,
+      "links": true,
+      "speed": 900,
+      "scrollMode": "vertical",
+      "scale": 2.1,
+      "firstPaintMs": 255.7,
+      "scrollMs": 4000.7,
+      "pagesCrossed": 2,
+      "commitsDuringScroll": 4,
+      "published": {
+        "updates": 4,
+        "windows": 2,
+        "currentPages": 2
+      },
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "settleMs": 0,
+      "lag": {
+        "p95Ms": 1.7,
+        "maxMs": 83.3,
+        "blockedMs": 124.9
+      },
+      "frames": {
+        "frames": 236,
+        "p95Ms": 16.7,
+        "maxMs": 87.2,
+        "dropped": 1
+      },
+      "renders": {
+        "base": 0,
+        "detail": 2,
+        "text": 2,
+        "annotations": 2,
+        "cancelled": 0,
+        "failed": 0
+      },
+      "canvasPixels": 40865000,
+      "crossOriginIsolated": true,
+      "devicePixelRatio": 2,
+      "variant": "pdfjs",
+      "run": 1,
+      "idle": {
+        "timerLagP50Ms": 0.8,
+        "timerLagP95Ms": 1.1,
+        "frameIntervalMs": 16.7
+      }
+    },
+    {
+      "file": "synthetic-text-1000.pdf",
+      "engineKind": "pdfjs",
+      "hwa": false,
+      "text": true,
+      "links": true,
+      "speed": 900,
+      "scrollMode": "vertical",
+      "scale": 2.1,
+      "firstPaintMs": 256.1,
+      "scrollMs": 4015.4,
+      "pagesCrossed": 2,
+      "commitsDuringScroll": 4,
+      "published": {
+        "updates": 4,
+        "windows": 2,
+        "currentPages": 2
+      },
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "settleMs": 0,
+      "lag": {
+        "p95Ms": 1.8,
+        "maxMs": 10.2,
+        "blockedMs": 31.7
+      },
+      "frames": {
+        "frames": 242,
+        "p95Ms": 16.7,
+        "maxMs": 17.4,
+        "dropped": 0
+      },
+      "renders": {
+        "base": 0,
+        "detail": 2,
+        "text": 2,
+        "annotations": 2,
+        "cancelled": 0,
+        "failed": 0
+      },
+      "canvasPixels": 40865000,
+      "crossOriginIsolated": true,
+      "devicePixelRatio": 2,
+      "variant": "pdfjs, before",
+      "run": 1,
+      "idle": {
+        "timerLagP50Ms": 0.7,
+        "timerLagP95Ms": 1.1,
+        "frameIntervalMs": 16.7
+      }
+    },
+    {
+      "file": "synthetic-text-1000.pdf",
+      "engineKind": "pdfjs",
+      "hwa": false,
+      "text": true,
+      "links": true,
+      "speed": 900,
+      "scrollMode": "vertical",
+      "scale": 2.1,
+      "firstPaintMs": 258.6,
+      "scrollMs": 4010.5,
+      "pagesCrossed": 2,
+      "commitsDuringScroll": 4,
+      "published": {
+        "updates": 4,
+        "windows": 2,
+        "currentPages": 2
+      },
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "settleMs": 0,
+      "lag": {
+        "p95Ms": 1.7,
+        "maxMs": 9.6,
+        "blockedMs": 27.5
+      },
+      "frames": {
+        "frames": 241,
+        "p95Ms": 16.7,
+        "maxMs": 17.5,
+        "dropped": 0
+      },
+      "renders": {
+        "base": 0,
+        "detail": 2,
+        "text": 2,
+        "annotations": 2,
+        "cancelled": 0,
+        "failed": 0
+      },
+      "canvasPixels": 40865000,
+      "crossOriginIsolated": true,
+      "devicePixelRatio": 2,
+      "variant": "pdfjs",
+      "run": 2,
+      "idle": {
+        "timerLagP50Ms": 0.8,
+        "timerLagP95Ms": 1.1,
+        "frameIntervalMs": 16.7
+      }
+    },
+    {
+      "file": "synthetic-text-1000.pdf",
+      "engineKind": "pdfjs",
+      "hwa": false,
+      "text": true,
+      "links": true,
+      "speed": 900,
+      "scrollMode": "vertical",
+      "scale": 2.1,
+      "firstPaintMs": 271.9,
+      "scrollMs": 4016.4,
+      "pagesCrossed": 2,
+      "commitsDuringScroll": 4,
+      "published": {
+        "updates": 4,
+        "windows": 2,
+        "currentPages": 2
+      },
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "settleMs": 0,
+      "lag": {
+        "p95Ms": 1.5,
+        "maxMs": 9.8,
+        "blockedMs": 27.4
+      },
+      "frames": {
+        "frames": 241,
+        "p95Ms": 16.7,
+        "maxMs": 17.3,
+        "dropped": 0
+      },
+      "renders": {
+        "base": 0,
+        "detail": 2,
+        "text": 2,
+        "annotations": 2,
+        "cancelled": 0,
+        "failed": 0
+      },
+      "canvasPixels": 40865000,
+      "crossOriginIsolated": true,
+      "devicePixelRatio": 2,
+      "variant": "pdfjs, before",
+      "run": 2,
+      "idle": {
+        "timerLagP50Ms": 0.8,
+        "timerLagP95Ms": 1.1,
+        "frameIntervalMs": 16.7
+      }
+    },
+    {
+      "file": "synthetic-text-1000.pdf",
+      "engineKind": "pdfjs",
+      "hwa": false,
+      "text": true,
+      "links": true,
+      "speed": 3600,
+      "scrollMode": "vertical",
+      "scale": 2.1,
+      "firstPaintMs": 283,
+      "scrollMs": 4013.1,
+      "pagesCrossed": 9,
+      "commitsDuringScroll": 24,
+      "published": {
+        "updates": 24,
+        "windows": 15,
+        "currentPages": 9
+      },
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "settleMs": 0,
+      "lag": {
+        "p95Ms": 1.7,
+        "maxMs": 19.1,
+        "blockedMs": 110.4
+      },
+      "frames": {
+        "frames": 241,
+        "p95Ms": 16.9,
+        "maxMs": 17.2,
+        "dropped": 0
+      },
+      "renders": {
+        "base": 9,
+        "detail": 0,
+        "text": 0,
+        "annotations": 0,
+        "cancelled": 0,
+        "failed": 0
+      },
+      "canvasPixels": 29126424,
+      "crossOriginIsolated": true,
+      "devicePixelRatio": 2,
+      "variant": "pdfjs",
+      "run": 0,
+      "idle": {
+        "timerLagP50Ms": 1,
+        "timerLagP95Ms": 1.1,
+        "frameIntervalMs": 16.7
+      }
+    },
+    {
+      "file": "synthetic-text-1000.pdf",
+      "engineKind": "pdfjs",
+      "hwa": false,
+      "text": true,
+      "links": true,
+      "speed": 3600,
+      "scrollMode": "vertical",
+      "scale": 2.1,
+      "firstPaintMs": 275.2,
+      "scrollMs": 4017.6,
+      "pagesCrossed": 9,
+      "commitsDuringScroll": 24,
+      "published": {
+        "updates": 24,
+        "windows": 15,
+        "currentPages": 9
+      },
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "settleMs": 0,
+      "lag": {
+        "p95Ms": 1.6,
+        "maxMs": 19.7,
+        "blockedMs": 87.6
+      },
+      "frames": {
+        "frames": 241,
+        "p95Ms": 16.7,
+        "maxMs": 17.5,
+        "dropped": 0
+      },
+      "renders": {
+        "base": 9,
+        "detail": 0,
+        "text": 0,
+        "annotations": 0,
+        "cancelled": 0,
+        "failed": 0
+      },
+      "canvasPixels": 29126424,
+      "crossOriginIsolated": true,
+      "devicePixelRatio": 2,
+      "variant": "pdfjs, before",
+      "run": 0,
+      "idle": {
+        "timerLagP50Ms": 1,
+        "timerLagP95Ms": 1.1,
+        "frameIntervalMs": 16.7
+      }
+    },
+    {
+      "file": "synthetic-text-1000.pdf",
+      "engineKind": "pdfjs",
+      "hwa": false,
+      "text": true,
+      "links": true,
+      "speed": 3600,
+      "scrollMode": "vertical",
+      "scale": 2.1,
+      "firstPaintMs": 288.9,
+      "scrollMs": 4004.9,
+      "pagesCrossed": 9,
+      "commitsDuringScroll": 24,
+      "published": {
+        "updates": 24,
+        "windows": 15,
+        "currentPages": 9
+      },
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "settleMs": 0,
+      "lag": {
+        "p95Ms": 1.6,
+        "maxMs": 12.2,
+        "blockedMs": 55.7
+      },
+      "frames": {
+        "frames": 241,
+        "p95Ms": 16.7,
+        "maxMs": 17.6,
+        "dropped": 0
+      },
+      "renders": {
+        "base": 9,
+        "detail": 0,
+        "text": 0,
+        "annotations": 0,
+        "cancelled": 0,
+        "failed": 0
+      },
+      "canvasPixels": 29126424,
+      "crossOriginIsolated": true,
+      "devicePixelRatio": 2,
+      "variant": "pdfjs",
+      "run": 1,
+      "idle": {
+        "timerLagP50Ms": 1,
+        "timerLagP95Ms": 1.1,
+        "frameIntervalMs": 16.7
+      }
+    },
+    {
+      "file": "synthetic-text-1000.pdf",
+      "engineKind": "pdfjs",
+      "hwa": false,
+      "text": true,
+      "links": true,
+      "speed": 3600,
+      "scrollMode": "vertical",
+      "scale": 2.1,
+      "firstPaintMs": 294,
+      "scrollMs": 4011.6,
+      "pagesCrossed": 9,
+      "commitsDuringScroll": 24,
+      "published": {
+        "updates": 24,
+        "windows": 15,
+        "currentPages": 9
+      },
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "settleMs": 0,
+      "lag": {
+        "p95Ms": 2.1,
+        "maxMs": 16.2,
+        "blockedMs": 115.1
+      },
+      "frames": {
+        "frames": 241,
+        "p95Ms": 16.7,
+        "maxMs": 17.4,
+        "dropped": 0
+      },
+      "renders": {
+        "base": 9,
+        "detail": 0,
+        "text": 0,
+        "annotations": 0,
+        "cancelled": 0,
+        "failed": 0
+      },
+      "canvasPixels": 29126424,
+      "crossOriginIsolated": true,
+      "devicePixelRatio": 2,
+      "variant": "pdfjs, before",
+      "run": 1,
+      "idle": {
+        "timerLagP50Ms": 1,
+        "timerLagP95Ms": 1.1,
+        "frameIntervalMs": 16.7
+      }
+    },
+    {
+      "file": "synthetic-text-1000.pdf",
+      "engineKind": "pdfjs",
+      "hwa": false,
+      "text": true,
+      "links": true,
+      "speed": 3600,
+      "scrollMode": "vertical",
+      "scale": 2.1,
+      "firstPaintMs": 270.7,
+      "scrollMs": 4008.9,
+      "pagesCrossed": 9,
+      "commitsDuringScroll": 24,
+      "published": {
+        "updates": 24,
+        "windows": 15,
+        "currentPages": 9
+      },
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "settleMs": 0,
+      "lag": {
+        "p95Ms": 2,
+        "maxMs": 17,
+        "blockedMs": 102.3
+      },
+      "frames": {
+        "frames": 241,
+        "p95Ms": 16.7,
+        "maxMs": 17.6,
+        "dropped": 0
+      },
+      "renders": {
+        "base": 9,
+        "detail": 0,
+        "text": 0,
+        "annotations": 0,
+        "cancelled": 0,
+        "failed": 0
+      },
+      "canvasPixels": 29126424,
+      "crossOriginIsolated": true,
+      "devicePixelRatio": 2,
+      "variant": "pdfjs",
+      "run": 2,
+      "idle": {
+        "timerLagP50Ms": 0.8,
+        "timerLagP95Ms": 1.1,
+        "frameIntervalMs": 16.7
+      }
+    },
+    {
+      "file": "synthetic-text-1000.pdf",
+      "engineKind": "pdfjs",
+      "hwa": false,
+      "text": true,
+      "links": true,
+      "speed": 3600,
+      "scrollMode": "vertical",
+      "scale": 2.1,
+      "firstPaintMs": 286.5,
+      "scrollMs": 4015.5,
+      "pagesCrossed": 9,
+      "commitsDuringScroll": 24,
+      "published": {
+        "updates": 24,
+        "windows": 15,
+        "currentPages": 9
+      },
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "settleMs": 0,
+      "lag": {
+        "p95Ms": 2,
+        "maxMs": 15.9,
+        "blockedMs": 92.4
+      },
+      "frames": {
+        "frames": 242,
+        "p95Ms": 16.8,
+        "maxMs": 17.5,
+        "dropped": 0
+      },
+      "renders": {
+        "base": 9,
+        "detail": 0,
+        "text": 0,
+        "annotations": 0,
+        "cancelled": 0,
+        "failed": 0
+      },
+      "canvasPixels": 29126424,
+      "crossOriginIsolated": true,
+      "devicePixelRatio": 2,
+      "variant": "pdfjs, before",
+      "run": 2,
+      "idle": {
+        "timerLagP50Ms": 1,
+        "timerLagP95Ms": 1.1,
+        "frameIntervalMs": 16.7
+      }
+    },
+    {
+      "file": "bill-hr815.pdf",
+      "engineKind": "pdfjs",
+      "hwa": false,
+      "text": true,
+      "links": true,
+      "speed": 900,
+      "scrollMode": "vertical",
+      "scale": 1.7,
+      "firstPaintMs": 252,
+      "scrollMs": 4008.4,
+      "pagesCrossed": 2,
+      "commitsDuringScroll": 4,
+      "published": {
+        "updates": 4,
+        "windows": 2,
+        "currentPages": 2
+      },
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "settleMs": 0,
+      "lag": {
+        "p95Ms": 2.2,
+        "maxMs": 20.5,
+        "blockedMs": 79.9
+      },
+      "frames": {
+        "frames": 241,
+        "p95Ms": 16.8,
+        "maxMs": 17.5,
+        "dropped": 0
+      },
+      "renders": {
+        "base": 0,
+        "detail": 2,
+        "text": 2,
+        "annotations": 2,
+        "cancelled": 0,
+        "failed": 0
+      },
+      "canvasPixels": 47962656,
+      "crossOriginIsolated": true,
+      "devicePixelRatio": 2,
+      "variant": "pdfjs",
+      "run": 0,
+      "idle": {
+        "timerLagP50Ms": 1,
+        "timerLagP95Ms": 1.1,
+        "frameIntervalMs": 16.7
+      }
+    },
+    {
+      "file": "bill-hr815.pdf",
+      "engineKind": "pdfjs",
+      "hwa": false,
+      "text": true,
+      "links": true,
+      "speed": 900,
+      "scrollMode": "vertical",
+      "scale": 1.7,
+      "firstPaintMs": 223.8,
+      "scrollMs": 4007.9,
+      "pagesCrossed": 2,
+      "commitsDuringScroll": 4,
+      "published": {
+        "updates": 4,
+        "windows": 2,
+        "currentPages": 2
+      },
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "settleMs": 0,
+      "lag": {
+        "p95Ms": 2.2,
+        "maxMs": 11,
+        "blockedMs": 60.6
+      },
+      "frames": {
+        "frames": 241,
+        "p95Ms": 16.8,
+        "maxMs": 17.6,
+        "dropped": 0
+      },
+      "renders": {
+        "base": 0,
+        "detail": 2,
+        "text": 2,
+        "annotations": 2,
+        "cancelled": 0,
+        "failed": 0
+      },
+      "canvasPixels": 47962656,
+      "crossOriginIsolated": true,
+      "devicePixelRatio": 2,
+      "variant": "pdfjs, before",
+      "run": 0,
+      "idle": {
+        "timerLagP50Ms": 1,
+        "timerLagP95Ms": 1.1,
+        "frameIntervalMs": 16.7
+      }
+    },
+    {
+      "file": "bill-hr815.pdf",
+      "engineKind": "pdfjs",
+      "hwa": false,
+      "text": true,
+      "links": true,
+      "speed": 900,
+      "scrollMode": "vertical",
+      "scale": 1.7,
+      "firstPaintMs": 229.7,
+      "scrollMs": 4012.3,
+      "pagesCrossed": 2,
+      "commitsDuringScroll": 4,
+      "published": {
+        "updates": 4,
+        "windows": 2,
+        "currentPages": 2
+      },
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "settleMs": 0,
+      "lag": {
+        "p95Ms": 2.5,
+        "maxMs": 16.7,
+        "blockedMs": 71.8
+      },
+      "frames": {
+        "frames": 241,
+        "p95Ms": 16.7,
+        "maxMs": 17.6,
+        "dropped": 0
+      },
+      "renders": {
+        "base": 0,
+        "detail": 2,
+        "text": 2,
+        "annotations": 2,
+        "cancelled": 0,
+        "failed": 0
+      },
+      "canvasPixels": 47962656,
+      "crossOriginIsolated": true,
+      "devicePixelRatio": 2,
+      "variant": "pdfjs",
+      "run": 1,
+      "idle": {
+        "timerLagP50Ms": 1,
+        "timerLagP95Ms": 1.1,
+        "frameIntervalMs": 16.7
+      }
+    },
+    {
+      "file": "bill-hr815.pdf",
+      "engineKind": "pdfjs",
+      "hwa": false,
+      "text": true,
+      "links": true,
+      "speed": 900,
+      "scrollMode": "vertical",
+      "scale": 1.7,
+      "firstPaintMs": 200.7,
+      "scrollMs": 4010.2,
+      "pagesCrossed": 2,
+      "commitsDuringScroll": 4,
+      "published": {
+        "updates": 4,
+        "windows": 2,
+        "currentPages": 2
+      },
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "settleMs": 0,
+      "lag": {
+        "p95Ms": 2.4,
+        "maxMs": 15.6,
+        "blockedMs": 77.3
+      },
+      "frames": {
+        "frames": 241,
+        "p95Ms": 16.9,
+        "maxMs": 17.5,
+        "dropped": 0
+      },
+      "renders": {
+        "base": 0,
+        "detail": 2,
+        "text": 2,
+        "annotations": 2,
+        "cancelled": 0,
+        "failed": 0
+      },
+      "canvasPixels": 47962656,
+      "crossOriginIsolated": true,
+      "devicePixelRatio": 2,
+      "variant": "pdfjs, before",
+      "run": 1,
+      "idle": {
+        "timerLagP50Ms": 1,
+        "timerLagP95Ms": 1.1,
+        "frameIntervalMs": 16.7
+      }
+    },
+    {
+      "file": "bill-hr815.pdf",
+      "engineKind": "pdfjs",
+      "hwa": false,
+      "text": true,
+      "links": true,
+      "speed": 900,
+      "scrollMode": "vertical",
+      "scale": 1.7,
+      "firstPaintMs": 220.6,
+      "scrollMs": 4011.7,
+      "pagesCrossed": 2,
+      "commitsDuringScroll": 4,
+      "published": {
+        "updates": 4,
+        "windows": 2,
+        "currentPages": 2
+      },
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "settleMs": 0,
+      "lag": {
+        "p95Ms": 2.4,
+        "maxMs": 12.4,
+        "blockedMs": 75.7
+      },
+      "frames": {
+        "frames": 241,
+        "p95Ms": 16.7,
+        "maxMs": 17.5,
+        "dropped": 0
+      },
+      "renders": {
+        "base": 0,
+        "detail": 2,
+        "text": 2,
+        "annotations": 2,
+        "cancelled": 0,
+        "failed": 0
+      },
+      "canvasPixels": 47962656,
+      "crossOriginIsolated": true,
+      "devicePixelRatio": 2,
+      "variant": "pdfjs",
+      "run": 2,
+      "idle": {
+        "timerLagP50Ms": 1,
+        "timerLagP95Ms": 1.1,
+        "frameIntervalMs": 16.7
+      }
+    },
+    {
+      "file": "bill-hr815.pdf",
+      "engineKind": "pdfjs",
+      "hwa": false,
+      "text": true,
+      "links": true,
+      "speed": 900,
+      "scrollMode": "vertical",
+      "scale": 1.7,
+      "firstPaintMs": 230.4,
+      "scrollMs": 4029.5,
+      "pagesCrossed": 2,
+      "commitsDuringScroll": 4,
+      "published": {
+        "updates": 4,
+        "windows": 2,
+        "currentPages": 2
+      },
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "settleMs": 0,
+      "lag": {
+        "p95Ms": 2.4,
+        "maxMs": 633,
+        "blockedMs": 741.3
+      },
+      "frames": {
+        "frames": 197,
+        "p95Ms": 17,
+        "maxMs": 433.3,
+        "dropped": 5
+      },
+      "renders": {
+        "base": 0,
+        "detail": 1,
+        "text": 1,
+        "annotations": 1,
+        "cancelled": 0,
+        "failed": 0
+      },
+      "canvasPixels": 47962656,
+      "crossOriginIsolated": true,
+      "devicePixelRatio": 2,
+      "variant": "pdfjs, before",
+      "run": 2,
+      "idle": {
+        "timerLagP50Ms": 1,
+        "timerLagP95Ms": 1.1,
+        "frameIntervalMs": 16.7
+      }
+    },
+    {
+      "file": "bill-hr815.pdf",
+      "engineKind": "pdfjs",
+      "hwa": false,
+      "text": true,
+      "links": true,
+      "speed": 3600,
+      "scrollMode": "vertical",
+      "scale": 1.7,
+      "firstPaintMs": 450.5,
+      "scrollMs": 4013.4,
+      "pagesCrossed": 7,
+      "commitsDuringScroll": 20,
+      "published": {
+        "updates": 20,
+        "windows": 13,
+        "currentPages": 7
+      },
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "settleMs": 0,
+      "lag": {
+        "p95Ms": 3.4,
+        "maxMs": 75.4,
+        "blockedMs": 239.6
+      },
+      "frames": {
+        "frames": 229,
+        "p95Ms": 17.2,
+        "maxMs": 83.2,
+        "dropped": 8
+      },
+      "renders": {
+        "base": 8,
+        "detail": 0,
+        "text": 0,
+        "annotations": 0,
+        "cancelled": 0,
+        "failed": 0
+      },
+      "canvasPixels": 33173256,
+      "crossOriginIsolated": true,
+      "devicePixelRatio": 2,
+      "variant": "pdfjs",
+      "run": 0,
+      "idle": {
+        "timerLagP50Ms": 1,
+        "timerLagP95Ms": 9.4,
+        "frameIntervalMs": 16.7
+      }
+    },
+    {
+      "file": "bill-hr815.pdf",
+      "engineKind": "pdfjs",
+      "hwa": false,
+      "text": true,
+      "links": true,
+      "speed": 3600,
+      "scrollMode": "vertical",
+      "scale": 1.7,
+      "firstPaintMs": 239.7,
+      "scrollMs": 4011.9,
+      "pagesCrossed": 7,
+      "commitsDuringScroll": 20,
+      "published": {
+        "updates": 20,
+        "windows": 13,
+        "currentPages": 7
+      },
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "settleMs": 0,
+      "lag": {
+        "p95Ms": 2,
+        "maxMs": 20.1,
+        "blockedMs": 113.4
+      },
+      "frames": {
+        "frames": 241,
+        "p95Ms": 16.9,
+        "maxMs": 17.2,
+        "dropped": 0
+      },
+      "renders": {
+        "base": 8,
+        "detail": 0,
+        "text": 0,
+        "annotations": 0,
+        "cancelled": 0,
+        "failed": 0
+      },
+      "canvasPixels": 33173256,
+      "crossOriginIsolated": true,
+      "devicePixelRatio": 2,
+      "variant": "pdfjs, before",
+      "run": 0,
+      "idle": {
+        "timerLagP50Ms": 1,
+        "timerLagP95Ms": 1.4,
+        "frameIntervalMs": 16.7
+      }
+    },
+    {
+      "file": "bill-hr815.pdf",
+      "engineKind": "pdfjs",
+      "hwa": false,
+      "text": true,
+      "links": true,
+      "speed": 3600,
+      "scrollMode": "vertical",
+      "scale": 1.7,
+      "firstPaintMs": 206.4,
+      "scrollMs": 4011.6,
+      "pagesCrossed": 7,
+      "commitsDuringScroll": 20,
+      "published": {
+        "updates": 20,
+        "windows": 13,
+        "currentPages": 7
+      },
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "settleMs": 0,
+      "lag": {
+        "p95Ms": 2.1,
+        "maxMs": 20.7,
+        "blockedMs": 99.9
+      },
+      "frames": {
+        "frames": 241,
+        "p95Ms": 16.7,
+        "maxMs": 17.4,
+        "dropped": 0
+      },
+      "renders": {
+        "base": 8,
+        "detail": 0,
+        "text": 0,
+        "annotations": 0,
+        "cancelled": 0,
+        "failed": 0
+      },
+      "canvasPixels": 33173256,
+      "crossOriginIsolated": true,
+      "devicePixelRatio": 2,
+      "variant": "pdfjs",
+      "run": 1,
+      "idle": {
+        "timerLagP50Ms": 1,
+        "timerLagP95Ms": 1.4,
+        "frameIntervalMs": 16.7
+      }
+    },
+    {
+      "file": "bill-hr815.pdf",
+      "engineKind": "pdfjs",
+      "hwa": false,
+      "text": true,
+      "links": true,
+      "speed": 3600,
+      "scrollMode": "vertical",
+      "scale": 1.7,
+      "firstPaintMs": 295.9,
+      "scrollMs": 4003.5,
+      "pagesCrossed": 7,
+      "commitsDuringScroll": 20,
+      "published": {
+        "updates": 20,
+        "windows": 13,
+        "currentPages": 7
+      },
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "settleMs": 0,
+      "lag": {
+        "p95Ms": 2.3,
+        "maxMs": 17.8,
+        "blockedMs": 103.6
+      },
+      "frames": {
+        "frames": 241,
+        "p95Ms": 16.7,
+        "maxMs": 17.5,
+        "dropped": 0
+      },
+      "renders": {
+        "base": 7,
+        "detail": 0,
+        "text": 0,
+        "annotations": 0,
+        "cancelled": 0,
+        "failed": 0
+      },
+      "canvasPixels": 33173256,
+      "crossOriginIsolated": true,
+      "devicePixelRatio": 2,
+      "variant": "pdfjs, before",
+      "run": 1,
+      "idle": {
+        "timerLagP50Ms": 1,
+        "timerLagP95Ms": 1.5,
+        "frameIntervalMs": 16.7
+      }
+    },
+    {
+      "file": "bill-hr815.pdf",
+      "engineKind": "pdfjs",
+      "hwa": false,
+      "text": true,
+      "links": true,
+      "speed": 3600,
+      "scrollMode": "vertical",
+      "scale": 1.7,
+      "firstPaintMs": 218.8,
+      "scrollMs": 4015.3,
+      "pagesCrossed": 7,
+      "commitsDuringScroll": 20,
+      "published": {
+        "updates": 20,
+        "windows": 13,
+        "currentPages": 7
+      },
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "settleMs": 0,
+      "lag": {
+        "p95Ms": 2.1,
+        "maxMs": 15,
+        "blockedMs": 102.7
+      },
+      "frames": {
+        "frames": 241,
+        "p95Ms": 16.8,
+        "maxMs": 17.6,
+        "dropped": 0
+      },
+      "renders": {
+        "base": 8,
+        "detail": 0,
+        "text": 0,
+        "annotations": 0,
+        "cancelled": 0,
+        "failed": 0
+      },
+      "canvasPixels": 33173256,
+      "crossOriginIsolated": true,
+      "devicePixelRatio": 2,
+      "variant": "pdfjs",
+      "run": 2,
+      "idle": {
+        "timerLagP50Ms": 1,
+        "timerLagP95Ms": 2,
+        "frameIntervalMs": 16.7
+      }
+    },
+    {
+      "file": "bill-hr815.pdf",
+      "engineKind": "pdfjs",
+      "hwa": false,
+      "text": true,
+      "links": true,
+      "speed": 3600,
+      "scrollMode": "vertical",
+      "scale": 1.7,
+      "firstPaintMs": 235.2,
+      "scrollMs": 4012.2,
+      "pagesCrossed": 7,
+      "commitsDuringScroll": 20,
+      "published": {
+        "updates": 20,
+        "windows": 13,
+        "currentPages": 7
+      },
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "settleMs": 0,
+      "lag": {
+        "p95Ms": 2.4,
+        "maxMs": 12,
+        "blockedMs": 87.9
+      },
+      "frames": {
+        "frames": 241,
+        "p95Ms": 16.7,
+        "maxMs": 17.5,
+        "dropped": 0
+      },
+      "renders": {
+        "base": 8,
+        "detail": 0,
+        "text": 0,
+        "annotations": 0,
+        "cancelled": 0,
+        "failed": 0
+      },
+      "canvasPixels": 33173256,
+      "crossOriginIsolated": true,
+      "devicePixelRatio": 2,
+      "variant": "pdfjs, before",
+      "run": 2,
+      "idle": {
+        "timerLagP50Ms": 0.9,
+        "timerLagP95Ms": 1.2,
+        "frameIntervalMs": 16.7
+      }
+    }
+  ]
+}

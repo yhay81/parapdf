@@ -88,7 +88,7 @@ viewer knows none of them by name.
 |---|---|
 | `extend(extension)` | Registers a `ViewerExtension` and returns the function that removes it. Its optional hooks hear the document about to be laid out (`prepare`) or ready (`ready`, with a signal that aborts when the document closes or the viewport detaches), a viewport attaching (`viewport`) or detaching (`detaching`), the document closing (`closed`), a page's text layer built or removed (`textLayer`), a link or outline jump about to happen (`jumping`), a named action the viewer does not handle (`namedAction`), and layers shown or hidden (`layersChanged`). Hooks for what already happened are called at once. |
 | `defer(loading)` | Makes the next document's first layout wait for `loading`, a feature loading that changes how pages are drawn. |
-| `renderer` | The renderer of the open document's pages, once it has loaded. |
+| `renderer` | The renderer of the open document's pages, once it has loaded. Its per-page resolution diagnostic is `pageSharpness(index, area, needed)`, where `area` is in PDF points and `needed` is device pixels per PDF point. |
 | `textLayers` | The text layers of the mounted pages that have one, by page. |
 | `setFormLayers(enabled)` | Shows form fields as HTML in the annotation layers instead of drawing them; pages already drawn are drawn again. |
 | `setAnnotationEditor(editor)` | Gives the pages an annotation editor's layers, or, with null, takes them down. |
