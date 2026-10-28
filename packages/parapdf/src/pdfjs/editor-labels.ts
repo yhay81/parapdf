@@ -1,3 +1,5 @@
+"use client";
+
 import type { AnnotationLabels } from "./editor-types.ts";
 
 /*
