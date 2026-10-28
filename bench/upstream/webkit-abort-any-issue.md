@@ -3,8 +3,9 @@
 Issue #1, reduced to a standalone case. In WebKit, a signal that
 `AbortSignal.any()` returned and that nothing references can be collected
 while its sources can still abort; listeners added with it then stay after
-the sources abort. The report for WebKit is at the end; it has not been
-filed. No existing report on bugs.webkit.org covers it (searched
+the sources abort. Filed as WebKit bug 329251
+(https://bugs.webkit.org/show_bug.cgi?id=329251), 2026-10-28, with the
+report at the end and `abort-any-gc.html` attached. No existing report on bugs.webkit.org covers it (searched
 2026-10-28: summaries with "AbortSignal", "abort signal", or
 "AbortController"; bug 298499 is the nearest).
 
@@ -107,9 +108,9 @@ shows is enough; `check:annotations` in WebKit fails without it. Remove the
 workaround once a WebKit release no longer reproduces: open
 `abort-any-gc.html` in it, or rerun the script with `BROWSER=webkit`, and
 see 0 listeners in every line, then run `check:annotations` in WebKit
-without the workaround.
+without the workaround, or follow bug 329251.
 
-## Report for WebKit (not filed)
+## Report for WebKit (filed as bug 329251)
 
 Product WebKit, component DOM, version Safari 27, hardware Mac, macOS
 27.0.1. Attachment: `bench/upstream/abort-any-gc.html`.
