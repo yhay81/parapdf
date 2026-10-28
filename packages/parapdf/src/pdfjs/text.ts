@@ -113,6 +113,28 @@ function inLayerLanguage(source: ReadableStream, container: HTMLElement): Readab
   );
 }
 
+/**
+ * Takes `container` out of the document while pdf.js fills it; the returned
+ * function puts it back where it was, unless the element before it left too,
+ * as when the page unmounted meanwhile. pdf.js appends each run and then
+ * measures the next with `measureText`, which in Firefox and WebKit first
+ * brings the whole document's style up to date: inside the scroller, a size
+ * query container, 200 runs cost Firefox 22 ms that way and 4 ms when they
+ * are measured out of the document and styled at once as the layer goes back.
+ */
+export function outOfDocument(container: HTMLElement): () => void {
+  const parent = container.parentNode;
+  const previous = container.previousSibling;
+  if (!parent) return () => {};
+  container.remove();
+  return () => {
+    if (container.parentNode) return;
+    if (previous) {
+      if (previous.parentNode === parent) previous.after(container);
+    } else if (parent.isConnected) parent.prepend(container);
+  };
+}
+
 /** Build a selectable, searchable, screen-reader-visible text layer for `page` once it has loaded. */
 export function buildTextLayer(
   { pdfjs }: LoadedPdfjs,
@@ -135,7 +157,12 @@ export function buildTextLayer(
       viewport,
     });
     layer = rendered;
-    await rendered.render();
+    const restore = outOfDocument(container);
+    try {
+      await rendered.render();
+    } finally {
+      restore();
+    }
     if (tree && structure) {
       // An untagged page has no tree; a broken one leaves the text as it is.
       const dom = await tree.render().catch((error: unknown) => {
