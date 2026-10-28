@@ -28,8 +28,9 @@ import {
   type Viewer,
 } from "../view/viewer.ts";
 import { PageContext, useSelected, useSession } from "./context.ts";
-import { setFeatureOptions, useViewer } from "./features.ts";
+import { setFeatureOptions } from "./features.ts";
 import { VIEWER_CSS } from "./styles.ts";
+import { useViewer } from "./viewer.ts";
 
 /** A zoom: CSS pixels per PDF point, or a fit that keeps fitting as the viewport resizes. */
 export type Zoom = number | "fit-width" | "fit-page";

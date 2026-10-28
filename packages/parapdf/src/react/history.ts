@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { historyOf } from "../features/history.ts";
 import type { Viewer } from "../view/viewer.ts";
-import { useStore } from "./features.ts";
+import { useStore } from "./context.ts";
 
 export interface HistoryControls {
   canGoBack: boolean;
