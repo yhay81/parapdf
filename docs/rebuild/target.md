@@ -227,7 +227,8 @@ loads it when set; any other feature is included by importing its hook.
 Features: search (index, matches, highlights), history (back, forward),
 view state (get and set), initial view (`/OpenAction`, `/PageLayout`,
 `/PageMode`), permissions, forms (fields, values, changes, scripts, saving),
-annotations (editing, import, export), print, download, thumbnails, layers
+annotations (editing, comments, images' alternative text, import, export),
+print, download, thumbnails, layers
 (optional content), attachments, selection (in PDF points), and text
 (`getText()`).
 

@@ -7,8 +7,6 @@ description: What ParaPDF does not do yet, and what has not been verified.
 
 - Editing the annotations a PDF already holds other than text, drawings,
   highlights, and images: those stay as they are drawn.
-- Comments on created annotations, and pdf.js's alt text dialog: images take
-  their alternative text from `addImage()`.
 - XFA forms, and the `WillSave`, `DidSave`, `WillPrint`, and `DidPrint`
   scripts of AcroForms.
 - Text layers for pages outside the mounted window, so the browser's own find

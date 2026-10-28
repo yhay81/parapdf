@@ -633,14 +633,24 @@ function AnnotationTools({ viewer }: { viewer: Viewer }) {
 
 - `tool`, `state`, and `styles`: the tool chosen; whether there is something
   to undo or redo (`canUndo`, `canRedo`), whether annotations are selected
-  (`hasSelection`), and whether there are any (`isEmpty`); and each tool's
-  style, or the selected annotation's. `state` and `styles` are null until
-  editing starts.
+  (`hasSelection`), whether there are any (`isEmpty`), and the annotation
+  selected when one alone is (`selected`: its `id`, `pageIndex`, `type`,
+  `comment`, and, for an image, `altText`); and each tool's style, or the
+  selected annotation's. `state` and `styles` are null until editing
+  starts.
 - `setStyle(tool, style)` restyles the selected annotations, or, with none
   selected, the next ones `tool` creates: `color` for each tool,
   `thickness` for `"ink"` and freehand highlights, `opacity` for `"ink"`,
   and `fontSize` for `"freetext"`, in PDF points.
 - `undo()`, `redo()`, `deleteSelected()`, and `selectAll()`.
+- `setComment(comment)` sets the selected annotation's comment, or with
+  null or `""` removes it, and `setAltText({ text, decorative })` the
+  selected image's alternative text, each as one undo step. They return
+  false unless one annotation alone is selected, an image for
+  `setAltText()`; text annotations take no comment. The PDF saves a comment
+  as the annotation's popup note, and `export()` and `import()` keep both.
+  Showing and editing them is the application's: ParaPDF shows no comment
+  or alt text dialog.
 - `addImage(image, { pageIndex, altText })` adds an image, a `Blob` or a
   URL, to the current page or `pageIndex`, in the middle of its visible
   part, and selects it. `altText` describes it to assistive technology, in
@@ -1052,8 +1062,6 @@ with `PdfThumbnails`'s.
   are drawn.
 - The current page is reported, never controlled: `onPageChange` reports it
   and `viewer.goToPage()` sets it.
-- Comments on created annotations and pdf.js's alt text dialog are not
-  shown; images take their alternative text from `addImage()`.
 - A viewer shows the annotations it created, not those other viewers of the
   document create, though saving and printing include them all.
 - Chromium and Firefox give pdf.js the PDF's preloaded download. Whether

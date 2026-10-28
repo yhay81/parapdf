@@ -61,6 +61,13 @@ interface Editing {
         canRedo: boolean;
         hasSelection: boolean;
         isEmpty: boolean;
+        selected: {
+          id: string;
+          pageIndex: number;
+          type: string;
+          comment: string | null;
+          altText: { text: string; decorative: boolean } | null;
+        } | null;
       } | null;
       styles: { ink: { color: string; thickness: number } } | null;
     };
@@ -69,6 +76,9 @@ interface Editing {
   setStyle(tool: string, style: object): void;
   undo(): void;
   redo(): void;
+  selectAll(): void;
+  setComment(comment: string | null): boolean;
+  setAltText(altText: { text: string; decorative: boolean }): boolean;
   addImage(image: Blob | string, options?: object): Promise<boolean>;
   addSignature(signature: object, options?: object): Promise<boolean>;
   export(): Saved[];
@@ -107,7 +117,9 @@ declare global {
     pdfjsLib?: {
       getDocument(source: { data: Uint8Array }): {
         promise: Promise<{
-          getPage(n: number): Promise<{ getAnnotations(): Promise<{ subtype: string }[]> }>;
+          getPage(n: number): Promise<{
+            getAnnotations(): Promise<{ subtype: string; contentsObj?: { str: string } }[]>;
+          }>;
         }>;
       };
     };
@@ -412,6 +424,99 @@ try {
   await page.evaluate(() => (window as unknown as Demo).__annotations?.redo());
   await page.evaluate(() => (window as unknown as Demo).__annotations?.setTool("none"));
 
+  // --- Comments and alternative text ---
+  await page.evaluate(() => (window as unknown as Demo).__annotations?.setTool("stamp"));
+  // Focused, as the keyboard reaches it: the signature, centered too, covers it.
+  await page.locator('section[data-page="1"] .stampEditor').focus();
+  let selected = (await viewerState(page))?.annotationState?.selected;
+  check(
+    "selecting an image publishes it with its alternative text",
+    selected?.type === "stamp" &&
+      selected.pageIndex === 0 &&
+      selected.comment === null &&
+      selected.altText?.text === "Blue box" &&
+      selected.altText.decorative === false,
+    JSON.stringify(selected),
+  );
+  const changed = await page.evaluate(() => {
+    const editing = (window as unknown as Demo).__annotations;
+    return [
+      editing?.setAltText({ text: "Navy box", decorative: false }),
+      editing?.setComment("Check the color"),
+    ];
+  });
+  selected = (await viewerState(page))?.annotationState?.selected;
+  check(
+    "the selected image takes a new alternative text and a comment",
+    changed.every(Boolean) &&
+      selected?.altText?.text === "Navy box" &&
+      selected.comment === "Check the color",
+    JSON.stringify(selected),
+  );
+  await page.evaluate(() => (window as unknown as Demo).__annotations?.undo());
+  const undone = (await viewerState(page))?.annotationState?.selected;
+  await page.evaluate(() => (window as unknown as Demo).__annotations?.undo());
+  const undoneTwice = (await viewerState(page))?.annotationState?.selected;
+  await page.evaluate(() => {
+    const editing = (window as unknown as Demo).__annotations;
+    editing?.redo();
+    editing?.redo();
+  });
+  selected = (await viewerState(page))?.annotationState?.selected;
+  check(
+    "undo and redo take a comment and an alternative text back and forth",
+    undone?.comment === null &&
+      undone.altText?.text === "Navy box" &&
+      undoneTwice?.altText?.text === "Blue box" &&
+      selected?.comment === "Check the color" &&
+      selected.altText?.text === "Navy box",
+    JSON.stringify([undone, undoneTwice, selected]),
+  );
+  // The demo's form, outside the pages: typing there keeps the image selected.
+  const form = page.getByRole("form", { name: "Selected annotation" });
+  await form.getByLabel("Comment").fill("Draft");
+  await form.getByRole("button", { name: "Cancel" }).click();
+  const cancelled = await form.getByLabel("Comment").inputValue();
+  await form.getByLabel("Comment").fill("Check the color, please");
+  await form.getByRole("button", { name: "Apply" }).click();
+  selected = (await viewerState(page))?.annotationState?.selected;
+  check(
+    "an application's form edits the comment, and cancels, with the image still selected",
+    cancelled === "Check the color" &&
+      selected?.type === "stamp" &&
+      selected.comment === "Check the color, please",
+    JSON.stringify([cancelled, selected]),
+  );
+  await page.evaluate(() => (window as unknown as Demo).__annotations?.undo());
+  const stamp = (await exported(page)).find((annotation) => annotation.type === "stamp");
+  const stampData = stamp?.data as
+    | { popup?: { contents?: string }; accessibilityData?: { altText?: string } }
+    | undefined;
+  check(
+    "export keeps the comment and the alternative text",
+    stampData?.popup?.contents === "Check the color" &&
+      stampData.accessibilityData?.altText === "Navy box",
+    JSON.stringify([stampData?.popup, stampData?.accessibilityData]),
+  );
+  const several = await page.evaluate(() => {
+    const editing = (window as unknown as Demo).__annotations;
+    editing?.selectAll();
+    return {
+      selected: editing?.store.get().state?.selected ?? null,
+      comment: editing?.setComment("Nothing"),
+    };
+  });
+  check(
+    "with several selected, none is described and none takes a comment",
+    several.selected === null && several.comment === false,
+    JSON.stringify(several),
+  );
+  await page.evaluate(() => (window as unknown as Demo).__annotations?.setTool("none"));
+  check(
+    "nothing is selected once the tool goes back to none",
+    (await viewerState(page))?.annotationState?.selected === null,
+  );
+
   // --- Zoom and rotation ---
   await page.evaluate(() => (window as unknown as Demo).__viewer?.setScale(2));
   await page.waitForTimeout(300);
@@ -446,11 +551,15 @@ try {
     if (!bytes || !window.pdfjsLib) return [];
     const saved = await window.pdfjsLib.getDocument({ data: bytes }).promise;
     const first = await saved.getPage(1);
-    return (await first.getAnnotations()).map((annotation) => annotation.subtype);
+    return (await first.getAnnotations()).map((annotation) =>
+      annotation.subtype === "Stamp" ? `Stamp:${annotation.contentsObj?.str}` : annotation.subtype,
+    );
   });
   check(
     "save() writes them into the PDF",
-    ["FreeText", "Highlight", "Ink", "Stamp"].every((subtype) => subtypes.includes(subtype)),
+    ["FreeText", "Highlight", "Ink", "Stamp:Check the color"].every((subtype) =>
+      subtypes.includes(subtype),
+    ),
     subtypes.filter((subtype) => subtype !== "Link").join(","),
   );
   const saved = await exported(page);
@@ -476,6 +585,15 @@ try {
       "imported annotations are where they were exported",
       samePlaces(again, saved),
       `${rects(again)} vs ${rects(saved)}`,
+    );
+    const importedStamp = again.find((annotation) => annotation.type === "stamp")?.data as
+      | { popup?: { contents?: string }; accessibilityData?: { altText?: string } }
+      | undefined;
+    check(
+      "imported annotations keep their comment and alternative text",
+      importedStamp?.popup?.contents === "Check the color" &&
+        importedStamp.accessibilityData?.altText === "Navy box",
+      JSON.stringify([importedStamp?.popup, importedStamp?.accessibilityData]),
     );
     check(
       "the page shows them",
@@ -1122,6 +1240,33 @@ try {
       "a double click with no tool chosen edits that annotation",
       chosen.annotationTool === "freetext",
       chosen.annotationTool,
+    );
+    // A comment on a drawing of the file changes it: saved over it.
+    await again.page.evaluate(() => (window as unknown as Demo).__annotations?.setTool("ink"));
+    await again.page.waitForTimeout(600);
+    await again.page.locator('section[data-page="1"] .inkEditor').focus();
+    const fileComment = await again.page.evaluate(async () => {
+      const demo = window as unknown as Demo;
+      const editing = demo.__annotations;
+      const selected = editing?.store.get().state?.selected ?? null;
+      const set = editing?.setComment("From the reader");
+      const ink = editing?.export().find((annotation) => annotation.type === "ink");
+      const bytes = await demo.__parapdf?.save(demo.__viewer);
+      if (!bytes || !window.pdfjsLib) return { selected, set, ink, saved: null };
+      const doc = await window.pdfjsLib.getDocument({ data: bytes }).promise;
+      const found = await (await doc.getPage(1)).getAnnotations();
+      const saved = found.find((annotation) => annotation.subtype === "Ink")?.contentsObj?.str;
+      return { selected, set, ink, saved };
+    });
+    check(
+      "a comment on an annotation of the file exports and saves with it",
+      fileComment.selected?.type === "ink" &&
+        fileComment.set === true &&
+        fileComment.ink?.data.annotationElementId !== undefined &&
+        (fileComment.ink?.data as { popup?: { contents?: string } } | undefined)?.popup
+          ?.contents === "From the reader" &&
+        fileComment.saved === "From the reader",
+      JSON.stringify({ ...fileComment, ink: fileComment.ink?.data.popup }),
     );
     check(
       "no errors while editing the file's annotations",
