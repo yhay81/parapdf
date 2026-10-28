@@ -11,7 +11,7 @@
 - Canvas memory: the pixels of the canvases in the page and of those kept for pages that unmounted, at 4 bytes each, once the pages settled after scrolling.
 - Versions: pdfjs-dist 6.4.299.
 - React commits: commits of the viewer's React tree while scrolling, and per second. Store updates: how often the store published while scrolling, and how often that moved the mounted window and the current page, the changes that should make React commit.
-- Reproduce: `pnpm --filter @parapdf/prototype build && BROWSER=firefox VARIANTS=pdfjs-hwa FILES=bill-hr815.pdf,synthetic-text-1000.pdf SPEEDS=900 RUNS=7 OUTPUT=detach-firefox pnpm --filter @parapdf/prototype bench`
+- Reproduction: the experimental source and builds were not retained. Recreate the variant, build it and the baseline separately, and supply the baseline build as `BEFORE`; see decision 0018 for the job settings.
 
 ## bill-hr815.pdf, 900 CSS px per second
 

@@ -27,7 +27,6 @@ for the direction of the rebuild gets a new record, numbered next.
 | [0016](0016-form-scripts-after-first-paint.md) | Form scripts start after the first paint | adopted |
 | [0017](0017-measured-against-react-pdf.md) | ParaPDF is measured against react-pdf | adopted |
 | [0018](0018-keep-the-size-query-container.md) | The scroller stays a size query container | rejected |
-||||||| 943b591
 
 ## Template
 

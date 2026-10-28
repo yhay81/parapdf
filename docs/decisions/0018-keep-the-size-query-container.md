@@ -7,12 +7,14 @@
 
 In Firefox at reading speed (900 CSS px/s), ParaPDF blocks the main thread
 longer than react-pdf with react-window: 39 against 24 ms on bill-hr815.pdf
-(`scroll-bench.ts`, 5 runs, AC power, load average 3;
+(`scroll-bench.ts`, 5 runs, AC power, load average 5.1 at the start and
+4.6 at the end;
 `examples/prototype/results/firefox-layers-vs-react-pdf.md`, measured with
-the react-pdf page of decision 0017). Turning layers off locates the difference: without text layers both block 18 ms, and the text
-layer adds 21 ms to ParaPDF against 6 ms to react-pdf.
+the react-pdf page of decision 0017). Turning text layers off reduces the
+median blocked time to 18 ms in both; the difference between the medians
+with and without text is 21 ms for ParaPDF and 6 ms for react-pdf.
 
-A Gecko profile of ParaPDF's page shows why. pdf.js's `TextLayer` appends
+A Gecko profile of ParaPDF's page points to one contributor. pdf.js's `TextLayer` appends
 each run to the page and then measures the next with `measureText`, which
 first brings the document's style up to date. ParaPDF's scroller is a size
 query container (`containerType: "size"`), so pages can be centered with
@@ -36,7 +38,9 @@ Query Styles Update" over it.
 
 Both against `main`, the same demo otherwise. With idea 1, unit tests and
 the scroll, rotation, options, viewers, pinch, links, and text checks
-passed in Chromium.
+passed in Chromium. Neither idea's source nor its builds are kept;
+reproducing a comparison means recreating the idea and building it and
+`main` separately.
 
 Gecko profiles of the content process's main thread, Firefox 157 in
 Playwright with `MOZ_PROFILER_STARTUP` (1 ms interval, CPU time per
@@ -75,8 +79,9 @@ idea 2: bill-hr815.pdf 59 → 41 ms; synthetic-text-1000.pdf 33 → 63 ms,
 whose runs spread from 23 to 285 ms.
 
 Both gain on bill-hr815.pdf at reading speed, where the comparison with
-react-pdf started, and lose or tie elsewhere. First paint did not change
-beyond the noise.
+react-pdf started, and lose or tie elsewhere. First-paint medians differed
+by up to 30 ms (idea 1, WebKit, bill-hr815.pdf at 900 px/s); these runs do
+not establish whether that difference repeats.
 
 ## Decision
 
