@@ -11,8 +11,9 @@ is not covered here.
   macOS with its Japanese voice (the announcements below keep its words:
   「領域」 region, 「リンク」 link, 「ボタン」 button, 「チェックボックス」
   checkbox, 「終わり」 end of).
-- The demo built from `main` at 8f2ffb7 (`pnpm --filter @parapdf/prototype
-  build`, served by `vite preview`), with `engine=pdfjs` (pdfjs-dist
+- The demo built from `main` at 8f2ffb7, and again with the fixes at the
+  end of this file (`pnpm --filter @parapdf/prototype build`, served by
+  `vite preview`), with `engine=pdfjs` (pdfjs-dist
   6.4.299), the demo's English labels, and its default options.
 - Safari was driven through safaridriver (WebDriver): it loaded the pages,
   moved the keyboard focus, and pressed keys such as Tab, Enter, Space,
@@ -34,6 +35,10 @@ is not covered here.
   took its cursor, and those steps were repeated with Safari in front.
 
 ## Results
+
+The table is the run on 8f2ffb7; the five failures and partial passes in
+the viewer were fixed afterwards, and "After the fixes" below is the
+same steps repeated.
 
 | Area | Document | Result |
 | --- | --- | --- |
@@ -220,9 +225,39 @@ Restricted page 1
 This text may not be copied.
 ```
 
+## After the fixes
+
+The viewer now moves the focus to the page shown (`tabindex="-1"` pages,
+out of the tab order), names a comment's icon by the comment, and puts a
+field's tooltip on its control. Repeated in Safari with VoiceOver:
+
+- `bill-hr815.pdf`, focus on the viewport, `goToPage(9)`: the focus moved
+  to page 10 and VoiceOver announced `PDF document 書類 Page 10 of 110 領域`;
+  VO-Right Arrow went on with `H. R. 815—10`, `(h)`, `CONSULTATION.—Not`.
+  End did the same with the page it showed (`Page 54 of 110`).
+- `usrguide.pdf`, VO-Space on `リンク 1 Introduction` on page 1: the focus
+  moved to page 2, the link's destination, announced as `Page 2 of 27 領域`,
+  and reading went on from that page's top.
+- `usrguide.pdf`, focus on the external link on page 26, then
+  `goToPage(0)`: page 26 unmounted, and the focus went to page 1 instead of
+  `body` (`Page 1 of 27 領域`).
+- `synthetic-features.pdf`, which now gives its fields tooltips:
+
+  ```text
+  A comment on the sampler クリック可能 イメージ
+  Your name テキストを編集 Page 2 of 6 領域
+  I agree チェックされていない チェックボックス
+  Size 下位項目が折りたたまれました ポップアップボタン
+  ```
+
+  The comment's icon is named by its text, and each field by its tooltip,
+  before its role; no field's region is named any more.
+
+`check:text`, `check:links`, and `check:document` hold these.
+
 ## Follow-ups
 
-Package behavior:
+Fixed in the viewer since the run above (see "After the fixes"):
 
 1. Where reading starts after the view moves: VoiceOver enters the document
    at its first mounted page, not at the page shown, after Page Down, Home,
@@ -234,7 +269,7 @@ Package behavior:
    without `alt`).
 5. A field's tooltip names its region, not the control (pdf.js's
    `container.title`); pdf.js's viewer does the same, so this may belong
-   upstream. The synthetic corpus has no field with a `/TU` to check it.
+   upstream.
 
 Application-owned, for the guides: announce page changes (an `aria-live`
 region for the current page, as the search guide does for results).

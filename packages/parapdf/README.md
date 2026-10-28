@@ -1078,9 +1078,8 @@ with `PdfThumbnails`'s.
   Firefox; 0.4 was also tried by hand in Safari in the iPadOS simulator.
   Safari on macOS and real iOS and iPadOS devices are not verified yet.
 - Of the screen readers, only VoiceOver in Safari on macOS has been tried.
-  It reads the pages, links, and forms, but after the view moves it starts
-  at the first mounted page rather than the page shown, and focus is lost
-  when the page holding it unmounts. NVDA has not been tried.
+  It reads the pages, links, and forms, and reads on from the page shown;
+  links are read after their page's text. NVDA has not been tried.
 - Whether iOS Safari counts the canvases pages keep when they unmount
   (`maxKeptPixels`) toward its canvas memory cap is not verified; it needs a
   device.

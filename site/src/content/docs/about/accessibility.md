@@ -36,15 +36,22 @@ The functional checks verify what the page exposes. VoiceOver in Safari on
 macOS has been tried with the demo
 ([results](https://github.com/yhay81/parapdf/blob/main/examples/prototype/results/voiceover-safari-macos.md)):
 it reads the text in order, the tagged lists, links, form fields, the
-thumbnails, and continues into pages as they mount. Where it falls short:
+thumbnails, and continues into pages as they mount. Pages are focusable
+(`tabindex="-1"`, out of the tab order), and the focus follows the page
+shown, so reading goes on from it:
 
-- After the view moves (keys, thumbnails, links), VoiceOver starts reading
-  at the first mounted page, not at the page shown, and following a link
-  leaves the focus on the link.
-- Focus falls back to the page's body when the page holding it unmounts.
-- Links are read after their page's text, and a field's tooltip names the
-  region around the field rather than the field.
-- A comment's icon is announced by its file name.
+- While the focus is on the viewport or a page, it moves to the current
+  page when that changes, and VoiceOver announces the page ("Page 10 of
+  110").
+- Following a link moves the focus to the page the link goes to.
+- When the page holding the focus unmounts, the focus moves to the current
+  page rather than the body.
+- A comment's icon is named by the comment, and a field by its tooltip
+  (`/TU`).
+
+Where it falls short: links are read after their page's text, and reading
+after a link starts at the top of the page it goes to, not at the exact
+destination.
 
 NVDA has not been tried yet
 ([#32](https://github.com/yhay81/parapdf/issues/32)).
