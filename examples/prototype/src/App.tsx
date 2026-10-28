@@ -70,6 +70,8 @@ const settings = {
   password: params.get("password"),
   /** Form fields the reader can fill in. */
   forms: params.get("forms") === "1",
+  /** The document's scripts run in its form fields. */
+  formScripts: params.get("scripts") === "1",
   /** Highlights, text, drawings, images, and signatures the reader creates. */
   annotations: params.get("annotations") === "1",
   /** "0" fails encrypted documents instead of asking for their password. */
@@ -200,6 +202,7 @@ const viewerProps: PdfViewerProps = {
   annotationLayer: settings.links,
   externalLinks: settings.externalLinks,
   forms: settings.forms,
+  formScripts: settings.formScripts,
   annotationEditing: settings.annotations,
   // With the document's initial view, only the arrangement asked for wins over it.
   ...(settings.initialView === "options" || params.has("spread")

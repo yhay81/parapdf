@@ -60,6 +60,7 @@ it was instead.
 | `textLayer` | `true` | Selectable, screen-reader-visible text. Search works without it but paints matches only on text layers. |
 | `annotationLayer` | `true` | Focusable links, comment popups, and, with `forms`, form fields. |
 | `forms` | `false` | Form fields as HTML the reader fills in, whose values `save()` writes into the document; needs `annotationLayer` (see [Forms](/guides/forms/)). Its code loads only when set. |
+| `formScripts` | `false` | With `forms`, the document's scripts run in its fields: calculations, validation, formatting, and actions (see [Form scripts](/guides/forms/#form-scripts)). pdf.js's sandbox loads only for a document with scripts. |
 | `annotationEditing` | `false` | Highlights, text, drawings, images, and signatures the reader creates (see [Annotations](/guides/annotations/)). Its code and styles load only when set. |
 | `annotationLabels` | English | The accessible names of the annotation editor's controls, such as `{ removeInk: "線を削除" }`. |
 | `pageColors` | none | `{ background, foreground }` to draw pages in two colors, for example `Canvas` and `CanvasText` in forced-colors mode. |

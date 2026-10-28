@@ -2,7 +2,7 @@
 
 import { documentOf, type PdfSession } from "../document/pdf-session.ts";
 import type { DocumentSession, PageSize, PdfPermissions } from "../document/session.ts";
-import type { LinkHandlers } from "../pdfjs/annotation-layer.ts";
+import type { AnnotationLayerScripting, LinkHandlers } from "../pdfjs/annotation-layer.ts";
 import type { Destination, ResolvedDestination } from "../pdfjs/destinations.ts";
 import type { PageColors, Rotation } from "../pdfjs/draw.ts";
 import type { AnnotationEditor } from "../pdfjs/editor.ts";
@@ -144,6 +144,8 @@ export class Viewer {
   readonly #extensions = new ExtensionSet();
   /** Whether annotation layers show form fields (`setFormLayers()`). */
   #formLayers = false;
+  /** The document's scripts, which those fields run (`setFormScripting()`). */
+  #formScripting: AnnotationLayerScripting | null = null;
   /** The annotation editor a feature gave, whose layers pages get. */
   #annotationEditor: AnnotationEditor | null = null;
   /** A feature took the pointer, which the hand tool then leaves alone. */
@@ -385,6 +387,15 @@ export class Viewer {
   }
 
   /**
+   * Have the form fields of annotation layers run `scripting`, the
+   * document's scripts, or, with null, none: those built are built again.
+   */
+  setFormScripting(scripting: AnnotationLayerScripting | null): void {
+    this.#formScripting = scripting;
+    this.#shown?.renderer?.setFormScripting(scripting);
+  }
+
+  /**
    * Build the layers of the annotations `editor` edits on the mounted pages
    * that have an editor container, or, with null, take them down.
    */
@@ -508,6 +519,7 @@ export class Viewer {
       ...rendererOptions(this.#options),
       links: this.#links,
       forms: this.#formLayers,
+      formScripting: this.#formScripting,
       ...(this.#annotationEditor ? { annotationEditor: this.#annotationEditor } : {}),
       selection: this.#selection,
       onPainted: (pageIndex) => {

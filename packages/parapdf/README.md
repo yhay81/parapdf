@@ -539,8 +539,29 @@ function FormSync({ viewer, onChange }: { viewer: Viewer; onChange: (name: strin
 - `useFormChange(viewer, listener)` hears `{ name, value }` for each value
   the reader enters, with `forms` on.
 
-The values belong to the document, so every viewer of it shows them. Form
-scripts (JavaScript actions) do not run.
+The values belong to the document, so every viewer of it shows them.
+
+### Form scripts
+
+With `formScripts` as well as `forms`, the document's scripts run in its
+fields as they do in pdf.js's viewer: calculated fields follow their
+inputs, values are validated and formatted, keystrokes are checked as they
+are typed, buttons run their actions, and the document and its pages run
+their scripts as they open. The option is off by default, since the
+scripts are the document's own JavaScript. They run in pdf.js's sandbox,
+QuickJS compiled to WebAssembly, which loads only for a document that has
+scripts: 66 KB of sandbox and 475 KB of QuickJS (20 KB and 220 KB with
+gzip), served from the package's files like the worker's.
+
+```tsx
+<PdfViewer forms formScripts />
+```
+
+The viewers of one document share its sandbox, which keeps the fields'
+values. What the scripts change reaches every viewer and the document's
+values, and `useFormChange()` hears it; `setFormValues()` does not run
+them. A script's request to turn the page, zoom, print, or save acts on the
+viewer whose field ran it, and its alerts are the browser's own dialogs.
 
 ## Permissions
 
@@ -856,6 +877,7 @@ keeps the position and the edits. Besides `viewer`, the view state
 | `textLayer` | `true` | Selectable, screen-reader-visible text. Search works without it but paints matches only on text layers. |
 | `annotationLayer` | `true` | Focusable links, comment popups, and, with `forms`, form fields. |
 | `forms` | `false` | Form fields the reader can fill in (see [Forms](#forms-printing-and-saving)). |
+| `formScripts` | `false` | With `forms`, the document's scripts run in its fields (see [Form scripts](#form-scripts)). |
 | `annotationEditing` | `false` | Highlights, text, drawings, images, and signatures the reader creates (see [Annotations](#annotations)). |
 | `annotationLabels` | English | The accessible names of the annotation editor's controls, such as `{ removeInk: "線を削除" }`. |
 | `enforcePermissions` | `false` | Follow what the document permits (see [Permissions](#permissions)). |
@@ -952,8 +974,8 @@ configurePdfjs({ assetBase: "/pdfjs/" });
 ```
 
 With a Content Security Policy, the worker needs `worker-src 'self'` and the
-decoders `script-src 'wasm-unsafe-eval'`. When the files come from another
-origin than the page, such as a CDN, pdf.js starts its worker from a
+decoders and form scripts' QuickJS `script-src 'wasm-unsafe-eval'`. When
+the files come from another origin than the page, such as a CDN, pdf.js starts its worker from a
 `blob:` URL, which `worker-src` must then allow.
 
 ## Sources
@@ -1024,8 +1046,8 @@ with `PdfThumbnails`'s.
 - Released pdfjs-dist draws pages on the main thread. Drawing in a worker
   needs pdf.js's renderer worker (`configurePdfjs({ rendererSrc })`), which
   is only in unreleased pdf.js builds so far.
-- Not yet supported: form scripts (calculations, validation, and button
-  actions) and XFA forms. Of the annotations the PDF already holds, only
+- Not yet supported: XFA forms, and `WillSave`, `DidSave`, `WillPrint`, and
+  `DidPrint` scripts, which do not run. Of the annotations the PDF already holds, only
   text, drawings, highlights, and images can be edited; others stay as they
   are drawn.
 - The current page is reported, never controlled: `onPageChange` reports it

@@ -19,13 +19,16 @@ The full license text is in
 | `packages/parapdf/src/render/dom-layers.ts` | `web/text_layer_builder.js` | The `endOfContent` element appended after each text layer. |
 | `packages/parapdf/src/features/search/text-search.ts` | `web/pdf_find_controller.js` (pdfjs-dist 6.4.299), `normalize()` and `PDFFindController`'s matching | `CHARACTERS_TO_NORMALIZE`, `DIACRITICS_EXCEPTION`, the rules for line ends: joining after CJK characters and inside hyphenated words, keeping a dash before a line end, and reading other line ends as spaces, and the case-sensitive and diacritics options. Diacritics are stripped from both the page and the query instead of being skipped by a regular expression; the whole-word rule is ParaPDF's own. |
 | `packages/parapdf/src/render/planner.ts` | `web/pdf_page_detail_view.js` (pdfjs-dist 6.4.299), `PDFPageDetailView` | Choosing the detail region: the visible area grown by up to its own size on each side within the pixel budget, and redrawing once the view leaves the region or its margin on one side exceeds three times the opposite margin. |
+| `packages/parapdf/src/pdfjs/scripting.ts` and `packages/parapdf/src/features/forms/scripts.ts` | `web/pdf_scripting_manager.js` and `web/generic_scripting.js` (pdfjs-dist 6.4.299), `PDFScriptingManager` and `GenericScripting` | Running a document's scripts in pdf.js's sandbox: the data it is created with (field objects, calculation order, application and document information, the document's actions), the events it is sent (the document's Open, a page's PageOpen with its actions on its first opening and PageClose), each in a task of its own, and how its updates reach fields (their elements, or the annotation storage) and the viewer (pages, zoom, printing, saving, the console). One sandbox per session shared by its viewers, its window's events kept to it, and loading QuickJS through a module of ParaPDF's own are ParaPDF's own. |
 | `packages/parapdf/src/view/viewer.ts` | `web/pdf_viewer.js` (pdfjs-dist 6.4.299), `PDFViewer` | Two rules of its scroll modes: horizontal scrolling fits one page, not a spread, to the viewport, and the current page stays current while all of it is in view. The layout of the scroll modes, flipping pages, and the keys that flip them are ParaPDF's own. |
 | `packages/parapdf/src/render/selection.ts` | `web/text_layer_builder.js` (pdfjs-dist 6.4.299), `TextLayerBuilder` | The selection handling: the `selecting` class on text layers a selection touches, its reset on pointer release, blur, and key release, and moving `endOfContent` next to the changing end of the selection in browsers other than Firefox and Chromium 148 or later. Each viewer owns its listeners instead of sharing static ones, and a reset leaves `endOfContent` in place when it already is the layer's last child; the drag handling for the space around the pages, including drags that start there, and for text layers above the selection is ParaPDF's own. |
 
 The `parapdf` package depends on pdfjs-dist 6.4.299 and redistributes parts
 of it in `pdfjs/`: pdf.js's worker and legacy worker, each behind ParaPDF's
-prelude, and the CMaps, standard fonts, image decoders, ICC profile, and
-annotation icons it loads on demand. They stay under the Apache License 2.0
+prelude, the CMaps, standard fonts, image decoders, ICC profile, and
+annotation icons it loads on demand, and QuickJS compiled to WebAssembly,
+which form scripts run in (`pdfjs/wasm/quickjs-eval.js` and
+`quickjs-eval.wasm`); `pdfjs/quickjs.js` is ParaPDF's own. They stay under the Apache License 2.0
 and the licenses that pdfjs-dist ships with them, copied alongside
 (`pdfjs/LICENSE` and the license files in its directories); the
 toolbar icons of the annotation editor are inlined, as noted above.

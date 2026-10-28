@@ -62,5 +62,27 @@ function FormSync({ viewer, onChange }: { viewer: Viewer; onChange: (name: strin
   render it under a Suspense boundary of your own; `getFormFields()` reads
   the values again.
 
-Form scripts (JavaScript actions: calculations, validation, and button
-actions) do not run, and XFA forms are not supported.
+## Form scripts
+
+With `formScripts` as well as `forms`, the document's scripts run in its
+fields as they do in pdf.js's viewer: calculated fields follow their
+inputs, values are validated and formatted, keystrokes are checked as they
+are typed, buttons run their actions, and the document and its pages run
+their scripts as they open. The option is off by default, since the
+scripts are the document's own JavaScript. They run in pdf.js's sandbox,
+QuickJS compiled to WebAssembly, which loads only for a document that has
+scripts: 66 KB of sandbox and 475 KB of QuickJS (20 KB and 220 KB with
+gzip), served from the package's files like the worker's.
+
+```tsx
+<PdfViewer forms formScripts />
+```
+
+The viewers of one document share its sandbox, which keeps the fields'
+values. What the scripts change reaches every viewer and the document's
+values, and `useFormChange()` hears it; `setFormValues()` does not run
+them. A script's request to turn the page, zoom, print, or save acts on the
+viewer whose field ran it, and its alerts are the browser's own dialogs.
+
+`WillSave`, `DidSave`, `WillPrint`, and `DidPrint` scripts do not run, and
+XFA forms are not supported.

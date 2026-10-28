@@ -226,7 +226,7 @@ loads it when set; any other feature is included by importing its hook.
 
 Features: search (index, matches, highlights), history (back, forward),
 view state (get and set), initial view (`/OpenAction`, `/PageLayout`,
-`/PageMode`), permissions, forms (fields, values, changes, saving),
+`/PageMode`), permissions, forms (fields, values, changes, scripts, saving),
 annotations (editing, import, export), print, download, thumbnails, layers
 (optional content), attachments, selection (in PDF points), and text
 (`getText()`).
@@ -259,6 +259,22 @@ How features reach the core (M4):
   sets them still emits their chunks; it loads none of them. Search, print,
   and the other features are imported by their hooks, or by the application
   calling them, and absent from builds that import neither.
+- Form scripts are an option of `PdfViewer`, `formScripts`, which takes
+  effect with `forms`: off by default, since they run the document's
+  JavaScript, and loaded only for a document that has some
+  (`hasJSActions()`). They run in pdf.js's sandbox, QuickJS compiled to
+  WebAssembly, which the package ships beside the worker: 66 KB of
+  sandbox and 475 KB of QuickJS, loaded on demand, never by a viewer
+  without the option. One sandbox per session serves every viewer of it
+  with the option, since the sandbox keeps the fields' values: it starts
+  as the first of them opens the document, and goes once the last
+  detaches or the document closes. The annotation layers of those viewers
+  are built with scripting, and what the scripts change reaches the
+  fields in each of them, the session's annotation storage, and
+  `onFormChange`. Scripts' requests to change the page or the zoom act on
+  the viewer whose field ran them; printing and saving from a script
+  print and download through that viewer. pdf.js's viewer component
+  (`PDFScriptingManager`) is the reference for the events it sends.
 - The opening view is an option of the viewer, a function of the session
   that the initial view feature makes from `initialView` and
   `initialViewState`, applied once per document; a viewport that reattaches
@@ -332,7 +348,7 @@ Components:
     sets state in them.
   - The opening: `initialView` and `initialViewState`, as the initial view
     feature reads them; the props above that the application sets win.
-  - Live options: `textLayer`, `annotationLayer`, `forms`,
+  - Live options: `textLayer`, `annotationLayer`, `forms`, `formScripts`,
     `annotationEditing`, `annotationLabels`, `enforcePermissions`, `direction`,
     `destinationZoom`, `externalLinks`, `openAttachment`, `pageColors`,
     `gap`, `overscan`, `minScale`, `maxScale`, `maxConcurrentRenders`, and

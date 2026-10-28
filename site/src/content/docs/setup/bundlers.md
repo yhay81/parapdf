@@ -53,7 +53,7 @@ configurePdfjs({ assetBase: "/pdfjs/" });
 ## Content Security Policy
 
 With a Content Security Policy, the worker needs `worker-src 'self'` and the
-decoders `script-src 'wasm-unsafe-eval'`. When the files come from another
+decoders and form scripts' QuickJS `script-src 'wasm-unsafe-eval'`. When the files come from another
 origin than the page, such as a CDN, pdf.js starts its worker from a `blob:`
 URL, which `worker-src` must then allow.
 
