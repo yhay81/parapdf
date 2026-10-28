@@ -91,6 +91,7 @@ interface Parapdf {
 
 /** What the demo exposes on `window` for these checks. */
 interface Demo {
+  __setViewerProps(props: Record<string, unknown>): void;
   __viewer?: Viewer;
   __session?: {
     state: { get(): { status: string; permissions: Record<string, boolean> | null } };
@@ -838,6 +839,32 @@ try {
     await page.context().close();
   }
   // --- Form scripts: off by default, and loaded only for a document with scripts ---
+  {
+    const { page, errors } = await open(launched.browser, demo("file=synthetic-scripts.pdf"));
+    await page.waitForFunction(() => (window as unknown as Demo).__viewer?.hasPixels(0));
+    await page.evaluate(() =>
+      (window as unknown as Demo).__setViewerProps({ forms: true, formScripts: true }),
+    );
+    const opened = page.locator('.parapdf-annotation-layer input[name="opened"]');
+    await opened.waitFor();
+    await page.waitForFunction(
+      () =>
+        (document.querySelector('input[name="opened"]') as HTMLInputElement | null)?.value ===
+        "yes",
+      undefined,
+      { timeout: 15_000 },
+    );
+    check(
+      "enabling forms and scripts after the first paint runs the open script",
+      (await opened.inputValue()) === "yes",
+    );
+    check(
+      "no errors enabling scripts after the first paint",
+      errors.length === 0,
+      errors.slice(0, 3).join(" | "),
+    );
+    await page.context().close();
+  }
   for (const [query, label] of [
     ["file=synthetic-scripts.pdf&forms=1", "without formScripts"],
     ["file=synthetic-features.pdf&forms=1&scripts=1&page=2", "for a document without scripts"],

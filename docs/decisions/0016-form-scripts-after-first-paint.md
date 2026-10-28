@@ -46,6 +46,14 @@ With scripts on, against `main` without them (forms only; `main` ignores
 | --- | ---: | ---: | --: |
 | Chromium 156 | 195 ms | 203 ms | 0 → 0 ms |
 | WebKit 27.2 | 225 ms | 229 ms | 22 → 19 ms |
+| Firefox 157 | 317 ms | 297 ms | 15 → 16 ms |
+
+The Firefox comparison (`examples/prototype/results/form-scripts-vs-main-firefox.md`)
+used the same five-run method, on AC power. Its one-minute load average was
+21 to 27, so it does not establish a speed win; it found no clear regression.
+Its before build includes #75, and its after build includes the fix for
+enabling forms after the first paint. The two-page file does not exercise
+long-document scrolling.
 
 Before the change, the same comparison in Chromium gave 230 → 263 ms. With
 `formScripts` off, the branch and `main` did not differ (f1040.pdf, 3
