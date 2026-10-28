@@ -438,7 +438,7 @@ body {
 }
 
 .demo-documents {
-  width: 340px;
+  width: min(340px, calc(100vw - 16px));
 }
 
 .demo .demo-document {
@@ -1234,8 +1234,12 @@ body {
   }
 }
 
-/* Phones: the pages and zoom take a row of their own, and the sidebar slides over the pages. */
-@media (max-width: 760px) {
+/*
+ * Phones and narrow tablets: the pages and zoom take a row of their own,
+ * and the sidebar slides over the pages. One row needs about 800px with a
+ * four-digit page count or a page label.
+ */
+@media (max-width: 820px) {
   .demo-from-md,
   .demo-start > .demo-divider {
     display: none;
@@ -1316,6 +1320,24 @@ body {
     right: 8px;
     bottom: max(10px, env(safe-area-inset-bottom));
     left: 8px;
+  }
+}
+
+/* The narrowest phones: the pages and zoom row tightens, so that a page label or a four-digit page count still fits. */
+@media (max-width: 359px) {
+  .demo-center .demo-button {
+    min-width: 30px;
+    height: 30px;
+    padding: 0 5px;
+  }
+
+  .demo-page {
+    gap: 4px;
+    margin-left: 2px;
+  }
+
+  .demo-zoom {
+    min-width: 64px;
   }
 }
 
