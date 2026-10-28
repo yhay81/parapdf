@@ -76,10 +76,13 @@ export function Popover({
       const shown = event.newState === "open";
       setOpen(shown);
       if (!shown) return;
+      // Its box without the opening animation, which scales it about its center.
       const box = popover.getBoundingClientRect();
+      const boxWidth = popover.offsetWidth;
+      const boxLeft = box.left + (box.width - boxWidth) / 2;
       const width = document.documentElement.clientWidth;
-      const left = Math.max(MARGIN, Math.min(box.left, width - MARGIN - box.width));
-      if (left !== box.left) {
+      const left = Math.max(MARGIN, Math.min(boxLeft, width - MARGIN - boxWidth));
+      if (left !== boxLeft) {
         style.translate = "none";
         style.right = "auto";
         style.left = `${left}px`;
