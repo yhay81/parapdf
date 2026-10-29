@@ -7,8 +7,8 @@ export interface PrintOptions {
   resolution?: number;
   /**
    * Turn a page whose orientation differs from the first page's to the
-   * sheet's, so that it prints at full size, as pdf.js's viewer prints
-   * (default true). Off, such a page prints upright, scaled to fit.
+   * sheet's, as pdf.js's viewer prints (default true). Pages are scaled to
+   * fit the first page's sheet. Off, such a page prints upright.
    */
   autoRotate?: boolean;
   /** Called after each page is drawn, with the pages drawn and how many there are. */

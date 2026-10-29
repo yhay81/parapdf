@@ -508,10 +508,10 @@ What the reader types belongs to the document:
   every page for printing, the typed values included, at 150 dpi by
   default, and opens the browser's print dialog with only those pages, on
   sheets the size of the first page. A page whose orientation differs from
-  the first page's is turned to the sheet's and prints at full size, as
-  pdf.js's viewer prints it; `autoRotate: false` prints it upright, scaled
-  to fit. A new print request stops the previous job; that job resolves
-  without opening another dialog.
+  the first page's is turned to the sheet's, as pdf.js's viewer prints it;
+  `autoRotate: false` prints it upright. Pages are scaled to fit the sheet,
+  whose size follows the first page. A new print request stops the previous
+  job; that job resolves without opening another dialog.
 
 Applications read and fill the form themselves:
 

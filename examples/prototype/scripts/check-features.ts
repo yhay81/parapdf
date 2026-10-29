@@ -810,7 +810,7 @@ try {
     const a3 = [Math.round((1191 * 150) / 72), Math.round((842 * 150) / 72)];
     const turned = await printedSizes(true);
     check(
-      "printing turns landscape pages among portrait ones to the sheet, at full size",
+      "printing turns landscape pages among portrait ones to the sheet",
       turned.length === 8 &&
         landscape(turned).length === 0 &&
         Math.abs((turned[2]?.[0] ?? 0) - (a3[1] ?? 0)) <= 1 &&

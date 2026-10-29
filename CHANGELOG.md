@@ -8,7 +8,8 @@ change the API.
 
 - Printing turns a page whose orientation differs from the first page's to
   the sheet's, as pdf.js's viewer prints it, so that a landscape page among
-  portrait ones prints at full size instead of scaled to fit (#88).
+  portrait ones fits a matching sheet without extra scaling (#88). Pages
+  larger than the first page's sheet are still scaled to fit.
   **Breaking:** this is the new default of `print()`; `autoRotate: false`
   prints every page upright, as before.
 
