@@ -142,9 +142,21 @@ function field(run: Running, session: DocumentSession, id: string, update: objec
   }
   if (!shown) storage.setValue(id, update);
   const after = (storage.getRawValue(id) as { value?: unknown } | undefined)?.value;
-  if ("value" in update && after !== before) {
+  if ("value" in update && !sameFieldValue(after, before)) {
     for (const member of run.viewers) member.changed(id);
   }
+}
+
+/**
+ * Whether two values stored for a field read the same: a choice's options
+ * item by item, and a number as its text, as a text field reads it.
+ */
+export function sameFieldValue(a: unknown, b: unknown): boolean {
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((item, index) => sameFieldValue(item, b[index]));
+  }
+  if (typeof a === "number" || typeof b === "number") return String(a) === String(b);
+  return a === b;
 }
 
 /**

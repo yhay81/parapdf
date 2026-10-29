@@ -41,6 +41,23 @@ describe("rendererChanged", () => {
     assert.equal(rendererChanged(previous, next), false);
   });
 
+  it("keeps it when an option goes between left out and its default", () => {
+    const defaults: ViewerOptions = {
+      textLayer: true,
+      annotationLayer: true,
+      externalLinks: "new-tab",
+      maxConcurrentRenders: 2,
+      maxDetailPixels: 16_777_216,
+      maxDetailViewports: Number.POSITIVE_INFINITY,
+      maxBasePixels: 2_097_152,
+      maxCanvasPixels: Number.POSITIVE_INFINITY,
+    };
+    for (const [name, value] of Object.entries(defaults)) {
+      assert.equal(rendererChanged({}, { [name]: value }), false, name);
+      assert.equal(rendererChanged({ [name]: value }, {}), false, name);
+    }
+  });
+
   it("compares the page colors by value, as applications pass them inline", () => {
     const colors = () => ({ background: "Canvas", foreground: "CanvasText" });
     assert.equal(rendererChanged({ pageColors: colors() }, { pageColors: colors() }), false);

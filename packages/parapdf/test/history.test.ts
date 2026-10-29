@@ -40,6 +40,10 @@ function fakeViewer() {
     extensions,
     restored,
     hear,
+    /** Where the viewer is now; null as it has no viewport. */
+    place(at: ViewerPosition | null) {
+      position = at;
+    },
     /** Jump from where the viewer is to page `pageIndex`, as a link does. */
     jump(pageIndex: number) {
       hear("jumping");
@@ -88,6 +92,22 @@ describe("the history feature", () => {
     assert.deepEqual(history.store.get(), { canGoBack: true, canGoForward: true });
     history.forward();
     assert.deepEqual(fake.restored, [4, 9]);
+  });
+
+  it("keeps its positions while the viewer has no viewport to leave or show them in", () => {
+    const fake = fakeViewer();
+    const history = attachHistory(fake.viewer);
+    fake.jump(4);
+    fake.jump(9);
+    fake.place(null);
+    history.back();
+    history.forward();
+    assert.deepEqual(fake.restored, []);
+    assert.deepEqual(history.store.get(), { canGoBack: true, canGoForward: false });
+    fake.place(at(9));
+    history.back();
+    history.back();
+    assert.deepEqual(fake.restored, [4, 0]);
   });
 
   it("follows the GoBack and GoForward named actions of links", () => {

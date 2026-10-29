@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type * as Pdfjs from "pdfjs-dist";
+import { sameFieldValue } from "../src/features/forms/scripts.ts";
 import type { LoadedPdfjs } from "../src/pdfjs/loader.ts";
 import { startScripting } from "../src/pdfjs/scripting.ts";
 
@@ -54,5 +55,19 @@ describe("a document's scripts", () => {
       errors.mock.calls.map((call) => call.arguments),
       [["starting the document's scripts failed", failure]],
     );
+  });
+});
+
+describe("a field's value as scripts change it", () => {
+  it("is the same for the same options in another array, and for a number and its text", () => {
+    assert.equal(sameFieldValue(["a", "b"], ["a", "b"]), true);
+    assert.equal(sameFieldValue(["a", "b"], ["b", "a"]), false);
+    assert.equal(sameFieldValue(["a"], ["a", "b"]), false);
+    assert.equal(sameFieldValue(5, "5"), true);
+    assert.equal(sameFieldValue("5", 5), true);
+    assert.equal(sameFieldValue(5, "5.0"), false);
+    assert.equal(sameFieldValue("a", "a"), true);
+    assert.equal(sameFieldValue(undefined, ""), false);
+    assert.equal(sameFieldValue(true, "true"), false);
   });
 });

@@ -249,9 +249,20 @@ export function attachAutoLinks(viewer: Viewer): () => void {
     const fileLinks = (await page.getAnnotations({ intent: "display" })).filter(
       (annotation) => annotation.annotationType === open.pdfjs.pdfjs.AnnotationType.LINK,
     );
-    // The page's layers may have gone, or been built again, meanwhile.
-    if (stopped || texts.get(pageIndex) !== text || annotations.get(pageIndex) !== layer) return;
-    const container = text.elements[0]?.closest<HTMLElement>(".parapdf-text-layer");
+    // The page's layers may have gone, or been built again, meanwhile. A run
+    // for new ones returned while this one held the annotation layer, so
+    // run again for the layers the page has now.
+    if (stopped || texts.get(pageIndex) !== text || annotations.get(pageIndex) !== layer) {
+      linked.delete(layer);
+      if (!stopped) void run(pageIndex);
+      return;
+    }
+    // An empty item's span is in no layer, as pdf.js builds it.
+    let container: HTMLElement | null = null;
+    for (const element of text.elements) {
+      container = element.closest<HTMLElement>(".parapdf-text-layer");
+      if (container) break;
+    }
     if (!container) return;
     const inferred: InferredLink[] = [];
     for (const found of links) {

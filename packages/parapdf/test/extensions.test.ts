@@ -73,6 +73,26 @@ describe("ExtensionSet", () => {
     assert.deepEqual(later.heard, []);
   });
 
+  it("tells an extension added while a hook runs each hook once, as add() replays it", () => {
+    const { signal } = new AbortController();
+    const heard = (hook: "prepare" | "ready" | "viewport" | "painted") => {
+      const set = new ExtensionSet();
+      const late = listening();
+      const viewport = hook === "viewport" ? { scroller, content, signal } : null;
+      set.add({ [hook]: () => set.add(late.extension, viewport) }, null);
+      set.prepare(session, signal);
+      set.ready(session, signal);
+      set.viewport(scroller, content, signal);
+      set.painted();
+      return late.heard;
+    };
+    const all = ["prepare true false", "ready true false", "viewport true", "painted"];
+    assert.deepEqual(heard("prepare"), all);
+    assert.deepEqual(heard("ready"), all);
+    assert.deepEqual(heard("viewport"), all);
+    assert.deepEqual(heard("painted"), ["prepare true false", "ready true false", "painted"]);
+  });
+
   it("tells a late extension of the ready document, the viewport, and the first paint", () => {
     const set = new ExtensionSet();
     const { signal } = new AbortController();

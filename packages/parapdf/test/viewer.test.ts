@@ -9,10 +9,10 @@ import {
   setPasswordPrompt,
 } from "../src/document/pdf-session.ts";
 import type { PdfjsLoader } from "../src/document/registry.ts";
-import type { Rotation } from "../src/pdfjs/draw.ts";
 import type { PdfSource } from "../src/document/session.ts";
 import { attachSearch } from "../src/features/search/index.ts";
 import { getText } from "../src/features/text/index.ts";
+import type { Rotation } from "../src/pdfjs/draw.ts";
 import type { ViewerOptions } from "../src/view/options.ts";
 import { attachViewport, openViewer, setViewerOptions, Viewer } from "../src/view/viewer.ts";
 import {
@@ -727,7 +727,10 @@ describe("a viewer's viewport", () => {
   it("keeps the page and rotation a view shows as NaN", async () => {
     const { viewer } = await viewing();
     viewer.goToPage(2);
-    viewer.show({ target: { pageIndex: Number.NaN, x: null, y: null }, rotation: Number.NaN as Rotation });
+    viewer.show({
+      target: { pageIndex: Number.NaN, x: null, y: null },
+      rotation: Number.NaN as Rotation,
+    });
     assert.deepEqual([viewer.store.get().currentPage, viewer.store.get().rotation], [2, 0]);
   });
 

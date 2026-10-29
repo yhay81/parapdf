@@ -50,7 +50,9 @@ export interface ViewerExtension {
 /**
  * The features attached to a viewer, and what they heard: the viewer calls
  * a hook here once, and every extension hears it. A feature registered late
- * hears at once what already happened.
+ * hears at once what already happened, from `add()`; one registered while a
+ * hook runs hears no more of that hook than `add()` replays, as listeners
+ * added while a DOM event dispatches do not hear it.
  */
 export class ExtensionSet {
   readonly #extensions = new Set<ViewerExtension>();
@@ -58,6 +60,8 @@ export class ExtensionSet {
   readonly #deferred = new Set<Promise<unknown>>();
   /** The document whose `ready` hooks ran and the signal they got, which `add()` replays. */
   #ready: { session: DocumentSession; signal: AbortSignal } | null = null;
+  /** The document whose `prepare` hooks run now, which `add()` replays too. */
+  #preparing: { session: DocumentSession; signal: AbortSignal } | null = null;
   #painted = false;
 
   /**
@@ -71,7 +75,9 @@ export class ExtensionSet {
   ): () => void {
     this.#extensions.add(extension);
     const ready = this.#ready;
-    if (ready && !ready.signal.aborted) {
+    const preparing = this.#preparing;
+    if (preparing) extension.prepare?.(preparing.session, preparing.signal);
+    else if (ready && !ready.signal.aborted) {
       extension.prepare?.(ready.session, ready.signal);
       extension.ready?.(ready.session, ready.signal);
     }
@@ -95,54 +101,66 @@ export class ExtensionSet {
     return Promise.all([...this.#deferred]);
   }
 
+  /** Tell each extension registered now, but one removed meanwhile, through `hear`. */
+  #each(hear: (extension: ViewerExtension) => void): void {
+    for (const extension of [...this.#extensions]) {
+      if (this.#extensions.has(extension)) hear(extension);
+    }
+  }
+
   prepare(session: DocumentSession, signal: AbortSignal): void {
-    for (const extension of this.#extensions) extension.prepare?.(session, signal);
+    this.#preparing = { session, signal };
+    try {
+      this.#each((extension) => extension.prepare?.(session, signal));
+    } finally {
+      this.#preparing = null;
+    }
   }
 
   ready(session: DocumentSession, signal: AbortSignal): void {
     this.#ready = { session, signal };
-    for (const extension of this.#extensions) extension.ready?.(session, signal);
+    this.#each((extension) => extension.ready?.(session, signal));
   }
 
   viewport(scroller: HTMLElement, content: HTMLElement, signal: AbortSignal): void {
-    for (const extension of this.#extensions) extension.viewport?.(scroller, content, signal);
+    this.#each((extension) => extension.viewport?.(scroller, content, signal));
   }
 
   /** The viewport is about to detach; with `rebuilding`, the document is shown again after. */
   detaching(rebuilding = false): void {
-    for (const extension of this.#extensions) extension.detaching?.();
+    this.#each((extension) => extension.detaching?.());
     this.#painted = false;
     if (rebuilding) this.#ready = null;
   }
 
   closed(): void {
-    for (const extension of this.#extensions) extension.closed?.();
+    this.#each((extension) => extension.closed?.());
     this.#ready = null;
     this.#painted = false;
   }
 
   painted(): void {
     this.#painted = true;
-    for (const extension of this.#extensions) extension.painted?.();
+    this.#each((extension) => extension.painted?.());
   }
 
   textLayer(pageIndex: number, handle: TextLayerHandle | null): void {
-    for (const extension of this.#extensions) extension.textLayer?.(pageIndex, handle);
+    this.#each((extension) => extension.textLayer?.(pageIndex, handle));
   }
 
   annotationLayer(pageIndex: number, handle: AnnotationLayerHandle | null): void {
-    for (const extension of this.#extensions) extension.annotationLayer?.(pageIndex, handle);
+    this.#each((extension) => extension.annotationLayer?.(pageIndex, handle));
   }
 
   jumping(): void {
-    for (const extension of this.#extensions) extension.jumping?.();
+    this.#each((extension) => extension.jumping?.());
   }
 
   namedAction(action: string): void {
-    for (const extension of this.#extensions) extension.namedAction?.(action);
+    this.#each((extension) => extension.namedAction?.(action));
   }
 
   layersChanged(): void {
-    for (const extension of this.#extensions) extension.layersChanged?.();
+    this.#each((extension) => extension.layersChanged?.());
   }
 }

@@ -72,13 +72,17 @@ export function attachHistory(viewer: Viewer): History {
   const store = new Store<HistoryState>({ canGoBack: false, canGoForward: false });
   const publish = () =>
     store.set({ canGoBack: positions.canGoBack, canGoForward: positions.canGoForward });
+  // A viewer with no viewport has no position to leave, nor one to show:
+  // the positions stay.
   const back = () => {
-    const entry = positions.back(viewer.position());
+    const from = viewer.position();
+    const entry = from && positions.back(from);
     publish();
     if (entry) viewer.restorePosition(entry);
   };
   const forward = () => {
-    const entry = positions.forward(viewer.position());
+    const from = viewer.position();
+    const entry = from && positions.forward(from);
     publish();
     if (entry) viewer.restorePosition(entry);
   };
