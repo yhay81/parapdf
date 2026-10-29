@@ -22,10 +22,11 @@ export async function save(viewer: Viewer): Promise<Uint8Array | null> {
  */
 export async function download(viewer: Viewer, filename?: string): Promise<void> {
   const { session } = viewer;
+  const sourceName = viewer.sourceName;
   const bytes = await save(viewer);
   if (!bytes) return;
   // A document whose metadata fails to read still downloads, under its URL.
   const served = filename ? null : await session?.metadata().catch(() => null);
-  const name = filename ?? served?.filename ?? viewer.sourceName;
+  const name = filename ?? served?.filename ?? sourceName;
   downloadBytes(bytes, name ?? "document.pdf", "application/pdf");
 }

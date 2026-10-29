@@ -112,7 +112,7 @@ export interface PdfMetadata {
   language: string | null;
   /** The file name the server gives (`Content-Disposition`). */
   filename: string | null;
-  /** The file's length in bytes, when the server or the source tells it. */
+  /** The file's length in bytes, when it can be read. */
   length: number | null;
   /** Whether the file is linearized (Fast Web View). */
   linearized: boolean;
@@ -484,6 +484,10 @@ export class DocumentSession {
       const { PDFDateString } = this.pdfjs.pdfjs;
       const date = (value: unknown) =>
         typeof value === "string" ? PDFDateString.toDateObject(value) : null;
+      // pdf.js reports no length for bytes and zero when the response has no
+      // Content-Length. Once loaded, its download info has the actual size.
+      const length =
+        contentLength || (await this.proxy.getDownloadInfo().catch(() => null))?.length;
       return {
         // XMP metadata is newer than the information dictionary when both exist.
         title: text(metadata?.get("dc:title"), fields.Title),
@@ -497,7 +501,7 @@ export class DocumentSession {
         pdfVersion: text(fields.PDFFormatVersion),
         language: text(fields.Language),
         filename: contentDispositionFilename || null,
-        length: contentLength ?? null,
+        length: length ?? null,
         linearized: fields.IsLinearized === true,
         fingerprint: this.proxy.fingerprints[0] ?? "",
       };

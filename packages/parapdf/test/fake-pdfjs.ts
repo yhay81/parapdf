@@ -232,6 +232,7 @@ export function fakeDocument({
     getPageLabels: async () => null,
     fingerprints: ["fake", null],
     getMetadata: async () => ({ info: {}, metadata: null }),
+    getDownloadInfo: async () => ({ length: 1 }),
     getAttachments: async () => null,
     getAttachmentContent: async () => null,
     getOptionalContentConfig: async () => fakeLayers(),

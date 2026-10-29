@@ -230,6 +230,26 @@ describe("DocumentSession", () => {
     assert.equal(await unlabelled.session.pageLabels(), null);
   });
 
+  it("reads the downloaded length when metadata has no length", async () => {
+    for (const contentLength of [null, 0]) {
+      const { session } = await openSession({
+        proxy: {
+          getMetadata: async () => ({ info: {}, metadata: null, contentLength }),
+          getDownloadInfo: async () => ({ length: 1234 }),
+        },
+      });
+      assert.equal((await session.metadata()).length, 1234);
+    }
+    const { session } = await openSession({
+      proxy: {
+        getDownloadInfo: async () => {
+          throw new Error("unavailable");
+        },
+      },
+    });
+    assert.equal((await session.metadata()).length, null);
+  });
+
   it("shares one layer state, whose changes reach every viewer until its signal aborts", async () => {
     const display = fakeLayers({ a: { name: "A", visible: true } });
     const print = fakeLayers({ a: { name: "A", visible: true } });
