@@ -19,6 +19,8 @@ export interface LoadedFeatures {
 
 /** The options of `<PdfViewer>` that attach features to its viewer. */
 export interface FeatureOptions {
+  /** Links found in the pages' text. */
+  autoLinks: boolean;
   forms: boolean;
   /** Run the document's scripts in the form fields, with `forms`. */
   formScripts: boolean;
@@ -28,6 +30,7 @@ export interface FeatureOptions {
 }
 
 const OFF: FeatureOptions = {
+  autoLinks: false,
   forms: false,
   formScripts: false,
   annotationEditing: false,
@@ -41,7 +44,10 @@ interface Attached {
   options: FeatureOptions;
   /** Stops following permissions. */
   unenforce: (() => void) | null;
+  /** Stops finding links in the text, once its module loaded. */
+  unlink: (() => void) | null;
   /** Each option's attachment, bumped when it is turned off or on again. */
+  autoLinksTurn: number;
   formsTurn: number;
   annotationsTurn: number;
 }
@@ -67,6 +73,8 @@ function attachedTo(viewer: Viewer): Attached {
       loaded: new Store<LoadedFeatures>({ formLayers: null, annotations: null }),
       options: OFF,
       unenforce: null,
+      unlink: null,
+      autoLinksTurn: 0,
       formsTurn: 0,
       annotationsTurn: 0,
     };
@@ -99,6 +107,20 @@ export function setFeatureOptions(viewer: Viewer, options: FeatureOptions): void
   if (options.enforcePermissions !== previous.enforcePermissions) {
     entry.unenforce?.();
     entry.unenforce = options.enforcePermissions ? enforcePermissions(viewer) : null;
+  }
+  if (options.autoLinks !== previous.autoLinks) {
+    const turn = ++entry.autoLinksTurn;
+    entry.unlink?.();
+    entry.unlink = null;
+    // Pages are drawn alike with or without it: the first layout does not wait.
+    if (options.autoLinks) {
+      import("../features/auto-links.ts").then(
+        ({ attachAutoLinks }) => {
+          if (entry.autoLinksTurn === turn) entry.unlink = attachAutoLinks(viewer);
+        },
+        (error: unknown) => console.error("loading a feature failed", error),
+      );
+    }
   }
   if (options.forms !== previous.forms) {
     const turn = ++entry.formsTurn;

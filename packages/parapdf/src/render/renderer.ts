@@ -1,7 +1,7 @@
 "use client";
 
 import type { DocumentSession } from "../document/session.ts";
-import type { LinkHandlers } from "../pdfjs/annotation-layer.ts";
+import type { AnnotationLayerHandle, LinkHandlers } from "../pdfjs/annotation-layer.ts";
 import {
   copyDrawing,
   type DrawRequest,
@@ -132,6 +132,8 @@ export interface RendererOptions extends Partial<Budgets> {
   onPainted?: (pageIndex: number, layer: Layer) => void;
   onTextReady?: (pageIndex: number, handle: TextLayerHandle) => void;
   onTextRemoved?: (pageIndex: number) => void;
+  onAnnotationsReady?: (pageIndex: number, handle: AnnotationLayerHandle) => void;
+  onAnnotationsRemoved?: (pageIndex: number) => void;
   /** Aborting it disposes the renderer, as when its document closes in the viewer. */
   signal?: AbortSignal;
 }

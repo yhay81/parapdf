@@ -5,9 +5,9 @@
  * the chunks it imports statically, which the browser loads with it. The
  * minimal demo (minimal.html), which uses neither search, forms,
  * annotation editing, nor print, must load none of their modules; the full
- * demo (index.html) loads search and print with it, and form layers and
- * editing from chunks of their own, which only its `forms` and
- * `annotationEditing` options load. A build that never sets them still emits those chunks.
+ * demo (index.html) loads search and print with it, and form layers,
+ * editing, and links found in the text from chunks of their own, which only
+ * its `forms`, `annotationEditing`, and `autoLinks` options load. A build that never sets them still emits those chunks.
  *
  * Usage: pnpm --filter @parapdf/prototype check:modules
  */
@@ -37,6 +37,7 @@ const FEATURES: Record<string, RegExp> = {
   forms: /packages\/parapdf\/src\/features\/forms\//,
   annotations: /packages\/parapdf\/src\/(features\/annotations\.ts|pdfjs\/editor(-labels)?\.ts)$/,
   print: /packages\/parapdf\/src\/features\/print\//,
+  autoLinks: /packages\/parapdf\/src\/features\/auto-links\.ts$/,
 };
 
 const outDir = mkdtempSync(join(tmpdir(), "parapdf-modules-"));
@@ -80,7 +81,7 @@ try {
 
   const minimal = featuresIn(modules(loaded("minimal.html")));
   check(
-    "the minimal demo loads no search, forms, annotation editing, or print",
+    "the minimal demo loads no search, forms, annotation editing, print, or autoLinks",
     minimal.length === 0,
     minimal.join(", "),
   );
@@ -90,10 +91,11 @@ try {
   // fields' too; the part that shows them as fields loads with `forms`.
   const formLayers = fullModules.some((source) => source.endsWith("features/forms/layers.ts"));
   check(
-    "the full demo loads search and print with it, and neither form layers nor editing",
+    "the full demo loads search and print with it, and neither form layers, editing, nor autoLinks",
     full.includes("search") &&
       full.includes("print") &&
       !full.includes("annotations") &&
+      !full.includes("autoLinks") &&
       !formLayers,
     `${full.join(", ")}${formLayers ? ", form layers" : ""}`,
   );
@@ -101,8 +103,8 @@ try {
     .filter(([key]) => !loaded("index.html").has(key) && !loaded("minimal.html").has(key))
     .flatMap(([key]) => featuresIn(modules([key])));
   check(
-    "forms and annotation editing come in chunks of their own",
-    lazy.includes("forms") && lazy.includes("annotations"),
+    "forms, annotation editing, and autoLinks come in chunks of their own",
+    lazy.includes("forms") && lazy.includes("annotations") && lazy.includes("autoLinks"),
     lazy.join(", "),
   );
 } finally {

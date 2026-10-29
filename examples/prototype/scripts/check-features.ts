@@ -4,8 +4,8 @@
  * password prompt, load progress, page labels, metadata, attachments, layers
  * (optional content), comment popups, form filling and saving, printing,
  * downloading, thumbnails, "fit-page" zoom, keyboard zoom, the initial page,
- * the hand tool, search options, spreads, selections in PDF points, and the
- * structure of tagged PDFs. They run on the synthetic feature sampler and
+ * the hand tool, search options, spreads, selections in PDF points, links
+ * found in the text (autoLinks), and the structure of tagged PDFs. They run on the synthetic feature sampler and
  * encrypted documents, on f1040.pdf (a tagged form), and on bill-hr815.pdf
  * (a long document).
  *
@@ -738,6 +738,150 @@ try {
     );
     check("no errors on a tagged form", errors.length === 0, errors.slice(0, 3).join(" | "));
     await page.context().close();
+  }
+
+  // --- Links found in the text (autoLinks) ---
+  {
+    /** The links of page `n`'s annotation layer, and the text run under each one's center. */
+    const pageLinks = (page: Page, n: number) =>
+      page.evaluate((n) => {
+        const section = document.querySelector(`section[data-page="${n}"]`);
+        const runs = [
+          ...(section?.querySelectorAll<HTMLElement>(".parapdf-text-layer span") ?? []),
+        ];
+        const links = section?.querySelectorAll<HTMLElement>(".parapdf-annotation-layer section");
+        return [...(links ?? [])].map((element) => {
+          const box = element.getBoundingClientRect();
+          const [x, y] = [box.left + box.width / 2, box.top + box.height / 2];
+          const under = runs.find((run) => {
+            const r = run.getBoundingClientRect();
+            return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+          });
+          const href = element.querySelector("a")?.getAttribute("href") ?? null;
+          // How well the link covers the address in the run: the overlap of
+          // their boxes over their union.
+          const address = (href ?? "").replace(/^(mailto:|http:\/\/)/, "");
+          const node = under?.firstChild;
+          const at = node?.textContent?.indexOf(address) ?? -1;
+          let fit = 0;
+          if (node && address && at >= 0) {
+            const range = document.createRange();
+            range.setStart(node, at);
+            range.setEnd(node, at + address.length);
+            const r = range.getBoundingClientRect();
+            const width = Math.min(r.right, box.right) - Math.max(r.left, box.left);
+            const height = Math.min(r.bottom, box.bottom) - Math.max(r.top, box.top);
+            const overlap = Math.max(0, width) * Math.max(0, height);
+            fit = overlap / (r.width * r.height + box.width * box.height - overlap);
+          }
+          return {
+            inferred: element.dataset.annotationId?.startsWith("inferred_link") === true,
+            href,
+            text: under?.textContent ?? null,
+            fit: Math.round(fit * 100) / 100,
+          };
+        });
+      }, n);
+    const inferredOn = async (page: Page, n: number, count: number) => {
+      await page
+        .waitForFunction(
+          ({ n, count }) =>
+            document.querySelectorAll(
+              `section[data-page="${n}"] [data-annotation-id^="inferred_link"]`,
+            ).length >= count,
+          { n, count },
+          { timeout: 10_000 },
+        )
+        .catch(() => {});
+      return pageLinks(page, n);
+    };
+    /** Whether a link covers the address it opens in the text, and little else. */
+    const overText = (link: { fit: number }) => link.fit > 0.8;
+
+    const { page, errors } = await open(
+      launched.browser,
+      demo("file=synthetic-links-in-text.pdf&autoLinks=1"),
+    );
+    const first = await inferredOn(page, 1, 3);
+    const inferred = first.filter((link) => link.inferred);
+    check(
+      "autoLinks links a URL, a www. address, and an e-mail address in the text, over the text",
+      inferred.map((link) => link.href).join() ===
+        "https://example.com/guide?page=2,http://www.example.org/mirror,mailto:reader@example.net" &&
+        inferred.every(overText),
+      JSON.stringify(first),
+    );
+    check(
+      "autoLinks adds no link where the file already links, nor for what is no address",
+      first.filter((link) => !link.inferred).length === 1 &&
+        !first.some((link) => link.href === "https://example.com/linked"),
+      JSON.stringify(first),
+    );
+    await page.evaluate(() => window.__viewer?.goToPage(1));
+    const turned = await inferredOn(page, 2, 1);
+    check(
+      "autoLinks places links on a page /Rotate turns",
+      turned.length === 1 &&
+        turned[0]?.href === "https://example.com/turned" &&
+        turned.every(overText),
+      JSON.stringify(turned),
+    );
+    // Turned off live, the links it added go; the file's stay.
+    await page.evaluate(() => window.__setViewerProps?.({ autoLinks: false }));
+    await page
+      .waitForFunction(
+        () => document.querySelectorAll('[data-annotation-id^="inferred_link"]').length === 0,
+        undefined,
+        { timeout: 5_000 },
+      )
+      .catch(() => {});
+    const removed = await pageLinks(page, 2);
+    check(
+      "turning autoLinks off removes the links it added",
+      removed.length === 0,
+      JSON.stringify(removed),
+    );
+    check(
+      "no errors finding links in the text",
+      errors.length === 0,
+      errors.slice(0, 3).join(" | "),
+    );
+    await page.context().close();
+
+    // A page of a reference list: 30 lines, each with a URL and an address.
+    const { page: dense } = await open(
+      launched.browser,
+      demo("file=synthetic-addresses.pdf&autoLinks=1"),
+    );
+    const listed = (await inferredOn(dense, 1, 60)).filter((link) => link.inferred);
+    check(
+      "autoLinks links every address of a page of a reference list",
+      listed.length === 60 && listed.every(overText),
+      `${listed.length} links, ${listed.filter(overText).length} over their text`,
+    );
+    await dense.context().close();
+
+    const { page: off } = await open(launched.browser, demo("file=synthetic-links-in-text.pdf"));
+    await settle(off);
+    const none = await pageLinks(off, 1);
+    check(
+      "without autoLinks, only the file's own links show",
+      none.length === 1 && !none[0]?.inferred,
+      JSON.stringify(none),
+    );
+    await off.context().close();
+
+    const { page: inert } = await open(
+      launched.browser,
+      demo("file=synthetic-links-in-text.pdf&autoLinks=1&externalLinks=disabled"),
+    );
+    const disabled = (await inferredOn(inert, 1, 3)).filter((link) => link.inferred);
+    check(
+      "links found in the text follow externalLinks",
+      disabled.length === 3 && disabled.every((link) => link.href === null),
+      JSON.stringify(disabled),
+    );
+    await inert.context().close();
   }
 
   // --- Thumbnails of a long document hold pixels only near view ---

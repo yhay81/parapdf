@@ -32,6 +32,7 @@ for the direction of the rebuild gets a new record, numbered next.
 | [0021](0021-focus-follows-the-page.md) | Focus follows the page being read | adopted |
 | [0022](0022-runtime-policy-modules.md) | Keep runtime policies in the modules that own them | adopted |
 | [0023](0023-provider-url-fragments.md) | URL open parameters belong to the provider | adopted |
+| [0024](0024-links-found-in-the-text.md) | Links found in the text are a feature off by default | adopted |
 
 ## Template
 

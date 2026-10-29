@@ -385,6 +385,15 @@ call them. The history starts with the first call of `useHistory()` (or of
 other documents open in a new tab; `externalLinks="disabled"` leaves them
 inert.
 
+`autoLinks` turns the URLs and e-mail addresses in the pages' text into
+links, as pdf.js's viewer does: documents made from text often show
+addresses that the file does not link. Once a page's text and annotation
+layers are built, the addresses found in its text, `https://`, `www.`, and
+e-mail addresses, become links of its annotation layer, except where a
+link of the file already covers them. They need `textLayer` and
+`annotationLayer` and follow `externalLinks`; the option is off by default,
+and its code loads only when set.
+
 ## Keeping the view
 
 `getViewState(viewer)` returns where and how the viewer shows its
@@ -890,6 +899,7 @@ keeps the position and the edits. Besides `viewer`, the view state
 |---|---|---|
 | `textLayer` | `true` | Selectable, screen-reader-visible text. Search works without it but paints matches only on text layers. |
 | `annotationLayer` | `true` | Focusable links, comment popups, and, with `forms`, form fields. |
+| `autoLinks` | `false` | URLs and e-mail addresses in the text become links (see [Links](#links-outline-and-history)). |
 | `forms` | `false` | Form fields the reader can fill in (see [Forms](#forms-printing-and-saving)). |
 | `formScripts` | `false` | With `forms`, the document's scripts run in its fields (see [Form scripts](#form-scripts)). |
 | `annotationEditing` | `false` | Highlights, text, drawings, images, and signatures the reader creates (see [Annotations](#annotations)). |
@@ -1041,7 +1051,8 @@ function MarkInfo() {
 
 Features of your own extend a viewer through `viewer.extend()`, the same
 hooks ParaPDF's features use (`ViewerExtension`): the document being laid
-out or ready, a page's text layer built or removed, a link about to jump,
+out or ready, a page's text or annotation layer built or removed, a link
+about to jump,
 and the rest. It returns the function that removes them.
 
 ## Server rendering
