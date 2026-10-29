@@ -18,8 +18,8 @@ unmounts and mounts again.
 
 - `save(viewer)` resolves to the PDF's bytes with the values and the
   annotations created written in, and `download(viewer, filename?)` hands
-  them to the browser as a download, named after the document's URL by
-  default.
+  them to the browser as a download, named by default as the server names
+  the file, or else after the document's URL.
 - `print(viewer, { resolution, onProgress, signal })` draws every page for
   printing, the typed values and the annotations created included, with the
   layers the viewer shows, at 150 dpi by default, and opens the

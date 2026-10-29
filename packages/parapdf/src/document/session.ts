@@ -93,7 +93,10 @@ export interface OutlineNode {
   items: readonly OutlineNode[];
 }
 
-/** The document's information dictionary and XMP metadata, as far as it has them. */
+/**
+ * The document's information dictionary and XMP metadata, as far as it has
+ * them, and what pdf.js reads about the file beside them.
+ */
 export interface PdfMetadata {
   title: string | null;
   author: string | null;
@@ -107,6 +110,17 @@ export interface PdfMetadata {
   pdfVersion: string | null;
   /** The document's natural language (/Lang), such as "ja". */
   language: string | null;
+  /** The file name the server gives (`Content-Disposition`). */
+  filename: string | null;
+  /** The file's length in bytes, when the server or the source tells it. */
+  length: number | null;
+  /** Whether the file is linearized (Fast Web View). */
+  linearized: boolean;
+  /**
+   * Identifies the document, from the ID in its trailer or its bytes, as
+   * pdf.js's viewer keeps each document's last view under it.
+   */
+  fingerprint: string;
 }
 
 /** A file embedded in the document. */
@@ -462,7 +476,10 @@ export class DocumentSession {
   /** The document's information dictionary and XMP metadata. */
   metadata(): Promise<PdfMetadata> {
     return this.#once("metadata", async () => {
-      const { info, metadata } = await this.proxy.getMetadata();
+      const { info, metadata, contentDispositionFilename, contentLength } =
+        (await this.proxy.getMetadata()) as Awaited<
+          ReturnType<Pdfjs.PDFDocumentProxy["getMetadata"]>
+        > & { contentDispositionFilename?: string | null; contentLength?: number | null };
       const fields = info as Record<string, unknown>;
       const { PDFDateString } = this.pdfjs.pdfjs;
       const date = (value: unknown) =>
@@ -479,6 +496,10 @@ export class DocumentSession {
         modificationDate: date(fields.ModDate),
         pdfVersion: text(fields.PDFFormatVersion),
         language: text(fields.Language),
+        filename: contentDispositionFilename || null,
+        length: contentLength ?? null,
+        linearized: fields.IsLinearized === true,
+        fingerprint: this.proxy.fingerprints[0] ?? "",
       };
     });
   }

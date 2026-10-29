@@ -70,4 +70,8 @@ layers work too. Pages keep their old pixels while they are drawn again.
 `usePageLabels()` gives each page's label, such as `"iv"` or `"A-3"`, when
 the PDF defines them, and null otherwise. `useMetadata()` gives the title,
 author, subject, keywords, creator, producer, creation and modification
-dates, PDF version, and language, or null when they cannot be read.
+dates, PDF version, and language, with what pdf.js reads about the file:
+the name the server gives it (`Content-Disposition`), its length, whether
+it is linearized (Fast Web View), and its fingerprint, which identifies the
+document, say to keep each document's last view. It is null when they
+cannot be read.

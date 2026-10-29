@@ -230,6 +230,7 @@ export function fakeDocument({
     getViewerPreferences: async () => null,
     getOutline: async () => null,
     getPageLabels: async () => null,
+    fingerprints: ["fake", null],
     getMetadata: async () => ({ info: {}, metadata: null }),
     getAttachments: async () => null,
     getAttachmentContent: async () => null,
