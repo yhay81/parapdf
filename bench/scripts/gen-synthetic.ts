@@ -313,6 +313,40 @@ async function features(): Promise<Uint8Array> {
   );
   first.node.set(PDFName.of("Annots"), context.obj([note]));
 
+  // On the last page, a highlight whose popup holds a comment, dated, and a
+  // reply to it.
+  const last = pages[pages.length - 1] as (typeof pages)[0];
+  const marked = context.register(
+    context.obj({
+      Type: "Annot",
+      Subtype: "Highlight",
+      F: 4,
+      Rect: [70, 600, 300, 624],
+      QuadPoints: [70, 624, 300, 624, 70, 600, 300, 600],
+      C: [1, 1, 0],
+      Contents: PDFString.of("Check this figure"),
+      T: PDFString.of("Editor"),
+      M: PDFString.of("D:20240102030405Z"),
+    }),
+  );
+  const markedPopup = context.register(
+    context.obj({ Type: "Annot", Subtype: "Popup", Rect: [320, 560, 520, 640], Parent: marked }),
+  );
+  (context.lookup(marked) as PDFDict).set(PDFName.of("Popup"), markedPopup);
+  const reply = context.register(
+    context.obj({
+      Type: "Annot",
+      Subtype: "Text",
+      F: 4,
+      Rect: [300, 600, 324, 624],
+      Contents: PDFString.of("Fixed"),
+      T: PDFString.of("Author"),
+      IRT: marked,
+      RT: "R",
+    }),
+  );
+  last.node.set(PDFName.of("Annots"), context.obj([marked, markedPopup, reply]));
+
   // Form fields on page 2.
   const form = doc.getForm();
   second.drawText("Name", { x: 72, y: 652, size: 12, font });

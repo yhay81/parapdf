@@ -13,6 +13,7 @@ import type {
   DocumentSession,
   OutlineNode,
   PdfAttachment,
+  PdfComment,
   PdfInitialView,
   PdfMetadata,
   PdfSource,
@@ -189,6 +190,11 @@ export class PdfSession {
   /** Files embedded in the document; empty when it has none. */
   attachments(): Promise<readonly PdfAttachment[]> {
     return this.#read("attachments", (session) => session.attachments(), []);
+  }
+
+  /** The file's comments, in page order; empty when it has none or they cannot be read. */
+  comments(): Promise<readonly PdfComment[]> {
+    return this.#read("comments", (session) => session.comments(), []);
   }
 
   /** Which of the document's layers show, in every viewer of it; null when they cannot be read. */

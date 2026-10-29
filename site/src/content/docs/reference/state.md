@@ -74,7 +74,7 @@ creates as it renders: its children read it at once.
 | `submitPassword(password)` | Tries a password while the document asks for one; a wrong one asks again, with the reason `"incorrect"`, and null stops opening it, which then fails. Any `PdfDocument` of the document may answer. |
 | `proxy` | pdf.js's `PDFDocumentProxy`, for its APIs ParaPDF does not wrap; null until it loads (see [Sources](/reference/sources/#pdfjss-own-api)). |
 | `signal` | Aborted once the `PdfDocument` lets the session go, or the session closes. |
-| `outline()`, `pageLabels()`, `metadata()`, `attachments()`, `layers()`, `initialView()` | Promises of the document's secondary data, each read once and settled with an empty value when the read or the document fails. `useOutline()` and the other data hooks read them with `use()`. |
+| `outline()`, `pageLabels()`, `metadata()`, `attachments()`, `comments()`, `layers()`, `initialView()` | Promises of the document's secondary data, each read once and settled with an empty value when the read or the document fails. `useOutline()` and the other data hooks read them with `use()`. |
 
 A `PdfSession` has no method that opens, closes, or releases anything:
 `PdfDocument` holds the document while it is mounted.

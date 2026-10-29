@@ -231,6 +231,7 @@ which never waits for them.
 | `usePageLabels()` | Each page's label, such as `"iv"` or `"A-3"`; null when the document defines none. |
 | `useMetadata()` | Title, author, subject, keywords, creator, producer, creation and modification dates, PDF version, and language, with the file name the server gives (`Content-Disposition`), the file's length, whether it is linearized (Fast Web View), and the fingerprint, which identifies the document for a view an application keeps; null when they cannot be read. |
 | `useAttachments()` | The embedded files (see [Layers and attachments](#layers-and-attachments)). |
+| `useComments()` | The file's comments (see [The file's comments](#the-files-comments)), in page order; empty when there are none. |
 | `useLayers()` | The layers (see [Layers and attachments](#layers-and-attachments)), following their visibility as it changes. |
 | `useFormFields()` | The form fields with their values as first read (see [Forms](#forms-printing-and-saving)). |
 | `useInitialView()` | How the document asks to be shown (see [The document's initial view](#the-documents-initial-view)); null when it cannot be read. |
@@ -243,8 +244,8 @@ of an error.
 `submitPassword()`, pdf.js's `proxy` once ready (see
 [pdf.js's own API](#pdfjss-own-api)), a `signal` that aborts when the
 `PdfDocument` lets the document go, and the promises the hooks above read
-(`outline()`, `pageLabels()`, `metadata()`, `attachments()`, `layers()`,
-`initialView()`).
+(`outline()`, `pageLabels()`, `metadata()`, `attachments()`, `comments()`,
+`layers()`, `initialView()`).
 
 ## Search
 
@@ -726,6 +727,33 @@ annotations created, as pdf.js's do. Label the editor's controls in the
 application's language with `annotationLabels`; the defaults are pdf.js's
 English names. `useAnnotationEditing(viewer)` gives the feature itself,
 with a `store` to subscribe to, for code outside React.
+
+### The file's comments
+
+The comments the file already holds are its markup annotations that carry
+one: a note's text, or another markup's popup note, such as a highlight's.
+`useComments()` lists them across the pages, read once like the outline,
+as `PdfComment`s: `id`, `pageIndex`, `rect` (PDF points from the page's
+bottom left), `subtype` (`"Text"` for a note, `"Highlight"`, and so on),
+`text`, `author`, `date` (when it was last changed, or else created), and
+`replyTo`, the `id` of the comment it answers. A free text annotation's
+text is what it shows, not a comment. The comments the editors add are the
+annotation editing's (`useAnnotationEditing()`).
+
+```tsx
+function Comments() {
+  const comments = useComments();
+  return (
+    <ul>
+      {comments.map((comment) => (
+        <li key={comment.id}>
+          p. {comment.pageIndex + 1}, {comment.author ?? "Anonymous"}: {comment.text}
+        </li>
+      ))}
+    </ul>
+  );
+}
+```
 
 ## Encrypted documents
 

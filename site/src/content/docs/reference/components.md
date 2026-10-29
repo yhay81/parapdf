@@ -99,6 +99,7 @@ too, and those that take none read the nearest `PdfDocument`.
 | `usePageLabels()` | Each page's label, such as `"iv"` or `"A-3"`; null when the document defines none. |
 | `useMetadata()` | Title, author, subject, keywords, creator, producer, creation and modification dates, PDF version, and language, with the file name the server gives (`Content-Disposition`), the file's length, whether it is linearized (Fast Web View), and the fingerprint, which identifies the document for a view an application keeps; null when they cannot be read. |
 | `useAttachments()` | The embedded files, empty when there are none (see [Layers and attachments](/guides/layers-attachments/)). |
+| `useComments()` | The file's comments in page order, empty when there are none (see [Annotations](/guides/annotations/#the-files-comments)). |
 | `useLayers()` | The layers (optional content) and which show, following `setLayerVisible()` in any viewer of the document. |
 | `useFormFields()` | The form fields with their values as first read; `getFormFields()` reads them again (see [Forms](/guides/forms/)). |
 | `useInitialView()` | How the document asks to be shown: its /OpenAction destination, /PageLayout, and /PageMode; null when it cannot be read (see [Keeping the view](/guides/view-state/)). |
