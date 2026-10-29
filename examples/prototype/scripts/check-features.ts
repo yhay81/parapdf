@@ -3,7 +3,7 @@
  * the features other React PDF viewers have: encrypted documents and the
  * password prompt, load progress, page labels, metadata, attachments, layers
  * (optional content), comment popups, form filling and saving, printing,
- * downloading, thumbnails, "fit-page" zoom, keyboard zoom, the initial page,
+ * downloading (named as the server names the file), thumbnails, "fit-page" zoom, keyboard zoom, the initial page,
  * the hand tool, search options, spreads, selections in PDF points, and the
  * structure of tagged PDFs. They run on the synthetic feature sampler and
  * encrypted documents, on f1040.pdf (a tagged form), and on bill-hr815.pdf
@@ -16,6 +16,7 @@
  *   pnpm --filter @parapdf/prototype check:features
  * Environment: BROWSER (chromium, webkit, or firefox), ENGINE (pdfjs-next).
  */
+import { statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Browser, Page } from "playwright";
@@ -134,6 +135,22 @@ const server = await preview({
   logLevel: "warn",
   ...(process.env.DIST ? { build: { outDir: process.env.DIST } } : {}),
   preview: { port: 4186, host: "127.0.0.1", strictPort: false, open: false },
+  plugins: [
+    {
+      // `/corpus/served/<file>` is the corpus file as a server that names it
+      // in `Content-Disposition` sends it.
+      name: "served-name",
+      configurePreviewServer(server) {
+        server.middlewares.use((request, response, next) => {
+          if (request.url?.startsWith("/corpus/served/")) {
+            request.url = request.url.replace("/served/", "/");
+            response.setHeader("Content-Disposition", 'attachment; filename="served-report.pdf"');
+          }
+          next();
+        });
+      },
+    },
+  ],
 });
 const baseUrl = server.resolvedUrls?.local[0] ?? "http://127.0.0.1:4186/";
 const launched = await launchBrowser();
@@ -673,6 +690,37 @@ try {
     );
     await page.evaluate(() => window.__viewer?.setSpread("none"));
     check("no errors on the feature sampler", errors.length === 0, errors.slice(0, 3).join(" | "));
+    await page.context().close();
+  }
+
+  // --- What pdf.js reads about the file, and the server's file name ---
+  {
+    const { page, errors } = await open(
+      launched.browser,
+      demo("file=served/synthetic-features.pdf"),
+    );
+    const metadata = (await documentData(page))?.metadata;
+    const length = statSync(
+      join(process.env.DIST ?? join(exampleDir, "dist"), "corpus/synthetic-features.pdf"),
+    ).size;
+    check(
+      "metadata: the server's file name, the length, linearization, and the fingerprint",
+      metadata?.filename === "served-report.pdf" &&
+        metadata.length === length &&
+        metadata.linearized === false &&
+        /^[0-9a-f]{32}$/.test(metadata.fingerprint),
+      JSON.stringify({ ...metadata, length: [metadata?.length, length] }),
+    );
+    const [served] = await Promise.all([
+      page.waitForEvent("download", { timeout: 10_000 }),
+      page.getByRole("button", { name: "Download", exact: true }).click(),
+    ]);
+    check(
+      "downloading prefers the server's file name to the URL's",
+      served.suggestedFilename() === "served-report.pdf",
+      served.suggestedFilename(),
+    );
+    check("no errors with a named file", errors.length === 0, errors.slice(0, 3).join(" | "));
     await page.context().close();
   }
 

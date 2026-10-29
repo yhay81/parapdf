@@ -196,9 +196,12 @@ describe("DocumentSession", () => {
           { title: "One", dest: "one", url: null, bold: true, italic: false, items: [] },
         ],
         getPageLabels: async () => ["i", "ii"],
+        fingerprints: ["f00d", null],
         getMetadata: async () => ({
-          info: { Title: " Report ", Author: "", PDFFormatVersion: "1.7" },
+          info: { Title: " Report ", Author: "", PDFFormatVersion: "1.7", IsLinearized: true },
           metadata: { get: (name: string) => (name === "dc:creator" ? "Someone" : null) },
+          contentDispositionFilename: "report.pdf",
+          contentLength: 1234,
         }),
         getAttachments: async () => new Map([["a", { filename: "", description: " Data " }]]),
       },
@@ -212,6 +215,10 @@ describe("DocumentSession", () => {
     assert.equal(metadata.author, "Someone", "XMP metadata wins");
     assert.equal(metadata.pdfVersion, "1.7");
     assert.equal(metadata.subject, null);
+    assert.equal(metadata.filename, "report.pdf");
+    assert.equal(metadata.length, 1234);
+    assert.equal(metadata.linearized, true);
+    assert.equal(metadata.fingerprint, "f00d");
     assert.deepEqual(await session.attachments(), [
       { id: "a", filename: "unnamed", description: "Data" },
     ]);
@@ -221,6 +228,26 @@ describe("DocumentSession", () => {
       proxy: { getPageLabels: async () => ["i"] },
     });
     assert.equal(await unlabelled.session.pageLabels(), null);
+  });
+
+  it("reads the downloaded length when metadata has no length", async () => {
+    for (const contentLength of [null, 0]) {
+      const { session } = await openSession({
+        proxy: {
+          getMetadata: async () => ({ info: {}, metadata: null, contentLength }),
+          getDownloadInfo: async () => ({ length: 1234 }),
+        },
+      });
+      assert.equal((await session.metadata()).length, 1234);
+    }
+    const { session } = await openSession({
+      proxy: {
+        getDownloadInfo: async () => {
+          throw new Error("unavailable");
+        },
+      },
+    });
+    assert.equal((await session.metadata()).length, null);
   });
 
   it("shares one layer state, whose changes reach every viewer until its signal aborts", async () => {
