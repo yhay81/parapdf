@@ -28,10 +28,7 @@
         "height": 1000
       },
       "deviceScaleFactor": 2,
-      "queries": [
-        "before",
-        ""
-      ]
+      "queries": ["before", ""]
     }
   },
   "summaries": [
@@ -41,10 +38,7 @@
       "description": "zoomBy(1.1) at fit-width",
       "runs": 3,
       "errors": [],
-      "scale": [
-        1.11,
-        1.22
-      ],
+      "scale": [1.11, 1.22],
       "blankFrames": 0,
       "blankMs": 0,
       "baseFrames": 0,
@@ -63,10 +57,7 @@
       "description": "zoomBy(1.1) at fit-width",
       "runs": 3,
       "errors": [],
-      "scale": [
-        1.11,
-        1.22
-      ],
+      "scale": [1.11, 1.22],
       "blankFrames": 0,
       "blankMs": 0,
       "baseFrames": 0,
@@ -85,10 +76,7 @@
       "description": "setScale() from 5 back to \"fit-width\"",
       "runs": 3,
       "errors": [],
-      "scale": [
-        5,
-        1.11
-      ],
+      "scale": [5, 1.11],
       "blankFrames": 0,
       "blankMs": 0,
       "baseFrames": 0,
@@ -107,10 +95,7 @@
       "description": "setScale() from 5 back to \"fit-width\"",
       "runs": 3,
       "errors": [],
-      "scale": [
-        5,
-        1.11
-      ],
+      "scale": [5, 1.11],
       "blankFrames": 0,
       "blankMs": 0,
       "baseFrames": 0,
@@ -129,10 +114,7 @@
       "description": "setScale() from 0.5 to 1.5, where detail still covers each page, after a jump drew bases",
       "runs": 3,
       "errors": [],
-      "scale": [
-        0.5,
-        1.5
-      ],
+      "scale": [0.5, 1.5],
       "blankFrames": 0,
       "blankMs": 0,
       "baseFrames": 0,
@@ -151,10 +133,7 @@
       "description": "setScale() from 0.5 to 1.5, where detail still covers each page, after a jump drew bases",
       "runs": 3,
       "errors": [],
-      "scale": [
-        0.5,
-        1.5
-      ],
+      "scale": [0.5, 1.5],
       "blankFrames": 0,
       "blankMs": 0,
       "baseFrames": 0,
