@@ -50,10 +50,30 @@ function bridgeTransport(
     range.progressiveDone,
     range.contentDispositionFilename,
   );
-  // pdf.js's stream gives the transport the listener the ranges reach it through.
-  bridge.transportReady = (listener) => range.transportReady(listener);
-  bridge.requestDataRange = (begin, end) => range.requestDataRange(begin, end);
-  bridge.abort = () => range.abort();
+  // A request may finish after this bridge was aborted and the transport was
+  // reopened. Only deliver ranges this stream is still waiting for; an old
+  // response for the same range is interchangeable with the new one.
+  const pending = new Map<number, number>();
+  let active = true;
+  bridge.transportReady = (listener) =>
+    range.transportReady((event: { type: string; begin?: number; chunk?: Uint8Array }) => {
+      if (!active) return;
+      if (event.type === "range") {
+        const { begin, chunk } = event;
+        if (begin === undefined || !chunk || pending.get(begin) !== chunk.byteLength) return;
+        pending.delete(begin);
+      }
+      listener(event);
+    });
+  bridge.requestDataRange = (begin, end) => {
+    pending.set(begin, end - begin);
+    range.requestDataRange(begin, end);
+  };
+  bridge.abort = () => {
+    active = false;
+    pending.clear();
+    range.abort();
+  };
   return bridge;
 }
 
