@@ -126,11 +126,12 @@ export function splitFragment(url: string): [url: string, fragment: string] {
 /**
  * What identifies a source: its URL without its fragment, which says where
  * to open, with the request's headers and credentials mode, or the identity
- * of its bytes. Sources with equal keys share one session; the password is
+ * of its bytes or its transport. Sources with equal keys share one session; the password is
  * not part of the key.
  */
 export const sourceKey = (source: PdfSource): unknown => {
-  if (!("url" in source)) return source.data;
+  if ("data" in source) return source.data;
+  if ("range" in source) return source.range;
   const { httpHeaders, withCredentials } = source;
   const [url] = splitFragment(source.url);
   if (!httpHeaders && withCredentials === undefined) return `url:${url}`;

@@ -28,6 +28,7 @@ import {
   useViewer,
   useViewState,
 } from "parapdf";
+import type { PDFDataRangeTransport } from "pdfjs-dist";
 import {
   lazy,
   Profiler,
@@ -64,8 +65,15 @@ const settings = {
     timerLagP95Ms: Number(params.get("idleLag") ?? "2"),
     frameIntervalMs: Number(params.get("idleFrame") ?? "16.7"),
   },
-  /** "data" opens the PDF from bytes the application fetched instead of from its URL. */
-  source: params.get("source") === "data" ? "data" : "url",
+  /**
+   * "data" opens the PDF from bytes the application fetched instead of from
+   * its URL, and "range" through a transport that fetches the ranges pdf.js
+   * asks for with code of its own.
+   */
+  source: (["data", "range"].includes(params.get("source") ?? "") ? params.get("source") : "url") as
+    | "url"
+    | "data"
+    | "range",
   /** The password the source carries; the viewer asks for one when it is absent or wrong. */
   password: params.get("password"),
   /** URLs and e-mail addresses in the text become links. */
@@ -146,6 +154,8 @@ const pageLabel = japanese
 
 declare global {
   interface Window {
+    /** The ranges a transport source fetched, as [begin, end). */
+    __ranges?: [number, number][];
     /** Hooks for scripts/check-lifecycle.ts. */
     __lifecycle?: {
       remount(): void;
@@ -196,6 +206,29 @@ const url = `/corpus/${settings.file}`;
 const bytesPromise: Promise<Uint8Array | null> =
   settings.source === "data"
     ? fetch(url).then(async (response) => new Uint8Array(await response.arrayBuffer()))
+    : Promise.resolve(null);
+/**
+ * A transport whose ranges the demo fetches itself (`source=range`), each
+ * listed in `window.__ranges`; pdf.js loads only then.
+ */
+const rangePromise: Promise<PDFDataRangeTransport | null> =
+  settings.source === "range"
+    ? Promise.all([fetch(url, { method: "HEAD" }), import("pdfjs-dist")]).then(
+        ([head, { PDFDataRangeTransport: Transport }]) => {
+          const ranges: [number, number][] = [];
+          window.__ranges = ranges;
+          class Fetched extends Transport {
+            override requestDataRange(begin: number, end: number): void {
+              ranges.push([begin, end]);
+              fetch(url, { headers: { Range: `bytes=${begin}-${end - 1}` } })
+                .then((response) => response.arrayBuffer())
+                .then((chunk) => this.onDataRange(begin, new Uint8Array(chunk)))
+                .catch((error: unknown) => console.error("fetching a range failed", error));
+            }
+          }
+          return new Fetched(Number(head.headers.get("Content-Length")), null);
+        },
+      )
     : Promise.resolve(null);
 let bytes: Uint8Array | null = null;
 void bytesPromise.then((loaded) => {
@@ -293,6 +326,7 @@ function Viewer({ fragment }: { renders: number; fragment: string }) {
   // Only a data source waits for its bytes: suspending for a URL would delay
   // PdfDocument's render, which starts loading pdf.js and the PDF.
   const data = settings.source === "data" ? use(bytesPromise) : null;
+  const range = settings.source === "range" ? use(rangePromise) : null;
   const viewer = useViewer();
   const [sidebar, setSidebar] = useState<SidebarView | null>(null);
   // Props a check sets on the viewer while it shows the document.
@@ -305,7 +339,9 @@ function Viewer({ fragment }: { renders: number; fragment: string }) {
   const password = settings.password !== null ? { password: settings.password } : {};
   const source: PdfSource = data
     ? { data, ...password }
-    : { url: fragment ? `${url}#${fragment}` : url, ...password };
+    : range
+      ? { range, ...password }
+      : { url: fragment ? `${url}#${fragment}` : url, ...password };
   return (
     <Profiler id="viewer" onRender={countCommit}>
       <PdfDocument source={source} passwordPrompt={settings.passwordPrompt}>

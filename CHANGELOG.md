@@ -6,6 +6,12 @@ change the API.
 
 ## Unreleased
 
+- A source may be `{ range }`, pdf.js's `PDFDataRangeTransport`, through
+  which the application hands pdf.js the ranges it asks for, for documents
+  it fetches with code of its own (#92). Like bytes, a transport is
+  identified by itself; ParaPDF hands pdf.js a transport of its own that
+  forwards to the application's, which stays usable and opens again.
+
 - Printing turns a page whose orientation differs from the first page's to
   the sheet's, as pdf.js's viewer prints it, so that a landscape page among
   portrait ones fits a matching sheet without extra scaling (#88). Pages

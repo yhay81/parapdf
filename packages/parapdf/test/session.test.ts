@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it, mock } from "node:test";
+import type { PDFDataRangeTransport } from "pdfjs-dist";
 import { closeSession, DocumentSession } from "../src/document/session.ts";
-import { fakeDocument, fakeLayers, fakePdfjs, LETTER, openSession, settle } from "./fake-pdfjs.ts";
+import {
+  FakeRangeTransport,
+  fakeDocument,
+  fakeLayers,
+  fakePdfjs,
+  LETTER,
+  openSession,
+  settle,
+} from "./fake-pdfjs.ts";
 
 const A4 = { width: 595, height: 842 };
 
@@ -295,6 +304,39 @@ describe("DocumentSession", () => {
     assert.equal(session.signal.aborted, true);
     assert.deepEqual(stopped, ["work"]);
     assert.equal(calls.destroys, 1);
+  });
+
+  it("opens a range transport through one of the loaded pdf.js, leaving the application's intact", async () => {
+    const { loader, calls } = fakePdfjs();
+    const initialData = new Uint8Array([1, 2, 3]);
+    const requested: number[][] = [];
+    let aborted = 0;
+    const range = Object.assign(new FakeRangeTransport(10, initialData, false, "a.pdf"), {
+      requestDataRange: (begin: number, end: number) => void requested.push([begin, end]),
+      abort: () => void aborted++,
+    });
+    await DocumentSession.open(
+      loader,
+      { range: range as unknown as PDFDataRangeTransport },
+      new AbortController(),
+    );
+    const bridge = calls.parameters[0]?.range as FakeRangeTransport;
+    assert.ok(bridge instanceof FakeRangeTransport);
+    assert.notEqual(bridge, range);
+    assert.deepEqual(
+      [bridge.length, bridge.progressiveDone, bridge.contentDispositionFilename],
+      [10, false, "a.pdf"],
+    );
+    assert.deepEqual(bridge.initialData, initialData);
+    assert.notEqual(bridge.initialData, initialData, "pdf.js gets a copy of the initial bytes");
+    const heard: object[] = [];
+    bridge.transportReady((args) => heard.push(args));
+    range.onDataRange(4, new Uint8Array([5]));
+    assert.deepEqual(heard, [{ type: "range", begin: 4, chunk: new Uint8Array([5]) }]);
+    bridge.requestDataRange(4, 8);
+    bridge.abort();
+    assert.deepEqual(requested, [[4, 8]]);
+    assert.equal(aborted, 1);
   });
 
   it("stops a load that is aborted before pdf.js has loaded the document", async () => {

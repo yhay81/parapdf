@@ -296,6 +296,34 @@ export function askPassword(
   });
 }
 
+/** pdf.js's `PDFDataRangeTransport`, which pdf.js's stream gives its listener. */
+export class FakeRangeTransport {
+  listener: ((args: object) => void) | null = null;
+  readonly length: number;
+  readonly initialData: Uint8Array | null;
+  readonly progressiveDone: boolean;
+  readonly contentDispositionFilename: string | null;
+  constructor(
+    length: number,
+    initialData: Uint8Array | null,
+    progressiveDone = false,
+    contentDispositionFilename: string | null = null,
+  ) {
+    this.length = length;
+    this.initialData = initialData;
+    this.progressiveDone = progressiveDone;
+    this.contentDispositionFilename = contentDispositionFilename;
+  }
+  onDataRange(begin: number, chunk: Uint8Array): void {
+    this.listener?.({ type: "range", begin, chunk });
+  }
+  transportReady(listener: (args: object) => void): void {
+    this.listener = listener;
+  }
+  requestDataRange(_begin: number, _end: number): void {}
+  abort(): void {}
+}
+
 /**
  * pdf.js loaded, whose `getDocument()` opens a document as `open` says:
  * `open` gets the loading task, through which it reports progress and asks
@@ -335,6 +363,7 @@ export function fakePdfjs(
     },
     PasswordResponses,
     PasswordException,
+    PDFDataRangeTransport: FakeRangeTransport,
     PermissionFlag: {
       PRINT: 0x04,
       MODIFY_CONTENTS: 0x08,
