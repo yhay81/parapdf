@@ -6,6 +6,13 @@ change the API.
 
 ## Unreleased
 
+- Printing turns a page whose orientation differs from the first page's to
+  the sheet's, as pdf.js's viewer prints it, so that a landscape page among
+  portrait ones fits a matching sheet without extra scaling (#88). Pages
+  larger than the first page's sheet are still scaled to fit.
+  **Breaking:** this is the new default of `print()`; `autoRotate: false`
+  prints every page upright, as before.
+
 - `useMetadata()` and `PdfSession.metadata()` also give what pdf.js reads
   about the file: `filename`, the name the server gives it
   (`Content-Disposition`); `length`, in bytes; `linearized` (Fast Web

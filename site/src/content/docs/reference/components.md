@@ -119,7 +119,7 @@ Each takes the viewer it acts through.
 
 | Function | |
 |---|---|
-| `print(viewer, options?)` | Draws every page for printing and opens the browser's print dialog; `options` are `resolution` (150 dpi by default), `onProgress(done, total)`, and `signal`. Fails when the viewer follows permissions and the document forbids printing (see [Forms, printing, and saving](/guides/forms/)). |
+| `print(viewer, options?)` | Draws every page for printing and opens the browser's print dialog; `options` are `resolution` (150 dpi by default), `autoRotate` (true by default: a page whose orientation differs from the first page's prints turned to the sheet), `onProgress(done, total)`, and `signal`. Fails when the viewer follows permissions and the document forbids printing (see [Forms, printing, and saving](/guides/forms/)). |
 | `save(viewer)` | Resolves to the PDF's bytes with form values and every viewer's annotations written in; null while no document is open. |
 | `download(viewer, filename?)` | Saves as `save()` does and hands the bytes to the browser as a download, named by default as the server names the file (`Content-Disposition`), or else after the document's URL. |
 | `getText(viewer, options?)` | Resolves to the document's text, all of it or between pages or points (`from`, `to`, `lineBreaks`, `signal`; see [Text](/guides/text/)). |

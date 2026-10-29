@@ -504,10 +504,14 @@ What the reader types belongs to the document:
   and `download(viewer, filename?)` hands them to the browser as a download,
   named by default as the server names the file, or else after the
   document's URL.
-- `print(viewer, { resolution, onProgress, signal })` draws every page for
-  printing, the typed values included, at 150 dpi by default, and opens the
-  browser's print dialog with only those pages. A new print request stops
-  the previous job; that job resolves without opening another dialog.
+- `print(viewer, { resolution, autoRotate, onProgress, signal })` draws
+  every page for printing, the typed values included, at 150 dpi by
+  default, and opens the browser's print dialog with only those pages, on
+  sheets the size of the first page. A page whose orientation differs from
+  the first page's is turned to the sheet's, as pdf.js's viewer prints it;
+  `autoRotate: false` prints it upright. Pages are scaled to fit the sheet,
+  whose size follows the first page. A new print request stops the previous
+  job; that job resolves without opening another dialog.
 
 Applications read and fill the form themselves:
 
