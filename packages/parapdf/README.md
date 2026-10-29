@@ -229,7 +229,7 @@ which never waits for them.
 |---|---|
 | `useOutline()` | The outline (bookmarks) as `OutlineNode`s: `title`, `dest`, `url`, `bold`, `italic`, and `items`; empty when there is none. |
 | `usePageLabels()` | Each page's label, such as `"iv"` or `"A-3"`; null when the document defines none. |
-| `useMetadata()` | Title, author, subject, keywords, creator, producer, creation and modification dates, PDF version, and language; null when they cannot be read. |
+| `useMetadata()` | Title, author, subject, keywords, creator, producer, creation and modification dates, PDF version, and language, with the file name the server gives (`Content-Disposition`), the file's length, whether it is linearized (Fast Web View), and the fingerprint, which identifies the document for a view an application keeps; null when they cannot be read. |
 | `useAttachments()` | The embedded files (see [Layers and attachments](#layers-and-attachments)). |
 | `useLayers()` | The layers (see [Layers and attachments](#layers-and-attachments)), following their visibility as it changes. |
 | `useFormFields()` | The form fields with their values as first read (see [Forms](#forms-printing-and-saving)). |
@@ -502,7 +502,8 @@ What the reader types belongs to the document:
 
 - `save(viewer)` resolves to the PDF's bytes with the values written in,
   and `download(viewer, filename?)` hands them to the browser as a download,
-  named after the document's URL by default.
+  named by default as the server names the file, or else after the
+  document's URL.
 - `print(viewer, { resolution, onProgress, signal })` draws every page for
   printing, the typed values included, at 150 dpi by default, and opens the
   browser's print dialog with only those pages. A new print request stops

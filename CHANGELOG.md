@@ -6,6 +6,13 @@ change the API.
 
 ## Unreleased
 
+- `useMetadata()` and `PdfSession.metadata()` also give what pdf.js reads
+  about the file: `filename`, the name the server gives it
+  (`Content-Disposition`); `length`, in bytes; `linearized` (Fast Web
+  View); and `fingerprint`, which identifies the document for a view an
+  application keeps (#90). **Breaking:** `download()` names the file as
+  the server does when it sends a name, and after the URL only otherwise.
+
 - `"auto"` zoom beside `"fit-width"` and `"fit-page"`, wherever a zoom mode
   is taken or reported (`zoom`, `defaultZoom`, `onZoomChange`,
   `setScale()`, the view state's `zoomMode`, and `ViewState.scale`): it
