@@ -4,6 +4,7 @@ export type {
   OutlineNode,
   PasswordReason,
   PdfAttachment,
+  PdfComment,
   PdfInitialView,
   PdfMetadata,
   PdfPageLayout,
@@ -91,6 +92,7 @@ export {
 export { useDocumentState, useSession, useViewState } from "./react/context.ts";
 export {
   useAttachments,
+  useComments,
   useInitialView,
   useLayers,
   useMetadata,
