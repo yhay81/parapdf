@@ -6,6 +6,9 @@ change the API.
 
 ## Unreleased
 
+- URL sources with explicit credentials now distinguish omitted headers,
+  which inherit the configured headers, from empty headers, which replace them.
+
 - A source may be `{ range }`, pdf.js's `PDFDataRangeTransport`, through
   which the application hands pdf.js the ranges it asks for, for documents
   it fetches with code of its own (#92). Like bytes, a transport is

@@ -182,6 +182,22 @@ describe("acquireSession", () => {
     );
   });
 
+  it("opens empty headers apart from inherited headers with explicit credentials", async () => {
+    const { loader, loaded, calls } = fakePdfjs();
+    Object.assign(loaded.documentParameters, { httpHeaders: { authorization: "token" } });
+    const inherited = acquireSession(loader, { url: "/a.pdf", withCredentials: false });
+    const empty = acquireSession(loader, {
+      url: "/a.pdf",
+      withCredentials: false,
+      httpHeaders: {},
+    });
+    assert.notEqual(await inherited.session, await empty.session);
+    assert.deepEqual(
+      calls.parameters.map((parameters) => parameters.httpHeaders),
+      [{ authorization: "token" }, {}],
+    );
+  });
+
   it("keeps the sessions of each pdf.js loader apart", async () => {
     const first = fakePdfjs();
     const second = fakePdfjs();
