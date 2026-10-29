@@ -1,0 +1,237 @@
+{
+  "environment": {
+    "runAt": "2026-10-29T11:46:25.829Z",
+    "os": "darwin 27.0.0 arm64",
+    "cpu": "Apple M2 Pro (12 logical cores)",
+    "browser": "Chromium 156.0.8078.4",
+    "power": {
+      "source": "ac",
+      "lowPowerMode": false
+    },
+    "loadAverage": {
+      "start": 32.15,
+      "end": 47.61
+    },
+    "turnTaking": {
+      "waits": 0,
+      "waitedMs": 0,
+      "repeatedJobs": 0
+    },
+    "settings": {
+      "file": "bill-hr815.pdf",
+      "runs": 3,
+      "devices": [
+        {
+          "name": "desktop",
+          "viewport": {
+            "width": 1280,
+            "height": 900
+          },
+          "deviceScaleFactor": 2
+        },
+        {
+          "name": "phone",
+          "viewport": {
+            "width": 390,
+            "height": 844
+          },
+          "deviceScaleFactor": 3
+        }
+      ]
+    }
+  },
+  "summaries": [
+    {
+      "device": "desktop",
+      "scale": 1.5,
+      "variant": "before",
+      "runs": 3,
+      "zoom": {
+        "timeToSharpMs": 2.95,
+        "sharpRuns": 3,
+        "sharpness": 1,
+        "canvasMiB": 82.52,
+        "peakCanvasMiB": 164.14
+      },
+      "pan": {
+        "timeToSharpMs": 15.54,
+        "sharpRuns": 3,
+        "sharpness": 1,
+        "canvasMiB": 82.52,
+        "peakCanvasMiB": 82.52
+      },
+      "renders": {
+        "base": 0,
+        "detail": 3
+      }
+    },
+    {
+      "device": "desktop",
+      "scale": 1.5,
+      "variant": "pdfjs-hwa",
+      "runs": 3,
+      "zoom": {
+        "timeToSharpMs": 2.96,
+        "sharpRuns": 3,
+        "sharpness": 1,
+        "canvasMiB": 82.52,
+        "peakCanvasMiB": 164.14
+      },
+      "pan": {
+        "timeToSharpMs": 15.14,
+        "sharpRuns": 3,
+        "sharpness": 1,
+        "canvasMiB": 82.52,
+        "peakCanvasMiB": 82.52
+      },
+      "renders": {
+        "base": 0,
+        "detail": 3
+      }
+    },
+    {
+      "device": "desktop",
+      "scale": 2.5,
+      "variant": "before",
+      "runs": 3,
+      "zoom": {
+        "timeToSharpMs": 44.31,
+        "sharpRuns": 3,
+        "sharpness": 1,
+        "canvasMiB": 51.21,
+        "peakCanvasMiB": 87.31
+      },
+      "pan": {
+        "timeToSharpMs": 47.97,
+        "sharpRuns": 3,
+        "sharpness": 1,
+        "canvasMiB": 58.03,
+        "peakCanvasMiB": 97.54
+      },
+      "renders": {
+        "base": 2,
+        "detail": 2
+      }
+    },
+    {
+      "device": "desktop",
+      "scale": 2.5,
+      "variant": "pdfjs-hwa",
+      "runs": 3,
+      "zoom": {
+        "timeToSharpMs": 41.76,
+        "sharpRuns": 3,
+        "sharpness": 1,
+        "canvasMiB": 51.21,
+        "peakCanvasMiB": 87.31
+      },
+      "pan": {
+        "timeToSharpMs": 47.81,
+        "sharpRuns": 3,
+        "sharpness": 1,
+        "canvasMiB": 58.03,
+        "peakCanvasMiB": 97.54
+      },
+      "renders": {
+        "base": 2,
+        "detail": 2
+      }
+    },
+    {
+      "device": "phone",
+      "scale": 1.5,
+      "variant": "before",
+      "runs": 3,
+      "zoom": {
+        "timeToSharpMs": 42.79,
+        "sharpRuns": 3,
+        "sharpness": 1,
+        "canvasMiB": 187.27,
+        "peakCanvasMiB": 201.07
+      },
+      "pan": {
+        "timeToSharpMs": 12.34,
+        "sharpRuns": 3,
+        "sharpness": 1,
+        "canvasMiB": 240.44,
+        "peakCanvasMiB": 247.34
+      },
+      "renders": {
+        "base": 0,
+        "detail": 4
+      }
+    },
+    {
+      "device": "phone",
+      "scale": 1.5,
+      "variant": "pdfjs-hwa",
+      "runs": 3,
+      "zoom": {
+        "timeToSharpMs": 41.09,
+        "sharpRuns": 3,
+        "sharpness": 1,
+        "canvasMiB": 187.27,
+        "peakCanvasMiB": 201.07
+      },
+      "pan": {
+        "timeToSharpMs": 5.83,
+        "sharpRuns": 3,
+        "sharpness": 1,
+        "canvasMiB": 240.44,
+        "peakCanvasMiB": 247.34
+      },
+      "renders": {
+        "base": 0,
+        "detail": 4
+      }
+    },
+    {
+      "device": "phone",
+      "scale": 2.5,
+      "variant": "before",
+      "runs": 3,
+      "zoom": {
+        "timeToSharpMs": 20.95,
+        "sharpRuns": 3,
+        "sharpness": 1,
+        "canvasMiB": 76.27,
+        "peakCanvasMiB": 78.54
+      },
+      "pan": {
+        "timeToSharpMs": 47.32,
+        "sharpRuns": 3,
+        "sharpness": 1,
+        "canvasMiB": 83.5,
+        "peakCanvasMiB": 83.5
+      },
+      "renders": {
+        "base": 0,
+        "detail": 2
+      }
+    },
+    {
+      "device": "phone",
+      "scale": 2.5,
+      "variant": "pdfjs-hwa",
+      "runs": 3,
+      "zoom": {
+        "timeToSharpMs": 19.33,
+        "sharpRuns": 3,
+        "sharpness": 1,
+        "canvasMiB": 76.27,
+        "peakCanvasMiB": 78.54
+      },
+      "pan": {
+        "timeToSharpMs": 47.74,
+        "sharpRuns": 3,
+        "sharpness": 1,
+        "canvasMiB": 83.5,
+        "peakCanvasMiB": 83.5
+      },
+      "renders": {
+        "base": 0,
+        "detail": 2
+      }
+    }
+  ]
+}

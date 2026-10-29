@@ -383,6 +383,13 @@ const allScenarios: Scenario[] = [
     act: (page) => viewerCall(page, 'v.setScale("fit-width");'),
   },
   {
+    name: "zoom-in-whole",
+    description:
+      "setScale() from 0.5 to 1.5, where detail still covers each page, after a jump drew bases",
+    setup: "v.setScale(0.5); v.goToPage(4);",
+    act: (page) => viewerCall(page, "v.setScale(1.5);"),
+  },
+  {
     name: "zoom-twice",
     description: "zoomBy(1.25) twice 30 ms apart at fit-width",
     setup: fitWidth(2),
