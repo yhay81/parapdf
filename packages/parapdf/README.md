@@ -133,7 +133,7 @@ holds. The view state (`ViewerState`) has:
 | Field | Meaning |
 |---|---|
 | `currentPage` | The zero-based page being read: the one nearest the viewport's center, except that the current page stays current while all of it is in view, and that navigation makes the page it shows current. |
-| `scale`, `zoomMode` | CSS pixels per PDF point; `"fit-width"` or `"fit-page"` while the page is fitted as the viewport resizes, otherwise `"custom"`. |
+| `scale`, `zoomMode` | CSS pixels per PDF point; `"fit-width"`, `"fit-page"`, or `"auto"` while the page is fitted as the viewport resizes, otherwise `"custom"`. |
 | `rotation`, `spread`, `scrollMode` | The view's clockwise rotation (0, 90, 180, or 270); `"none"`, `"odd"`, or `"even"`; and `"vertical"`, `"horizontal"`, `"wrapped"`, or `"page"` (see [Scroll modes](#scroll-modes-spreads-and-fitting)). |
 | `tool` | What a mouse drag does: `"select"` text, or scroll the document with the `"hand"`. |
 | `direction` | The order of pages in a row: `"ltr"` or `"rtl"`, from the `direction` prop or the document. |
@@ -142,7 +142,7 @@ holds. The view state (`ViewerState`) has:
 
 A viewer's methods change the view: `goToPage(index)`, `nextPage()` and
 `previousPage()` (by a whole spread or row), `zoomBy(factor)`,
-`setScale(scale | "fit-width" | "fit-page")`, `resetScale()`,
+`setScale(scale | "fit-width" | "fit-page" | "auto")`, `resetScale()`,
 `rotate(degrees)`, `setRotation(rotation)`, `setSpread(spread)`,
 `setScrollMode(mode)`, `setTool("select" | "hand")`, and
 `goToDestination(dest)` (see [Links](#links-outline-and-history)).
@@ -179,7 +179,7 @@ function ControlledViewer() {
 
 | Controlled | Change callback | Uncontrolled default |
 |---|---|---|
-| `zoom` (a scale in CSS pixels per point, `"fit-width"`, or `"fit-page"`) | `onZoomChange` | `defaultZoom` (`"fit-width"`) |
+| `zoom` (a scale in CSS pixels per point, `"fit-width"`, `"fit-page"`, or `"auto"`) | `onZoomChange` | `defaultZoom` (`"fit-width"`) |
 | `rotation` | `onRotationChange` | `defaultRotation` (`0`) |
 | `spread` | `onSpreadChange` | `defaultSpread` (`"none"`) |
 | `scrollMode` | `onScrollModeChange` | `defaultScrollMode` (`"vertical"`) |
@@ -390,8 +390,8 @@ inert.
 `getViewState(viewer)` returns where and how the viewer shows its
 document, as a plain object to store or put in a URL: the `page` at the
 viewport's top-left corner, the point of that page there (`x`, `y`, in PDF
-points from its top-left corner), `scale` (a number, `"fit-width"`, or
-`"fit-page"`), `rotation`, `spread`, and `scrollMode`; null until the
+points from its top-left corner), `scale` (a number, `"fit-width"`,
+`"fit-page"`, or `"auto"`), `rotation`, `spread`, and `scrollMode`; null until the
 document is ready. The point keeps its place on the page whatever the zoom
 or the viewport's size, so the view moves between a phone and a desktop.
 
@@ -796,7 +796,9 @@ a wrapped row and when `"page"` mode flips. `setScale("fit-page")` fits all
 of the current page, or of its spread, and keeps fitting it as the viewport
 resizes; in a spread mode, fitting counts two pages, so the zoom stays the
 same from row to row, as in pdf.js. In `"horizontal"` mode, where all pages
-share one row, fitting counts one.
+share one row, fitting counts one. `setScale("auto")` fits as pdf.js's
+viewer opens documents: the width of a portrait page, all of a landscape
+one, never above a scale of 5/3 (pdf.js's 125%), and keeps fitting too.
 
 Pages of a document read from the right, such as Japanese or Arabic books,
 run right to left when the document says so in its `/ViewerPreferences

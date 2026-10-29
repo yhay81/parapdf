@@ -63,7 +63,9 @@ search results, and `getViewState()` do not change with it.
 
 `setScale("fit-width")`, or `"fit-width"` as `PdfViewer`'s `zoom` or
 `defaultZoom`, the default, fits the current page to the viewport's width,
-and `"fit-page"` fits all of it; both keep fitting as the viewport resizes,
+`"fit-page"` fits all of it, and `"auto"` fits as pdf.js's viewer opens
+documents: the width of a portrait page and all of a landscape one, never
+above a scale of 5/3 (pdf.js's 125%). All three keep fitting as the viewport resizes,
 the view turns, or the page's real size arrives. The view state's
 `zoomMode` says which one holds; a numeric scale, a zoom step, or a pinch
 makes it `"custom"`, and `onZoomChange` then hears the scale.

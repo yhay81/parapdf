@@ -58,7 +58,7 @@ zoom it asks for, as in pdf.js:
 | `FitV` | The page's height. |
 | `FitR` | Its rectangle, filling the viewport. |
 
-`"fit-width"` and `"fit-page"` keep fitting as the viewport resizes. With
+`"fit-width"`, `"fit-page"`, and `"auto"` keep fitting as the viewport resizes. With
 `destinationZoom={false}`, the viewer keeps the zoom and only scrolls.
 
 `viewer.goToDestination(dest)` takes a named destination or an explicit

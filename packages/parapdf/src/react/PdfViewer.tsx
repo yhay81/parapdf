@@ -25,7 +25,7 @@ import type { PageColors, Rotation } from "../pdfjs/draw.ts";
 import type { AnnotationLabels } from "../pdfjs/editor-types.ts";
 import type { Direction, ScrollMode, SpreadMode } from "../view/layout.ts";
 import type { ViewerOptions } from "../view/options.ts";
-import type { PointerTool, ViewerState } from "../view/state.ts";
+import type { FitMode, PointerTool, ViewerState } from "../view/state.ts";
 import {
   attachPage,
   attachViewport,
@@ -39,7 +39,7 @@ import { VIEWER_CSS } from "./styles.ts";
 import { useViewer } from "./viewer.ts";
 
 /** A zoom: CSS pixels per PDF point, or a fit that keeps fitting as the viewport resizes. */
-export type Zoom = number | "fit-width" | "fit-page";
+export type Zoom = number | FitMode;
 
 /** Each view setting a `<PdfViewer>` controls or leaves to the viewer, by its prop. */
 interface ViewValues {
@@ -60,8 +60,10 @@ export interface PdfViewerProps extends InitialViewOptions {
 
   /**
    * The zoom, controlled: a scale in CSS pixels per point, "fit-width" to
-   * keep fitting the width of the current page, or "fit-page" to keep
-   * fitting all of it. The viewer reports its own changes through
+   * keep fitting the width of the current page, "fit-page" to keep
+   * fitting all of it, or "auto" to keep fitting as pdf.js's viewer opens
+   * documents: a portrait page's width, a landscape page whole, never above
+   * 5/3 (pdf.js's 125%). The viewer reports its own changes through
    * `onZoomChange` and returns to this once React renders without it.
    */
   zoom?: Zoom;

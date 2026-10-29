@@ -106,5 +106,5 @@ export type { ViewerExtension } from "./view/extensions.ts";
 export type { Direction, Layout, ScrollMode, SpreadMode } from "./view/layout.ts";
 export type { ViewerPosition } from "./view/navigation.ts";
 export type { Opening, ShownView } from "./view/options.ts";
-export type { PointerTool, ViewerState, ZoomMode } from "./view/state.ts";
+export type { FitMode, PointerTool, ViewerState, ZoomMode } from "./view/state.ts";
 export type { Viewer } from "./view/viewer.ts";

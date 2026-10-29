@@ -24,8 +24,9 @@ export interface ViewerState {
   scale: number;
   /**
    * "fit-width" keeps fitting the width of the current page as the viewport
-   * resizes or the view turns, "fit-page" all of that page; "custom" keeps
-   * `scale`.
+   * resizes or the view turns, "fit-page" all of that page, "auto" the
+   * width of a portrait page and all of a landscape one, never above 5/3;
+   * "custom" keeps `scale`.
    */
   zoomMode: ZoomMode;
   /**
@@ -49,7 +50,10 @@ export interface ViewerState {
   direction: Direction;
 }
 
-export type ZoomMode = "fit-width" | "fit-page" | "custom";
+export type ZoomMode = FitMode | "custom";
+
+/** The zoom modes that fit the page to the viewport again as it resizes. */
+export type FitMode = "fit-width" | "fit-page" | "auto";
 
 export type PointerTool = "select" | "hand";
 

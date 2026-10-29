@@ -35,7 +35,7 @@ nothing in it per frame.
 | `first`, `last` | hot | The mounted pages: those in view and `overscan` beyond each edge. |
 | `currentPage` | hot | The zero-based page being read: the one nearest the viewport's center, except that the current page stays current while all of it is in view, as in pdf.js. `goToPage()`, links, `back()`, and search make the page they show current. |
 | `scale` | hot | CSS pixels per PDF point. |
-| `zoomMode` | hot | `"fit-width"` or `"fit-page"` while the page is fitted as the viewport resizes or the view turns, otherwise `"custom"`. |
+| `zoomMode` | hot | `"fit-width"`, `"fit-page"`, or `"auto"` while the page is fitted as the viewport resizes or the view turns, otherwise `"custom"`. |
 | `rotation` | cold | The clockwise rotation of every page: 0, 90, 180, or 270. |
 | `spread` | cold | `"none"`, `"odd"`, or `"even"` (see [Scroll modes and spreads](/guides/layout/)). |
 | `scrollMode` | cold | `"vertical"`, `"horizontal"`, `"wrapped"`, or `"page"`. |

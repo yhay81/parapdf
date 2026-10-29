@@ -10,6 +10,7 @@ import {
   turnedSize,
 } from "../view/layout.ts";
 import type { ShownView } from "../view/options.ts";
+import type { FitMode } from "../view/state.ts";
 import type { Viewer } from "../view/viewer.ts";
 
 /**
@@ -27,12 +28,13 @@ export interface ViewState {
   x: number;
   y: number;
   /** CSS pixels per PDF point, or the fit that keeps the zoom. */
-  scale: number | "fit-width" | "fit-page";
+  scale: number | FitMode;
   rotation: Rotation;
   spread: SpreadMode;
   scrollMode: ScrollMode;
 }
 
+const FIT_MODES = new Set<string>(["fit-width", "fit-page", "auto"]);
 const SPREADS = new Set<string>(["none", "odd", "even"]);
 const SCROLL_MODES = new Set<string>(["vertical", "horizontal", "wrapped", "page"]);
 
@@ -52,7 +54,7 @@ export function toShownView(view: Partial<ViewState>): ShownView {
   if (SCROLL_MODES.has(view.scrollMode as string)) {
     shown.scrollMode = view.scrollMode as ScrollMode;
   }
-  if (view.scale === "fit-width" || view.scale === "fit-page") shown.scale = view.scale;
+  if (FIT_MODES.has(view.scale as string)) shown.scale = view.scale as FitMode;
   else if (number(view.scale) && view.scale > 0) shown.scale = view.scale;
   if (number(view.page)) {
     shown.target = {

@@ -13,7 +13,7 @@ ready:
 |---|---|
 | `page` | The page at the viewport's top-left corner, zero-based. |
 | `x`, `y` | The point of that page there, in PDF points from its top-left corner. |
-| `scale` | A number, `"fit-width"`, or `"fit-page"`. |
+| `scale` | A number, `"fit-width"`, `"fit-page"`, or `"auto"`. |
 | `rotation`, `spread`, `scrollMode` | How the pages are turned and arranged. |
 
 The point keeps its place on the page whatever the zoom or the viewport's

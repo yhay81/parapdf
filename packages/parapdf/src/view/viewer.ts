@@ -56,7 +56,7 @@ import {
   viewportOf,
 } from "./scrolling.ts";
 import { linked } from "./signals.ts";
-import { type PointerTool, ViewerStore, type ZoomMode } from "./state.ts";
+import { type FitMode, type PointerTool, ViewerStore, type ZoomMode } from "./state.ts";
 import { destinationScale, fitScale, refits, requestedZoom } from "./zoom.ts";
 
 /** Whether a visible area is all of its page. */
@@ -203,7 +203,7 @@ export class Viewer {
     requestUpdate: () => this.#requestUpdate(),
   });
   #firstPaintAt: number | null = null;
-  /** Viewport size the "fit-width" or "fit-page" scale was last computed for. */
+  /** Viewport size the fitted scale was last computed for. */
   #fittedWidth = 0;
   #fittedHeight = 0;
   /**
@@ -291,7 +291,7 @@ export class Viewer {
     return this.#options.annotationLayer ?? true;
   }
 
-  get #initialScale(): number | "fit-width" | "fit-page" {
+  get #initialScale(): number | FitMode {
     return this.#options.initialScale ?? "fit-width";
   }
 
@@ -1106,7 +1106,7 @@ export class Viewer {
 
   /**
    * Lay the pages out again after their arrangement changed, fitted again in
-   * "fit-width" and "fit-page" mode, and go to page `page`.
+   * a fitting zoom mode, and go to page `page`.
    */
   #arrange(page: number): void {
     const state = this.store.get();
@@ -1131,11 +1131,12 @@ export class Viewer {
    * coordinates, default center) in place. "fit-width" fits the width of the
    * current page and keeps fitting it as the viewport resizes or the view
    * turns, like pdf.js's "page-width"; "fit-page" fits all of that page and
-   * shows it from its top, like "page-fit"; a number stops that.
+   * shows it from its top, like "page-fit"; "auto" fits as pdf.js's viewer
+   * opens documents, like its "auto"; a number stops that.
    */
-  setScale(requested: number | "fit-width" | "fit-page", anchor?: { x: number; y: number }): void {
+  setScale(requested: number | FitMode, anchor?: { x: number; y: number }): void {
     this.#gestures.finish();
-    if (requested === "fit-width" || requested === "fit-page") {
+    if (typeof requested === "string") {
       this.store.set({ zoomMode: requested });
       this.#fit();
       return;
@@ -1175,7 +1176,7 @@ export class Viewer {
   }
 
   /** `fitScale()` for this viewer's pages, arrangement, viewport, and limits. */
-  #fitScale(index: number, mode: "fit-width" | "fit-page"): number | null {
+  #fitScale(index: number, mode: FitMode): number | null {
     return fitScale(
       this.#sizes,
       this.store.get(),

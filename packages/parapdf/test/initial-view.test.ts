@@ -47,6 +47,8 @@ describe("view states", () => {
       rotation: 270,
       scale: "fit-page",
     });
+    assert.deepEqual(toShownView({ scale: "auto" }), { scale: "auto" });
+    assert.deepEqual(toShownView({ scale: "fit" as never }), {});
   });
 
   it("leaves out what a URL could hold wrongly", () => {
