@@ -7,6 +7,7 @@ import {
   OPENING,
   type PdfjsLoader,
   type SessionLease,
+  splitFragment,
 } from "./registry.ts";
 import type {
   DocumentSession,
@@ -16,7 +17,7 @@ import type {
   PdfMetadata,
   PdfSource,
 } from "./session.ts";
-import type { ReadableStore } from "./store.ts";
+import { type ReadableStore, Store } from "./store.ts";
 
 /**
  * A session's document state as a provider that shows no password prompt
@@ -61,6 +62,8 @@ let connect: (session: PdfSession, pdfjs: PdfjsLoader) => () => void;
 let loaded: (session: PdfSession) => Promise<DocumentSession>;
 /** Shows or hides a session's password requests; see `setPasswordPrompt()`. */
 let prompt: (session: PdfSession, passwordPrompt: boolean) => void;
+/** The fragment of a session's URL; see `fragmentOf()`. */
+let fragment: (session: PdfSession) => Store<{ fragment: string }>;
 
 /**
  * One `<PdfDocument>`'s view of the session of its source, shared by the
@@ -79,9 +82,10 @@ export class PdfSession {
       session.#prompt = passwordPrompt;
       session.#notify();
     };
+    fragment = (session) => session.#fragment;
   }
 
-  /** The source it shows. */
+  /** The source it shows, a URL without its fragment. */
   readonly source: PdfSource;
   /** Status, progress, the password request, page count, and permissions. */
   readonly state: ReadableStore<DocumentState>;
@@ -105,9 +109,13 @@ export class PdfSession {
   #fail!: () => void;
   readonly #reads = new Map<string, Promise<unknown>>();
   #proxy: Pdfjs.PDFDocumentProxy | null = null;
+  /** Where its URL's fragment says to open, which changes without opening the document again. */
+  readonly #fragment: Store<{ fragment: string }>;
 
   constructor(source: PdfSource, { passwordPrompt = true }: { passwordPrompt?: boolean } = {}) {
-    this.source = source;
+    const [url, hash] = "url" in source ? splitFragment(source.url) : ["", ""];
+    this.source = "url" in source && source.url !== url ? { ...source, url } : source;
+    this.#fragment = new Store({ fragment: hash });
     this.#loaded = new Promise((resolve) => {
       this.#resolveLoaded = resolve;
     });
@@ -283,4 +291,17 @@ export function documentOf(session: PdfSession): Promise<DocumentSession> {
  */
 export function setPasswordPrompt(session: PdfSession, passwordPrompt: boolean): void {
   prompt(session, passwordPrompt);
+}
+
+/**
+ * The fragment of `session`'s URL, without its "#": where `<PdfDocument>`'s
+ * source says to open, which its viewers follow when it changes.
+ */
+export function fragmentOf(session: PdfSession): ReadableStore<{ fragment: string }> {
+  return fragment(session);
+}
+
+/** Point `session`'s fragment elsewhere: a new fragment of `<PdfDocument>`'s source. */
+export function setFragment(session: PdfSession, hash: string): void {
+  fragment(session).set({ fragment: hash });
 }

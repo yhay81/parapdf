@@ -2,8 +2,13 @@
 
 import { type ReactNode, useEffect, useState } from "react";
 import { preload } from "react-dom";
-import { connectSession, PdfSession, setPasswordPrompt } from "../document/pdf-session.ts";
-import { sourceKey } from "../document/registry.ts";
+import {
+  connectSession,
+  PdfSession,
+  setFragment,
+  setPasswordPrompt,
+} from "../document/pdf-session.ts";
+import { sourceKey, splitFragment } from "../document/registry.ts";
 import type { PdfSource } from "../document/session.ts";
 import { documentRequestMode, preloadPdfjs } from "../pdfjs/loader.ts";
 import { SessionContext } from "./context.ts";
@@ -13,7 +18,9 @@ export interface PdfDocumentProps {
    * The document to show: its URL, `{ url }`, or `{ data }` with its bytes.
    * It reopens when its URL, request headers, or password change or, for
    * data, when the bytes are another object or the password changes; a new
-   * object for the same URL keeps the open document.
+   * object for the same URL keeps the open document. A URL's fragment, such
+   * as `#page=3`, opens it where it points (RFC 8118's `page`, `zoom`, and
+   * `nameddest`), and a new one moves its viewers there.
    */
   source: string | PdfSource;
   /**
@@ -47,7 +54,7 @@ export function PdfDocument({ source, passwordPrompt = true, children }: PdfDocu
     // request has this CORS mode and takes the preloaded response. A source
     // with headers has no preload: none can carry them.
     const mode = documentRequestMode(resolved);
-    if (mode) preload(resolved.url, { as: "fetch", crossOrigin: mode });
+    if (mode) preload(splitFragment(resolved.url)[0], { as: "fetch", crossOrigin: mode });
   }
   // pdf.js and its worker load while React renders and commits.
   preloadPdfjs();
@@ -75,5 +82,8 @@ export function PdfDocument({ source, passwordPrompt = true, children }: PdfDocu
   useEffect(() => connectSession(session), [session]);
   // The prompt changes what the session shows, not the document.
   useEffect(() => setPasswordPrompt(session, passwordPrompt), [session, passwordPrompt]);
+  // A new fragment moves the viewers where it points, as a link would.
+  const fragment = "url" in resolved ? splitFragment(resolved.url)[1] : "";
+  useEffect(() => setFragment(session, fragment), [session, fragment]);
   return <SessionContext value={session}>{children}</SessionContext>;
 }

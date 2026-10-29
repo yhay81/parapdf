@@ -16,7 +16,7 @@ any more.
 
 | Prop | |
 |---|---|
-| `source` | The document: its URL, `{ url }`, or `{ data }` with its bytes (see [Sources](/reference/sources/)). It reopens when its URL, request headers, credentials mode, or password change or, for data, when the bytes are another object or the password changes; a new object for the same URL keeps the open document. |
+| `source` | The document: its URL, `{ url }`, or `{ data }` with its bytes (see [Sources](/reference/sources/)). It reopens when its URL, request headers, credentials mode, or password change or, for data, when the bytes are another object or the password changes; a new object for the same URL keeps the open document. A URL's fragment, such as `#page=3`, opens it where it points, and a new fragment moves its viewers there (see [Sources](/reference/sources/#sessions)). |
 | `passwordPrompt` | `true` by default: an encrypted document waits for a password (status `"password"`), which `useSession().submitPassword()` gives. `false` fails it at once (status `"error"`) when the source has no password or a wrong one, for this `PdfDocument` only: others of the same document may still answer. Changing it does not open the document again. |
 | `children` | Viewers, thumbnails, and your controls. |
 

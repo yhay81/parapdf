@@ -43,7 +43,7 @@ its callback and returns to its value unless you take the change up (see
 
 | Method | |
 |---|---|
-| `goToDestination(dest)` | Shows a named or explicit destination (pdf.js's `Destination`), with the zoom it asks for unless `destinationZoom` is false; resolves to false when it is invalid or null, as an outline entry's without one is. The history feature keeps the position before the jump. |
+| `goToDestination(dest, signal?)` | Shows a named or explicit destination (pdf.js's `Destination`), with the zoom it asks for unless `destinationZoom` is false; resolves to false when it is invalid or null, or the optional `AbortSignal` aborts before it is resolved. The history feature keeps the position before a completed jump. |
 | `show(view)` | Shows a `ShownView`: `rotation`, `spread`, `scrollMode`, `scale`, and a `target`, a page and a point of it in PDF points to put at the viewport's top-left corner. Fields left out keep the viewer's; a page out of range and a scale beyond the limits are clamped. `setViewState()` is built on it. |
 | `revealRect(pageIndex, rect)` | Scrolls so that `rect` (`x`, `y`, `width`, `height` in PDF points from the page's unturned top-left corner) sits in the upper third of the viewport; the page becomes current. Search shows its matches this way. |
 | `position()` | Where the viewer shows its document, as `{ pageIndex, x, y, current, scale, zoomMode }`: the page at the viewport's top-left corner and where that corner is as a share of the page, which survive zoom changes, with the current page and zoom; null without a layout. |

@@ -133,7 +133,8 @@ when the choice matters for performance or direction.
   which exposes the viewer, its session, and its features to the checks
   (`window.__viewer`, `__session`, `__parapdf`, `__search`, `__history`,
   `__annotations`), lets them change `PdfViewer`'s props
-  (`__setViewerProps`), and, through `src/internals.ts`, show a document a
+  (`__setViewerProps`) and the fragment of its source's URL (`?fragment=`,
+  `__setFragment`), and, through `src/internals.ts`, show a document a
   pdf.js of their own opens (`__showWith`). `minimal.html` is the demo
   without search, forms, annotation editing, and print. `compare.html` shows
   a document with react-pdf (with or without react-window), which

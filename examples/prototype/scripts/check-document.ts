@@ -116,6 +116,7 @@ interface Demo {
     getPage(n: number): Promise<{ getAnnotations(): Promise<{ dest?: unknown }[]> }>;
   };
   __changes?: { name: string; value: unknown }[];
+  __setFragment?: (fragment: string) => void;
 }
 
 /**
@@ -1056,6 +1057,137 @@ try {
         opened.spread === "odd" &&
         close(view?.y, 100, 1),
       JSON.stringify({ page: opened?.currentPage, mode: opened?.zoomMode, view }),
+    );
+    await page.context().close();
+  }
+
+  // --- A URL's fragment opens where it points, and a new one moves the viewer ---
+  {
+    const withFragment = (fragment: string, query = "") =>
+      demo(`file=synthetic-navigation.pdf&fragment=${encodeURIComponent(fragment)}${query}`);
+    {
+      const { page, errors } = await open(launched.browser, withFragment("page=4"));
+      const opened = await state(page);
+      check("#page= opens at that page", opened?.currentPage === 3, String(opened?.currentPage));
+      check("no errors opening at #page=", errors.length === 0, errors.join(" | "));
+      await page.context().close();
+    }
+    {
+      const { page, errors } = await open(launched.browser, withFragment("nameddest=page-4"));
+      const opened = await state(page);
+      const at = await corner(page);
+      check(
+        "#nameddest= opens at the named destination, with its zoom",
+        opened?.currentPage === 3 && opened.zoomMode === "fit-width" && close(at?.y, 192, 1),
+        JSON.stringify({ page: opened?.currentPage, mode: opened?.zoomMode, at }),
+      );
+      check("no errors opening at #nameddest=", errors.length === 0, errors.join(" | "));
+      await page.context().close();
+    }
+    {
+      // Over the document's /OpenAction, at its page, as pdf.js's viewer does.
+      // A zoom is a share of the printed size: 96 CSS pixels to 72 points at 100%.
+      const { page } = await open(launched.browser, withFragment("zoom=50", "&view=document"));
+      const opened = await state(page);
+      check(
+        "#zoom= wins over /OpenAction's zoom, on its page",
+        opened?.currentPage === 2 &&
+          opened.zoomMode === "custom" &&
+          close(opened.scale, (0.5 * 96) / 72, 1e-6),
+        JSON.stringify({ page: opened?.currentPage, mode: opened?.zoomMode, scale: opened?.scale }),
+      );
+      await page.context().close();
+    }
+    const { page, errors } = await open(launched.browser, withFragment("page=2&zoom=300,100,500"));
+    const opened = await state(page);
+    const at = await corner(page);
+    check(
+      "#page=&zoom= opens at that page, zoom, and point",
+      opened?.currentPage === 1 &&
+        opened.zoomMode === "custom" &&
+        close(opened.scale, (3 * 96) / 72, 1e-6) &&
+        close(at?.x, 100, 1) &&
+        close(at?.y, 292, 1),
+      JSON.stringify({ page: opened?.currentPage, scale: opened?.scale, at }),
+    );
+    await page.evaluate(() => {
+      const demo = window as unknown as Demo & { __opened?: unknown };
+      demo.__opened = demo.__pdfDocument;
+      demo.__setFragment?.("nameddest=page-4");
+    });
+    await page
+      .waitForFunction(
+        () => (window as unknown as Demo).__viewer?.store.get().currentPage === 3,
+        undefined,
+        { timeout: 10_000 },
+      )
+      .catch(() => {});
+    await settle(page);
+    const moved = await state(page);
+    const same = await page.evaluate(() => {
+      const demo = window as unknown as Demo & { __opened?: unknown };
+      return {
+        document: demo.__opened === demo.__pdfDocument,
+        downloads: (performance.getEntriesByType("resource") as PerformanceResourceTiming[]).filter(
+          (entry) => entry.name.includes("synthetic-navigation.pdf"),
+        ).length,
+      };
+    });
+    check(
+      "a new fragment moves the viewer as a link does, without opening the document again",
+      moved?.currentPage === 3 &&
+        moved.zoomMode === "fit-width" &&
+        moved.canGoBack &&
+        same.document &&
+        same.downloads === 1,
+      JSON.stringify({
+        page: moved?.currentPage,
+        mode: moved?.zoomMode,
+        back: moved?.canGoBack,
+        same,
+      }),
+    );
+    check("no errors moving to a new fragment", errors.length === 0, errors.join(" | "));
+    await page.evaluate(() => {
+      window.__setViewerProps?.({ textLayer: false });
+      window.__setFragment?.("page=3");
+    });
+    await settle(page);
+    check(
+      "a fragment changed during a renderer rebuild is applied once ready",
+      (await state(page))?.currentPage === 2,
+    );
+
+    await page.evaluate(() => {
+      const probe = window as unknown as Demo & {
+        __fragmentPending?: boolean;
+        __releaseFragment?: () => void;
+      };
+      const proxy = probe.__pdfDocument as unknown as {
+        getDestination(name: string): Promise<unknown>;
+      };
+      const original = proxy.getDestination.bind(proxy);
+      const gate = new Promise<void>((resolve) => {
+        probe.__releaseFragment = resolve;
+      });
+      proxy.getDestination = async (name) => {
+        if (name === "review-slow") {
+          probe.__fragmentPending = true;
+          await gate;
+          return original("page-4");
+        }
+        return original(name);
+      };
+      probe.__setFragment?.("nameddest=review-slow");
+    });
+    await page.waitForFunction(() => (window as { __fragmentPending?: boolean }).__fragmentPending);
+    await page.evaluate(() => window.__setFragment?.("page=2"));
+    await page.waitForFunction(() => window.__viewer?.store.get().currentPage === 1);
+    await page.evaluate(() => (window as { __releaseFragment?: () => void }).__releaseFragment?.());
+    await settle(page);
+    check(
+      "a late named destination cannot overwrite a newer fragment",
+      (await state(page))?.currentPage === 1,
     );
     await page.context().close();
   }

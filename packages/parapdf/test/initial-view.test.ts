@@ -1,8 +1,17 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it, mock } from "node:test";
-import type { PdfInitialView } from "../src/document/session.ts";
-import { initialViewOpening, openingOf } from "../src/features/initial-view.ts";
+import type { DocumentSession, PdfInitialView } from "../src/document/session.ts";
+import { Store } from "../src/document/store.ts";
+import {
+  followFragments,
+  fragmentDestinations,
+  initialViewOpening,
+  openingFragment,
+  openingOf,
+} from "../src/features/initial-view.ts";
 import { toShownView } from "../src/features/view-state.ts";
+import type { Destination } from "../src/pdfjs/destinations.ts";
+import type { ViewerExtension } from "../src/view/extensions.ts";
 import { Viewer } from "../src/view/viewer.ts";
 import { fakeDocument, fakePdfjs, LETTER, settle, show } from "./fake-pdfjs.ts";
 
@@ -141,5 +150,147 @@ describe("a viewer's opening", () => {
     assert.equal(state.spread, "even");
     assert.equal(state.scrollMode, "vertical");
     assert.equal(state.layout?.spread, "even");
+  });
+});
+
+describe("a URL's open parameters", () => {
+  it("treats inherited object names as unknown zooms", () => {
+    for (const name of ["constructor", "__proto__", "toString", "hasOwnProperty"]) {
+      assert.deepEqual(fragmentDestinations(`page=2&zoom=${name}`, 0), [
+        [1, { name: "XYZ" }, null, null, null],
+      ]);
+    }
+  });
+
+  it("reads page and zoom as pdf.js's viewer does", () => {
+    assert.deepEqual(fragmentDestinations("page=3", 0), [[2, { name: "XYZ" }, null, null, null]]);
+    assert.deepEqual(fragmentDestinations("page=3&zoom=150,10,700", 0), [
+      [2, { name: "XYZ" }, 10, 700, 1.5],
+    ]);
+    // A zoom without a page applies to the current one; a junk page is the first.
+    assert.deepEqual(fragmentDestinations("zoom=200", 4), [[4, { name: "XYZ" }, null, null, 2]]);
+    assert.deepEqual(fragmentDestinations("page=x", 4), [[0, { name: "XYZ" }, null, null, null]]);
+    assert.deepEqual(fragmentDestinations("PAGE=2&zoom=FitH,300", 0), [[1, { name: "FitH" }, 300]]);
+    assert.deepEqual(fragmentDestinations("page=1&zoom=Fit", 0), [[0, { name: "Fit" }]]);
+    assert.deepEqual(fragmentDestinations("page=1&zoom=FitR,1,2,3,4", 0), [
+      [0, { name: "FitR" }, 1, 2, 3, 4],
+    ]);
+    assert.deepEqual(fragmentDestinations("page=1&zoom=page-width,0,500", 0), [
+      [0, { name: "FitH" }, 500],
+    ]);
+    // A zoom it cannot use leaves the page alone, as pdf.js's viewer does.
+    assert.deepEqual(fragmentDestinations("page=2&zoom=FitR,1,2", 0), [
+      [1, { name: "XYZ" }, null, null, null],
+    ]);
+    assert.deepEqual(fragmentDestinations("page=2&zoom=auto", 0), [
+      [1, { name: "XYZ" }, null, null, null],
+    ]);
+  });
+
+  it("tries a named destination first, and leaves the rest to the application", () => {
+    assert.deepEqual(fragmentDestinations("nameddest=intro&page=2", 0), [
+      "intro",
+      [1, { name: "XYZ" }, null, null, null],
+    ]);
+    assert.deepEqual(fragmentDestinations("search=word&pagemode=bookmarks", 0), []);
+    assert.deepEqual(fragmentDestinations("intro", 0), []);
+    assert.deepEqual(fragmentDestinations("", 0), []);
+  });
+
+  it("opens there, over the document's destination and the application's page", () => {
+    const linked = { pageIndex: 4, x: null, y: 100 };
+    assert.deepEqual(
+      openingOf(asked(), 5, { initialView: "document", initialPage: 1 }, linked)?.view,
+      { target: linked },
+    );
+    // Outside the document, it opens as though it had none.
+    assert.deepEqual(
+      openingOf(asked(), 5, { initialView: "document" }, { ...linked, pageIndex: 7 }),
+      { spread: "even", scrollMode: "page", destination },
+    );
+    // A view state wins, and opens there when it names no page.
+    assert.deepEqual(
+      openingOf(null, 5, { initialViewState: { page: 1, scale: 2 } }, linked)?.view,
+      { scale: 2, target: { pageIndex: 1, x: null, y: null } },
+    );
+    assert.deepEqual(openingOf(null, 5, { initialViewState: { scale: 2 } }, linked)?.view, {
+      scale: 2,
+      target: linked,
+    });
+  });
+
+  it("resolves the fragment as the document opens, past a name it lacks", async () => {
+    const resolved: Destination[] = [];
+    const session = {
+      pageCount: 5,
+      initialView: async () => ({ destination, pageLayout: null, pageMode: null }),
+      resolveDestination: async (dest: Destination) => {
+        resolved.push(dest);
+        if (typeof dest === "string") return null;
+        const [pageIndex] = dest as unknown as [number];
+        return { pageIndex, x: null, y: null };
+      },
+    } as unknown as DocumentSession;
+    let fragment = "nameddest=missing&zoom=50";
+    const opening = initialViewOpening({ initialView: "document", fragment: () => fragment });
+    assert.ok(opening);
+    // The zoom applies to the page the document asks to open at.
+    assert.deepEqual((await opening(session))?.view, {
+      target: { pageIndex: 2, x: null, y: null },
+    });
+    assert.deepEqual(resolved, ["missing", [2, { name: "XYZ" }, null, null, 0.5]]);
+    fragment = "";
+    assert.equal((await opening(session))?.view, undefined);
+  });
+});
+
+describe("following URL fragments", () => {
+  it("cancels superseded moves and follows changes made while unavailable", async () => {
+    const source = new Store({ fragment: "page=1" });
+    const moves: { destination: Destination; signal: AbortSignal }[] = [];
+    let extension: ViewerExtension | null = null;
+    const viewer = {
+      store: new Store({ currentPage: 0 }),
+      extend(next: ViewerExtension) {
+        extension = next;
+        return () => {
+          extension = null;
+        };
+      },
+      async goToDestination(destination: Destination, signal: AbortSignal) {
+        moves.push({ destination, signal });
+        return !signal.aborted;
+      },
+    } as unknown as Viewer;
+    const ready = () => {
+      const control = new AbortController();
+      (extension as ViewerExtension | null)?.ready?.({} as DocumentSession, control.signal);
+      return control;
+    };
+    assert.equal(openingFragment(viewer, source), "page=1");
+    let detach = followFragments(viewer, source);
+    const first = ready();
+    assert.equal(moves.length, 0, "the opening already applied this fragment");
+    source.set({ fragment: "page=2" });
+    source.set({ fragment: "page=3" });
+    assert.equal(moves[0]?.signal.aborted, true);
+    assert.equal(moves[1]?.signal.aborted, false);
+    await settle();
+    first.abort();
+    source.set({ fragment: "page=4" });
+    assert.equal(moves.length, 2, "wait until the viewport is ready");
+    ready();
+    await settle();
+    assert.deepEqual(moves[2]?.destination, [3, { name: "XYZ" }, null, null, null]);
+    detach();
+    source.set({ fragment: "page=5" });
+    detach = followFragments(viewer, source);
+    ready();
+    await settle();
+    assert.deepEqual(moves[3]?.destination, [4, { name: "XYZ" }, null, null, null]);
+    ready();
+    assert.equal(moves.length, 4, "reattaching without a new fragment keeps the view");
+    detach();
+    assert.equal(moves[3]?.signal.aborted, true);
   });
 });

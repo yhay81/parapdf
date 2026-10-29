@@ -249,6 +249,10 @@ const renderOverlay = (pageIndex: number) =>
 const SplitView = lazy(() => import("./SplitView.tsx"));
 
 export function App() {
+  const [fragment, setFragment] = useState(params.get("fragment") ?? "");
+  useEffect(() => {
+    window.__setFragment = setFragment;
+  }, []);
   // A new key mounts a new viewer with a new runtime for the same source.
   const [mounted, setMounted] = useState(true);
   const [generation, setGeneration] = useState(0);
@@ -268,19 +272,19 @@ export function App() {
     <Suspense fallback={<div className="status">Loading…</div>}>
       {params.get("split") === "1" ? (
         <SplitView
-          source={{ url }}
+          source={{ url: fragment ? `${url}#${fragment}` : url }}
           passwordPrompt={settings.passwordPrompt}
           viewerProps={viewerProps}
         />
       ) : mounted ? (
-        <Viewer key={generation} renders={renders} />
+        <Viewer key={generation} renders={renders} fragment={fragment} />
       ) : null}
     </Suspense>
   );
 }
 
 /** A new `renders` only renders the viewer again (see `__lifecycle.rerender`). */
-function Viewer(_props: { renders: number }) {
+function Viewer({ fragment }: { renders: number; fragment: string }) {
   // Only a data source waits for its bytes: suspending for a URL would delay
   // PdfDocument's render, which starts loading pdf.js and the PDF.
   const data = settings.source === "data" ? use(bytesPromise) : null;
@@ -294,7 +298,9 @@ function Viewer(_props: { renders: number }) {
   // A new object at every render: the document stays open while its URL or
   // its bytes stay the same.
   const password = settings.password !== null ? { password: settings.password } : {};
-  const source: PdfSource = data ? { data, ...password } : { url, ...password };
+  const source: PdfSource = data
+    ? { data, ...password }
+    : { url: fragment ? `${url}#${fragment}` : url, ...password };
   return (
     <Profiler id="viewer" onRender={countCommit}>
       <PdfDocument source={source} passwordPrompt={settings.passwordPrompt}>
@@ -358,6 +364,8 @@ declare global {
     __attachViewport?: typeof attachViewport;
     /** Changes props of the viewer's `<PdfViewer>`, which are live, for check-options.ts. */
     __setViewerProps?: (props: Partial<PdfViewerProps>) => void;
+    /** Changes the fragment of the source's URL, for check-document.ts. */
+    __setFragment?: (fragment: string) => void;
   }
 }
 

@@ -326,6 +326,15 @@ describe("sourceKey", () => {
     assert.notEqual(sourceKey(a), sourceKey({ url: "/b.pdf" }));
   });
 
+  it("leaves out the URL's fragment, which says where to open", () => {
+    assert.equal(sourceKey({ url: "/a.pdf#page=3" }), sourceKey({ url: "/a.pdf" }));
+    assert.equal(
+      sourceKey({ url: "/a.pdf#zoom=200", withCredentials: true }),
+      sourceKey({ url: "/a.pdf", withCredentials: true }),
+    );
+    assert.notEqual(sourceKey({ url: "/a.pdf?v=2#page=3" }), sourceKey({ url: "/a.pdf" }));
+  });
+
   it("is the bytes themselves for data", () => {
     const data = new ArrayBuffer(8);
     assert.equal(sourceKey({ data }), data);
