@@ -6,6 +6,13 @@ change the API.
 
 ## Unreleased
 
+- With `formScripts`, saving and printing, from a script or the
+  application, run the document's `WillSave` and `DidSave`, or `WillPrint`
+  and `DidPrint`, scripts around them, as pdf.js's viewer does: what
+  `WillSave` changes is in the saved bytes, and what `WillPrint` changes
+  prints (#86). The scripts hear `WillClose` when the document closes or
+  the scripts are turned off.
+
 - Printing turns a page whose orientation differs from the first page's to
   the sheet's, as pdf.js's viewer prints it, so that a landscape page among
   portrait ones fits a matching sheet without extra scaling (#88). Pages

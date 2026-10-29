@@ -645,7 +645,8 @@ async function annotations(): Promise<Uint8Array> {
  * built-in functions do: price and quantity formatted as numbers, the
  * quantity kept between 1 and 100, the total their product, a button that
  * sets the status, and a document script that marks the form opened. Two
- * pages, the second with a page script that counts its openings.
+ * pages, the second with a page script that counts its openings. Printing
+ * stamps a field until it ends, and saving fills one in, then another.
  */
 async function scripts(): Promise<Uint8Array> {
   const doc = await PDFDocument.create({ updateMetadata: false });
@@ -684,6 +685,9 @@ async function scripts(): Promise<Uint8Array> {
   text("status", "Status", 520, {});
   text("opened", "Opened", 480, {});
   text("visits", "Visits", 440, {});
+  text("stamp", "Stamp", 340, {});
+  text("saving", "Saving", 300, {});
+  text("saved", "Saved", 260, {});
   const button = form.createButton("apply");
   button.addToPage("Apply", first, { x: 180, y: 390, width: 100, height: 28, font });
   // The button's action, on its widget as pdf.js expects of push buttons.
@@ -700,6 +704,16 @@ async function scripts(): Promise<Uint8Array> {
     },
   });
   doc.catalog.set(PDFName.of("Names"), names);
+  // The document's scripts around printing and saving.
+  doc.catalog.set(
+    PDFName.of("AA"),
+    context.obj({
+      WP: js('this.getField("stamp").value = "PRINTED";'),
+      DP: js('this.getField("stamp").value = "";'),
+      WS: js('this.getField("saving").value = "on save";'),
+      DS: js('this.getField("saved").value = "yes";'),
+    }),
+  );
   // A page script runs each time the second page opens.
   second.node.set(
     PDFName.of("AA"),

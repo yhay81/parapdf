@@ -879,6 +879,64 @@ try {
       String(values.visits) === "1",
       JSON.stringify(values),
     );
+    // Printing: WillPrint stamps a field, what prints shows it, and DidPrint clears it.
+    const stamped = await page.evaluate(async () => {
+      const demo = window as unknown as Demo;
+      let dark = -1;
+      window.print = () => {
+        const image = document.querySelector<HTMLImageElement>(".parapdf-print img");
+        if (!image) return;
+        const canvas = document.createElement("canvas");
+        canvas.width = image.naturalWidth;
+        canvas.height = image.naturalHeight;
+        const context = canvas.getContext("2d");
+        if (!context) return;
+        context.drawImage(image, 0, 0);
+        // The stamp field's inside, at 150 dpi, without its border.
+        const scale = 150 / 72;
+        const [x, y] = [Math.ceil(180 * scale) + 6, Math.ceil((792 - 364) * scale) + 6];
+        const [width, height] = [Math.floor(200 * scale) - 12, Math.floor(24 * scale) - 12];
+        const { data } = context.getImageData(x, y, width, height);
+        dark = 0;
+        for (let i = 0; i < data.length; i += 4) if ((data[i] ?? 255) < 128) dark++;
+      };
+      await demo.__parapdf?.print(demo.__viewer);
+      window.dispatchEvent(new Event("afterprint"));
+      return dark;
+    });
+    check("what WillPrint changes prints", stamped > 20, `${stamped} dark pixels`);
+    await page
+      .waitForFunction(
+        () =>
+          (
+            document.querySelector(
+              '.parapdf-annotation-layer input[name="stamp"]',
+            ) as HTMLInputElement | null
+          )?.value === "",
+        undefined,
+        { timeout: 10_000 },
+      )
+      .catch(() => {});
+    check("DidPrint runs once printing ends", (await value("stamp")) === "");
+    const saving = await page.evaluate(async () => {
+      const demo = window as unknown as Demo;
+      const bytes = await demo.__parapdf?.save(demo.__viewer);
+      return bytes ? new TextDecoder("latin1").decode(bytes).includes("(on save)") : false;
+    });
+    check("what WillSave changes saves", saving);
+    await page
+      .waitForFunction(
+        () =>
+          (
+            document.querySelector(
+              '.parapdf-annotation-layer input[name="saved"]',
+            ) as HTMLInputElement | null
+          )?.value === "yes",
+        undefined,
+        { timeout: 10_000 },
+      )
+      .catch(() => {});
+    check("DidSave runs once saved", (await value("saved")) === "yes");
     check("no errors running form scripts", errors.length === 0, errors.slice(0, 3).join(" | "));
     await page.context().close();
   }

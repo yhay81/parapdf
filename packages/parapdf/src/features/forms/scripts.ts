@@ -30,6 +30,8 @@ interface Running {
   last: ScriptingViewer | null;
   /** Stops following the current page of the first viewer. */
   unfollow: () => void;
+  /** Aborts once the sandbox goes: the session's saving and printing no longer reach it. */
+  readonly stop: AbortController;
 }
 
 /** One sandbox per session, since it keeps the values of the document's fields. */
@@ -118,7 +120,8 @@ function command(run: Running, session: DocumentSession, name: string, value: un
           console.error("saving for the document's scripts failed", error),
         );
       break;
-    // `layout` (the page layout) and `WillPrintFinished` (ParaPDF sends no WillPrint) are left out.
+    // `layout` (the page layout) is left out, and `WillPrintFinished` needs
+    // nothing: the WillPrint event's dispatch has already finished.
   }
 }
 
@@ -159,7 +162,11 @@ export function joinScripting(session: DocumentSession, member: ScriptingViewer)
       viewers: new Set(),
       last: null,
       unfollow: () => {},
+      stop: new AbortController(),
     };
+    // Saving and printing, from a script or the application, send the
+    // document's events around them (`save()`, `print()`).
+    session.onOutput((event) => started.scripting.documentEvent(event), started.stop.signal);
     run = started;
     running.set(session, run);
   }
@@ -189,6 +196,7 @@ export function joinScripting(session: DocumentSession, member: ScriptingViewer)
         return;
       }
       joined.unfollow();
+      joined.stop.abort();
       joined.scripting.destroy();
       running.delete(session);
     },
