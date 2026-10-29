@@ -13,7 +13,7 @@ export function blankFraction(
   viewport: Viewport,
   hasPixels: (index: number) => boolean,
 ): number {
-  if (viewport.height === 0) return 0;
+  if (viewport.height === 0 || viewport.width === 0) return 0;
   const { first, last } = visibleRange(layout, viewport);
   let blank = 0;
   for (let index = first; index <= last; index++) {

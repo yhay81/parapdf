@@ -192,12 +192,20 @@ export function createFormAccess(
       case "checkbox":
       case "radio": {
         let changed = false;
+        let originalStillChecked = false;
         for (const { id, exportValue } of widgets) {
-          const value = stored(id);
+          const raw = stored(id);
+          // What the scripts sent for a widget not built yet: the field's value.
+          const value = typeof raw === "string" ? raw === exportValue : raw;
           if (value === true) return exportValue;
           if (value !== undefined) changed = true;
+          // pdf.js may store only other widgets as false while the originally
+          // selected widget still gets its value from the document.
+          if (value === undefined && exportValue === documentValue && documentValue !== "Off") {
+            originalStillChecked = true;
+          }
         }
-        return changed ? "Off" : documentValue;
+        return !changed || originalStillChecked ? documentValue : "Off";
       }
       case "combobox":
       case "listbox": {
@@ -207,8 +215,9 @@ export function createFormAccess(
         return field.multiple ? values : (values[0] ?? "");
       }
       default: {
-        const widget = widgets.find(({ id }) => typeof stored(id) === "string");
-        return widget ? (stored(widget.id) as string) : documentValue;
+        // The scripts send calculated values as numbers, which pdf.js's element writes as text.
+        const widget = widgets.find(({ id }) => ["string", "number"].includes(typeof stored(id)));
+        return widget ? String(stored(widget.id)) : documentValue;
       }
     }
   };
@@ -245,7 +254,8 @@ export function createFormAccess(
           case "listbox": {
             const selected = typeof value === "boolean" ? [] : strings(value);
             for (const { id } of widgets) {
-              storage.setValue(id, { value: field.multiple ? selected : (selected[0] ?? null) });
+              // pdf.js's widgets read a single choice as a string, never null.
+              storage.setValue(id, { value: field.multiple ? selected : (selected[0] ?? "") });
             }
             break;
           }

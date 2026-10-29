@@ -89,6 +89,7 @@ export function pageText(
     pendingSpace = false;
     text += char;
   }
-  // A page's text ends with its last character, not with its last line end.
-  return lineBreaks === "keep" && !to ? text.replace(/\n$/u, "") : text;
+  // Drop only the synthetic line end after the last item, not a newline in
+  // the item's text itself.
+  return lineBreaks === "keep" && !to && page.endsLine.at(-1) ? text.replace(/\n$/u, "") : text;
 }

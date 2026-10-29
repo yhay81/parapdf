@@ -541,14 +541,24 @@ export function nextDrawing(
       (page) => input.settled && !visible(page) && wantsDetail(page) && fits(page, "detail"),
       "detail",
     ],
-    [(page) => input.settled && staleBase(page) && (visible(page) || fits(page, "base")), "base"],
+    // Under whole-page detail, only to give back the pixels of a base drawn
+    // at a larger zoom (decision 0025).
+    [
+      (page) =>
+        input.settled &&
+        staleBase(page) &&
+        (!coveredByDetail(page) || page.baseScale > baseScale(context, page.index) * 2) &&
+        (visible(page) || fits(page, "base")),
+      "base",
+    ],
   ];
   for (const [matches, layer] of phases) {
     for (const page of idle) {
       if (!matches(page)) continue;
       const plan: DetailPlan | null =
         layer === "base" ? { scale: baseScale(context, page.index), region: null } : planOf(page);
-      if (!plan || failed(context, page, layer, plan)) continue;
+      // A base of no pixels, as with maxBasePixels 0, would be drawn again forever.
+      if (!plan || plan.scale === 0 || failed(context, page, layer, plan)) continue;
       // A page that shows a detail keeps it until the next one, drawn into
       // the spare canvas, is complete.
       const intoSpare =

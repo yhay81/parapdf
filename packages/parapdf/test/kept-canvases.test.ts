@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { DEFAULT_ANNOTATION_SETUP } from "../src/render/dom-layers.ts";
+import { KeptCanvases, type KeptPage } from "../src/render/kept-canvases.ts";
 import type { ViewInput } from "../src/render/planner.ts";
 import { Renderer } from "../src/render/renderer.ts";
 import { computeLayout } from "../src/view/layout.ts";
-import { canvasesOf, type FakeElement, fakeHost } from "./fake-dom.ts";
+import { canvasesOf, FakeDocument, type FakeElement, fakeHost } from "./fake-dom.ts";
 import { LETTER, openSession, settle } from "./fake-pdfjs.ts";
 
 /** A session of two pages, whose drawings stay pending until the test settles them. */
@@ -240,21 +241,36 @@ describe("Renderer kept canvases", () => {
     assert.equal(renderer.keptPixels, 0);
   });
 
-  it("keeps six viewports' worth of device pixels by default, and no page larger than that", async () => {
-    for (const [maxKeptPixels, kept] of [
-      [undefined, 612 * 792],
-      [400_000, 0],
+  it("keeps twelve viewports' worth of device pixels by default, and no page larger than that", async () => {
+    // The page's detail holds 612 by 792 pixels: twelve viewports of 201 by
+    // 201 hold it, of 200 by 201 not.
+    for (const [width, maxKeptPixels, kept] of [
+      [201, undefined, 612 * 792],
+      [200, undefined, 0],
+      [800, 484_704, 612 * 792],
+      [800, 484_703, 0],
     ] as const) {
       const { doc, renders } = await controlledDocument();
       const renderer = new Renderer(doc, maxKeptPixels === undefined ? {} : { maxKeptPixels });
       const { detail } = mount(renderer, 0);
-      renderer.update(input(1));
+      const view = input(1);
+      renderer.update({
+        ...view,
+        viewport: {
+          ...view.viewport,
+          width,
+          height: 201,
+          scrollerWidth: width,
+          scrollerHeight: 201,
+        },
+      });
       await settle();
       renders.at(-1)?.resolve();
       await settle();
       renderer.detach(0);
-      assert.equal(renderer.keptPixels, kept, `maxKeptPixels ${maxKeptPixels}`);
-      assert.equal(detail.width * detail.height, kept);
+      const name = `viewport ${width} by 201, maxKeptPixels ${maxKeptPixels}`;
+      assert.equal(renderer.keptPixels, kept, name);
+      assert.equal(detail.width * detail.height, kept, name);
       renderer.dispose();
     }
   });
@@ -380,5 +396,79 @@ describe("Renderer kept canvases", () => {
     renderer.dispose();
     assert.equal(detail.width, 0);
     assert.equal(renderer.keptPixels, 0);
+  });
+});
+
+describe("KeptCanvases", () => {
+  /** A page that kept a whole-page detail of `pixels` by one, drawn turned by `rotation` at `version`. */
+  function kept(pixels: number, rotation: 0 | 90 = 0, version = 0): KeptPage {
+    const canvas = new FakeDocument().createElement("canvas");
+    Object.assign(canvas, { width: pixels, height: 1 });
+    return {
+      rotation,
+      version,
+      base: null,
+      detail: { canvas: canvas as unknown as HTMLCanvasElement, scale: 1, region: null },
+    };
+  }
+  const width = (page: KeptPage) => page.detail?.canvas.width ?? 0;
+
+  it("gives a page back only for the turn and content version it was drawn for, and nothing cleared since", () => {
+    const canvases = new KeptCanvases(1000, () => undefined);
+    const page = kept(100);
+    assert.equal(canvases.keep(0, page), true);
+    assert.equal(canvases.take(0, 90, 0), undefined);
+    assert.equal(width(page), 0, "what it cannot show goes");
+    assert.equal(canvases.pixels, 0);
+    canvases.keep(0, kept(100));
+    assert.equal(canvases.take(0, 0, 1), undefined);
+    const cleared = kept(100);
+    canvases.keep(0, cleared);
+    Object.assign(cleared.detail?.canvas ?? {}, { width: 0 });
+    assert.equal(canvases.take(0, 0, 0), undefined);
+    const shown = kept(100);
+    canvases.keep(1, shown);
+    assert.equal(canvases.take(1, 0, 0), shown);
+    assert.equal(width(shown), 100, "taken back as it is");
+    assert.equal(canvases.take(1, 0, 0), undefined, "once");
+  });
+
+  it("keeps a page's canvases in place of what it kept before, and none larger than the budget", () => {
+    const canvases = new KeptCanvases(1000, () => undefined);
+    const before = kept(600);
+    canvases.keep(0, before);
+    canvases.keep(0, kept(500));
+    assert.equal(canvases.pixels, 500);
+    assert.equal(width(before), 0);
+    assert.equal(canvases.keep(1, kept(1001)), false);
+    assert.equal(canvases.pixels, 500);
+  });
+
+  it("lets the least recently kept go once the commit that unmounted them is over", async () => {
+    const canvases = new KeptCanvases(1000, () => undefined);
+    const pages = [kept(400), kept(400), kept(400)];
+    for (const [index, page] of pages.entries()) canvases.keep(index, page);
+    assert.equal(canvases.pixels, 1200, "not yet");
+    await Promise.resolve();
+    assert.equal(canvases.pixels, 800);
+    assert.deepEqual(pages.map(width), [0, 400, 400]);
+    canvases.trim(0);
+    assert.equal(canvases.pixels, 0);
+  });
+
+  it("keeps nothing while not keeping, nor after closing", () => {
+    const canvases = new KeptCanvases(1000, () => undefined);
+    const page = kept(100);
+    canvases.keep(0, page);
+    canvases.setKeeping(false);
+    assert.equal(width(page), 0);
+    assert.equal(canvases.keep(0, kept(100)), false);
+    canvases.setKeeping(true);
+    assert.equal(canvases.keep(0, kept(100)), true);
+    canvases.close();
+    assert.equal(canvases.pixels, 0);
+    assert.equal(canvases.keep(0, kept(100)), false);
+    // Following the viewport, nothing without one.
+    assert.equal(new KeptCanvases(undefined, () => undefined).keep(0, kept(1)), false);
   });
 });

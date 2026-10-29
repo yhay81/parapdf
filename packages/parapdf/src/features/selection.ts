@@ -98,6 +98,8 @@ function textPointOf(
   const point = document.createRange();
   point.setStart(node, offset);
   for (const [item, element] of elements.entries()) {
+    // pdf.js leaves the runs of empty items out of the layer.
+    if (!element.parentNode) continue;
     const run = document.createRange();
     run.selectNode(element);
     if (point.compareBoundaryPoints(Range.START_TO_START, run) <= 0) {

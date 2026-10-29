@@ -48,6 +48,23 @@ describe("flipTarget", () => {
     assert.equal(flipTarget(horizontal, "none", 0, 1), 1);
   });
 
+  it("goes by the first page alone and the pairs after it in horizontal mode", () => {
+    const horizontal = arranged({ scrollMode: "horizontal", spread: "even" });
+    assert.equal(flipTarget(horizontal, "even", 0, 1), 1);
+    assert.equal(flipTarget(horizontal, "even", 1, 1), 3);
+    assert.equal(flipTarget(horizontal, "even", 3, -1), 2);
+    assert.equal(flipTarget(horizontal, "even", 4, 1), null);
+  });
+
+  it("flips from a last page without a partner, and whole spreads in page mode", () => {
+    const odd = arranged({ spread: "odd" });
+    assert.equal(flipTarget(odd, "odd", 4, 1), null);
+    assert.equal(flipTarget(odd, "odd", 4, -1), 3);
+    const paged = arranged({ scrollMode: "page", spread: "odd", page: 3 });
+    assert.equal(flipTarget(paged, "odd", 0, 1), 4);
+    assert.equal(flipTarget(paged, "odd", 0, -1), 1);
+  });
+
   it("flips from the row page mode shows, which the current page follows later", () => {
     const paged = arranged({ scrollMode: "page", page: 2 });
     assert.equal(flipTarget(paged, "none", 0, 1), 3);
@@ -80,6 +97,12 @@ describe("pageTarget", () => {
   it("shows the page at the viewport's left in horizontal mode", () => {
     assert.deepEqual(pageTarget(row, 1, at()), { top: 99, left: 622 });
   });
+
+  it("shows the page at the viewport's right in horizontal mode read from the right", () => {
+    const rtl = computeLayout(sizes, 1, { gap: 10, scrollMode: "horizontal", direction: "rtl" });
+    // Page 1 is at the right end of the row of 1,484 CSS pixels.
+    assert.deepEqual(pageTarget(rtl, 0, at()), { top: 0, left: 1484 - 1000 });
+  });
 });
 
 describe("destinationTarget", () => {
@@ -108,6 +131,43 @@ describe("destinationTarget", () => {
     const target = { pageIndex: 0, x: 100, y: null };
     assert.deepEqual(destinationTarget(turned, target, at(), false), { top: 110, left: null });
   });
+
+  it("turns the point with a half turn and three quarters", () => {
+    const half = computeLayout(sizes, 1, { gap: 10, rotation: 180 });
+    assert.deepEqual(destinationTarget(half, point, at(), false), {
+      top: 10 + 792 - 50,
+      left: null,
+    });
+    const threeQuarters = computeLayout(sizes, 1, { gap: 10, rotation: 270 });
+    assert.deepEqual(destinationTarget(threeQuarters, point, at(), false), {
+      top: 10 + 612 - 100,
+      left: null,
+    });
+  });
+
+  it("takes a quarter-turned page's top coordinate as the left one", () => {
+    const turned = computeLayout(sizes, 1, { gap: 10, rotation: 90 });
+    const target = { pageIndex: 0, x: null, y: 50 };
+    // The page, 792 CSS pixels wide once turned, starts at 104.
+    assert.deepEqual(destinationTarget(turned, target, at(), true), {
+      top: 0,
+      left: 104 + 792 - 50,
+    });
+  });
+
+  it("shows a half-turned rectangle from the corner that turned to its top left", () => {
+    const half = computeLayout(sizes, 1, { gap: 10, rotation: 180 });
+    const rect = { ...point, view: { fit: "rect" as const, width: 200, height: 100 } };
+    assert.deepEqual(destinationTarget(half, rect, at(), false), {
+      top: 10 + 792 - 50 - 100,
+      left: 194 + 612 - 100 - 200,
+    });
+  });
+
+  it("goes to the page's left edge in horizontal mode without a point", () => {
+    const target = { pageIndex: 1, x: null, y: null };
+    assert.deepEqual(destinationTarget(row, target, at(), false), { top: 99, left: 622 });
+  });
 });
 
 describe("rectTarget", () => {
@@ -120,6 +180,12 @@ describe("rectTarget", () => {
   it("puts it in the left third in horizontal mode or when it is out of view sideways", () => {
     assert.equal(rectTarget(row, 1, rect, at()).left, 622 + 10 + 20 - 1000 / 3);
     assert.equal(rectTarget(column, 1, rect, at(500)).left, 79 + 20 - 1000 / 3);
+  });
+
+  it("turns the rectangle with the view", () => {
+    const turned = computeLayout(sizes, 1, { gap: 10, rotation: 90 });
+    // Its left coordinate is now its top one, and it stays in view sideways.
+    assert.deepEqual(rectTarget(turned, 0, rect, at()), { top: 10 + 20 - 800 / 3, left: null });
   });
 });
 
@@ -144,5 +210,15 @@ describe("positionAt and positionTarget", () => {
     const target = positionTarget(twice, position, at());
     assert.equal(target.top, 1604 + 88 * 2);
     assert.ok(Math.abs((target.left ?? 0) - (10 - 79 * 2)) < 1e-9);
+  });
+
+  it("shows a position again in a row read from the right", () => {
+    const rtl = computeLayout(sizes, 1, { gap: 10, scrollMode: "horizontal", direction: "rtl" });
+    const position = positionAt(rtl, at(300, 0), view);
+    // Page 2 is at the row's left end, from 10 to 852.
+    assert.equal(position.pageIndex, 1);
+    const target = positionTarget(rtl, position, at());
+    assert.ok(Math.abs(target.top) < 1e-9);
+    assert.ok(Math.abs((target.left ?? 0) - 300) < 1e-9);
   });
 });

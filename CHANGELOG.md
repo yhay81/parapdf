@@ -113,6 +113,56 @@ change the API.
   `HeadlessChrome/`, was taken for WebKit's (decision 0014), so pages
   rendered by Playwright, Puppeteer, or a prerenderer started the download
   only once pdf.js had loaded.
+- `configurePdfjs({ workerSrc })` without `assetBase` keeps the annotation
+  icons the package ships. Until now they were transparent.
+- A document that fails to open lets go of pdf.js's loading task. Until now
+  the task stayed open with what pdf.js held for it.
+- A URL source that leaves out `withCredentials` no longer shares a
+  document with one that sets it to `false`: the first follows
+  `configurePdfjs({ documentOptions })`, which may send credentials.
+- A `PdfSession` that showed a password request as an error, without
+  `passwordPrompt`, reads the document once it opens, as when the prompt
+  shows again or another provider unlocks it. Until now what it read after
+  the error settled empty.
+- The zoom stays within `minScale` and `maxScale`: a document opening at a
+  `scale` outside them, and a custom zoom kept while the document is built
+  again or its viewport is away, are clamped, and a fitted zoom stays
+  fitted when the limits change. Until now those went past the limits, and
+  changing the limits made a fitted zoom custom.
+- A document built again, or a viewport attached again, while the viewport
+  is hidden keeps its fitted zoom. Until now it fitted the hidden
+  viewport's zero width.
+- `goToPage()` truncates a fractional index and does nothing for NaN.
+  Until now either made the current page a number no page has.
+- `Viewer.sourceName` is null for a `data:` or `blob:` URL source, whose
+  path names no file. Until now it was the end of the data, or the blob's
+  id. `Viewer.blankFraction()` is 0 for a viewport with no width or
+  height, where it was NaN.
+- Pages no longer draw again a base that never shows under a detail of
+  the whole page, as after zooming in or after what the pages draw changes
+  (decision 0025). With `maxBasePixels` 0, a page no longer draws its empty
+  base again forever.
+- A page's text, annotation, or annotation editor layer that fails to
+  build is tried again when the page mounts again, and the annotation
+  layers when what the pages show changes. Until now it was built again in
+  the next idle periods, ahead of the layers still to build.
+- Search matches a final sigma, `ς`, with `σ` and `Σ` when it ignores
+  case, and a match ends after the combining marks of its last letter, as
+  pdf.js's search does. `previous()` with no match selected goes to the
+  last match. Until now it went to the one before it.
+- A selection whose end falls past an empty text item, which pdf.js leaves
+  out of the text layer, ends at the next run of text. Until now it could
+  end at the empty item.
+- Text read with `lineBreaks: "keep"` keeps a newline that ends the page's
+  last item. Until now it was dropped with the line end after the item.
+- `getFormFields()` reads what the document's scripts set on fields whose
+  widgets were not built yet: a check box or radio button set to its export
+  value reads checked, and a text field set to a number reads that number.
+  A radio group whose selected button pdf.js left unstored, storing only
+  the others as unchecked, keeps its value. Until now those read `"Off"`
+  or the document's value.
+- `setFormValues()` stores a single choice set to no option as an empty
+  one, as pdf.js's widgets read it. Until now it stored null.
 
 ## 0.7.0 — 2026-10-27
 

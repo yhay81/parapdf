@@ -67,6 +67,75 @@ describe("the search feature", () => {
     assert.equal(search.store.get().current, 2);
   });
 
+  it("selects the first match at or after the current page, else the first of all", async () => {
+    const { viewers } = await twoViewers();
+    const search = attachSearch(viewers[0]);
+    viewers[0].store.set({ currentPage: 1 });
+    search.search("rose");
+    await finish();
+    assert.equal(search.store.get().current, 1);
+    viewers[0].store.set({ currentPage: 2 });
+    search.search("tulip");
+    await finish();
+    assert.equal(search.store.get().current, 0);
+  });
+
+  it("goes back from no selection to the last match", async (context) => {
+    const document = fakeDocument({
+      pages: [LETTER, LETTER, LETTER],
+      texts: [[{ str: "rose rose" }], [], [{ str: "rose" }]],
+    });
+    const viewer = new Viewer();
+    close.push(show(viewer, { url: "/a.pdf" }, fakePdfjs(async () => document.proxy).loader).close);
+    await settle();
+    viewer.store.set({ currentPage: 2 });
+    // Each page takes long enough for what was found so far to be published.
+    let now = 0;
+    context.mock.method(performance, "now", () => (now += 200));
+    const search = attachSearch(viewer);
+    search.search("rose");
+    await settle();
+    const { status, matches, current } = search.store.get();
+    assert.deepEqual([status, matches.length, current], ["searching", 2, -1]);
+    search.previous();
+    assert.equal(search.store.get().current, 1);
+  });
+
+  it("does nothing for a blank query, or to move through no matches", async () => {
+    const { viewers, textsRead } = await twoViewers();
+    const search = attachSearch(viewers[0]);
+    search.search(" \t ");
+    await finish();
+    assert.equal(search.store.get().status, "idle");
+    assert.equal(search.store.get().query, " \t ");
+    assert.deepEqual(textsRead, []);
+    search.search("lily");
+    await finish();
+    search.next();
+    search.previous();
+    const { status, matches, current } = search.store.get();
+    assert.deepEqual([status, matches.length, current], ["done", 0, -1]);
+    assert.deepEqual(textsRead, [0, 1, 2]);
+    search.clear();
+    assert.equal(search.store.get().status, "idle");
+    assert.equal(search.store.get().query, "");
+  });
+
+  it("indexes pages apart for each way of comparing, from the text read once", async () => {
+    const { viewers, textsRead } = await twoViewers();
+    const search = attachSearch(viewers[0]);
+    search.search("Rose", { caseSensitive: true });
+    await finish();
+    assert.equal(search.store.get().matches.length, 1);
+    search.search("Rose");
+    await finish();
+    assert.equal(search.store.get().matches.length, 3);
+    search.search("rose", { caseSensitive: true, entireWord: true });
+    await finish();
+    assert.equal(search.store.get().matches.length, 2);
+    assert.deepEqual(textsRead, [0, 1, 2]);
+  });
+
   it("reads each page's text once for every viewer of the document", async () => {
     const { viewers, textsRead } = await twoViewers();
     const first = attachSearch(viewers[0]);
@@ -77,6 +146,52 @@ describe("the search feature", () => {
     await finish();
     assert.equal(second.store.get().matches.length, 3);
     assert.deepEqual(textsRead, [0, 1, 2]);
+  });
+
+  it("does not publish an older query when a pending text read finishes", async () => {
+    let releaseText!: () => void;
+    const textsReady = new Promise<void>((resolve) => {
+      releaseText = resolve;
+    });
+    const document = fakeDocument({ texts: [[{ str: "rose tulip tulip" }]], textsReady });
+    const { loader } = fakePdfjs(async () => document.proxy);
+    const viewer = new Viewer();
+    close.push(show(viewer, { url: "/slow.pdf" }, loader).close);
+    await settle();
+    const search = attachSearch(viewer);
+    search.search("rose");
+    await settle();
+    assert.deepEqual(document.textsRead, [0]);
+    search.search("tulip");
+    releaseText();
+    await finish();
+    const state = search.store.get();
+    assert.equal(state.query, "tulip");
+    assert.equal(state.status, "done");
+    assert.equal(state.matches.length, 2);
+    assert.deepEqual(document.textsRead, [0], "both queries share the pending read");
+  });
+
+  it("stays clear when a pending text read finishes", async () => {
+    let releaseText!: () => void;
+    const textsReady = new Promise<void>((resolve) => {
+      releaseText = resolve;
+    });
+    const document = fakeDocument({ texts: [[{ str: "rose" }]], textsReady });
+    const { loader } = fakePdfjs(async () => document.proxy);
+    const viewer = new Viewer();
+    close.push(show(viewer, { url: "/slow.pdf" }, loader).close);
+    await settle();
+    const search = attachSearch(viewer);
+    search.search("rose");
+    await settle();
+    assert.deepEqual(document.textsRead, [0]);
+    search.clear();
+    releaseText();
+    await finish();
+    assert.equal(search.store.get().status, "idle");
+    assert.equal(search.store.get().query, "");
+    assert.deepEqual(search.store.get().matches, []);
   });
 
   it("stops when detached, and the viewer hears nothing more of it", async () => {

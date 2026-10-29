@@ -12,7 +12,8 @@ import type { PdfjsLoader } from "../src/document/registry.ts";
 import type { PdfSource } from "../src/document/session.ts";
 import { attachSearch } from "../src/features/search/index.ts";
 import { getText } from "../src/features/text/index.ts";
-import { openViewer, Viewer } from "../src/view/viewer.ts";
+import type { ViewerOptions } from "../src/view/options.ts";
+import { attachViewport, openViewer, setViewerOptions, Viewer } from "../src/view/viewer.ts";
 import {
   askPassword,
   fakeDocument,
@@ -524,5 +525,214 @@ describe("a viewer's extensions", () => {
     editing.abort();
     session.commit();
     assert.deepEqual(committed, [0, 1, 1]);
+  });
+});
+
+describe("a viewer's viewport", () => {
+  const globals = ["window", "requestAnimationFrame", "cancelAnimationFrame", "ResizeObserver"];
+  const before = globals.map((name) => Object.getOwnPropertyDescriptor(globalThis, name));
+  const release: (() => void)[] = [];
+  let resized: (() => void)[] = [];
+  let frames: (() => void)[] = [];
+
+  beforeEach(() => {
+    mock.timers.enable({ apis: ["setTimeout"] });
+    resized = [];
+    frames = [];
+    Object.assign(globalThis, {
+      window: {
+        devicePixelRatio: 1,
+        setTimeout: (callback: () => void, delay: number) => setTimeout(callback, delay),
+      },
+      requestAnimationFrame: (callback: () => void) => frames.push(callback),
+      cancelAnimationFrame: () => {},
+      ResizeObserver: class {
+        constructor(callback: () => void) {
+          resized.push(callback);
+        }
+        observe() {}
+        disconnect() {}
+      },
+    });
+  });
+
+  afterEach(async () => {
+    for (const done of release.splice(0)) done();
+    mock.timers.tick(1000);
+    await settle();
+    mock.timers.reset();
+    globals.forEach((name, index) => {
+      const descriptor = before[index];
+      if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+      else Reflect.deleteProperty(globalThis, name);
+    });
+  });
+
+  /** A scroller, 1000 by 800 CSS pixels, whose content is its viewer's layout. */
+  class Scroller extends EventTarget {
+    viewer: Viewer | null = null;
+    clientWidth = 1000;
+    clientHeight = 800;
+    clientLeft = 0;
+    clientTop = 0;
+    readonly ownerDocument = { activeElement: null };
+    readonly classList = { toggle: () => {}, remove: () => {} };
+    readonly style = {};
+    #left = 0;
+    #top = 0;
+    get scrollWidth(): number {
+      return Math.max(this.clientWidth, this.viewer?.store.get().layout?.totalWidth ?? 0);
+    }
+    get scrollHeight(): number {
+      return Math.max(this.clientHeight, this.viewer?.store.get().layout?.totalHeight ?? 0);
+    }
+    get scrollLeft(): number {
+      return this.#left;
+    }
+    set scrollLeft(left: number) {
+      this.#left = Math.min(Math.max(0, left), this.scrollWidth - this.clientWidth);
+    }
+    get scrollTop(): number {
+      return this.#top;
+    }
+    set scrollTop(top: number) {
+      this.#top = Math.min(Math.max(0, top), this.scrollHeight - this.clientHeight);
+    }
+    scrollTo(left: number, top: number): void {
+      this.scrollLeft = left;
+      this.scrollTop = top;
+    }
+    getBoundingClientRect() {
+      return { left: 0, top: 0, width: this.clientWidth, height: this.clientHeight };
+    }
+  }
+
+  /** Attach `scroller` to `viewer`'s viewport until the test ends. */
+  function attach(viewer: Viewer, scroller: Scroller): () => void {
+    scroller.viewer = viewer;
+    const content = { style: {}, classList: { remove: () => {} } };
+    const detach = attachViewport(
+      viewer,
+      scroller as unknown as HTMLElement,
+      content as unknown as HTMLElement,
+    );
+    release.push(detach);
+    return detach;
+  }
+
+  /** A viewer of five Letter pages in a viewport. */
+  async function viewing(options: ViewerOptions = {}) {
+    const viewer = new Viewer(options);
+    const scroller = new Scroller();
+    attach(viewer, scroller);
+    const document = fakeDocument({ pages: Array.from({ length: 5 }, () => LETTER) });
+    release.push(
+      show(viewer, { url: "/a.pdf" }, fakePdfjs(async () => document.proxy).loader).close,
+    );
+    await settle();
+    return { viewer, scroller };
+  }
+
+  /** Resize the viewport, as the browser reports it, and draw the next frame. */
+  function resize(scroller: Scroller, width: number, height: number): void {
+    scroller.clientWidth = width;
+    scroller.clientHeight = height;
+    for (const observed of resized) observed();
+    for (const frame of frames.splice(0)) frame();
+  }
+
+  /** The width of a Letter page fitted to a viewport `width` wide, with the gaps. */
+  const fitWidth = (width: number) => (width - 24) / 612;
+
+  it("goes to the page in range an index names: clamped, truncated, or not at all for NaN", async () => {
+    const { viewer, scroller } = await viewing();
+    const tops = viewer.store.get().layout?.tops ?? [];
+    const at = () => [viewer.store.get().currentPage, scroller.scrollTop];
+    viewer.goToPage(3);
+    assert.deepEqual(at(), [3, (tops[3] ?? 0) - 12]);
+    viewer.goToPage(Number.NaN);
+    assert.deepEqual(at(), [3, (tops[3] ?? 0) - 12]);
+    viewer.goToPage(1.5);
+    assert.deepEqual(at(), [1, (tops[1] ?? 0) - 12]);
+    viewer.goToPage(99);
+    assert.deepEqual(at(), [4, (tops[4] ?? 0) - 12]);
+    viewer.goToPage(Number.NEGATIVE_INFINITY);
+    assert.deepEqual(at(), [0, 0]);
+  });
+
+  it("shows the row of the page an index names in page mode, and keeps it for NaN", async () => {
+    const { viewer } = await viewing({ initialScrollMode: "page" });
+    viewer.goToPage(2);
+    viewer.goToPage(Number.NaN);
+    assert.deepEqual(viewer.store.get().layout?.shown, { first: 2, last: 2 });
+    viewer.goToPage(1.5);
+    const layout = viewer.store.get().layout;
+    assert.deepEqual(layout?.shown, { first: 1, last: 1 });
+    assert.equal(layout?.totalHeight, (layout?.heights[1] ?? 0) + 24);
+    assert.equal(viewer.store.get().currentPage, 1);
+  });
+
+  it("keeps fitting within scale limits that change, and clamps a custom zoom to them", async () => {
+    const { viewer, scroller } = await viewing();
+    const zoom = () => [viewer.store.get().scale, viewer.store.get().zoomMode];
+    assert.deepEqual(zoom(), [fitWidth(1000), "fit-width"]);
+    setViewerOptions(viewer, { minScale: 2 });
+    assert.deepEqual(zoom(), [2, "fit-width"]);
+    resize(scroller, 1400, 800);
+    assert.deepEqual(zoom(), [fitWidth(1400), "fit-width"]);
+    viewer.setScale(5);
+    setViewerOptions(viewer, { minScale: 2, maxScale: 3 });
+    assert.deepEqual(zoom(), [3, "custom"]);
+  });
+
+  it("opens at an initial scale within the limits", async () => {
+    const { viewer } = await viewing({ initialScale: 20 });
+    assert.deepEqual([viewer.store.get().scale, viewer.store.get().zoomMode], [10, "custom"]);
+  });
+
+  it("keeps a custom zoom within limits that change as the document is built again", async () => {
+    const { viewer } = await viewing();
+    viewer.setScale(5);
+    setViewerOptions(viewer, { textLayer: false, maxScale: 2 });
+    await settle();
+    assert.deepEqual([viewer.store.get().scale, viewer.store.get().zoomMode], [2, "custom"]);
+  });
+
+  it("keeps a custom zoom within limits that changed while its viewport was away", async () => {
+    const { viewer, scroller } = await viewing();
+    viewer.setScale(5);
+    release.shift()?.();
+    setViewerOptions(viewer, { maxScale: 2 });
+    attach(viewer, scroller);
+    await settle();
+    assert.deepEqual([viewer.store.get().scale, viewer.store.get().zoomMode], [2, "custom"]);
+  });
+
+  it("keeps the fitted zoom of a document built again while its viewport is hidden", async () => {
+    const { viewer, scroller } = await viewing();
+    viewer.goToPage(2);
+    const top = scroller.scrollTop;
+    resize(scroller, 0, 0);
+    setViewerOptions(viewer, { textLayer: false });
+    await settle();
+    resize(scroller, 1000, 800);
+    assert.equal(viewer.store.get().scale, fitWidth(1000));
+    assert.deepEqual([viewer.store.get().currentPage, scroller.scrollTop], [2, top]);
+  });
+
+  it("keeps the fitted zoom of a viewport that attaches again while hidden", async () => {
+    const { viewer, scroller } = await viewing();
+    viewer.goToPage(2);
+    const top = scroller.scrollTop;
+    // The viewport's first detach, which viewing() released first.
+    release.shift()?.();
+    resized.splice(0);
+    scroller.clientWidth = 0;
+    scroller.clientHeight = 0;
+    attach(viewer, scroller);
+    await settle();
+    resize(scroller, 1000, 800);
+    assert.equal(viewer.store.get().scale, fitWidth(1000));
+    assert.deepEqual([viewer.store.get().currentPage, scroller.scrollTop], [2, top]);
   });
 });

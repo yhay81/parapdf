@@ -18,6 +18,7 @@ import {
   type Viewport,
   visibleArea,
   visibleRange,
+  zoomTarget,
 } from "../src/view/layout.ts";
 
 // A US Letter page and an A4 page in landscape, 10 CSS pixels apart.
@@ -59,6 +60,15 @@ describe("computeLayout", () => {
     // The sizes stay unturned.
     assert.deepEqual(layout.sizes, sizes);
   });
+
+  it("keeps the page boxes of a half turn and swaps those of three quarters", () => {
+    const half = computeLayout(sizes, 1, { gap: 10, rotation: 180 });
+    assert.deepEqual([...half.widths], [612, 842]);
+    assert.deepEqual([...half.heights], [792, 595]);
+    const threeQuarters = computeLayout(sizes, 1, { gap: 10, rotation: 270 });
+    assert.deepEqual([...threeQuarters.widths], [792, 595]);
+    assert.deepEqual([...threeQuarters.heights], [612, 842]);
+  });
 });
 
 describe("pageAtPoint and visibleRange", () => {
@@ -79,6 +89,11 @@ describe("pageAtPoint and visibleRange", () => {
   it("is empty for a document without pages", () => {
     const empty = computeLayout([], 1, { gap: 10 });
     assert.deepEqual(visibleRange(empty, view(0, 0, 1000, 900)), { first: 0, last: -1 });
+  });
+
+  it("keeps a viewport scrolled past either end on the page at that end", () => {
+    assert.deepEqual(visibleRange(layout, view(0, 5000, 1000, 100)), { first: 1, last: 1 });
+    assert.deepEqual(visibleRange(layout, view(0, -100, 1000, 50)), { first: 0, last: 0 });
   });
 });
 
@@ -131,6 +146,12 @@ describe("turnBox", () => {
     const turned = turnBox(box, size, 90);
     assert.deepEqual(turnBox(turned, turnedSize(size, 90), 270), box);
   });
+
+  it("turns back from a half turn and from three quarters", () => {
+    assert.deepEqual(turnBox(turnBox(box, size, 180), size, 180), box);
+    const turned = turnBox(box, size, 270);
+    assert.deepEqual(turnBox(turned, turnedSize(size, 270), 90), box);
+  });
 });
 
 describe("toRotation", () => {
@@ -140,6 +161,35 @@ describe("toRotation", () => {
     assert.equal(toRotation(450), 90);
     assert.equal(toRotation(-90), 270);
     assert.equal(toRotation(-360), 0);
+  });
+});
+
+describe("zoomTarget", () => {
+  const scroller = { width: 1000, height: 800 };
+  const center = { x: 500, y: 400 };
+
+  it("keeps the point under the anchor at the same share of its page", () => {
+    const layout = computeLayout(sizes, 1, { gap: 10 });
+    // The middle of page 1's width, 390 of its 792 points down.
+    const target = zoomTarget(layout, computeLayout(sizes, 2, { gap: 10 }), scroller, center, {
+      x: 500,
+      y: 400,
+    });
+    // At twice the size, the page is wider than the viewport and starts at the gap.
+    assert.deepEqual(target, { left: 10 + 612 - 500, top: 10 + 780 - 400 });
+  });
+
+  it("finds the page again where the rows wrap otherwise", () => {
+    const letters = Array.from({ length: 6 }, () => ({ width: 612, height: 792 }));
+    const wrapped = (scale: number) =>
+      computeLayout(letters, scale, { gap: 10, scrollMode: "wrapped", viewportWidth: 1000 });
+    // The middle of page 5, the second of the second row of three.
+    const point = { x: pageLeft(wrapped(0.5), 4, 1000) + 153, y: 416 + 198 };
+    // At full size, one page fits a row: page 5 is the fifth row.
+    assert.deepEqual(zoomTarget(wrapped(0.5), wrapped(1), scroller, center, point), {
+      left: 194 + 306 - 500,
+      top: 10 + 4 * 802 + 396 - 400,
+    });
   });
 });
 
@@ -156,6 +206,12 @@ describe("spreads", () => {
     assert.deepEqual(rowBounds("even", 2, 6), { first: 1, last: 2 });
     // A last page without a partner stays alone.
     assert.deepEqual(rowBounds("even", 5, 6), { first: 5, last: 5 });
+  });
+
+  it("leaves the last page of an odd count alone, and a single page alone", () => {
+    assert.deepEqual(rowBounds("odd", 4, 5), { first: 4, last: 4 });
+    assert.deepEqual(rowBounds("odd", 0, 1), { first: 0, last: 0 });
+    assert.deepEqual(rowBounds("even", 1, 2), { first: 1, last: 1 });
   });
 
   it("lays pairs side by side and centers each page in its row's height", () => {
@@ -227,6 +283,10 @@ describe("horizontal scrolling", () => {
     assert.deepEqual(visibleRange(layout, view(0, 0, 1000, 900)), { first: 0, last: 1 });
   });
 
+  it("keeps a viewport scrolled past the end of the row on the last page", () => {
+    assert.deepEqual(visibleRange(layout, view(5000, 0, 600, 900)), { first: 1, last: 1 });
+  });
+
   it("gives the visible part of a page in the centered row", () => {
     const viewport = view(0, 0, 1000, 1000);
     assert.deepEqual(visibleArea(layout, 0, viewport), { minX: 0, minY: 0, maxX: 1, maxY: 1 });
@@ -272,6 +332,17 @@ describe("right-to-left page order", () => {
     assert.deepEqual(visibleRange(layout, view(0, 0, 1484, 900)), { first: 0, last: 1 });
   });
 
+  it("keeps a viewport beyond either end of a row read from the right on the page there", () => {
+    const layout = computeLayout(sizes, 1, {
+      gap: 10,
+      scrollMode: "horizontal",
+      direction: "rtl",
+    });
+    // Page 1 is at the right end, the last page at the left.
+    assert.deepEqual(visibleRange(layout, view(5000, 0, 600, 900)), { first: 0, last: 0 });
+    assert.deepEqual(visibleRange(layout, view(-500, 0, 400, 900)), { first: 1, last: 1 });
+  });
+
   it("fills wrapped rows from the right", () => {
     const pages = Array.from({ length: 3 }, () => letter);
     const layout = computeLayout(pages, 0.5, {
@@ -309,6 +380,12 @@ describe("wrapped scrolling", () => {
     // Page 1 alone, then pairs 2–3 and 4–5, then page 6: a pair never breaks.
     assert.deepEqual([...wrapped(1000, "even").rowFirst], [0, 0, 0, 3, 3, 3]);
     assert.deepEqual([...wrapped(900, "even").rowFirst], [0, 1, 1, 3, 3, 5]);
+  });
+
+  it("keeps a page in a row that it and the gaps fill exactly", () => {
+    // Two pages of 306 CSS pixels, the gap between them, and one on each side.
+    assert.deepEqual([...wrapped(642).rowFirst], [0, 0, 2, 2, 4, 4]);
+    assert.deepEqual([...wrapped(641).rowFirst], [0, 1, 2, 3, 4, 5]);
   });
 
   it("tells whether another width wraps pages into other rows", () => {
@@ -359,5 +436,26 @@ describe("page scrolling", () => {
     assert.deepEqual(spreads.shown, { first: 2, last: 3 });
     // Pages 3 and 4 are both US Letter.
     assert.equal(spreads.totalWidth, 612 + 10 + 612 + 20);
+  });
+
+  it("shows the first or last row for a page out of range", () => {
+    const past = computeLayout(pages, 1, { gap: 10, scrollMode: "page", page: 99 });
+    assert.deepEqual(past.shown, { first: 2, last: 2 });
+    assert.deepEqual([past.totalWidth, past.totalHeight], [632, 812]);
+    const before = computeLayout(pages, 1, { gap: 10, scrollMode: "page", page: -3 });
+    assert.deepEqual(before.shown, { first: 0, last: 0 });
+    assert.deepEqual(showPage(before, 99).shown, { first: 2, last: 2 });
+  });
+
+  it("starts a row taller or wider than the viewport at the gap", () => {
+    const zoomed = computeLayout(pages, 2, { gap: 10, scrollMode: "page" });
+    assert.deepEqual([pageTop(zoomed, 0, 800), pageLeft(zoomed, 0, 1000)], [10, 10]);
+  });
+
+  it("shows nothing without pages", () => {
+    const empty = computeLayout([], 1, { gap: 10, scrollMode: "page" });
+    assert.equal(empty.shown, null);
+    assert.deepEqual(visibleRange(empty, view(0, 0, 1000, 1000)), { first: 0, last: -1 });
+    assert.equal(pageAtPoint(empty, 0, 0, 1000), 0);
   });
 });

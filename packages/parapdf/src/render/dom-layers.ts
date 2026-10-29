@@ -49,6 +49,8 @@ interface PageLayerState {
   annotationRotation: Rotation;
   editorTask: AnnotationEditorLayerTask | undefined;
   editorHandle: AnnotationLayerEditor | undefined;
+  /** Layers that failed: built again once the page mounts again, and annotations once they change. */
+  readonly failed: Set<"text" | "annotations" | "editor">;
 }
 
 export interface DomLayerStats {
@@ -174,6 +176,7 @@ export class DomLayers {
       annotationRotation: 0,
       editorTask: undefined,
       editorHandle: undefined,
+      failed: new Set(),
     });
   }
 
@@ -245,6 +248,8 @@ export class DomLayers {
    */
   invalidateAnnotations(): void {
     for (const page of this.#pages.values()) {
+      page.failed.delete("annotations");
+      page.failed.delete("editor");
       page.editorTask?.cancel();
       page.editorTask = undefined;
       page.editorHandle?.destroy();
@@ -291,15 +296,19 @@ export class DomLayers {
     );
     const visible = (page: PageLayerState) => page.index >= input.first && page.index <= input.last;
     const needsText = (page: PageLayerState) =>
-      page.elements.text !== null && !page.textHandle && !page.textTask;
+      page.elements.text !== null && !page.textHandle && !page.textTask && !page.failed.has("text");
     const needsLinks = (page: PageLayerState) =>
-      page.elements.annotations !== null && !page.annotationHandle && !page.annotationTask;
+      page.elements.annotations !== null &&
+      !page.annotationHandle &&
+      !page.annotationTask &&
+      !page.failed.has("annotations");
     // The editor layer takes the file's annotations from the annotation layer.
     const needsEditor = (page: PageLayerState) =>
       page.elements.editor !== null &&
       this.#options.annotationSetup.editor !== null &&
       !page.editorHandle &&
       !page.editorTask &&
+      !page.failed.has("editor") &&
       (page.elements.annotations === null || page.annotationHandle !== undefined);
     for (const inWindow of [visible, (page: PageLayerState) => !visible(page)]) {
       const text = pages.find((page) => inWindow(page) && needsText(page));
@@ -379,12 +388,19 @@ export class DomLayers {
     return this.#pages.get(page.index) === page;
   }
 
-  #failed(error: unknown, page: PageLayerState, what: string): void {
-    if (isRenderCancelled(error)) this.#stats.cancelled++;
-    else {
-      this.#stats.failed++;
-      console.error(`page ${page.index + 1}: ${what} failed`, error);
+  /**
+   * Counts a layer that failed or was cancelled; true if it failed. Like a
+   * drawing, a layer that fails for good must not be built again and again,
+   * ahead of every other layer.
+   */
+  #failed(error: unknown, page: PageLayerState, what: string): boolean {
+    if (isRenderCancelled(error)) {
+      this.#stats.cancelled++;
+      return false;
     }
+    this.#stats.failed++;
+    console.error(`page ${page.index + 1}: ${what} failed`, error);
+    return true;
   }
 
   #done(): void {
@@ -421,7 +437,11 @@ export class DomLayers {
           this.#stats.editors++;
           this.#editorBuilt(page.index, true);
         },
-        (error: unknown) => this.#failed(error, page, "annotation editor layer"),
+        (error: unknown) => {
+          if (this.#failed(error, page, "annotation editor layer") && page.editorTask === task) {
+            page.failed.add("editor");
+          }
+        },
       )
       .finally(() => {
         if (page.editorTask === task) page.editorTask = undefined;
@@ -460,7 +480,11 @@ export class DomLayers {
           this.#stats.annotations++;
           this.#options.onAnnotationsReady?.(page.index, handle);
         },
-        (error: unknown) => this.#failed(error, page, "annotation layer"),
+        (error: unknown) => {
+          if (this.#failed(error, page, "annotation layer") && page.annotationTask === task) {
+            page.failed.add("annotations");
+          }
+        },
       )
       .finally(() => {
         if (page.annotationTask === task) page.annotationTask = undefined;
@@ -499,7 +523,11 @@ export class DomLayers {
           this.#stats.text++;
           this.#options.onTextReady?.(page.index, handle);
         },
-        (error: unknown) => this.#failed(error, page, "text layer"),
+        (error: unknown) => {
+          if (this.#failed(error, page, "text layer") && page.textTask === task) {
+            page.failed.add("text");
+          }
+        },
       )
       .finally(() => {
         if (page.textTask === task) page.textTask = undefined;

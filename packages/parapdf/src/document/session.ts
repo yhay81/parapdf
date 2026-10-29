@@ -388,6 +388,9 @@ export class DocumentSession {
       signal.throwIfAborted();
       return new DocumentSession(loaded, loadingTask, proxy, controller, password);
     } catch (error) {
+      // A failed load keeps its transport, and the file pdf.js's worker read
+      // of it, until destroyed; an aborted one was destroyed as it aborted.
+      if (!signal.aborted) void loadingTask.destroy().catch(() => {});
       // pdf.js tries to parse on the main thread when its worker does not
       // start, and that fails too when the script is missing.
       if (error instanceof Error && error.message.includes("fake worker")) {

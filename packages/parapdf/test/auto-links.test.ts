@@ -52,6 +52,39 @@ describe("findLinks", () => {
     assert.deepEqual(found[0]?.end, { item: 1, offset: 4 });
   });
 
+  it("ends a link at a line end without a hyphen", () => {
+    assert.deepEqual(
+      links(page("https://example.com/a", "b")).map(({ url }) => url),
+      ["https://example.com/a"],
+    );
+  });
+
+  it("finds a link written in several items of one line, as search reads them", () => {
+    const text: PageText = {
+      items: ["Visit https://exa", "mple.com today"],
+      endsLine: [false, true],
+      boxes: new Float32Array(8),
+    };
+    const found = links(text);
+    assert.deepEqual(
+      found.map(({ url }) => url),
+      ["https://example.com/"],
+    );
+    assert.deepEqual(found[0]?.start, { item: 0, offset: 6 });
+    assert.deepEqual(found[0]?.end, { item: 1, offset: 8 });
+  });
+
+  it("maps a link back through compatibility forms and ligatures", () => {
+    // Full-width letters and the fi ligature, which read as their plain letters.
+    const found = links(page("Go to ｈｔｔｐｓ://example.com/ﬁle now"));
+    assert.deepEqual(
+      found.map(({ url }) => url),
+      ["https://example.com/file"],
+    );
+    assert.deepEqual(found[0]?.start, { item: 0, offset: 6 });
+    assert.deepEqual(found[0]?.end, { item: 0, offset: 29 });
+  });
+
   it("keeps mailto: addresses as they are", () => {
     assert.deepEqual(
       links(page("mailto:me@example.net")).map(({ url }) => url),
@@ -71,6 +104,23 @@ describe("coveredByLink", () => {
     assert.equal(coveredByLink(link, [{ rect: [150, 95, 300, 125] }]), false);
     assert.equal(coveredByLink(link, [{ rect: [300, 300, 400, 320] }]), false);
     assert.equal(coveredByLink(link, []), false);
+    // Two of the file's links that cover two fifths each: each counts on its own.
+    const twoFifths: { rect: [number, number, number, number] }[] = [
+      { rect: [100, 95, 140, 125] },
+      { rect: [160, 95, 200, 125] },
+    ];
+    assert.equal(coveredByLink(link, twoFifths), false);
+  });
+
+  it("measures a link over two lines by both lines", () => {
+    // Two lines of 100 by 20 points, as quadrilaterals.
+    const twoLines = {
+      rect: [0, 0, 100, 60] as [number, number, number, number],
+      quadPoints: [0, 60, 100, 60, 0, 40, 100, 40, 0, 20, 100, 20, 0, 0, 100, 0],
+    };
+    assert.equal(coveredByLink(twoLines, [{ rect: [0, 40, 100, 60] }]), false, "one line of two");
+    assert.equal(coveredByLink(twoLines, [{ rect: [0, 30, 100, 60] }]), false);
+    assert.equal(coveredByLink(twoLines, [{ rect: [0, 0, 100, 50] }]), true);
   });
 
   it("measures a file's link by its quadrilaterals", () => {

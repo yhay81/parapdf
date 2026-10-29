@@ -266,7 +266,11 @@ export class Viewer {
       this.#arrange(this.store.get().currentPage);
     }
     const { scale } = this.store.get();
-    if (scale < this.#minScale || scale > this.#maxScale) this.setScale(scale);
+    // Clamped in the zoom mode it has: a zoom that fits goes on fitting.
+    if (scale < this.#minScale || scale > this.#maxScale) {
+      this.#gestures.finish();
+      this.#zoomTo(scale);
+    }
   }
 
   /** The view a document opens with, before its opening applies. */
@@ -588,11 +592,15 @@ export class Viewer {
     // Where a viewport showed the document, it shows it again at once.
     const saved = shown.savedPosition;
     shown.savedPosition = null;
-    const scale = saved
-      ? saved.zoomMode === "custom"
-        ? saved.scale
-        : (this.#fitScale(saved.current, saved.zoomMode) ?? saved.scale)
-      : this.#resolveInitialScale();
+    const scale = clamp(
+      saved
+        ? saved.zoomMode === "custom" || !this.#scroller?.clientWidth
+          ? saved.scale
+          : (this.#fitScale(saved.current, saved.zoomMode) ?? saved.scale)
+        : this.#resolveInitialScale(),
+      this.#minScale,
+      this.#maxScale,
+    );
     this.#applyLayout(scale);
     this.store.set({ scale });
     if (saved) this.restorePosition(saved);
@@ -821,8 +829,8 @@ export class Viewer {
   goToPage(index: number): void {
     const current = this.store.get().layout;
     const scroller = this.#scroller;
-    if (!current || !scroller || current.tops.length === 0) return;
-    const target = clamp(index, 0, current.tops.length - 1);
+    if (!current || !scroller || current.tops.length === 0 || Number.isNaN(index)) return;
+    const target = clamp(Math.trunc(index), 0, current.tops.length - 1);
     this.#goTo(current, scroller, target, (layout) => pageTarget(layout, target, scroller));
   }
 
@@ -1019,10 +1027,14 @@ export class Viewer {
     const scroller = this.#scroller;
     if (!current || !scroller) return;
     const { pageIndex, zoomMode } = entry;
-    const scale =
-      zoomMode === "custom"
+    // A viewport without a width, hidden, has nothing to fit.
+    const scale = clamp(
+      zoomMode === "custom" || scroller.clientWidth === 0
         ? entry.scale
-        : (this.#fitScale(entry.current, zoomMode) ?? entry.scale);
+        : (this.#fitScale(entry.current, zoomMode) ?? entry.scale),
+      this.#minScale,
+      this.#maxScale,
+    );
     this.store.set({ zoomMode, currentPage: entry.current });
     if (Math.abs(scale - current.scale) > 1e-4) {
       if (zoomMode !== "custom") {

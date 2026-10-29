@@ -108,6 +108,8 @@ export class PdfSession {
   /** Resolves once `state` shows the document failed, which settles what is read from it. */
   #failed!: Promise<void>;
   #fail!: () => void;
+  /** Whether `state` showed the document failed since `#failed` was last reset. */
+  #showedFailure = false;
   readonly #reads = new Map<string, Promise<unknown>>();
   #proxy: Pdfjs.PDFDocumentProxy | null = null;
   /** Where its URL's fragment says to open, which changes without opening the document again. */
@@ -137,14 +139,22 @@ export class PdfSession {
   }
 
   #resetFailure(): void {
+    this.#showedFailure = false;
     this.#failed = new Promise((resolve) => {
       this.#fail = resolve;
     });
   }
 
-  /** Tell the state's readers, and settle what is read once the document failed. */
+  /** Tell the state's readers, and settle what is read while the document shows it failed. */
   #notify(): void {
-    if (this.state.get().status === "error") this.#fail();
+    if (this.state.get().status === "error") {
+      this.#showedFailure = true;
+      this.#fail();
+    } else if (this.#showedFailure) {
+      // A request it showed as an error was answered, or shows as such
+      // again: what is read from now on waits for the document.
+      this.#resetFailure();
+    }
     for (const listener of [...this.#listeners]) listener();
   }
 

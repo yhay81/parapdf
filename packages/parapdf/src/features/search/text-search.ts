@@ -96,9 +96,9 @@ function normalizeChar(char: string, options: SearchOptions): string {
   if (replacement) return replacement;
   let out = "";
   const compatible = char.normalize("NFKC");
-  for (const unit of (options.caseSensitive ? compatible : compatible.toLowerCase()).normalize(
-    "NFD",
-  )) {
+  // The final sigma folds as in pdf.js's case-insensitive regular expression.
+  const folded = options.caseSensitive ? compatible : compatible.toLowerCase().replaceAll("ς", "σ");
+  for (const unit of folded.normalize("NFD")) {
     if (
       !options.matchDiacritics &&
       MARK.test(unit) &&
@@ -224,7 +224,13 @@ export function buildPageIndex(
   };
 
   for (const source of joinLines(sourceChars(page), options.keepDashes)) {
-    append(normalizeChar(source.char, options), source);
+    const normalized = normalizeChar(source.char, options);
+    const last = endOf.length - 1;
+    // An ignored mark belongs to the letter before it, where pdf.js's matches end.
+    if (!normalized && itemOf[last] === source.item && endOf[last] === source.start) {
+      endOf[last] = source.end;
+    }
+    append(normalized, source);
   }
   return {
     text: parts.join(""),

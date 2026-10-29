@@ -4,7 +4,7 @@ import { type AnnotationSetup, DEFAULT_ANNOTATION_SETUP } from "../src/render/do
 import type { ViewInput } from "../src/render/planner.ts";
 import { Renderer } from "../src/render/renderer.ts";
 import { computeLayout } from "../src/view/layout.ts";
-import { canvasesOf, type FakeElement, fakeHost } from "./fake-dom.ts";
+import { canvasesOf, FakeDocument, type FakeElement, fakeHost } from "./fake-dom.ts";
 import { LETTER, openSession, settle } from "./fake-pdfjs.ts";
 
 /** A session of two pages, whose drawings stay pending until the test settles them. */
@@ -340,6 +340,30 @@ describe("Renderer failures", () => {
 });
 
 describe("Renderer lifecycle", () => {
+  it("cancels an unmounted page's drawing before drawing it in a new host", async (t) => {
+    const { doc, renders } = await controlledDocument();
+    const renderer = new Renderer(doc, drawingsOnly);
+    t.after(() => renderer.dispose());
+    const first = mount(renderer, 0);
+    const view = input(1, true);
+    renderer.update(view);
+    await settle();
+    assert.equal(renders.length, 1);
+    renderer.detach(0);
+    const second = mount(renderer, 0);
+    renderer.update(view);
+    await settle();
+    assert.equal(renders[0]?.cancellations, 1);
+    assert.equal((first.host as unknown as FakeElement).children.length, 0);
+    assert.equal(renders.length, 2);
+    assert.equal(renderer.hasPixels(0), false);
+    renders[1]?.resolve();
+    await settle();
+    assert.equal(renderer.hasPixels(0), true);
+    assert.equal(second.detail.style.visibility, "");
+    assert.equal(renderer.stats.failed, 0);
+  });
+
   it("disposes itself when its signal aborts: drawings stop, and pages are given back", async () => {
     const { session, drawings, cleaned } = await openSession({ pages: [LETTER, LETTER] });
     const controller = new AbortController();
@@ -357,5 +381,170 @@ describe("Renderer lifecycle", () => {
     renderer.update(input());
     await settle();
     assert.equal(drawings.length, 1, "nothing is drawn after");
+  });
+});
+
+/** A canvas `width` by `height`, as a thumbnail sizes it before asking for a copy. */
+function sized(width: number, height: number) {
+  const canvas = new FakeDocument().createElement("canvas");
+  Object.assign(canvas, { width, height });
+  return canvas;
+}
+
+/** input() with the page turned a quarter. */
+function turned(settled = false): ViewInput {
+  const view = input(1, settled);
+  return { ...view, layout: computeLayout([LETTER], 1, { gap: 10, rotation: 90 }) };
+}
+
+describe("Renderer drawings for others", () => {
+  it("copies a page's current whole-page drawing, and nothing else", async (t) => {
+    const { doc, renders } = await controlledDocument();
+    const renderer = new Renderer(doc, drawingsOnly);
+    t.after(() => renderer.dispose());
+    const { detail } = mount(renderer, 0);
+    const copy = (canvas = sized(300, 388), rotation: 0 | 90 = 0) =>
+      renderer.copyPage(0, canvas as unknown as HTMLCanvasElement, rotation);
+    renderer.update(input(1, true));
+    await settle();
+    assert.equal(copy(), false, "a drawing in progress");
+    renders[0]?.resolve();
+    await settle();
+    const thumbnail = sized(300, 388);
+    assert.equal(copy(thumbnail), true);
+    assert.deepEqual(thumbnail.copied, [detail]);
+    assert.equal(copy(sized(613, 793)), false, "larger than the drawing");
+    assert.equal(copy(sized(300, 388), 90), false, "drawn at another turn");
+    assert.equal(
+      renderer.copyPage(1, sized(300, 388) as unknown as HTMLCanvasElement, 0),
+      false,
+      "a page not mounted",
+    );
+    renderer.invalidateDrawings();
+    await settle();
+    assert.equal(copy(), false, "a drawing of what the page showed before");
+  });
+
+  it("copies no page whose form fields show as HTML, since its drawing leaves them out", async (t) => {
+    t.mock.method(console, "error", () => {});
+    const { doc, renders } = await controlledDocument();
+    const annotationSetup = { ...DEFAULT_ANNOTATION_SETUP, forms: true };
+    const withFields = new Renderer(doc, { textLayer: false, annotationSetup });
+    const without = new Renderer(doc, { ...drawingsOnly, annotationSetup });
+    t.after(() => {
+      withFields.dispose();
+      without.dispose();
+    });
+    for (const renderer of [withFields, without]) {
+      mount(renderer, 0);
+      renderer.update(input(1, true));
+    }
+    await settle();
+    for (const drawing of renders) drawing.resolve();
+    await settle();
+    const copy = (renderer: Renderer) =>
+      renderer.copyPage(0, sized(300, 388) as unknown as HTMLCanvasElement, 0);
+    assert.equal(copy(withFields), false);
+    assert.equal(copy(without), true);
+  });
+
+  it("draws other drawings one at a time in the slots pages leave free", async (t) => {
+    t.mock.method(console, "error", () => {});
+    const { doc, renders } = await controlledDocument();
+    const renderer = new Renderer(doc, { ...drawingsOnly, maxConcurrent: 1 });
+    t.after(() => renderer.dispose());
+    mount(renderer, 0);
+    renderer.update(input());
+    await settle();
+    assert.equal(renders.length, 1, "the page's base");
+    const heard: unknown[][] = [[], [], [], []];
+    const ask = (index: number) =>
+      renderer.enqueue(
+        1,
+        { scale: 0.2, canvas: sized(0, 0) as unknown as HTMLCanvasElement },
+        (error) => heard[index]?.push(error),
+      );
+    ask(0);
+    const cancelQueued = ask(1);
+    ask(2);
+    ask(3);
+    await settle();
+    assert.equal(renders.length, 1, "waiting for the page");
+    cancelQueued();
+    renders[0]?.resolve();
+    await settle();
+    assert.equal(renders.length, 2);
+    assert.equal(renders[1]?.pageIndex, 1);
+    renders[1]?.reject(new Error("broken page"));
+    await settle();
+    assert.equal(renders.length, 3, "the cancelled one is skipped");
+    renders[2]?.resolve();
+    await settle();
+    assert.equal(renders.length, 4);
+    renderer.dispose();
+    await settle();
+    assert.equal(renders[3]?.cancellations, 1);
+    assert.equal(heard[0]?.[0] instanceof Error, true);
+    assert.deepEqual(heard.slice(1), [[], [null], []], "cancelled ones hear nothing");
+    assert.equal(renderer.stats.failed, 1);
+  });
+});
+
+describe("Renderer view changes", () => {
+  it("cancels drawings and gives back pixels when pages turn, then draws them turned", async (t) => {
+    const { doc, renders } = await controlledDocument();
+    const painted: string[] = [];
+    const renderer = new Renderer(doc, {
+      ...drawingsOnly,
+      onPainted: (index, layer) => painted.push(`${index + 1} ${layer}`),
+    });
+    t.after(() => renderer.dispose());
+    const { base } = mount(renderer, 0);
+    renderer.update(input());
+    await settle();
+    renders[0]?.resolve();
+    await settle();
+    renderer.update(input(1, true));
+    await settle();
+    assert.equal(renders.length, 2, "the detail");
+    // As the viewer does, with the turned layout at once.
+    renderer.rotate(90);
+    renderer.update(turned(true));
+    await settle();
+    assert.equal(renders[1]?.cancellations, 1);
+    assert.equal(renderer.hasPixels(0), false);
+    assert.equal(base.width * base.height, 0);
+    assert.equal(renders.length, 3);
+    assert.equal(renders[2]?.request.rotation, 90);
+    renders[2]?.resolve();
+    await settle();
+    assert.equal(renderer.hasPixels(0), true);
+    assert.deepEqual(painted, ["1 base", "1 detail"]);
+    assert.equal(renderer.stats.failed, 0);
+  });
+
+  it("draws pages again when their drawings change, cancelling what is in progress", async (t) => {
+    const { doc, renders } = await controlledDocument();
+    const renderer = new Renderer(doc, drawingsOnly);
+    t.after(() => renderer.dispose());
+    const { detail, spare } = mount(renderer, 0);
+    renderer.update(input(1, true));
+    await settle();
+    renders[0]?.resolve();
+    await settle();
+    renderer.invalidateDrawings();
+    await settle();
+    assert.equal(renders[1]?.request.canvas, spare, "into the spare, the old one showing");
+    renderer.invalidateDrawings();
+    await settle();
+    assert.equal(renders[1]?.cancellations, 1);
+    assert.equal(renders.length, 3);
+    assert.equal(detail.style.visibility, "");
+    renders[2]?.resolve();
+    await settle();
+    assert.equal(spare.style.visibility, "", "the new drawing shows");
+    assert.equal(detail.width * detail.height, 0, "the old one is given back");
+    assert.equal(renderer.stats.cancelled, 1);
+    assert.equal(renderer.stats.failed, 0);
   });
 });

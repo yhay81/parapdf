@@ -56,6 +56,24 @@ describe("findMatches", () => {
     assert.deepEqual(search(text, "cafe"), ["Café"]);
   });
 
+  it("folds the final sigma as pdf.js's case-insensitive search does", () => {
+    const text = page(["ΟΔΟΣ οδος"]);
+    assert.deepEqual(search(text, "οδος"), ["ΟΔΟΣ", "οδος"]);
+    assert.deepEqual(search(text, "ΟΔΟΣ"), ["ΟΔΟΣ", "οδος"]);
+    assert.deepEqual(search(text, "οδος", { caseSensitive: true }), ["οδος"]);
+  });
+
+  it("ends a match after the marks of its last letter, as pdf.js's matches do", () => {
+    // é written as e and a combining accent, and Hindi's vowel signs, which are marks.
+    assert.deepEqual(search(page(["café noir"]), "café"), ["café"]);
+    assert.deepEqual(search(page(["हिंदी भाषा"]), "हिंदी"), ["हिंदी"]);
+  });
+
+  it("matches the letters of a ligature, taking it whole", () => {
+    assert.deepEqual(search(page(["ﬁnd the ﬂow"]), "find"), ["ﬁnd"]);
+    assert.deepEqual(search(page(["ﬁnd"]), "ind"), ["ﬁnd"]);
+  });
+
   it("keeps the marks that make a different letter", () => {
     assert.deepEqual(search(page(["ガス"]), "カス"), []);
     assert.deepEqual(search(page(["ガス"]), "ガス"), ["ガス"]);
@@ -76,6 +94,14 @@ describe("findMatches", () => {
 
   it("keeps any other dash before a line end", () => {
     assert.deepEqual(search(page(["2010-", "2020"], [true, false]), "2010-2020"), ["2010-2020"]);
+    const text = page(["self-", "Esteem"], [true, false]);
+    assert.deepEqual(search(text, "self-esteem"), ["self-Esteem"]);
+    assert.deepEqual(search(text, "selfesteem"), []);
+  });
+
+  it("joins upper-case words, and words broken after an accented letter, as pdf.js does", () => {
+    assert.deepEqual(search(page(["PRE-", "VIEW"], [true, false]), "preview"), ["PRE-VIEW"]);
+    assert.deepEqual(search(page(["Café-", "Bar"], [true, false]), "cafébar"), ["Café-Bar"]);
   });
 
   it("reads other line ends as spaces and collapses whitespace", () => {
@@ -133,5 +159,16 @@ describe("search options", () => {
 
   it("treats accented letters as part of a word", () => {
     assert.deepEqual(search(page(["naïve nai"]), "nai", { entireWord: true }), ["nai"]);
+  });
+
+  it("counts digits, underscores, and letters beyond the BMP as parts of words", () => {
+    const text = page(["x1 x_y 𐐨x x𐐨 x😀 x"]);
+    assert.deepEqual(search(text, "x", { entireWord: true }), ["x", "x"]);
+  });
+
+  it("matches composed and decomposed accents alike when diacritics match", () => {
+    const text = page(["café café cafe"]);
+    assert.deepEqual(search(text, "café", { matchDiacritics: true }), ["café", "café"]);
+    assert.deepEqual(search(text, "café", { matchDiacritics: true }), ["café", "café"]);
   });
 });

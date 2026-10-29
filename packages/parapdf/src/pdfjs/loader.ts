@@ -302,8 +302,10 @@ async function load(options: PdfjsConfig): Promise<LoadedPdfjs> {
       ...documentOptions,
     },
     imageResourcesPath,
+    // The icons do not come with the worker: one of the application's own
+    // shows those the package ships, as the scripts' files are.
     iconUrls:
-      shipped && imageResourcesPath === TRANSPARENT_ICONS
+      assetBase === undefined && imageResourcesPath === TRANSPARENT_ICONS
         ? Object.fromEntries(
             Object.entries(iconUrls()).map(([name, url]) => [name, shippedUrl(url)]),
           )
