@@ -1003,6 +1003,16 @@ source object with the same URL keeps the open document, so
 `source={{ url }}` inline is fine. ParaPDF copies `data` before pdf.js
 transfers it to its worker, so your bytes stay usable.
 
+A URL's fragment is not part of the source: it says where to open, with
+the open parameters of RFC 8118 that pdf.js's viewer reads. `#page=3` opens
+page 3, `#zoom=150,72,700` at 150% with that point at the viewport's
+corner, `#zoom=FitH,700` fitted to the width, and `#nameddest=intro` at a
+destination the document names. It wins over `initialView="document"`,
+`defaultPage`, and `defaultZoom`, and `initialViewState` wins over it. A new
+fragment of the same URL moves the viewers there, as following a link
+does, without opening the document again. `search` and `pagemode` are left
+to the application.
+
 ## pdf.js's own API
 
 `useSession().proxy` is pdf.js's `PDFDocumentProxy` of the open document,

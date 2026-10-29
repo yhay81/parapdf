@@ -30,6 +30,17 @@ or an `ArrayBuffer`:
   `source={{ url }}` inline is fine. A changed URL, headers, credentials
   mode, or password, or another bytes object, opens another; a new password
   for the same source tries it on the shared document, as after a wrong one.
+- A URL's fragment is not part of the source: it says where to open, with
+  the open parameters of RFC 8118 that pdf.js's viewer reads. `#page=3`
+  opens page 3, `#zoom=150,72,700` at 150% with that point of the page
+  (left and top, in PDF points from its bottom left) at the viewport's
+  corner, `#zoom=FitH,700` (or `Fit`, `FitV`, `FitR`, `page-width`, `page-fit`) fitted, and
+  `#nameddest=intro` at a destination the document names. It wins over
+  `initialView="document"`, `defaultPage`, and `defaultZoom`, and
+  `initialViewState` wins over it. A new fragment of the same URL moves the `PdfDocument`'s
+  viewers there, as following a link does, without opening the document
+  again. `search` and `pagemode` are left to the application, whose find
+  bar and sidebars they address.
 - A document is closed a second after the last `PdfDocument` of it
   unmounts, so React's StrictMode and a quick remount reuse it instead of
   loading it again; one still loading or waiting for a password stops

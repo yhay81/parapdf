@@ -494,7 +494,9 @@ async function encrypt(bytes: Uint8Array, password: string, permissions: number,
  * Four Letter pages that ask how they are shown: the catalog opens page 3
  * at 200% (/OpenAction), two pages side by side (/PageLayout
  * /TwoColumnLeft), with the outline (/PageMode /UseOutlines); page 1 links
- * to a destination of every kind, and the outline lists two of them.
+ * to a destination of every kind, and the outline lists two of them; the
+ * catalog names one, page 4 at 600 points from its bottom fitted to its
+ * width (/Dests /page-4).
  */
 async function navigation(): Promise<Uint8Array> {
   const doc = await PDFDocument.create({ updateMetadata: false });
@@ -560,6 +562,7 @@ async function navigation(): Promise<Uint8Array> {
   );
   doc.catalog.set(PDFName.of("Outlines"), outline);
   doc.catalog.set(PDFName.of("OpenAction"), context.obj([ref(2), "XYZ", 72, 400, 2]));
+  doc.catalog.set(PDFName.of("Dests"), context.obj({ "page-4": [ref(3), "FitH", 600] }));
   doc.catalog.set(PDFName.of("PageLayout"), PDFName.of("TwoColumnLeft"));
   doc.catalog.set(PDFName.of("PageMode"), PDFName.of("UseOutlines"));
   return doc.save({ useObjectStreams: false });

@@ -117,14 +117,22 @@ export interface SessionLease {
 /** Sessions by source, for each pdf.js loader. */
 const registries = new WeakMap<object, Map<unknown, Entry>>();
 
+/** A URL without its fragment, and the fragment without its "#" (empty when it has none). */
+export function splitFragment(url: string): [url: string, fragment: string] {
+  const hash = url.indexOf("#");
+  return hash < 0 ? [url, ""] : [url.slice(0, hash), url.slice(hash + 1)];
+}
+
 /**
- * What identifies a source: its URL with the request's headers and
- * credentials mode, or the identity of its bytes. Sources with equal keys
- * share one session; the password is not part of the key.
+ * What identifies a source: its URL without its fragment, which says where
+ * to open, with the request's headers and credentials mode, or the identity
+ * of its bytes. Sources with equal keys share one session; the password is
+ * not part of the key.
  */
 export const sourceKey = (source: PdfSource): unknown => {
   if (!("url" in source)) return source.data;
-  const { url, httpHeaders, withCredentials } = source;
+  const { httpHeaders, withCredentials } = source;
+  const [url] = splitFragment(source.url);
   if (!httpHeaders && withCredentials === undefined) return `url:${url}`;
   const headers = Object.entries(httpHeaders ?? {}).sort(([a], [b]) => (a < b ? -1 : 1));
   return `url:${url} ${JSON.stringify([headers, withCredentials ?? false])}`;

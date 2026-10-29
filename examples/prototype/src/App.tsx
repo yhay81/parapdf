@@ -291,10 +291,17 @@ function Viewer(_props: { renders: number }) {
   useEffect(() => {
     window.__setViewerProps = (props) => setChanged((previous) => ({ ...previous, ...props }));
   }, []);
+  // The URL's fragment, where it opens, which a check moves.
+  const [fragment, setFragment] = useState(params.get("fragment") ?? "");
+  useEffect(() => {
+    window.__setFragment = setFragment;
+  }, []);
   // A new object at every render: the document stays open while its URL or
   // its bytes stay the same.
   const password = settings.password !== null ? { password: settings.password } : {};
-  const source: PdfSource = data ? { data, ...password } : { url, ...password };
+  const source: PdfSource = data
+    ? { data, ...password }
+    : { url: fragment ? `${url}#${fragment}` : url, ...password };
   return (
     <Profiler id="viewer" onRender={countCommit}>
       <PdfDocument source={source} passwordPrompt={settings.passwordPrompt}>
@@ -358,6 +365,8 @@ declare global {
     __attachViewport?: typeof attachViewport;
     /** Changes props of the viewer's `<PdfViewer>`, which are live, for check-options.ts. */
     __setViewerProps?: (props: Partial<PdfViewerProps>) => void;
+    /** Changes the fragment of the source's URL, for check-document.ts. */
+    __setFragment?: (fragment: string) => void;
   }
 }
 

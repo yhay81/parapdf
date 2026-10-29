@@ -14,7 +14,12 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { type InitialViewOptions, initialViewOpening } from "../features/initial-view.ts";
+import { fragmentOf } from "../document/pdf-session.ts";
+import {
+  goToFragment,
+  type InitialViewOptions,
+  initialViewOpening,
+} from "../features/initial-view.ts";
 import type { PageColors, Rotation } from "../pdfjs/draw.ts";
 import type { AnnotationLabels } from "../pdfjs/editor.ts";
 import type { Direction, ScrollMode, SpreadMode } from "../view/layout.ts";
@@ -339,7 +344,12 @@ function ViewerViewport({
     ...explicit,
     ...(initialRotation !== undefined ? { initialRotation } : {}),
     ...(initialTool !== undefined ? { initialTool } : {}),
-    opening: initialViewOpening({ initialView, initialViewState, ...explicit }),
+    opening: initialViewOpening({
+      initialView,
+      initialViewState,
+      ...explicit,
+      fragment: () => fragmentOf(session).get().fragment,
+    }),
     textLayer,
     annotationLayer,
     destinationZoom,
@@ -433,6 +443,12 @@ function ViewerViewport({
 
   // The viewer shows the session until it closes, also while this unmounts.
   useEffect(() => openViewer(viewer, session), [viewer, session]);
+
+  // A new fragment of the source's URL moves the viewer where it points.
+  useEffect(() => {
+    const fragment = fragmentOf(session);
+    return fragment.subscribe(() => void goToFragment(viewer, fragment.get().fragment));
+  }, [viewer, session]);
 
   const pages: ReactNode[] = [];
   if (layout) {
