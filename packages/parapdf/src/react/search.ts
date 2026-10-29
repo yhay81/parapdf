@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { type SearchState, searchOf } from "../features/search/index.ts";
 import type { SearchOptions } from "../features/search/text-search.ts";
 import type { Viewer } from "../view/viewer.ts";
-import { useStore } from "./features.ts";
+import { useStore } from "./context.ts";
 
 export interface SearchControls extends SearchState {
   search(query: string, options?: SearchOptions): void;

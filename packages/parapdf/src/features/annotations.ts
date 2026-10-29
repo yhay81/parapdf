@@ -2,17 +2,17 @@
 
 import type { DocumentSession } from "../document/session.ts";
 import { type ReadableStore, Store } from "../document/store.ts";
-import {
-  type AnnotationAltText,
-  type AnnotationEditingState,
-  type AnnotationEditor,
-  type AnnotationLabels,
-  type AnnotationStyles,
-  type AnnotationTool,
-  createPdfjsAnnotationEditor,
-  type SavedAnnotation,
-  type SignatureInput,
-} from "../pdfjs/editor.ts";
+import { createPdfjsAnnotationEditor } from "../pdfjs/editor.ts";
+import type {
+  AnnotationAltText,
+  AnnotationEditingState,
+  AnnotationEditor,
+  AnnotationLabels,
+  AnnotationStyles,
+  AnnotationTool,
+  SavedAnnotation,
+  SignatureInput,
+} from "../pdfjs/editor-types.ts";
 import { linked } from "../view/signals.ts";
 import type { Viewer } from "../view/viewer.ts";
 import { permits } from "./permissions.ts";

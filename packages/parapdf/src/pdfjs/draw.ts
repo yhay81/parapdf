@@ -79,7 +79,7 @@ export const isRenderCancelled = (error: unknown): boolean =>
   error instanceof Error && cancellationNames.has(error.name);
 
 /** The page at `scale` turned by the view on top of its own rotation. */
-export const viewportOf = (
+export const pageViewport = (
   page: Pdfjs.PDFPageProxy,
   scale: number,
   rotation: Rotation = 0,
@@ -140,7 +140,7 @@ export function drawPage(
   let cancelled = false;
   const promise = page.then(async (page) => {
     if (cancelled) throw new RenderCancelledError("render cancelled before it started");
-    const viewport = viewportOf(page, scale, rotation);
+    const viewport = pageViewport(page, scale, rotation);
     const canvasLayer = formLayer ?? editing;
     const form = canvasLayer ? formLayerOf(canvasLayer) : null;
     const parameters = {

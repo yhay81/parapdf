@@ -82,6 +82,10 @@ export interface LayoutOptions {
   page?: number;
 }
 
+/** `value` within `min` and `max`. */
+export const clamp = (value: number, min: number, max: number): number =>
+  Math.min(max, Math.max(min, value));
+
 /** The first and last page of the row that page `index` of `count` is in. */
 export function rowBounds(
   spread: SpreadMode,
@@ -427,6 +431,10 @@ export const intersectAreas = (a: PageArea, b: PageArea): PageArea => ({
   maxX: Math.min(a.maxX, b.maxX),
   maxY: Math.min(a.maxY, b.maxY),
 });
+
+/** The rotation `degrees` stands for: the nearest quarter turn, from 0 to 270. */
+export const toRotation = (degrees: number): Rotation =>
+  ((((Math.round(degrees / 90) * 90) % 360) + 360) % 360) as Rotation;
 
 /** A page's size as the view shows it: a quarter turn swaps width and height. */
 export const turnedSize = (size: PageSize, rotation: Rotation): PageSize =>

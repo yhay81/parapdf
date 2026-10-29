@@ -5,6 +5,7 @@ import type { AnnotationLayerScripting } from "../../pdfjs/annotation-layer.ts";
 import { type DocumentScripting, startScripting } from "../../pdfjs/scripting.ts";
 import { ZOOM_STEP } from "../../view/input.ts";
 import type { Viewer } from "../../view/viewer.ts";
+import { PDF_TO_CSS } from "../../view/zoom.ts";
 
 /** A viewer whose form fields run the document's scripts (`formScripts`). */
 export interface ScriptingViewer {
@@ -32,9 +33,6 @@ interface Running {
 
 /** One sandbox per session, since it keeps the values of the document's fields. */
 const running = new WeakMap<DocumentSession, Running>();
-
-/** pdf.js's zoom of 1 is 100%: 96 CSS pixels per inch of 72 points. */
-const PDF_TO_CSS = 96 / 72;
 
 /** The scripts' zoom requests (`this.zoomType`) as the viewer's zoom modes. */
 const ZOOM_MODES: Readonly<Record<string, "fit-width" | "fit-page">> = {

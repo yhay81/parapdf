@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type * as Pdfjs from "pdfjs-dist";
 import { ANNOTATION_LABELS } from "../src/features/annotations.ts";
-import { type AnnotationEditingState, createPdfjsAnnotationEditor } from "../src/pdfjs/editor.ts";
+import { createPdfjsAnnotationEditor } from "../src/pdfjs/editor.ts";
+import type { AnnotationEditingState } from "../src/pdfjs/editor-types.ts";
 
 /** pdf.js's manager of editors, which, like pdf.js's, numbers the ids it gives from 0. */
 class FakeManager {

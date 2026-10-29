@@ -1,5 +1,5 @@
 import type * as Pdfjs from "pdfjs-dist";
-import { RenderCancelledError, type Rotation, viewportOf } from "./draw.ts";
+import { pageViewport, RenderCancelledError, type Rotation } from "./draw.ts";
 import type { LoadedPdfjs } from "./loader.ts";
 import { type RawDims, StructTreeBuilder } from "./struct-tree.ts";
 
@@ -123,7 +123,7 @@ export function buildTextLayer(
   let cancelled = false;
   const promise = page.then(async (page): Promise<TextLayerHandle> => {
     if (cancelled) throw new RenderCancelledError("text layer cancelled before it started");
-    const viewport = viewportOf(page, cssScale, rotation);
+    const viewport = pageViewport(page, cssScale, rotation);
     const tree = structure
       ? new StructTreeBuilder(page.getStructTree(), viewport.rawDims as RawDims)
       : null;
@@ -152,7 +152,7 @@ export function buildTextLayer(
       elements: rendered.textDivs,
       structTree: tree,
       update(nextScale, nextRotation) {
-        rendered.update({ viewport: viewportOf(page, nextScale, nextRotation) });
+        rendered.update({ viewport: pageViewport(page, nextScale, nextRotation) });
       },
     };
   });

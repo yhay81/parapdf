@@ -67,7 +67,7 @@ export type {
   SavedAnnotation,
   SelectedAnnotation,
   SignatureInput,
-} from "./pdfjs/editor.ts";
+} from "./pdfjs/editor-types.ts";
 export { pdfjsVersion } from "./pdfjs/files.ts";
 export type { PdfLayer } from "./pdfjs/layers.ts";
 export {
@@ -91,7 +91,6 @@ export {
   useOutline,
   usePageLabels,
 } from "./react/data.ts";
-export { useViewer } from "./react/features.ts";
 export { useFormChange, useFormFields } from "./react/forms.ts";
 export { type HistoryControls, useHistory } from "./react/history.ts";
 export { PdfDocument, type PdfDocumentProps } from "./react/PdfDocument.tsx";
@@ -101,6 +100,7 @@ export { PdfThumbnails, type PdfThumbnailsProps } from "./react/PdfThumbnails.ts
 export { PdfViewer, type PdfViewerProps, type Zoom } from "./react/PdfViewer.tsx";
 export { type SearchControls, useSearch } from "./react/search.ts";
 export { useSelection } from "./react/selection.ts";
+export { useViewer } from "./react/viewer.ts";
 export type { RenderStats } from "./render/renderer.ts";
 export type { ViewerExtension } from "./view/extensions.ts";
 export type { Direction, Layout, ScrollMode, SpreadMode } from "./view/layout.ts";

@@ -6,6 +6,10 @@ change the API.
 
 ## Unreleased
 
+- Renamed the per-page diagnostic on `Viewer.renderer` from `sharpness()`
+  to `pageSharpness()`, distinguishing it from the viewport's
+  `Viewer.sharpness()`.
+
 - Screen readers read on from the page shown (#32). Pages are focusable
   (`tabindex="-1"`) but not in the tab order. While the focus is on the
   viewport or a page, it moves to the current page when that changes;

@@ -685,7 +685,7 @@ export function staleDetail(
  * share of `needed` device pixels per point, weighted by area. 1 means
  * full resolution everywhere, 0 means blank.
  */
-export function sharpness(page: PageState | undefined, area: PageArea, needed: number): number {
+export function pageSharpness(page: PageState | undefined, area: PageArea, needed: number): number {
   const total = areaSize(area);
   if (!page || total === 0) return 0;
   const base = Math.min(1, page.baseScale / needed);
