@@ -208,6 +208,12 @@ change the API.
 - `autoLinks` links a page whose text layer was built again while its links
   were found, and a page whose first text item is empty. Until now those
   pages had no links.
+- What the document's scripts set on a field whose widgets are not built
+  yet is stored apart for each widget. Until now the widgets shared what
+  was stored, and the first one built changed it for the others: a radio
+  group a script set read as none once its page was built. pdf.js's radio
+  buttons still read such a value inverted, and check another button than
+  the one set.
 
 ## 0.7.0 — 2026-10-27
 

@@ -129,8 +129,16 @@ function command(run: Running, session: DocumentSession, name: string, value: un
  * Hand what the scripts changed of the field `id` to its element in each
  * viewer, which shows it and stores it, or, where no viewer has the
  * field's page built, to the storage, which the element applies once built.
+ * Each widget stores a copy of its own: pdf.js's storage merges later
+ * values into the object it keeps, which the field's other widgets would
+ * otherwise share.
  */
-function field(run: Running, session: DocumentSession, id: string, update: object): void {
+export function updateField(
+  run: Running,
+  session: DocumentSession,
+  id: string,
+  update: object,
+): void {
   const storage = session.proxy.annotationStorage;
   const before = (storage.getRawValue(id) as { value?: unknown } | undefined)?.value;
   let shown = false;
@@ -140,7 +148,7 @@ function field(run: Running, session: DocumentSession, id: string, update: objec
     element.dispatchEvent(new CustomEvent("updatefromsandbox", { detail: { ...update } }));
     shown = true;
   }
-  if (!shown) storage.setValue(id, update);
+  if (!shown) storage.setValue(id, { ...update });
   const after = (storage.getRawValue(id) as { value?: unknown } | undefined)?.value;
   if ("value" in update && !sameFieldValue(after, before)) {
     for (const member of run.viewers) member.changed(id);
@@ -168,7 +176,7 @@ export function joinScripting(session: DocumentSession, member: ScriptingViewer)
   if (!run) {
     const started: Running = {
       scripting: startScripting(session.pdfjs, session.proxy, member.viewer.sourceName, {
-        field: (id, update) => field(started, session, id, update),
+        field: (id, update) => updateField(started, session, id, update),
         command: (name, value) => command(started, session, name, value),
       }),
       viewers: new Set(),
