@@ -876,6 +876,8 @@ export class Viewer {
    * asks for unless `destinationZoom` is false. The history feature keeps
    * the position before the jump for `back()`. Resolves to false when the target is
    * invalid or null, as an outline entry's without one is.
+   * An optional signal cancels a pending navigation without changing the
+   * view or history.
    */
   async goToDestination(dest: Destination | null, signal?: AbortSignal): Promise<boolean> {
     const session = this.#shown?.session;
