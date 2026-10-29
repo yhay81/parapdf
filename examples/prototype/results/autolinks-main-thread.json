@@ -22,9 +22,7 @@
       "file": "synthetic-addresses.pdf",
       "dpr": 2,
       "startScale": null,
-      "scrollModes": [
-        "vertical"
-      ],
+      "scrollModes": ["vertical"],
       "zoom": "1.25,1.25,1.25,1.25",
       "speed": 900,
       "durationMs": 4000,

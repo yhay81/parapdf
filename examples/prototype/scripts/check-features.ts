@@ -7,9 +7,8 @@
  * zoom, keyboard zoom, the initial page, the hand tool, search options,
  * spreads, selections in PDF points, links found in the text (autoLinks),
  * and the structure of tagged PDFs. They run on the synthetic feature
- * sampler and
- * encrypted documents, on f1040.pdf (a tagged form), and on bill-hr815.pdf
- * (a long document).
+ * sampler and encrypted documents, on f1040.pdf (a tagged form), and on
+ * bill-hr815.pdf (a long document).
  *
  * Colors on pages are read from screenshots: pdf.js's renderer worker draws
  * into canvases the main thread cannot read.

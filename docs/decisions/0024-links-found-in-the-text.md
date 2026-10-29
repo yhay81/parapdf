@@ -61,7 +61,13 @@ Main-thread blocked time over 4 s on `synthetic-addresses.pdf` at
   `autoLinks=1` in one build: task time 112 → 118 ms, script time
   48 → 47 ms; the feature's module does not appear among the functions
   with the most self time.
-- FIREFOX_RERUN
+- Firefox's first paint at 3600 CSS px/s read 211 → 345 ms, two of three
+  runs near 346 ms. Rerun with five runs (`autolinks-on-firefox-rerun`):
+  191 → 192 ms, 176 to 205 ms against 187 to 208 ms, and at 900 CSS px/s
+  209 → 204 ms; no first-paint cost is claimed or recorded. The rerun's
+  blocked time read 49 → 56 ms at 900 CSS px/s and 46 → 61 ms at
+  3600 CSS px/s, where the feature does no work: Firefox's blocked time
+  varies by about 15 ms between the builds here.
 - Bundle: the `PdfViewer` chunk grows from 121.78 to 122.69 kB (gzip
   37.25 → 37.47 kB) for the option and the hook; the feature is a lazy
   chunk of 3.6 kB (1.8 kB gzip). `check:modules` checks that
