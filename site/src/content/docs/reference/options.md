@@ -33,7 +33,7 @@ they cost React nothing unless you set state in them.
 
 | Prop | Default | |
 |---|---|---|
-| `zoom`, `defaultZoom`, `onZoomChange` | `"fit-width"` | A `Zoom`: a scale in CSS pixels per PDF point, `"fit-width"`, which keeps fitting the current page's width as the viewport resizes, or `"fit-page"`, which keeps fitting all of it. |
+| `zoom`, `defaultZoom`, `onZoomChange` | `"fit-width"` | A `Zoom`: a scale in CSS pixels per PDF point, `"fit-width"`, which keeps fitting the current page's width as the viewport resizes, `"fit-page"`, which keeps fitting all of it, or `"auto"`, which keeps fitting a portrait page's width and all of a landscape page, never above 5/3 (pdf.js's 125%). |
 | `rotation`, `defaultRotation`, `onRotationChange` | `0` | The clockwise rotation of every page: `0`, `90`, `180`, or `270`. |
 | `spread`, `defaultSpread`, `onSpreadChange` | `"none"` | `"odd"` or `"even"` shows pages in pairs (see [Scroll modes and spreads](/guides/layout/)). |
 | `scrollMode`, `defaultScrollMode`, `onScrollModeChange` | `"vertical"` | `"horizontal"`, `"wrapped"`, or `"page"` arranges pages otherwise (see [Scroll modes and spreads](/guides/layout/)). |

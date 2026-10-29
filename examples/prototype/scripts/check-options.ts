@@ -1,7 +1,8 @@
 /**
  * Functional checks for the options an embedding application sets: pages of
  * mixed sizes centered in the viewport, "fit-width" following the viewport's
- * width and the view's rotation, per-canvas and total canvas pixel limits, one
+ * width and the view's rotation, "auto" fitting again as the viewport
+ * resizes and the page turns, per-canvas and total canvas pixel limits, one
  * render for the first paint of a small page, inert external links, and
  * `<PdfViewer>`'s props: live options and controlled view state.
  *
@@ -496,6 +497,70 @@ try {
     JSON.stringify({ scale: after.scale, pages: after.pages.slice(0, 1) }),
   );
   await fit.context().close();
+
+  // "auto" fits a portrait page's width, never above pdf.js's 125%, and a
+  // landscape page whole, again as the viewport resizes and the page turns.
+  const auto = await newPage("file=bill-hr815.pdf&scale=auto", 1600);
+  const autoFit = () =>
+    auto.evaluate(() => {
+      const viewer = (
+        window as unknown as {
+          __viewer: {
+            store: {
+              get(): {
+                zoomMode: string;
+                scale: number;
+                currentPage: number;
+                layout: { gap: number; widths: Float64Array; heights: Float64Array } | null;
+              };
+            };
+          };
+        }
+      ).__viewer;
+      const state = viewer.store.get();
+      const scroller = document.querySelector(".parapdf-viewport") as HTMLElement;
+      const layout = state.layout;
+      const gap = layout?.gap ?? 0;
+      // The current page's turned size in points.
+      const width = (layout?.widths[state.currentPage] ?? 0) / state.scale;
+      const height = (layout?.heights[state.currentPage] ?? 0) / state.scale;
+      const byWidth = (scroller.clientWidth - 2 * gap) / width;
+      const byHeight = (scroller.clientHeight - 2 * gap) / height;
+      const expected = Math.min(5 / 3, width > height ? Math.min(byWidth, byHeight) : byWidth);
+      return {
+        mode: state.zoomMode,
+        scale: state.scale,
+        expected,
+        landscape: width > height,
+        ok: state.zoomMode === "auto" && Math.abs(state.scale - expected) < 1e-3,
+      };
+    });
+  let autoState = await autoFit();
+  check(
+    '"auto" opens a portrait page at its width, never above 125%',
+    autoState.ok && autoState.scale === 5 / 3,
+    JSON.stringify(autoState),
+  );
+  await auto.setViewportSize({ width: 800, height: 900 });
+  await auto.waitForTimeout(300);
+  await settle(auto);
+  autoState = await autoFit();
+  check(
+    '"auto" fits the width again when the viewport narrows',
+    autoState.ok && autoState.scale < 5 / 3,
+    JSON.stringify(autoState),
+  );
+  await auto.setViewportSize({ width: 1200, height: 600 });
+  await auto.getByRole("button", { name: "Rotate clockwise", exact: true }).click();
+  await auto.waitForTimeout(300);
+  await settle(auto);
+  autoState = await autoFit();
+  check(
+    '"auto" fits all of a page the view turned to landscape',
+    autoState.ok && autoState.landscape,
+    JSON.stringify(autoState),
+  );
+  await auto.context().close();
 
   // Canvas pixel limits: per canvas, and for all of a viewer's canvases together.
   const budget = 12_000_000;

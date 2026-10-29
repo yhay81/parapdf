@@ -2,7 +2,7 @@ import type { PageSize } from "../document/session.ts";
 import type { ResolvedDestination } from "../pdfjs/destinations.ts";
 import { clamp, rowBounds, turnedSize } from "./layout.ts";
 import type { ShownView } from "./options.ts";
-import type { ViewerState, ZoomMode } from "./state.ts";
+import type { FitMode, ViewerState, ZoomMode } from "./state.ts";
 
 // The zoom rules: the scale that fits a page or its row to the viewport, and
 // the zoom a destination or a view asks for. A resize runs them up to once a
@@ -15,6 +15,9 @@ import type { ViewerState, ZoomMode } from "./state.ts";
  */
 export const PDF_TO_CSS = 96 / 72;
 
+/** The largest scale "auto" fits to: pdf.js's `MAX_AUTO_SCALE`, its 125%. */
+export const MAX_AUTO_SCALE = (1.25 * 96) / 72;
+
 /** The viewport's size: the scroller, or what a test passes. */
 export interface ViewportBox {
   readonly clientWidth: number;
@@ -26,7 +29,10 @@ export type Arrangement = Pick<ViewerState, "rotation" | "spread" | "scrollMode"
 
 /**
  * The scale that fits the row of page `index`, the page or its spread, to
- * the viewport in `mode`; null while the pages' sizes are unknown. In a
+ * the viewport in `mode`; null while the pages' sizes are unknown. "auto"
+ * fits as pdf.js's viewer does by default: the width when page `index` is
+ * portrait, the whole row when it is landscape, and never above
+ * `MAX_AUTO_SCALE`. In a
  * spread mode, a page alone in its row, such as a cover, counts twice, as
  * in pdf.js: the zoom then stays the same from row to row. In "horizontal"
  * mode, where all pages share one row, the page alone fits.
@@ -35,7 +41,7 @@ export function fitScale(
   sizes: readonly PageSize[],
   view: Arrangement,
   index: number,
-  mode: "fit-width" | "fit-page",
+  mode: FitMode,
   scroller: ViewportBox | null,
   gap: number,
   minScale: number,
@@ -47,10 +53,12 @@ export function fitScale(
   const { first, last } = rowBounds(spread, index, sizes.length);
   let width = 0;
   let height = 0;
+  let landscape = false;
   for (let page = first; page <= last; page++) {
     const size = sizes[page];
     if (!size) return null;
     const turned = turnedSize(size, rotation);
+    if (page === index) landscape = turned.width > turned.height;
     width += turned.width;
     height = Math.max(height, turned.height);
   }
@@ -60,12 +68,11 @@ export function fitScale(
   // The gaps around the row and between its pages stay the same at every zoom.
   const room = (scroller?.clientWidth ?? 0) - (1 + pages) * gap;
   const roomHeight = (scroller?.clientHeight ?? 0) - 2 * gap;
-  const scale = room / width;
-  return clamp(
-    mode === "fit-page" && roomHeight > 0 ? Math.min(scale, roomHeight / height) : scale,
-    minScale,
-    maxScale,
-  );
+  let scale = room / width;
+  const whole = mode === "fit-page" || (mode === "auto" && landscape);
+  if (whole && roomHeight > 0) scale = Math.min(scale, roomHeight / height);
+  if (mode === "auto") scale = Math.min(scale, MAX_AUTO_SCALE);
+  return clamp(scale, minScale, maxScale);
 }
 
 /**
@@ -130,7 +137,7 @@ export function requestedZoom(
   minScale: number,
   maxScale: number,
 ): { scale: number; mode: ZoomMode } {
-  if (requested === "fit-width" || requested === "fit-page") {
+  if (typeof requested === "string") {
     return { scale: before.scale, mode: requested };
   }
   if (requested !== undefined && Number.isFinite(requested) && requested > 0) {
@@ -141,8 +148,8 @@ export function requestedZoom(
 
 /**
  * Whether the viewport no longer has the size the zoom was fitted to in
- * `mode`: "fit-width" fits again when its width changed, "fit-page" when
- * either side did, and "custom" never.
+ * `mode`: "fit-width" fits again when its width changed, "fit-page" and
+ * "auto" when either side did, and "custom" never.
  */
 export const refits = (
   mode: ZoomMode,
@@ -151,5 +158,5 @@ export const refits = (
   fittedHeight: number,
 ): boolean =>
   (mode === "fit-width" && scroller.clientWidth !== fittedWidth) ||
-  (mode === "fit-page" &&
+  ((mode === "fit-page" || mode === "auto") &&
     (scroller.clientWidth !== fittedWidth || scroller.clientHeight !== fittedHeight));

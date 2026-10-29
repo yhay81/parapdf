@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { ResolvedDestination } from "../src/pdfjs/destinations.ts";
+import type { FitMode } from "../src/view/state.ts";
 import {
   type Arrangement,
   destinationScale,
   fitScale,
+  MAX_AUTO_SCALE,
   refits,
   requestedZoom,
 } from "../src/view/zoom.ts";
@@ -21,7 +23,7 @@ const GAP = 12;
 
 const fit = (
   index: number,
-  mode: "fit-width" | "fit-page",
+  mode: FitMode,
   view: Arrangement = column,
   scroller: { clientWidth: number; clientHeight: number } | null = viewport,
   limits: [number, number] = [0.25, 10],
@@ -57,6 +59,41 @@ describe("fitScale", () => {
   it("fits pages one by one where they share one row", () => {
     const row: Arrangement = { rotation: 0, spread: "odd", scrollMode: "horizontal" };
     assert.equal(fit(0, "fit-width", row), (1000 - 2 * GAP) / 612);
+  });
+
+  it('fits a portrait page\'s width in "auto" mode', () => {
+    assert.equal(fit(0, "auto"), (1000 - 2 * GAP) / 612);
+    // Even when its height does not fit.
+    assert.equal(
+      fit(0, "auto", column, { clientWidth: 1000, clientHeight: 400 }),
+      (1000 - 2 * GAP) / 612,
+    );
+  });
+
+  it('fits all of a landscape page in "auto" mode', () => {
+    const wide = { clientWidth: 1400, clientHeight: 600 };
+    assert.equal(fit(1, "auto", column, wide), (600 - 2 * GAP) / 595);
+    assert.equal(fit(1, "auto"), (1000 - 2 * GAP) / 842);
+  });
+
+  it('turns the page before "auto" asks whether it is portrait', () => {
+    const wide = { clientWidth: 1400, clientHeight: 600 };
+    const turned: Arrangement = { ...column, rotation: 90 };
+    assert.equal(fit(0, "auto", turned, wide), (600 - 2 * GAP) / 612);
+    assert.equal(fit(1, "auto", turned), (1000 - 2 * GAP) / 595);
+  });
+
+  it('fits a spread in "auto" mode by its current page', () => {
+    const spread: Arrangement = { ...column, spread: "odd" };
+    const wide = { clientWidth: 1600, clientHeight: 500 };
+    assert.equal(fit(0, "auto", spread, wide), (1600 - 3 * GAP) / (612 + 842));
+    assert.equal(fit(1, "auto", spread, wide), (500 - 2 * GAP) / 792);
+  });
+
+  it('never fits above pdf.js\'s 125% in "auto" mode', () => {
+    assert.equal(MAX_AUTO_SCALE, 5 / 3);
+    assert.equal(fit(0, "auto", column, { clientWidth: 2000, clientHeight: 3000 }), 5 / 3);
+    assert.equal(fit(0, "auto", column, viewport, [2, 10]), 2);
   });
 
   it("keeps the fit within the scale limits", () => {
@@ -167,6 +204,7 @@ describe("requestedZoom", () => {
       scale: 1.5,
       mode: "fit-page",
     });
+    assert.deepEqual(requestedZoom("auto", before, 0.25, 10), { scale: 1.5, mode: "auto" });
   });
 
   it("takes a scale as a custom zoom within the limits", () => {
@@ -194,6 +232,9 @@ describe("refits", () => {
   it("fits the whole page again when either side changes", () => {
     assert.equal(refits("fit-page", { clientWidth: 1000, clientHeight: 600 }, 1000, 800), true);
     assert.equal(refits("fit-page", { clientWidth: 1000, clientHeight: 800 }, 1000, 800), false);
+    assert.equal(refits("auto", { clientWidth: 1000, clientHeight: 600 }, 1000, 800), true);
+    assert.equal(refits("auto", { clientWidth: 900, clientHeight: 800 }, 1000, 800), true);
+    assert.equal(refits("auto", { clientWidth: 1000, clientHeight: 800 }, 1000, 800), false);
   });
 
   it("never fits a custom zoom again", () => {

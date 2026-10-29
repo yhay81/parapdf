@@ -105,11 +105,13 @@ const settings = {
     : undefined,
   /** The one-based page shown first. */
   initialPage: Number(params.get("page") ?? "1") - 1,
-  /** A scale in CSS pixels per point, "fit-width", or "fit-page". */
+  /** A scale in CSS pixels per point, "fit-width", "fit-page", or "auto". */
   initialScale: ((value): PdfViewerProps["defaultZoom"] =>
-    value === "fit-page" || value === "fit-width" ? value : value ? Number(value) : undefined)(
-    params.get("scale"),
-  ),
+    value === "fit-page" || value === "fit-width" || value === "auto"
+      ? value
+      : value
+        ? Number(value)
+        : undefined)(params.get("scale")),
   /** CSS pixels per PDF point the zoom may reach; the runtime's default when absent. */
   maxScale: params.has("maxScale") ? Number(params.get("maxScale")) : undefined,
   /** More pdf.js getDocument parameters, as JSON. */

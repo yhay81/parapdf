@@ -6,6 +6,16 @@ change the API.
 
 ## Unreleased
 
+- `"auto"` zoom beside `"fit-width"` and `"fit-page"`, wherever a zoom mode
+  is taken or reported (`zoom`, `defaultZoom`, `onZoomChange`,
+  `setScale()`, the view state's `zoomMode`, and `ViewState.scale`): it
+  fits as pdf.js's viewer opens documents, the width of a portrait page
+  and all of a landscape one, never above a scale of 5/3 (pdf.js's 125%),
+  and fits again as the viewport resizes or the view turns (#89). The
+  default stays `"fit-width"`. A form script's `zoomType = "auto"` now
+  asks for it instead of `"fit-width"`. The `FitMode` type names the
+  three.
+
 - A URL source's fragment opens the document where it points, with the
   open parameters of RFC 8118 that pdf.js's viewer reads: `#page=3`,
   `#zoom=150,72,700` or `#zoom=FitH,700`, and `#nameddest=intro`. It wins

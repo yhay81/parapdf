@@ -3,7 +3,7 @@ import type { ResolvedDestination } from "../pdfjs/destinations.ts";
 import type { PageColors, Rotation } from "../pdfjs/draw.ts";
 import type { RendererOptions } from "../render/renderer.ts";
 import type { Direction, ScrollMode, SpreadMode } from "./layout.ts";
-import type { PointerTool } from "./state.ts";
+import type { FitMode, PointerTool } from "./state.ts";
 
 /** A view for `show()`: what it leaves out stays as the viewer shows it. */
 export interface ShownView {
@@ -11,7 +11,7 @@ export interface ShownView {
   spread?: SpreadMode;
   scrollMode?: ScrollMode;
   /** CSS pixels per PDF point, or the fit that keeps the zoom. */
-  scale?: number | "fit-width" | "fit-page";
+  scale?: number | FitMode;
   /**
    * The point of a page to show at the viewport's top-left corner, in PDF
    * points from its unturned top-left corner, with the zoom its `view` asks
@@ -51,9 +51,10 @@ export interface ViewerOptions {
   maxConcurrentRenders?: number;
   /**
    * A scale in CSS pixels per point, "fit-width" (the default) to keep
-   * fitting the page width, or "fit-page" to keep fitting the whole page.
+   * fitting the page width, "fit-page" to keep fitting the whole page, or
+   * "auto" to keep fitting as pdf.js's viewer opens documents.
    */
-  initialScale?: number | "fit-width" | "fit-page";
+  initialScale?: number | FitMode;
   /** The zero-based page shown first, at the top of the viewport (default 0). */
   initialPage?: number;
   /**

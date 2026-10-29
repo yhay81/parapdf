@@ -4,6 +4,7 @@ import type { DocumentSession } from "../../document/session.ts";
 import type { AnnotationLayerScripting } from "../../pdfjs/annotation-layer.ts";
 import { type DocumentScripting, startScripting } from "../../pdfjs/scripting.ts";
 import { ZOOM_STEP } from "../../view/input.ts";
+import type { FitMode } from "../../view/state.ts";
 import type { Viewer } from "../../view/viewer.ts";
 import { PDF_TO_CSS } from "../../view/zoom.ts";
 
@@ -35,11 +36,11 @@ interface Running {
 const running = new WeakMap<DocumentSession, Running>();
 
 /** The scripts' zoom requests (`this.zoomType`) as the viewer's zoom modes. */
-const ZOOM_MODES: Readonly<Record<string, "fit-width" | "fit-page">> = {
+const ZOOM_MODES: Readonly<Record<string, FitMode>> = {
   "page-fit": "fit-page",
   "page-height": "fit-page",
   "page-width": "fit-width",
-  auto: "fit-width",
+  auto: "auto",
 };
 
 /** The viewer the scripts' requests act on. */

@@ -27,7 +27,7 @@ before that, they do nothing. The view a document opens with is
 | `goToPage(index)` | Shows the zero-based page from its top: its row at the viewport's top, or, in `"horizontal"` mode, the page at its left; `"page"` mode shows its row. The page becomes current. |
 | `nextPage()`, `previousPage()` | Move by a whole page, spread, or row of pages; `"page"` mode flips to it. |
 | `zoomBy(factor)` | Multiplies the scale by `factor`. |
-| `setScale(scale, anchor?)` | A scale in CSS pixels per point, keeping the point under `anchor` (viewport coordinates, the center by default) in place; or `"fit-width"`, which fits the current page's width and keeps fitting it as the viewport resizes or the view turns; or `"fit-page"`, which fits all of that page. |
+| `setScale(scale, anchor?)` | A scale in CSS pixels per point, keeping the point under `anchor` (viewport coordinates, the center by default) in place; or `"fit-width"`, which fits the current page's width and keeps fitting it as the viewport resizes or the view turns; `"fit-page"`, which fits all of that page; or `"auto"`, which fits a portrait page's width and all of a landscape page, never above 5/3, as pdf.js's viewer opens documents. |
 | `resetScale()` | Back to the zoom the document opened with (`zoom` or `defaultZoom`), as Ctrl or ⌘ with 0 does. |
 | `rotate(degrees?)` | Turns every page by `degrees`, a multiple of 90, clockwise when positive; 90 by default. |
 | `setRotation(rotation)` | Shows every page turned clockwise by `0`, `90`, `180`, or `270` degrees. |
