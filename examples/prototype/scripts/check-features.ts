@@ -890,6 +890,13 @@ try {
       removed.length === 0,
       JSON.stringify(removed),
     );
+    await page.evaluate(() => window.__setViewerProps?.({ autoLinks: true }));
+    const restored = await inferredOn(page, 2, 1);
+    check(
+      "turning autoLinks back on restores each link once",
+      restored.length === 1 && restored[0]?.href === "https://example.com/turned",
+      JSON.stringify(restored),
+    );
     check(
       "no errors finding links in the text",
       errors.length === 0,

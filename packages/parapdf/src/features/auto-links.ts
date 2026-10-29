@@ -189,6 +189,11 @@ function linkPosition(
 /** Each session's pages' links, read once and shared by its viewers. */
 const found = new WeakMap<DocumentSession, Map<number, Promise<FoundLink[]>>>();
 
+// pdf.js keeps added links in the annotation layer even after their DOM is
+// removed. Reuse those elements when the feature is turned on again.
+const added = new WeakMap<AnnotationLayerHandle, HTMLElement[]>();
+let nextId = 0;
+
 function pageLinks(session: DocumentSession, pageIndex: number): Promise<FoundLink[]> {
   let pages = found.get(session);
   if (!pages) {
@@ -226,7 +231,6 @@ export function attachAutoLinks(viewer: Viewer): () => void {
   const annotations = new Map<number, AnnotationLayerHandle>();
   /** Annotation layers given links, or being given them. */
   const linked = new WeakSet<AnnotationLayerHandle>();
-  let ids = 0;
   let stopped = false;
 
   const link = async (pageIndex: number): Promise<void> => {
@@ -235,6 +239,11 @@ export function attachAutoLinks(viewer: Viewer): () => void {
     const open = session;
     if (stopped || !text || !layer || !open || linked.has(layer)) return;
     linked.add(layer);
+    const previous = added.get(layer);
+    if (previous) {
+      layer.layer.div.append(...previous);
+      return;
+    }
     const [links, page] = await Promise.all([pageLinks(open, pageIndex), open.page(pageIndex)]);
     if (links.length === 0) return;
     const fileLinks = (await page.getAnnotations({ intent: "display" })).filter(
@@ -250,7 +259,7 @@ export function attachAutoLinks(viewer: Viewer): () => void {
       const position = range && linkPosition(range, container, page);
       if (!position || coveredByLink(position, fileLinks)) continue;
       inferred.push({
-        id: `inferred_link_${ids++}`,
+        id: `inferred_link_${nextId++}`,
         url: found.url,
         unsafeUrl: found.url,
         annotationType: open.pdfjs.pdfjs.AnnotationType.LINK,
@@ -259,7 +268,15 @@ export function attachAutoLinks(viewer: Viewer): () => void {
         borderStyle: null,
       });
     }
-    if (inferred.length > 0) await layer.layer.addLinkAnnotations(inferred as never);
+    if (inferred.length > 0) {
+      const adding = layer.layer.addLinkAnnotations(inferred as never);
+      // pdf.js appends these synchronously, before its accessibility work
+      // finishes. Keep them before another option change can detach them.
+      added.set(layer, [
+        ...(layer.layer.div as HTMLElement).querySelectorAll<HTMLElement>(`[${INFERRED}]`),
+      ]);
+      await adding;
+    }
   };
 
   const run = (pageIndex: number) =>
