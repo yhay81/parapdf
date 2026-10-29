@@ -179,6 +179,39 @@ async function checkViews(url: string) {
   }
 }
 
+/** A hidden viewport follows a fragment changed while its provider stayed mounted. */
+async function checkHiddenFragment(url: string) {
+  const context = await launched.browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await context.newPage();
+  try {
+    await page.goto(`${url}?split=1&engine=${engine}&count=1&file=synthetic-navigation.pdf`);
+    await ready(page, 0);
+    await ready(page, 1);
+    await page.locator('[data-viewer="0"]').getByRole("button", { name: "Hide viewport" }).click();
+    await page.evaluate(() => window.__setFragment?.("page=4"));
+    await page.waitForFunction(() => window.__split!.viewers[1]!.store.get().currentPage === 3);
+    await page.locator('[data-viewer="0"]').getByRole("button", { name: "Show viewport" }).click();
+    await page
+      .waitForFunction(() => window.__split!.viewers[0]!.store.get().currentPage === 3, undefined, {
+        timeout: 5000,
+      })
+      .catch(() => {});
+    await ready(page, 0);
+    assert.equal(
+      await page.evaluate(() => window.__split!.viewers[0]!.store.get().currentPage),
+      3,
+      "a fragment changed while hidden is applied after reattachment",
+    );
+    assert.equal(await page.evaluate(() => window.__lifecycle!.stats.opens), 1);
+    console.log("PASS both viewers follow a new fragment, including after viewport reattachment");
+  } catch (error) {
+    await captureFailure(error instanceof Error ? error.message : String(error));
+    throw error;
+  } finally {
+    await context.close();
+  }
+}
+
 /** Annotations two viewers of one session create: kept apart, saved together. */
 async function checkSharedEditing(url: string) {
   const context = await launched.browser.newContext({
@@ -364,6 +397,7 @@ try {
   });
   try {
     await checkViews(server.resolvedUrls!.local[0]!);
+    await checkHiddenFragment(server.resolvedUrls!.local[0]!);
     await checkSharedEditing(server.resolvedUrls!.local[0]!);
     await checkFileAnnotations(server.resolvedUrls!.local[0]!);
   } finally {

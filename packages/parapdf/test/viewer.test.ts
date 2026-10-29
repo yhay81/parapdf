@@ -3,7 +3,9 @@ import { afterEach, beforeEach, describe, it, mock } from "node:test";
 import {
   connectSession,
   documentOf,
+  fragmentOf,
   PdfSession,
+  setFragment,
   setPasswordPrompt,
 } from "../src/document/pdf-session.ts";
 import type { PdfjsLoader } from "../src/document/registry.ts";
@@ -37,6 +39,14 @@ function lockedPdfjs() {
 }
 
 describe("a session's document state", () => {
+  it("removes an empty URL fragment from its source too", () => {
+    const session = new PdfSession({ url: "/a.pdf#", httpHeaders: { Accept: "application/pdf" } });
+    assert.deepEqual(session.source, {
+      url: "/a.pdf",
+      httpHeaders: { Accept: "application/pdf" },
+    });
+  });
+
   const cancelFrame = Object.getOwnPropertyDescriptor(globalThis, "cancelAnimationFrame");
   const close: (() => void)[] = [];
 
@@ -63,6 +73,24 @@ describe("a session's document state", () => {
     close.push(connectSession(session, loader));
     return session;
   };
+
+  it("shares the document while each provider keeps its own fragment", async () => {
+    let opens = 0;
+    const { loader } = fakePdfjs(async () => {
+      opens++;
+      return fakeDocument().proxy;
+    });
+    const first = provide({ url: "/fragment.pdf#page=2" }, loader);
+    const second = provide({ url: "/fragment.pdf#page=3" }, loader);
+    await settle();
+    assert.equal(opens, 1);
+    assert.equal(first.proxy, second.proxy);
+    assert.deepEqual(first.source, { url: "/fragment.pdf" });
+    assert.equal(fragmentOf(first).get().fragment, "page=2");
+    setFragment(first, "page=4");
+    assert.equal(fragmentOf(first).get().fragment, "page=4");
+    assert.equal(fragmentOf(second).get().fragment, "page=3");
+  });
 
   it("is the session's, published to every provider and viewer of it", async () => {
     const { loader } = fakePdfjs(async () => fakeDocument({ pages: [LETTER, A4] }).proxy);

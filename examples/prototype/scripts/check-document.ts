@@ -1148,6 +1148,47 @@ try {
       }),
     );
     check("no errors moving to a new fragment", errors.length === 0, errors.join(" | "));
+    await page.evaluate(() => {
+      window.__setViewerProps?.({ textLayer: false });
+      window.__setFragment?.("page=3");
+    });
+    await settle(page);
+    check(
+      "a fragment changed during a renderer rebuild is applied once ready",
+      (await state(page))?.currentPage === 2,
+    );
+
+    await page.evaluate(() => {
+      const probe = window as unknown as Demo & {
+        __fragmentPending?: boolean;
+        __releaseFragment?: () => void;
+      };
+      const proxy = probe.__pdfDocument as unknown as {
+        getDestination(name: string): Promise<unknown>;
+      };
+      const original = proxy.getDestination.bind(proxy);
+      const gate = new Promise<void>((resolve) => {
+        probe.__releaseFragment = resolve;
+      });
+      proxy.getDestination = async (name) => {
+        if (name === "review-slow") {
+          probe.__fragmentPending = true;
+          await gate;
+          return original("page-4");
+        }
+        return original(name);
+      };
+      probe.__setFragment?.("nameddest=review-slow");
+    });
+    await page.waitForFunction(() => (window as { __fragmentPending?: boolean }).__fragmentPending);
+    await page.evaluate(() => window.__setFragment?.("page=2"));
+    await page.waitForFunction(() => window.__viewer?.store.get().currentPage === 1);
+    await page.evaluate(() => (window as { __releaseFragment?: () => void }).__releaseFragment?.());
+    await settle(page);
+    check(
+      "a late named destination cannot overwrite a newer fragment",
+      (await state(page))?.currentPage === 1,
+    );
     await page.context().close();
   }
 

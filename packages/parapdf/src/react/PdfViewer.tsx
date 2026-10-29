@@ -16,9 +16,10 @@ import {
 import { createPortal } from "react-dom";
 import { fragmentOf } from "../document/pdf-session.ts";
 import {
-  goToFragment,
+  followFragments,
   type InitialViewOptions,
   initialViewOpening,
+  openingFragment,
 } from "../features/initial-view.ts";
 import type { PageColors, Rotation } from "../pdfjs/draw.ts";
 import type { AnnotationLabels } from "../pdfjs/editor-types.ts";
@@ -349,7 +350,7 @@ function ViewerViewport({
       initialView,
       initialViewState,
       ...explicit,
-      fragment: () => fragmentOf(session).get().fragment,
+      fragment: () => openingFragment(viewer, fragmentOf(session)),
     }),
     textLayer,
     annotationLayer,
@@ -447,8 +448,7 @@ function ViewerViewport({
 
   // A new fragment of the source's URL moves the viewer where it points.
   useEffect(() => {
-    const fragment = fragmentOf(session);
-    return fragment.subscribe(() => void goToFragment(viewer, fragment.get().fragment));
+    return followFragments(viewer, fragmentOf(session));
   }, [viewer, session]);
 
   const pages: ReactNode[] = [];

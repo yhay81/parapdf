@@ -114,7 +114,7 @@ export class PdfSession {
 
   constructor(source: PdfSource, { passwordPrompt = true }: { passwordPrompt?: boolean } = {}) {
     const [url, hash] = "url" in source ? splitFragment(source.url) : ["", ""];
-    this.source = hash ? { ...source, url } : source;
+    this.source = "url" in source && source.url !== url ? { ...source, url } : source;
     this.#fragment = new Store({ fragment: hash });
     this.#loaded = new Promise((resolve) => {
       this.#resolveLoaded = resolve;

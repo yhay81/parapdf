@@ -877,13 +877,13 @@ export class Viewer {
    * the position before the jump for `back()`. Resolves to false when the target is
    * invalid or null, as an outline entry's without one is.
    */
-  async goToDestination(dest: Destination | null): Promise<boolean> {
+  async goToDestination(dest: Destination | null, signal?: AbortSignal): Promise<boolean> {
     const session = this.#shown?.session;
-    const signal = this.#shown?.work?.signal;
-    if (!session || !signal || dest === null) return false;
+    const work = this.#shown?.work?.signal;
+    if (!session || !work || signal?.aborted || dest === null) return false;
     const target = await session.resolveDestination(dest).catch(() => null);
     const current = this.store.get().layout;
-    if (!target || !current || !this.#scroller || signal.aborted) return false;
+    if (!target || !current || !this.#scroller || work.aborted || signal?.aborted) return false;
     if (target.pageIndex < 0 || target.pageIndex >= current.tops.length) return false;
     this.#jumping();
     this.#jump(target, this.#destinationZoom);

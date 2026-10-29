@@ -1,7 +1,9 @@
 import type { DocumentSession, PdfInitialView, PdfPageLayout } from "../document/session.ts";
+import type { ReadableStore } from "../document/store.ts";
 import type { Destination, ResolvedDestination } from "../pdfjs/destinations.ts";
 import type { ScrollMode, SpreadMode } from "../view/layout.ts";
 import type { Opening, ViewerOptions } from "../view/options.ts";
+import { linked } from "../view/signals.ts";
 import type { Viewer } from "../view/viewer.ts";
 import { toShownView, type ViewState } from "./view-state.ts";
 
@@ -71,7 +73,7 @@ export function fragmentDestinations(fragment: string, current: number): Destina
     const arg = (index: number) => (rest.length > index ? Number(rest[index]) | 0 : null);
     const percent = Number.parseFloat(name);
     if (!name.includes("Fit")) {
-      const byName = ZOOM_NAMES[name];
+      const byName = Object.hasOwn(ZOOM_NAMES, name) ? ZOOM_NAMES[name] : undefined;
       // A zoom it cannot name, such as "auto", keeps the zoom.
       view = byName
         ? byName(arg(0), arg(1))
@@ -102,10 +104,68 @@ async function firstResolved(
  * Move `viewer` where `fragment` points, as following a link does: a new
  * fragment of an open document's URL.
  */
-export async function goToFragment(viewer: Viewer, fragment: string): Promise<void> {
+export async function goToFragment(
+  viewer: Viewer,
+  fragment: string,
+  signal: AbortSignal,
+): Promise<void> {
   for (const dest of fragmentDestinations(fragment, viewer.store.get().currentPage)) {
-    if (await viewer.goToDestination(dest)) return;
+    if (signal.aborted || (await viewer.goToDestination(dest, signal))) return;
   }
+}
+
+type FragmentSource = ReadableStore<{ fragment: string }>;
+/** The fragment a viewer last applied, kept while its viewport is hidden. */
+const fragments = new WeakMap<Viewer, { source: FragmentSource; seen: string }>();
+
+function fragmentState(viewer: Viewer, source: FragmentSource) {
+  let state = fragments.get(viewer);
+  if (!state || state.source !== source) {
+    state = { source, seen: source.get().fragment };
+    fragments.set(viewer, state);
+  }
+  return state;
+}
+
+/** Remember the fragment the initial opening is about to apply. */
+export function openingFragment(viewer: Viewer, source: FragmentSource): string {
+  const state = fragmentState(viewer, source);
+  state.seen = source.get().fragment;
+  return state.seen;
+}
+
+/** Follow fragment changes, including those deferred while the viewport was unavailable. */
+export function followFragments(viewer: Viewer, source: FragmentSource): () => void {
+  const state = fragmentState(viewer, source);
+  let ready: AbortSignal | null = null;
+  let pending: AbortController | null = null;
+  const move = () => {
+    pending?.abort();
+    pending = null;
+    const fragment = source.get().fragment;
+    if (!ready || ready.aborted || fragment === state.seen) return;
+    pending = linked(ready);
+    const { signal } = pending;
+    void goToFragment(viewer, fragment, signal).then(() => {
+      if (!signal.aborted) state.seen = fragment;
+    });
+  };
+  const unsubscribe = source.subscribe(move);
+  const detach = viewer.extend({
+    ready(_session, signal) {
+      ready = signal;
+      move();
+    },
+    detaching() {
+      pending?.abort();
+      ready = null;
+    },
+  });
+  return () => {
+    unsubscribe();
+    detach();
+    pending?.abort();
+  };
 }
 
 /**

@@ -15,6 +15,10 @@ change the API.
   fragment keeps the open document and moves its viewers there, as
   following a link does, instead of opening the document again.
   `PdfSession.source` is the URL without its fragment.
+  Rapid changes cancel older unresolved destinations, and a change made
+  while a viewport is hidden or rebuilding applies when it is ready.
+  `viewer.goToDestination(dest, signal?)` also accepts an `AbortSignal` to
+  cancel an unresolved navigation.
 
 - Renamed the per-page diagnostic on `Viewer.renderer` from `sharpness()`
   to `pageSharpness()`, distinguishing it from the viewport's

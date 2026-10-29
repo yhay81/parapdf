@@ -372,6 +372,8 @@ size), `Fit` the whole page, `FitH` the page's width, `FitV` its height, and
 fitting as the viewport resizes. `destinationZoom={false}` keeps the zoom
 and only scrolls. `goToDestination()` resolves to false for a destination
 that does not exist, or the null of an outline entry without one.
+Pass an optional `AbortSignal` as its second argument to cancel a pending
+navigation before it changes the view or history.
 
 `useHistory(viewer)` keeps where the viewer's links, outline entries, and
 named actions jumped from: `back()` returns to the position and zoom before
@@ -1010,7 +1012,9 @@ corner, `#zoom=FitH,700` fitted to the width, and `#nameddest=intro` at a
 destination the document names. It wins over `initialView="document"`,
 `defaultPage`, and `defaultZoom`, and `initialViewState` wins over it. A new
 fragment of the same URL moves the viewers there, as following a link
-does, without opening the document again. `search` and `pagemode` are left
+does, without opening the document again. A change while a viewport is
+hidden or rebuilding applies once it is ready, and rapid changes cancel
+older unresolved destinations. `search` and `pagemode` are left
 to the application.
 
 ## pdf.js's own API
