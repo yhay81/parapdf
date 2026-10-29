@@ -287,6 +287,19 @@ describe("DocumentSession", () => {
     assert.deepEqual(await session.save(), new Uint8Array([2]));
   });
 
+  it("saves the pages chosen through pdf.js's extractPages(), its own from its saved bytes once edited", async () => {
+    const storage = { size: 0, print: {} };
+    const { session } = await openSession({ proxy: { annotationStorage: storage } });
+    const pages = [
+      { includePages: [[0, 1]] },
+      { document: new Uint8Array([9]), includePages: [0] },
+    ];
+    assert.deepEqual(await session.save(pages), new Uint8Array([3, 0, 9]));
+    storage.size = 1;
+    // saveDocument() gives [2]: the document with what was typed into it.
+    assert.deepEqual(await session.save(pages), new Uint8Array([3, 2, 9]));
+  });
+
   it("aborts its signal and destroys the document when it closes", async () => {
     const { session, calls } = await openSession();
     const stopped: string[] = [];

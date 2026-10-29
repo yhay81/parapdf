@@ -30,6 +30,14 @@ export type PdfSource =
     }
   | { data: ArrayBuffer | Uint8Array; password?: string };
 
+/**
+ * Pages to save, as pdf.js's `extractPages()` takes them: each entry the
+ * pages of this document (`document` left out) or of another one's bytes,
+ * as `includePages` and `excludePages` choose them (0-based indices and
+ * `[first, last]` ranges), or an `image` as a page.
+ */
+export type PdfPageSelection = Parameters<Pdfjs.PDFDocumentProxy["extractPages"]>[0];
+
 /** Why an encrypted document asks for a password: none was given, or the last one was wrong. */
 export type PasswordReason = "required" | "incorrect";
 
@@ -551,10 +559,24 @@ export class DocumentSession {
   }
 
   /**
-   * The document's bytes, with what was typed into its form fields and the
-   * annotations an editor created saved in them.
+   * The document's bytes, or a new document of the `pages` chosen, with what
+   * was typed into its form fields and the annotations an editor created
+   * saved in them.
    */
-  save(): Promise<Uint8Array> {
+  async save(pages?: PdfPageSelection): Promise<Uint8Array> {
+    if (pages) {
+      // pdf.js's extractPages() writes the editors' annotations into this
+      // document's pages but not its fields' values: once something was
+      // typed or drawn, its pages come from its saved bytes, which have both.
+      // pdf.js takes this document's pages from an entry whose `document` is
+      // null, and leaves out one without it.
+      const own = this.proxy.annotationStorage.size > 0 ? await this.proxy.saveDocument() : null;
+      return this.proxy.extractPages(
+        pages.map((entry) =>
+          entry.document == null && !entry.image ? { ...entry, document: own } : entry,
+        ),
+      );
+    }
     // Without edits, the original bytes; saveDocument() writes form
     // values and the editor's annotations in.
     return this.proxy.annotationStorage.size > 0 ? this.proxy.saveDocument() : this.proxy.getData();

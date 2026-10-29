@@ -308,7 +308,7 @@ function FormTools({ viewer }: { viewer: Viewer }) {
       <button type="button" onClick={async () => setFields((await getFormFields(viewer)).length)}>
         Count fields
       </button>
-      <button type="button" onClick={() => void download(viewer, "f1040-filled.pdf")}>
+      <button type="button" onClick={() => void download(viewer, { filename: "f1040-filled.pdf" })}>
         Download
       </button>
       <button type="button" onClick={() => void print(viewer)}>
@@ -371,7 +371,7 @@ function AnnotationTools({ viewer }: { viewer: Viewer }) {
       <button type="button" disabled={!editing?.canRedo} onClick={() => annotations?.redo()}>
         Redo
       </button>
-      <button type="button" onClick={() => void download(viewer, "annotated.pdf")}>
+      <button type="button" onClick={() => void download(viewer, { filename: "annotated.pdf" })}>
         Download
       </button>
     </>

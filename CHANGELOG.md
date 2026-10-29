@@ -6,6 +6,13 @@ change the API.
 
 ## Unreleased
 
+- `save()` and `download()` take `pages`, the pages to save instead of the
+  whole document, as pdf.js's `extractPages()` takes them: ranges of its
+  pages, pages of other documents' bytes, and images as pages, with the
+  values typed and the annotations created (#93). An entry without
+  `document` is of the open document. **Breaking:** `download(viewer,
+  filename)` is now `download(viewer, { filename })`.
+
 - Printing turns a page whose orientation differs from the first page's to
   the sheet's, as pdf.js's viewer prints it, so that a landscape page among
   portrait ones fits a matching sheet without extra scaling (#88). Pages

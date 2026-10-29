@@ -245,6 +245,12 @@ export function fakeDocument({
     annotationStorage: { size: 0, print: { printing: true } },
     saveDocument: async () => new Uint8Array([2]),
     getData: async () => new Uint8Array([1]),
+    // Each entry's document's first byte, 0 for this one (null), so tests tell what was extracted.
+    extractPages: async (pages: { document?: Uint8Array | null }[]) =>
+      new Uint8Array([
+        3,
+        ...pages.map(({ document }) => (document === null ? 0 : (document?.[0] ?? 255))),
+      ]),
     ...proxy,
   };
   return {
