@@ -18,9 +18,15 @@ export interface ScriptingHandlers {
 export interface DocumentScripting {
   /** Hand the scripts an event, as a field's element dispatches it. */
   dispatch(event: object, before?: () => boolean): void;
+  /**
+   * Hand the scripts one of the document's events, `WillSave`, `DidSave`,
+   * `WillPrint`, or `DidPrint`; resolves once they ran it, and what they
+   * changed reached the handlers.
+   */
+  documentEvent(name: string): Promise<void>;
   /** The reader turned to page `index`, or, with null, left the pages. */
   showPage(index: number | null): void;
-  /** Stop the scripts and free the sandbox. */
+  /** Close the document for the scripts (`PageClose`, `WillClose`), then free the sandbox. */
   destroy(): void;
 }
 
@@ -79,7 +85,8 @@ async function documentInfo(doc: Pdfjs.PDFDocumentProxy, filename: string | null
  * Run the scripts of `doc` (its fields' and its own) in pdf.js's sandbox,
  * once loaded, as pdf.js's viewer does: the document opens, then its pages
  * open and close as `showPage()` tells. What the scripts change reaches
- * `handlers`. A document without scripts starts no sandbox.
+ * `handlers`. A document without scripts starts no sandbox. Once
+ * `destroy()` is called, what the scripts change reaches nothing.
  */
 export function startScripting(
   loaded: LoadedPdfjs,
@@ -88,6 +95,8 @@ export function startScripting(
   handlers: ScriptingHandlers,
 ): DocumentScripting {
   let destroyed = false;
+  /** `destroy()` was called: the scripts hear the document close, and nothing else. */
+  let closing = false;
   /** The fields of the document, the only elements the scripts change. */
   let fields = new Set<string>();
   /** The page open in the sandbox, and the pages it has had: their actions go once. */
@@ -111,7 +120,7 @@ export function startScripting(
     CustomEvent,
     console,
     dispatchEvent(event: CustomEvent<FieldUpdate>) {
-      if (!destroyed) update(event.detail);
+      if (!closing) update(event.detail);
       return true;
     },
   });
@@ -139,12 +148,12 @@ export function startScripting(
       doc.getCalculationOrderIds(),
       doc.getJSActions(),
     ]);
-    if (destroyed || (!objects && !actions)) return null;
+    if (closing || (!objects && !actions)) return null;
     const [info, created] = await Promise.all([
       documentInfo(doc, filename),
       createSandbox(loaded.scriptingUrls()),
     ]);
-    if (destroyed) {
+    if (closing) {
       created.nukeSandbox();
       return null;
     }
@@ -168,8 +177,12 @@ export function startScripting(
 
   /** Events reach the sandbox in order, each in a task of its own, as in pdf.js's viewer. */
   let queue: Promise<unknown> = sandbox;
-  const send = (event: object | (() => Promise<object | null>), before?: () => boolean) => {
-    queue = queue
+  const send = (
+    event: object | (() => Promise<object | null>),
+    before?: () => boolean,
+  ): Promise<void> => {
+    if (closing) return Promise.resolve();
+    const sent = queue
       .then(async () => {
         const ready = await sandbox;
         const detail = typeof event === "function" ? await event() : event;
@@ -178,29 +191,41 @@ export function startScripting(
         if (!destroyed && (!before || before())) ready.dispatchEvent(detail);
       })
       .catch((error: unknown) => console.error("dispatching a document script failed", error));
+    queue = sent;
+    return sent;
   };
 
-  send({ id: "doc", name: "Open" });
+  void send({ id: "doc", name: "Open" });
 
   return {
-    dispatch: send,
+    dispatch(event, before) {
+      void send(event, before);
+    },
+    documentEvent: (name) => send({ id: "doc", name }),
     showPage(index) {
       if (index === page) return;
-      if (page !== null) send({ id: "page", name: "PageClose", pageNumber: page + 1 });
+      if (page !== null) void send({ id: "page", name: "PageClose", pageNumber: page + 1 });
       page = index;
       if (index === null) return;
       const first = !visited.has(index);
       visited.add(index);
-      send(async () => {
+      void send(async () => {
         // A page's own actions go with its first opening only, as in pdf.js's viewer.
         const actions = first ? await (await doc.getPage(index + 1)).getJSActions() : null;
         return { id: "page", name: "PageOpen", pageNumber: index + 1, actions };
       });
     },
     destroy() {
-      if (destroyed) return;
-      destroyed = true;
-      void sandbox.then((ready) => ready?.nukeSandbox());
+      if (closing) return;
+      // The scripts hear the page and the document close, as in pdf.js's
+      // viewer when it closes a document, then the sandbox goes.
+      if (page !== null) void send({ id: "page", name: "PageClose", pageNumber: page + 1 });
+      void send({ id: "doc", name: "WillClose" });
+      closing = true;
+      void queue.then(async () => {
+        destroyed = true;
+        (await sandbox)?.nukeSandbox();
+      });
     },
   };
 }

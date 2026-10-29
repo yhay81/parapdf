@@ -103,5 +103,11 @@ values, and `useFormChange()` hears it; `setFormValues()` does not run
 them. A script's request to turn the page, zoom, print, or save acts on the
 viewer whose field ran it, and its alerts are the browser's own dialogs.
 
-`WillSave`, `DidSave`, `WillPrint`, and `DidPrint` scripts do not run, and
+Saving and printing, from a script or the application (`save()`,
+`download()`, `print()`), run the document's `WillSave` and `DidSave`, or
+`WillPrint` and `DidPrint`, scripts around them: what `WillSave` changes is
+in the saved bytes, and what `WillPrint` changes prints. The scripts hear
+`WillClose` when the document closes or the scripts are turned off; what
+they change then reaches nothing.
+
 XFA forms are not supported.

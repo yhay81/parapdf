@@ -21,16 +21,22 @@ export interface DownloadOptions extends SaveOptions {
 /**
  * The bytes of `viewer`'s document, or of the `pages` chosen, with what was
  * typed into its form fields and the annotations created in any of its
- * viewers saved in them; null while no document is open.
+ * viewers saved in them; null while no document is open. The document's scripts hear `WillSave`
+ * before, and what they change saves, and `DidSave` after.
  */
 export async function save(
   viewer: Viewer,
   { pages }: SaveOptions = {},
 ): Promise<Uint8Array | null> {
+  const { session } = viewer;
+  if (!session) return null;
   // The text being typed counts, in every viewer, as it would once the
   // reader clicks away.
-  viewer.session?.commit();
-  return (await viewer.session?.save(pages)) ?? null;
+  session.commit();
+  await session.output("WillSave");
+  const bytes = await session.save(pages);
+  await session.output("DidSave");
+  return bytes;
 }
 
 /**
