@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it, mock } from "node:test";
+import type { PDFDataRangeTransport } from "pdfjs-dist";
 import { acquireSession, type SessionLease, sourceKey } from "../src/document/registry.ts";
 import type { PdfSource } from "../src/document/session.ts";
 import {
   askPassword,
   type FakeLoadingTask,
+  FakeRangeTransport,
   fakeDocument,
   fakePdfjs,
   PasswordException,
@@ -338,6 +340,16 @@ describe("sourceKey", () => {
   it("is the bytes themselves for data", () => {
     const data = new ArrayBuffer(8);
     assert.equal(sourceKey({ data }), data);
+  });
+
+  it("is the transport itself for a range transport", () => {
+    const range = new FakeRangeTransport(8, null) as unknown as PDFDataRangeTransport;
+    assert.equal(sourceKey({ range }), range);
+    assert.equal(sourceKey({ range, password: "a" }), range);
+    assert.notEqual(
+      sourceKey({ range: new FakeRangeTransport(8, null) as unknown as PDFDataRangeTransport }),
+      range,
+    );
   });
 
   it("tells requests with other headers or credentials apart", () => {

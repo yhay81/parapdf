@@ -1059,18 +1059,43 @@ the files come from another origin than the page, such as a CDN, pdf.js starts i
 
 ## Sources
 
-A source is a URL, `{ url }`, or `{ data }`, where `data` is a `Uint8Array`
-or an `ArrayBuffer`. A URL source may add `httpHeaders` and `withCredentials`
-for its request, and either kind the `password` of an encrypted document;
-its own headers and credentials replace those of `documentOptions`.
-`PdfDocument`s of the same URL (with the same headers and credentials), or
-of the same bytes, share one open document, and React's StrictMode or a
+A source is a URL, `{ url }`; `{ data }`, where `data` is a `Uint8Array`
+or an `ArrayBuffer`; or `{ range }`, a transport (below). A URL source may
+add `httpHeaders` and `withCredentials` for its request, and any kind the
+`password` of an encrypted document; its own headers and credentials
+replace those of `documentOptions`. `PdfDocument`s of the same URL (with
+the same headers and credentials), of the same bytes, or of the same
+transport share one open document, and React's StrictMode or a
 quick remount reuses it instead of opening it again. A document is closed a
 second after the last `PdfDocument` holding it unmounts or opens another
 source; one still loading or waiting for a password stops loading. A new
 source object with the same URL keeps the open document, so
 `source={{ url }}` inline is fine. ParaPDF copies `data` before pdf.js
 transfers it to its worker, so your bytes stay usable.
+
+A transport source, `{ range }`, hands pdf.js the byte ranges it asks for
+through pdf.js's `PDFDataRangeTransport`, for a document your own code
+fetches: from a store of its own, or with authentication that request
+headers cannot carry. Subclass it from the `pdfjs-dist` ParaPDF depends on,
+give it the file's length, and answer each `requestDataRange(begin, end)`
+with `onDataRange(begin, bytes)`:
+
+```tsx
+import { PDFDataRangeTransport } from "pdfjs-dist";
+
+class StoreTransport extends PDFDataRangeTransport {
+  override requestDataRange(begin: number, end: number) {
+    store.read(key, begin, end).then((bytes) => this.onDataRange(begin, bytes));
+  }
+}
+const range = new StoreTransport(length, null);
+
+<PdfDocument source={{ range }} />
+```
+
+Import it dynamically to keep pdf.js out of your first chunk. ParaPDF hands
+pdf.js a transport of its own that forwards to yours, so yours stays usable
+and opens again after its document was closed.
 
 A URL's fragment is not part of the source: it says where to open, with
 the open parameters of RFC 8118 that pdf.js's viewer reads. `#page=3` opens

@@ -6,6 +6,12 @@ change the API.
 
 ## Unreleased
 
+- A source may be `{ range }`, pdf.js's `PDFDataRangeTransport`, through
+  which the application hands pdf.js the ranges it asks for, for documents
+  it fetches with code of its own (#92). Like bytes, a transport is
+  identified by itself; ParaPDF hands pdf.js a transport of its own that
+  forwards to the application's, which stays usable and opens again.
+
 - `save()` and `download()` take `pages`, the pages to save instead of the
   whole document, as pdf.js's `extractPages()` takes them: ranges of its
   pages, pages of other documents' bytes, and images as pages, with the

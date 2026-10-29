@@ -16,10 +16,11 @@ export interface PageSize {
 }
 
 /**
- * Where a document comes from. A URL source may carry the request's headers
- * and credentials mode, and any source the password of an encrypted
- * document: it is tried first, and another is asked for only when it is
- * wrong.
+ * Where a document comes from: a URL, which may carry the request's headers
+ * and credentials mode; bytes; or pdf.js's `PDFDataRangeTransport`, through
+ * which the application hands pdf.js the ranges it asks for. Any source may
+ * carry the password of an encrypted document: it is tried first, and
+ * another is asked for only when it is wrong.
  */
 export type PdfSource =
   | {
@@ -28,7 +29,53 @@ export type PdfSource =
       withCredentials?: boolean;
       password?: string;
     }
-  | { data: ArrayBuffer | Uint8Array; password?: string };
+  | { data: ArrayBuffer | Uint8Array; password?: string }
+  | { range: Pdfjs.PDFDataRangeTransport; password?: string };
+
+/**
+ * A transport of the pdf.js loaded, for this document only, that hands the
+ * application's transport the ranges pdf.js asks for and pdf.js what the
+ * application answers. pdf.js takes only transports of its own build, and
+ * transfers their initial bytes to its worker: the bridge leaves the
+ * application its transport, from whichever pdfjs-dist it came, and lets
+ * the same transport open again after its document was destroyed.
+ */
+function bridgeTransport(
+  pdfjs: typeof Pdfjs,
+  range: Pdfjs.PDFDataRangeTransport,
+): Pdfjs.PDFDataRangeTransport {
+  const bridge = new pdfjs.PDFDataRangeTransport(
+    range.length,
+    range.initialData?.slice() ?? null,
+    range.progressiveDone,
+    range.contentDispositionFilename,
+  );
+  // A request may finish after this bridge was aborted and the transport was
+  // reopened. Only deliver ranges this stream is still waiting for; an old
+  // response for the same range is interchangeable with the new one.
+  const pending = new Map<number, number>();
+  let active = true;
+  bridge.transportReady = (listener) =>
+    range.transportReady((event: { type: string; begin?: number; chunk?: Uint8Array }) => {
+      if (!active) return;
+      if (event.type === "range") {
+        const { begin, chunk } = event;
+        if (begin === undefined || !chunk || pending.get(begin) !== chunk.byteLength) return;
+        pending.delete(begin);
+      }
+      listener(event);
+    });
+  bridge.requestDataRange = (begin, end) => {
+    pending.set(begin, end - begin);
+    range.requestDataRange(begin, end);
+  };
+  bridge.abort = () => {
+    active = false;
+    pending.clear();
+    range.abort();
+  };
+  return bridge;
+}
 
 /**
  * Pages to save, as pdf.js's `extractPages()` takes them: each entry the
@@ -304,7 +351,9 @@ export class DocumentSession {
               ? { withCredentials: source.withCredentials }
               : {}),
           }
-        : { data: source.data.slice(0) }),
+        : "data" in source
+          ? { data: source.data.slice(0) }
+          : { range: bridgeTransport(pdfjs, source.range) }),
       ...(source.password !== undefined ? { password: source.password } : {}),
       worker: loaded.worker,
     });

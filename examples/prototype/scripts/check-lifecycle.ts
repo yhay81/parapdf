@@ -3,9 +3,10 @@
  * mount and quick remounts share one loaded document, the document is
  * destroyed only after the last viewer has been gone for a moment, work that
  * outlives a closed viewer neither fails noisily nor raises unhandled
- * rejections, an equal source object keeps the open document, and a data
+ * rejections, an equal source object keeps the open document, a data
  * source keeps the application's bytes and opens again after its document
- * was destroyed. The StrictMode part runs on the Vite development server,
+ * was destroyed, and a transport source shows its document from the ranges
+ * it serves and opens again too. The StrictMode part runs on the Vite development server,
  * because production React does not double-mount.
  *
  * Usage: pnpm --filter @parapdf/prototype build && pnpm --filter @parapdf/prototype check:lifecycle
@@ -264,6 +265,41 @@ try {
       [...again.unhandled, ...data.errors].slice(0, 3).join(" | "),
     );
     await data.page.context().close();
+
+    // A transport the application answers with code of its own: pdf.js asks
+    // it for ranges, and the same transport opens again after its document
+    // was destroyed.
+    const ranged = await openPage(
+      launched.browser,
+      `${baseUrl}?engine=${engine}&count=1&file=bill-hr815.pdf&source=range`,
+    );
+    const ranges = () => ranged.page.evaluate(() => window.__ranges?.length ?? 0);
+    const asked = await ranges();
+    check(
+      "a transport source shows its document from the ranges pdf.js asks for",
+      asked > 0,
+      `${asked} ranges`,
+    );
+    await call(ranged.page, "unmount");
+    await ranged.page.waitForTimeout(2500);
+    const before = await ranges();
+    await call(ranged.page, "mount");
+    let reopenedRange = true;
+    await waitForNewViewer(ranged.page).catch(() => {
+      reopenedRange = false;
+    });
+    const rangedAgain = await snapshot(ranged.page);
+    check(
+      "the same transport opens again after its document was destroyed",
+      reopenedRange && rangedAgain.opens === 2 && (await ranges()) > before,
+      `${rangedAgain.opens} loads${reopenedRange ? "" : ", no pixels within 30 s"}`,
+    );
+    check(
+      "transport sources raise no unhandled rejections or errors",
+      rangedAgain.unhandled.length === 0 && ranged.errors.length === 0,
+      [...rangedAgain.unhandled, ...ranged.errors].slice(0, 3).join(" | "),
+    );
+    await ranged.page.context().close();
   } finally {
     await server.close();
   }
