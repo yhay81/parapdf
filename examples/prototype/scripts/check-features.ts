@@ -194,6 +194,28 @@ try {
       (unlocked?.progress?.loaded ?? 0) > 0,
       JSON.stringify(unlocked?.progress),
     );
+    const extractEncrypted = async (target: Page) => {
+      const bytes = await target.evaluate(async () => {
+        const viewer = window.__viewer;
+        if (!viewer?.session) return null;
+        // A nonempty storage makes save() reopen the edited document's bytes.
+        viewer.session.proxy.annotationStorage.setValue("test", { value: "edited" });
+        const result = await window.__parapdf?.save(viewer, { pages: [{ includePages: [0] }] });
+        return result ? [...result] : null;
+      });
+      if (!bytes) return 0;
+      const result = await pdfjsNode.getDocument({
+        data: new Uint8Array(bytes),
+        password: "parapdf",
+      }).promise;
+      const count = result.numPages;
+      await result.loadingTask.destroy();
+      return count;
+    };
+    check(
+      "extracts edited encrypted pages after a password prompt",
+      (await extractEncrypted(page)) === 1,
+    );
     check(
       "no errors while asking for a password",
       errors.every((error) => /PasswordException|password/i.test(error)),
@@ -208,6 +230,10 @@ try {
     check(
       "a password in the source opens it without asking",
       (await documentState(given.page))?.status === "ready",
+    );
+    check(
+      "extracts edited encrypted pages with a source password",
+      (await extractEncrypted(given.page)) === 1,
     );
     await given.page.context().close();
 

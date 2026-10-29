@@ -225,6 +225,8 @@ export class DocumentSession {
   readonly #reads = new Map<string, Promise<unknown>>();
   /** What finishes the edits in progress in the session's viewers; see `commit()`. */
   readonly #commits = new Set<() => void>();
+  /** The password that opened this document, for reopening its saved bytes when extracting pages. */
+  readonly #password: string | undefined;
   /** Every page's size, once the background pass has learned them. */
   #sizes: readonly PageSize[] | null = null;
 
@@ -233,11 +235,13 @@ export class DocumentSession {
     loadingTask: Pdfjs.PDFDocumentLoadingTask,
     proxy: Pdfjs.PDFDocumentProxy,
     controller: AbortController,
+    password: string | undefined,
   ) {
     this.pdfjs = pdfjs;
     this.proxy = proxy;
     this.pageCount = proxy.numPages;
     this.signal = controller.signal;
+    this.#password = password;
     closers.set(this, () => {
       controller.abort();
       this.#pages.clear();
@@ -261,6 +265,7 @@ export class DocumentSession {
     const loaded = await loader();
     signal.throwIfAborted();
     const { pdfjs } = loaded;
+    let password = source.password;
     const loadingTask = pdfjs.getDocument({
       ...loaded.documentParameters,
       // pdf.js transfers the bytes to its worker, which detaches the
@@ -288,12 +293,14 @@ export class DocumentSession {
         const reason =
           code === pdfjs.PasswordResponses.INCORRECT_PASSWORD ? "incorrect" : "required";
         askPassword(reason).then(
-          (password) =>
+          (answer) => {
+            password = answer ?? undefined;
             update(
-              password ??
+              answer ??
                 // pdf.js's own exception class, so the failure reads like any other.
                 (new pdfjs.PasswordException("No password was given.", code) as unknown as Error),
-            ),
+            );
+          },
           (error: unknown) => update(error instanceof Error ? error : new Error(String(error))),
         );
       };
@@ -305,7 +312,7 @@ export class DocumentSession {
       const proxy = await loadingTask.promise;
       // Aborted while it loaded: the loading task, and the document with it, is destroyed.
       signal.throwIfAborted();
-      return new DocumentSession(loaded, loadingTask, proxy, controller);
+      return new DocumentSession(loaded, loadingTask, proxy, controller, password);
     } catch (error) {
       // pdf.js tries to parse on the main thread when its worker does not
       // start, and that fails too when the script is missing.
@@ -573,7 +580,13 @@ export class DocumentSession {
       const own = this.proxy.annotationStorage.size > 0 ? await this.proxy.saveDocument() : null;
       return this.proxy.extractPages(
         pages.map((entry) =>
-          entry.document == null && !entry.image ? { ...entry, document: own } : entry,
+          entry.document == null && !entry.image
+            ? {
+                ...entry,
+                document: own,
+                ...(own && this.#password ? { password: this.#password } : {}),
+              }
+            : entry,
         ),
       );
     }
