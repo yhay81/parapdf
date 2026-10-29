@@ -163,6 +163,19 @@ change the API.
   or the document's value.
 - `setFormValues()` stores a single choice set to no option as an empty
   one, as pdf.js's widgets read it. Until now it stored null.
+- A zoom mode, such as "fit-width", fits again as `minScale` or
+  `maxScale` changes. Until now a fitted zoom that the old limits held
+  back stayed there until the viewport resized.
+- `setScale()`, `zoomBy()`, and `setRotation()` do nothing for NaN, nor
+  `setRotation()` for a rotation that is not finite, and `show()` keeps
+  the viewer's page and rotation for a NaN one. `revealRect()` truncates a
+  fractional page index and does nothing for NaN. Until now these made the
+  zoom, rotation, or current page NaN, or a fractional page.
+- A destination whose page is not in the document resolves to null, as
+  pdf.js's viewer ignores it, and an `XYZ` zoom that is not a positive
+  finite number keeps the zoom, as 0 does. Until now the first resolved to
+  a page index past the document, which `PdfInitialView.destination`
+  carried, and the second to that zoom.
 
 ## 0.7.0 — 2026-10-27
 
