@@ -176,6 +176,14 @@ change the API.
   finite number keeps the zoom, as 0 does. Until now the first resolved to
   a page index past the document, which `PdfInitialView.destination`
   carried, and the second to that zoom.
+- What a `PdfSession` read while its password request showed as an error
+  (`passwordPrompt={false}`), and settled empty, is read anew once the
+  request is answered or shows as a request again, and `useOutline()` and
+  the other hooks of the document's data render again to show it. The
+  document is still read once. Until now those reads stayed empty after
+  the document opened.
+- A document whose viewers all left before it opened no longer publishes
+  `"error"` as its opening stops. Until now it did.
 
 ## 0.7.0 — 2026-10-27
 

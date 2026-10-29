@@ -110,6 +110,8 @@ export class PdfSession {
   #fail!: () => void;
   /** Whether `state` showed the document failed since `#failed` was last reset. */
   #showedFailure = false;
+  /** What is read from the document held, once each; `#reads` races them with `#failed`. */
+  readonly #documentReads = new Map<string, Promise<unknown>>();
   readonly #reads = new Map<string, Promise<unknown>>();
   #proxy: Pdfjs.PDFDocumentProxy | null = null;
   /** Where its URL's fragment says to open, which changes without opening the document again. */
@@ -152,7 +154,9 @@ export class PdfSession {
       this.#fail();
     } else if (this.#showedFailure) {
       // A request it showed as an error was answered, or shows as such
-      // again: what is read from now on waits for the document.
+      // again: what is read from now on waits for the document, and what
+      // settled empty meanwhile is read anew.
+      this.#reads.clear();
       this.#resetFailure();
     }
     for (const listener of [...this.#listeners]) listener();
@@ -220,15 +224,21 @@ export class PdfSession {
   /**
    * What `read` reads from the loaded document, once for this provider:
    * `fallback` when the read or the document fails, so that a component
-   * reading it with `use()` shows nothing rather than failing.
+   * reading it with `use()` shows nothing rather than failing. A fallback
+   * given while a request showed as an error lasts until it no longer does.
    */
   #read<T>(what: string, read: (session: DocumentSession) => Promise<T>, fallback: T): Promise<T> {
     let reading = this.#reads.get(what) as Promise<T> | undefined;
     if (!reading) {
       // A provider without a prompt shows a password request as an error
       // while the document still waits: what is read settles then too.
+      let fromDocument = this.#documentReads.get(what) as Promise<T> | undefined;
+      if (!fromDocument) {
+        fromDocument = this.#loaded.then(read);
+        this.#documentReads.set(what, fromDocument);
+      }
       const failed = this.#failed.then(() => fallback);
-      reading = Promise.race([this.#loaded.then(read), failed]).catch((error: unknown) => {
+      reading = Promise.race([fromDocument, failed]).catch((error: unknown) => {
         if (this.#source?.get().status === "ready") console.error(`loading ${what} failed`, error);
         return fallback;
       });
@@ -255,6 +265,7 @@ export class PdfSession {
       if (this.#held === null) this.#resolveLoaded(held);
       else {
         this.#loaded = held;
+        this.#documentReads.clear();
         this.#reads.clear();
         this.#proxy = null;
         this.#resetFailure();

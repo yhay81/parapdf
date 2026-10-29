@@ -23,17 +23,31 @@ import {
 /** A document whose one page is labelled "i", which tells a read from its empty value. */
 const labelled = () => fakeDocument({ proxy: { getPageLabels: async () => ["i"] } }).proxy;
 
-/** pdf.js whose labelled document opens with the password "secret" alone. */
-const lockedPdfjs = () =>
-  fakePdfjs(async (task, { password: given }) => {
+/**
+ * pdf.js whose labelled document opens with the password "secret" alone;
+ * `reads` counts the reads of its page labels.
+ */
+const lockedPdfjs = () => {
+  const reads = { labels: 0 };
+  const proxy = fakeDocument({
+    proxy: {
+      getPageLabels: async () => {
+        reads.labels++;
+        return ["i"];
+      },
+    },
+  }).proxy;
+  const pdfjs = fakePdfjs(async (task, { password: given }) => {
     let password = given;
     while (password !== "secret") {
       const answer = await askPassword(task, password === undefined ? "required" : "incorrect");
       if (answer === null) throw new PasswordException("No password given", 1);
       password = answer;
     }
-    return labelled();
+    return proxy;
   });
+  return { ...pdfjs, reads };
+};
 
 describe("a PdfSession's source and fragment", () => {
   it("is the source given when it has no fragment to take out", () => {
@@ -226,6 +240,33 @@ describe("a PdfSession", () => {
     assert.equal(session.state.get().status, "ready");
     assert.deepEqual(await labels, ["i"], "read while the request showed as such");
     assert.notEqual(await session.initialView(), null, "first read once it opened");
+  });
+
+  it("reads anew what settled empty while the request showed as an error, once it shows again", async () => {
+    const { loader, reads } = lockedPdfjs();
+    const session = provide({ url: "/locked.pdf" }, loader, false);
+    await settle();
+    const settled = session.pageLabels();
+    assert.equal(await settled, null);
+    setPasswordPrompt(session, true);
+    const again = session.pageLabels();
+    assert.notEqual(again, settled);
+    assert.equal(session.pageLabels(), again, "one read until it settles");
+    session.submitPassword("secret");
+    await settle();
+    assert.deepEqual(await again, ["i"]);
+    assert.equal(reads.labels, 1, "the document read once");
+  });
+
+  it("reads anew what settled empty while the request showed as an error, once another provider answers it", async () => {
+    const { loader } = lockedPdfjs();
+    const prompted = provide({ url: "/locked.pdf" }, loader);
+    const session = provide({ url: "/locked.pdf" }, loader, false);
+    await settle();
+    assert.equal(await session.pageLabels(), null);
+    prompted.submitPassword("secret");
+    await settle();
+    assert.deepEqual(await session.pageLabels(), ["i"]);
   });
 
   it("reads the document another provider unlocked while it showed the request as an error", async () => {

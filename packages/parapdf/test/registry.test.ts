@@ -225,6 +225,23 @@ describe("acquireSession", () => {
     assert.equal(calls.opens, 0);
   });
 
+  it("publishes no error for an open that stopped because its viewers all left", async () => {
+    const { loaded } = fakePdfjs();
+    let ready = () => {};
+    const loader = () =>
+      new Promise<typeof loaded>((resolve) => {
+        ready = () => resolve(loaded);
+      });
+    const lease = acquireSession(loader, { url: "/a.pdf" });
+    lease.release();
+    mock.timers.tick(1000);
+    ready();
+    await assert.rejects(lease.session, { name: "AbortError" });
+    await settle();
+    assert.equal(lease.state.get().status, "loading");
+    assert.equal(lease.state.get().error, null);
+  });
+
   it("publishes a failed open, and starts the next viewer's attempt from loading", async () => {
     const { loader } = failingPdfjs();
     const first = acquireSession(loader, { url: "/a.pdf" });

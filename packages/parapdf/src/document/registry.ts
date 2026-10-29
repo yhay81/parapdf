@@ -225,6 +225,8 @@ function openEntry(pdfjs: PdfjsLoader, source: PdfSource): Entry {
       });
     },
     (error: unknown) => {
+      // A session closed while it opened failed for no viewer.
+      if (entry.controller.signal.aborted) return;
       entry.state.set({ status: "error", error: String(error), passwordReason: null });
     },
   );
