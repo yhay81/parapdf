@@ -740,6 +740,51 @@ try {
     await page.context().close();
   }
 
+  // --- Printing turns pages whose orientation differs from the first page's ---
+  {
+    const { page, errors } = await open(launched.browser, demo("file=synthetic-mixed-sizes.pdf"));
+    const printedSizes = (autoRotate: boolean) =>
+      page.evaluate(async (autoRotate) => {
+        let sizes: [number, number][] = [];
+        window.print = () => {
+          sizes = [...document.querySelectorAll<HTMLImageElement>(".parapdf-print img")].map(
+            (image) => [image.naturalWidth, image.naturalHeight],
+          );
+        };
+        const viewer = window.__viewer;
+        if (viewer) await window.__parapdf?.print(viewer, { autoRotate });
+        window.dispatchEvent(new Event("afterprint"));
+        return sizes;
+      }, autoRotate);
+    const landscape = (sizes: [number, number][]) =>
+      sizes.flatMap(([width, height], index) => (width > height ? [index] : []));
+    // The A3 landscape page, third, at 150 dpi: 1191 × 842 pt.
+    const a3 = [Math.round((1191 * 150) / 72), Math.round((842 * 150) / 72)];
+    const turned = await printedSizes(true);
+    check(
+      "printing turns landscape pages among portrait ones to the sheet, at full size",
+      turned.length === 8 &&
+        landscape(turned).length === 0 &&
+        Math.abs((turned[2]?.[0] ?? 0) - (a3[1] ?? 0)) <= 1 &&
+        Math.abs((turned[2]?.[1] ?? 0) - (a3[0] ?? 0)) <= 1,
+      JSON.stringify(turned),
+    );
+    const upright = await printedSizes(false);
+    check(
+      "without autoRotate, printing keeps every page upright",
+      upright.length === 8 &&
+        landscape(upright).join() === "2,4" &&
+        Math.abs((upright[2]?.[0] ?? 0) - (a3[0] ?? 0)) <= 1,
+      JSON.stringify(upright),
+    );
+    check(
+      "no errors printing mixed orientations",
+      errors.length === 0,
+      errors.slice(0, 3).join(" | "),
+    );
+    await page.context().close();
+  }
+
   // --- Thumbnails of a long document hold pixels only near view ---
   {
     const { page } = await open(launched.browser, demo("file=bill-hr815.pdf"));

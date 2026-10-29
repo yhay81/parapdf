@@ -5,6 +5,12 @@ import type { LayerState } from "../../pdfjs/layers.ts";
 export interface PrintOptions {
   /** Dots per inch the pages are drawn at (default 150, as pdf.js's viewer prints). */
   resolution?: number;
+  /**
+   * Turn a page whose orientation differs from the first page's to the
+   * sheet's, so that it prints at full size, as pdf.js's viewer prints
+   * (default true). Off, such a page prints upright, scaled to fit.
+   */
+  autoRotate?: boolean;
   /** Called after each page is drawn, with the pages drawn and how many there are. */
   onProgress?(done: number, total: number): void;
   /** Aborting stops drawing pages and prints nothing. */
@@ -46,6 +52,8 @@ const printCss = (first: PageSize) => `
 }
 `;
 
+const isPortrait = ({ width, height }: PageSize) => width <= height;
+
 const toBlob = (canvas: HTMLCanvasElement): Promise<Blob> =>
   new Promise((resolve, reject) =>
     canvas.toBlob(
@@ -63,7 +71,7 @@ const toBlob = (canvas: HTMLCanvasElement): Promise<Blob> =>
  */
 export async function printDocument(
   session: DocumentSession,
-  { resolution = 150, onProgress, signal, layers }: PrintJobOptions = {},
+  { resolution = 150, autoRotate = true, onProgress, signal, layers }: PrintJobOptions = {},
 ): Promise<void> {
   current?.cleanUp();
   signal?.throwIfAborted();
@@ -98,10 +106,18 @@ export async function printDocument(
     for (let pageIndex = 0; pageIndex < session.pageCount; pageIndex++) {
       if (cleaned) return;
       signal?.throwIfAborted();
+      // Turned a quarter counterclockwise, as pdf.js's viewer turns it.
+      const turned =
+        autoRotate &&
+        pageIndex > 0 &&
+        isPortrait(await session.pageSize(pageIndex)) !== isPortrait(first);
+      if (cleaned) return;
+      signal?.throwIfAborted();
       const canvas = document.createElement("canvas");
       drawing = canvas;
       const task = drawPage(session.pdfjs, session.page(pageIndex), {
         scale,
+        ...(turned ? { rotation: 270 as const } : {}),
         canvas,
         // What was typed into form fields, and the layers as the viewer
         // shows them, on pdf.js's configuration for printing.

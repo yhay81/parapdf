@@ -3,7 +3,7 @@ import { describe, it, type TestContext } from "node:test";
 import { print } from "../src/features/print/index.ts";
 import { printDocument } from "../src/features/print/print.ts";
 import { Viewer } from "../src/view/viewer.ts";
-import { fakeDocument, fakePdfjs, openSession, settle, show } from "./fake-pdfjs.ts";
+import { fakeDocument, fakePdfjs, LETTER, openSession, settle, show } from "./fake-pdfjs.ts";
 
 /** Only the element operations printDocument uses; rendering is controlled separately. */
 class PrintElement {
@@ -74,6 +74,32 @@ async function controlledDocument() {
   const { session, drawings } = await openSession();
   return { doc: session, renders: drawings };
 }
+
+describe("print orientation", () => {
+  const LANDSCAPE = { width: 792, height: 612 };
+  const pages = [LETTER, LANDSCAPE, LETTER, LANDSCAPE];
+
+  async function turns(options?: { autoRotate?: boolean }) {
+    const { session, drawings } = await openSession({ pages });
+    const printing = printDocument(session, options);
+    for (let index = 0; index < pages.length; index++) {
+      await settle();
+      drawings[index]?.resolve();
+    }
+    await printing;
+    return drawings.map((drawing) => drawing.request.rotation ?? 0);
+  }
+
+  it("turns pages whose orientation differs from the first page's, as pdf.js's viewer does", async (t) => {
+    environment(t);
+    assert.deepEqual(await turns(), [0, 270, 0, 270]);
+  });
+
+  it("prints every page upright without autoRotate", async (t) => {
+    environment(t);
+    assert.deepEqual(await turns({ autoRotate: false }), [0, 0, 0, 0]);
+  });
+});
 
 describe("print job replacement", () => {
   it("cancels an active render and prints only its replacement, with no cleanup left behind", async (t) => {

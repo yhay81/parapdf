@@ -6,6 +6,12 @@ change the API.
 
 ## Unreleased
 
+- Printing turns a page whose orientation differs from the first page's to
+  the sheet's, as pdf.js's viewer prints it, so that a landscape page among
+  portrait ones prints at full size instead of scaled to fit (#88).
+  **Breaking:** this is the new default of `print()`; `autoRotate: false`
+  prints every page upright, as before.
+
 - `"auto"` zoom beside `"fit-width"` and `"fit-page"`, wherever a zoom mode
   is taken or reported (`zoom`, `defaultZoom`, `onZoomChange`,
   `setScale()`, the view state's `zoomMode`, and `ViewState.scale`): it

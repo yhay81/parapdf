@@ -26,6 +26,8 @@ export interface Drawing {
     canvas: HTMLCanvasElement;
     region?: { x: number; y: number; width: number; height: number };
     intent?: string;
+    /** The page's turn, when it is drawn turned. */
+    rotation?: number;
   };
   resolve(): void;
   reject(error: Error): void;
@@ -98,7 +100,7 @@ function fakePage(
       viewport(size, scale, rotation),
     render(parameters: {
       canvas: HTMLCanvasElement;
-      viewport: { scale: number };
+      viewport: { scale: number; rotation: number };
       transform?: number[];
       intent?: string;
     }) {
@@ -126,6 +128,7 @@ function fakePage(
               }
             : {}),
           ...(parameters.intent ? { intent: parameters.intent } : {}),
+          ...(parameters.viewport.rotation ? { rotation: parameters.viewport.rotation } : {}),
         },
         resolve,
         reject,
