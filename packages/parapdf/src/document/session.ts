@@ -30,6 +30,14 @@ export type PdfSource =
     }
   | { data: ArrayBuffer | Uint8Array; password?: string };
 
+/**
+ * Pages to save, as pdf.js's `extractPages()` takes them: each entry the
+ * pages of this document (`document` left out) or of another one's bytes,
+ * as `includePages` and `excludePages` choose them (0-based indices and
+ * `[first, last]` ranges), or an `image` as a page.
+ */
+export type PdfPageSelection = Parameters<Pdfjs.PDFDocumentProxy["extractPages"]>[0];
+
 /** Why an encrypted document asks for a password: none was given, or the last one was wrong. */
 export type PasswordReason = "required" | "incorrect";
 
@@ -240,6 +248,8 @@ export class DocumentSession {
   readonly #reads = new Map<string, Promise<unknown>>();
   /** What finishes the edits in progress in the session's viewers; see `commit()`. */
   readonly #commits = new Set<() => void>();
+  /** The password that opened this document, for reopening its saved bytes when extracting pages. */
+  readonly #password: string | undefined;
   /** What hears the document being saved and printed; see `output()`. */
   readonly #outputs = new Set<(event: OutputEvent) => Promise<void>>();
   /** Every page's size, once the background pass has learned them. */
@@ -250,11 +260,13 @@ export class DocumentSession {
     loadingTask: Pdfjs.PDFDocumentLoadingTask,
     proxy: Pdfjs.PDFDocumentProxy,
     controller: AbortController,
+    password: string | undefined,
   ) {
     this.pdfjs = pdfjs;
     this.proxy = proxy;
     this.pageCount = proxy.numPages;
     this.signal = controller.signal;
+    this.#password = password;
     closers.set(this, () => {
       controller.abort();
       this.#pages.clear();
@@ -278,6 +290,7 @@ export class DocumentSession {
     const loaded = await loader();
     signal.throwIfAborted();
     const { pdfjs } = loaded;
+    let password = source.password;
     const loadingTask = pdfjs.getDocument({
       ...loaded.documentParameters,
       // pdf.js transfers the bytes to its worker, which detaches the
@@ -305,12 +318,14 @@ export class DocumentSession {
         const reason =
           code === pdfjs.PasswordResponses.INCORRECT_PASSWORD ? "incorrect" : "required";
         askPassword(reason).then(
-          (password) =>
+          (answer) => {
+            password = answer ?? undefined;
             update(
-              password ??
+              answer ??
                 // pdf.js's own exception class, so the failure reads like any other.
                 (new pdfjs.PasswordException("No password was given.", code) as unknown as Error),
-            ),
+            );
+          },
           (error: unknown) => update(error instanceof Error ? error : new Error(String(error))),
         );
       };
@@ -322,7 +337,7 @@ export class DocumentSession {
       const proxy = await loadingTask.promise;
       // Aborted while it loaded: the loading task, and the document with it, is destroyed.
       signal.throwIfAborted();
-      return new DocumentSession(loaded, loadingTask, proxy, controller);
+      return new DocumentSession(loaded, loadingTask, proxy, controller, password);
     } catch (error) {
       // pdf.js tries to parse on the main thread when its worker does not
       // start, and that fails too when the script is missing.
@@ -651,10 +666,30 @@ export class DocumentSession {
   }
 
   /**
-   * The document's bytes, with what was typed into its form fields and the
-   * annotations an editor created saved in them.
+   * The document's bytes, or a new document of the `pages` chosen, with what
+   * was typed into its form fields and the annotations an editor created
+   * saved in them.
    */
-  save(): Promise<Uint8Array> {
+  async save(pages?: PdfPageSelection): Promise<Uint8Array> {
+    if (pages) {
+      // pdf.js's extractPages() writes the editors' annotations into this
+      // document's pages but not its fields' values: once something was
+      // typed or drawn, its pages come from its saved bytes, which have both.
+      // pdf.js takes this document's pages from an entry whose `document` is
+      // null, and leaves out one without it.
+      const own = this.proxy.annotationStorage.size > 0 ? await this.proxy.saveDocument() : null;
+      return this.proxy.extractPages(
+        pages.map((entry) =>
+          entry.document == null && !entry.image
+            ? {
+                ...entry,
+                document: own,
+                ...(own && this.#password ? { password: this.#password } : {}),
+              }
+            : entry,
+        ),
+      );
+    }
     // Without edits, the original bytes; saveDocument() writes form
     // values and the editor's annotations in.
     return this.proxy.annotationStorage.size > 0 ? this.proxy.saveDocument() : this.proxy.getData();

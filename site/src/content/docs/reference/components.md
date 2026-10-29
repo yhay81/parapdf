@@ -121,8 +121,8 @@ Each takes the viewer it acts through.
 | Function | |
 |---|---|
 | `print(viewer, options?)` | Draws every page for printing and opens the browser's print dialog; `options` are `resolution` (150 dpi by default), `autoRotate` (true by default: a page whose orientation differs from the first page's prints turned to the sheet), `onProgress(done, total)`, and `signal`. Fails when the viewer follows permissions and the document forbids printing (see [Forms, printing, and saving](/guides/forms/)). |
-| `save(viewer)` | Resolves to the PDF's bytes with form values and every viewer's annotations written in; null while no document is open. |
-| `download(viewer, filename?)` | Saves as `save()` does and hands the bytes to the browser as a download, named by default as the server names the file (`Content-Disposition`), or else after the document's URL. |
+| `save(viewer, options?)` | Resolves to the PDF's bytes with form values and every viewer's annotations written in; null while no document is open. `pages` saves the pages chosen instead, as pdf.js's `extractPages()` takes them: of this document, of other documents' bytes, and images (see [Forms, printing, and saving](/guides/forms/)). |
+| `download(viewer, options?)` | Saves as `save()` does, with `pages`, and hands the bytes to the browser as a download, named by default as the server names the file (`Content-Disposition`), or else after the document's URL, unless `filename` names it. |
 | `getText(viewer, options?)` | Resolves to the document's text, all of it or between pages or points (`from`, `to`, `lineBreaks`, `signal`; see [Text](/guides/text/)). |
 | `getSelection(viewer)` | The selection, as `useSelection()` gives it, or null. |
 | `getViewState(viewer)` | Where and how the document is shown, as a plain object, or null before it is (see [Keeping the view](/guides/view-state/)). |

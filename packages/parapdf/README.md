@@ -510,10 +510,11 @@ With `forms`, form fields become inputs, check boxes, radio buttons, and
 lists the reader can fill in; without it, they show as the PDF draws them.
 What the reader types belongs to the document:
 
-- `save(viewer)` resolves to the PDF's bytes with the values written in,
-  and `download(viewer, filename?)` hands them to the browser as a download,
-  named by default as the server names the file, or else after the
-  document's URL.
+- `save(viewer, { pages })` resolves to the PDF's bytes with the values
+  written in, and `download(viewer, { filename, pages })` hands them to the
+  browser as a download, named by default as the server names the file, or
+  else after the document's URL. With `pages`, only the pages chosen (see
+  below).
 - `print(viewer, { resolution, autoRotate, onProgress, signal })` draws
   every page for printing, the typed values included, at 150 dpi by
   default, and opens the browser's print dialog with only those pages, on
@@ -522,6 +523,20 @@ What the reader types belongs to the document:
   `autoRotate: false` prints it upright. Pages are scaled to fit the sheet,
   whose size follows the first page. A new print request stops the previous
   job; that job resolves without opening another dialog.
+
+`save()` and `download()` take `pages` to save chosen pages instead of the
+whole document, as pdf.js's `extractPages()` takes them: each entry is
+pages of this document, or of another document's bytes (`document`),
+chosen by `includePages` and `excludePages` (0-based indices and
+`[first, last]` ranges), or an `ImageBitmap` as a page (`image`). This document's pages keep the values
+typed and the annotations created.
+
+```ts
+const bytes = await save(viewer, {
+  pages: [{ includePages: [[0, 2]] }, { document: appendix, includePages: [0] }],
+});
+await download(viewer, { filename: "excerpt.pdf", pages: [{ excludePages: [3] }] });
+```
 
 Applications read and fill the form themselves:
 

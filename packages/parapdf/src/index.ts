@@ -9,6 +9,7 @@ export type {
   PdfMetadata,
   PdfPageLayout,
   PdfPageMode,
+  PdfPageSelection,
   PdfPermissions,
   PdfSource,
 } from "./document/session.ts";
@@ -18,7 +19,12 @@ export type {
   AnnotationEditingStore,
 } from "./features/annotations.ts";
 export { getAttachmentContent, openAttachment } from "./features/attachments.ts";
-export { download, save } from "./features/download.ts";
+export {
+  type DownloadOptions,
+  download,
+  type SaveOptions,
+  save,
+} from "./features/download.ts";
 export {
   type FormChange,
   type FormField,
