@@ -5,7 +5,7 @@ import type { DocumentSession, PageSize, PdfPermissions } from "../document/sess
 import type { AnnotationLayerScripting, LinkHandlers } from "../pdfjs/annotation-layer.ts";
 import type { Destination, ResolvedDestination } from "../pdfjs/destinations.ts";
 import type { PageColors, Rotation } from "../pdfjs/draw.ts";
-import type { AnnotationEditor } from "../pdfjs/editor.ts";
+import type { AnnotationEditor } from "../pdfjs/editor-types.ts";
 import type { LayerState } from "../pdfjs/layers.ts";
 import type { TextLayerHandle } from "../pdfjs/text.ts";
 import { type AnnotationSetup, DEFAULT_ANNOTATION_SETUP } from "../render/dom-layers.ts";
@@ -16,19 +16,20 @@ import { downloadBytes, filenameFromUrl } from "./files.ts";
 import { ViewerGestures } from "./gestures.ts";
 import { ViewerInput } from "./input.ts";
 import {
+  clamp,
   computeLayout,
   type Direction,
   type Layout,
   type LayoutOptions,
   type PageArea,
   pageAtPoint,
-  rowBounds,
   rowEnd,
   rowStart,
   type ScrollMode,
   type SpreadMode,
   sameRows,
   showPage,
+  toRotation,
   visibleArea,
   visibleRange,
   zoomTarget,
@@ -36,6 +37,7 @@ import {
 import { blankFraction, sharpness } from "./metrics.ts";
 import {
   destinationTarget,
+  flipTarget,
   pageTarget,
   positionAt,
   positionTarget,
@@ -55,9 +57,7 @@ import {
 } from "./scrolling.ts";
 import { linked } from "./signals.ts";
 import { type PointerTool, ViewerStore, type ZoomMode } from "./state.ts";
-import { destinationScale, fitScale, refits } from "./zoom.ts";
-
-const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+import { destinationScale, fitScale, refits, requestedZoom } from "./zoom.ts";
 
 /** Whether a visible area is all of its page. */
 const whole = (area: PageArea | null): boolean =>
@@ -790,7 +790,7 @@ export class Viewer {
     if (!layout || !scroller || !renderer) return 0;
     const needed = layout.scale * (window.devicePixelRatio || 1);
     return sharpness(layout, viewportOf(scroller), needed, (index, area, needed) =>
-      renderer.sharpness(index, area, needed),
+      renderer.pageSharpness(index, area, needed),
     );
   }
 
@@ -804,12 +804,7 @@ export class Viewer {
     const scroller = this.#scroller;
     if (!current || !scroller || current.tops.length === 0) return;
     const target = clamp(index, 0, current.tops.length - 1);
-    const layout = this.#show(current, target);
-    this.#scrollTo(scroller, pageTarget(layout, target, scroller));
-    // At once, not at the scroll event: a flip may not scroll at all, and a
-    // second flip in the same frame starts from the page this one shows.
-    this.store.set({ currentPage: target });
-    this.#update();
+    this.#goTo(current, scroller, target, (layout) => pageTarget(layout, target, scroller));
   }
 
   /** Go to the next page, or the next spread or row of pages; "page" mode flips to it. */
@@ -823,25 +818,17 @@ export class Viewer {
   }
 
   /**
-   * Go to the first page after the current page's row, or the last before
-   * it: in "horizontal" mode, where all pages share one row, its spread.
-   * Keys that flip pages pass the `axis` they scroll along: the page then
-   * shows from the edge they crossed, at the same place along the other axis.
+   * Go to the page after the current page's row, or before it (see
+   * `flipTarget()`). Keys that flip pages pass the `axis` they scroll along:
+   * the page then shows from the edge they crossed, at the same place along
+   * the other axis.
    */
   #flip(direction: 1 | -1, axis: "x" | "y" | null = null): boolean {
     const { layout, currentPage, spread } = this.store.get();
     const scroller = this.#scroller;
     if (!layout || !scroller) return false;
-    const count = layout.tops.length;
-    // In "page" mode, from the row shown: the current page follows it a
-    // frame later, so a key pressed before then flipped to the same row.
-    const row =
-      layout.shown ??
-      (layout.scrollMode === "horizontal"
-        ? rowBounds(spread, currentPage, count)
-        : { first: rowStart(layout, currentPage), last: rowEnd(layout, currentPage) });
-    const target = direction > 0 ? row.last + 1 : row.first - 1;
-    if (target < 0 || target >= count) return false;
+    const target = flipTarget(layout, spread, currentPage, direction);
+    if (target === null) return false;
     const { scrollLeft, scrollTop } = scroller;
     this.goToPage(target);
     // The browser clamps the far edge to the scrollable range.
@@ -858,22 +845,30 @@ export class Viewer {
   }
 
   /**
-   * In "page" mode, show the row of page `index`, resizing the content for
-   * it; returns the layout that shows it, `layout` itself in the other modes.
+   * Go to page `index`: in "page" mode, show its row, resizing the content
+   * for it; then scroll to where `at` places it in the layout that shows
+   * it, read before this write: to its top, then its left unless null. Page
+   * `current`, by default `index`, becomes current at once, not at the
+   * scroll event: a flip may not scroll at all, and a second flip in the
+   * same frame starts from the page this one shows.
    */
-  #show(layout: Layout, index: number): Layout {
+  #goTo(
+    layout: Layout,
+    scroller: HTMLElement,
+    index: number,
+    at: (layout: Layout) => ScrollTarget,
+    current = index,
+  ): void {
     const next = showPage(layout, index);
     if (next !== layout) {
       this.#sizeContent(next);
       this.store.set({ layout: next });
     }
-    return next;
-  }
-
-  /** Scroll to `target`, read before this write: its top, then its left unless null. */
-  #scrollTo(scroller: HTMLElement, target: ScrollTarget): void {
+    const target = at(next);
     scroller.scrollTop = target.top;
     if (target.left !== null) scroller.scrollLeft = target.left;
+    this.store.set({ currentPage: current });
+    this.#update();
   }
 
   /**
@@ -927,10 +922,9 @@ export class Viewer {
         this.store.set({ scale: fitted.scale });
       }
     }
-    const layout = this.#show(current, pageIndex);
-    this.#scrollTo(scroller, destinationTarget(layout, target, scroller, exact));
-    this.store.set({ currentPage: pageIndex });
-    this.#update();
+    this.#goTo(current, scroller, pageIndex, (layout) =>
+      destinationTarget(layout, target, scroller, exact),
+    );
   }
 
   /**
@@ -953,24 +947,18 @@ export class Viewer {
       : { pageIndex: before.currentPage, x: null, y: null };
     const page = target.pageIndex;
     this.store.set({ rotation, spread, scrollMode, currentPage: page });
-    const requested = view.scale;
-    let mode: ZoomMode = before.zoomMode;
-    let scale = before.scale;
-    if (requested === "fit-width" || requested === "fit-page") mode = requested;
-    else if (requested !== undefined && Number.isFinite(requested) && requested > 0) {
-      mode = "custom";
-      scale = clamp(requested, this.#minScale, this.#maxScale);
-    }
-    if (mode !== "custom") {
-      scale = this.#fitScale(page, mode) ?? scale;
+    const zoom = requestedZoom(view.scale, before, this.#minScale, this.#maxScale);
+    let scale = zoom.scale;
+    if (zoom.mode !== "custom") {
+      scale = this.#fitScale(page, zoom.mode) ?? scale;
       this.#markFitted(scroller);
     }
-    this.store.set({ zoomMode: mode, scale });
+    this.store.set({ zoomMode: zoom.mode, scale });
     this.#applyLayout(scale, page);
     if (rotation !== before.rotation) this.#shown?.renderer?.rotate(rotation);
     // The destination's zoom applies only when the view leaves the zoom unsaid.
     if (target.x === null && target.y === null && !target.view) this.goToPage(page);
-    else this.#jump(target, requested === undefined && this.#destinationZoom, true);
+    else this.#jump(target, view.scale === undefined && this.#destinationZoom, true);
   }
 
   /**
@@ -986,10 +974,9 @@ export class Viewer {
     const current = this.store.get().layout;
     const scroller = this.#scroller;
     if (!current || !scroller || pageIndex < 0 || pageIndex >= current.tops.length) return;
-    const layout = this.#show(current, pageIndex);
-    this.#scrollTo(scroller, rectTarget(layout, pageIndex, rect, scroller));
-    this.store.set({ currentPage: pageIndex });
-    this.#update();
+    this.#goTo(current, scroller, pageIndex, (layout) =>
+      rectTarget(layout, pageIndex, rect, scroller),
+    );
   }
 
   /**
@@ -1023,10 +1010,13 @@ export class Viewer {
       current = this.#applyLayout(scale, pageIndex);
       this.store.set({ scale });
     }
-    const layout = this.#show(current, pageIndex);
-    this.#scrollTo(scroller, positionTarget(layout, entry, scroller));
-    this.store.set({ currentPage: entry.current });
-    this.#update();
+    this.#goTo(
+      current,
+      scroller,
+      pageIndex,
+      (layout) => positionTarget(layout, entry, scroller),
+      entry.current,
+    );
   }
 
   /** A link, outline entry, or named action is about to jump: history keeps the position. */
@@ -1068,7 +1058,7 @@ export class Viewer {
 
   /** Show every page turned clockwise by `rotation` degrees. */
   setRotation(rotation: Rotation): void {
-    const turned = ((((Math.round(rotation / 90) * 90) % 360) + 360) % 360) as Rotation;
+    const turned = toRotation(rotation);
     if (turned === this.store.get().rotation) return;
     this.#gestures.finish();
     const state = this.store.get();
@@ -1077,12 +1067,7 @@ export class Viewer {
     this.store.set({ rotation: turned });
     if (!layout || !scroller) return;
     // Keep the point at the viewport's center at the same share of its page.
-    const anchor = { x: scroller.clientWidth / 2, y: scroller.clientHeight / 2 };
-    const point = { x: scroller.scrollLeft + anchor.x, y: scroller.scrollTop + anchor.y };
-    const next = this.#applyLayout(layout.scale);
-    const target = zoomTarget(layout, next, sizeOf(scroller), anchor, point);
-    scroller.scrollTop = target.top;
-    scroller.scrollLeft = target.left;
+    this.#relayout(layout, scroller, layout.scale);
     this.#shown?.renderer?.rotate(turned);
     this.#update();
     // A turned page has another width to fit.
@@ -1207,12 +1192,7 @@ export class Viewer {
     this.#fittedHeight = scroller.clientHeight;
   }
 
-  /**
-   * Zoom keeping the content point `point`, by default the one under
-   * `anchor`, under `anchor`, as a share of the same page: pages are centered
-   * in the viewport, so a share of the content's width moved points on
-   * narrower pages sideways.
-   */
+  /** Zoom to `requested` within the limits, keeping `point` under `anchor` (see `#relayout()`). */
   #zoomTo(
     requested: number,
     anchor?: { x: number; y: number },
@@ -1227,17 +1207,32 @@ export class Viewer {
       return;
     }
     if (Math.abs(scale - state.scale) < 1e-4) return;
-    const x = anchor?.x ?? scroller.clientWidth / 2;
-    const y = anchor?.y ?? scroller.clientHeight / 2;
-    const docPoint = point ?? { x: scroller.scrollLeft + x, y: scroller.scrollTop + y };
+    this.#relayout(layout, scroller, scale, anchor, point);
+    this.store.set({ scale });
+    this.#update();
+  }
+
+  /**
+   * Lay the pages out again at `scale`, keeping the content point `point` of
+   * `layout` under `anchor` (viewport coordinates), as a share of the same
+   * page: pages are centered in the viewport, so a share of the content's
+   * width moved points on narrower pages sideways. `anchor` defaults to the
+   * viewport's center and `point` to the one under it, read before the
+   * content resizes, which can clamp its scroll position.
+   */
+  #relayout(
+    layout: Layout,
+    scroller: HTMLElement,
+    scale: number,
+    anchor = { x: scroller.clientWidth / 2, y: scroller.clientHeight / 2 },
+    point = { x: scroller.scrollLeft + anchor.x, y: scroller.scrollTop + anchor.y },
+  ): void {
     const next = this.#applyLayout(scale);
-    const target = zoomTarget(layout, next, sizeOf(scroller), { x, y }, docPoint);
+    const target = zoomTarget(layout, next, sizeOf(scroller), anchor, point);
     // The content is resized imperatively, so the scroll position can be
     // restored before React re-renders the mounted pages.
     scroller.scrollTop = target.top;
     scroller.scrollLeft = target.left;
-    this.store.set({ scale });
-    this.#update();
   }
 
   #initialZoomMode(): ZoomMode {
@@ -1325,16 +1320,11 @@ export class Viewer {
     this.#gestures.finish();
     const scroller = this.#scroller;
     const layout = this.store.get().layout;
-    // Shrinking the content can clamp its scroll position immediately.
-    const point = scroller ? { x: scroller.scrollLeft, y: scroller.scrollTop } : null;
+    const scale = this.store.get().scale;
     this.#sizes = [...sizes];
-    const next = this.#applyLayout(this.store.get().scale);
-    if (scroller && layout && point) {
-      // Keep the point at the viewport's top-left corner where it is.
-      const target = zoomTarget(layout, next, sizeOf(scroller), { x: 0, y: 0 }, point);
-      scroller.scrollTop = target.top;
-      scroller.scrollLeft = target.left;
-    }
+    // Keep the point at the viewport's top-left corner where it is.
+    if (scroller && layout) this.#relayout(layout, scroller, scale, { x: 0, y: 0 });
+    else this.#applyLayout(scale);
     this.#update();
     // The page at the center may turn out wider or narrower than the first.
     this.#fit();
@@ -1370,12 +1360,7 @@ export class Viewer {
     if (sameRows(layout, computeLayout(this.#sizes, layout.scale, this.#layoutOptions()))) return;
     this.#gestures.finish();
     const current = this.store.get().layout ?? layout;
-    const anchor = { x: scroller.clientWidth / 2, y: scroller.clientHeight / 2 };
-    const point = { x: scroller.scrollLeft + anchor.x, y: scroller.scrollTop + anchor.y };
-    const next = this.#applyLayout(current.scale);
-    const target = zoomTarget(current, next, sizeOf(scroller), anchor, point);
-    scroller.scrollTop = target.top;
-    scroller.scrollLeft = target.left;
+    this.#relayout(current, scroller, current.scale);
     this.#update();
   }
 

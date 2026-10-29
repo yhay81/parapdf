@@ -22,6 +22,11 @@ export function useSelected<T, S>(store: ReadableStore<T>, selector: (state: T) 
   );
 }
 
+/** A store's whole state, re-rendering on every change. */
+export function useStore<T>(store: ReadableStore<T>): T {
+  return useSyncExternalStore(store.subscribe, store.get, store.get);
+}
+
 /**
  * The session of the nearest `<PdfDocument>`: its document state, the
  * answer to its password request, pdf.js's document, and its secondary data.

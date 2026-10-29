@@ -30,6 +30,7 @@ for the direction of the rebuild gets a new record, numbered next.
 | [0019](0019-pdfjs-viewer-parity.md) | What ParaPDF takes from pdf.js's viewer, and what it leaves | adopted |
 | [0020](0020-text-layers-built-in-the-document.md) | Text layers are built in the document | rejected |
 | [0021](0021-focus-follows-the-page.md) | Focus follows the page being read | adopted |
+| [0022](0022-runtime-policy-modules.md) | Keep runtime policies in the modules that own them | adopted |
 
 ## Template
 

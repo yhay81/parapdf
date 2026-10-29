@@ -1,13 +1,24 @@
 import type { ResolvedDestination } from "../pdfjs/destinations.ts";
-import { type Layout, pageAtPoint, pageLeft, pageTop, turnBox } from "./layout.ts";
+import {
+  type Layout,
+  pageAtPoint,
+  pageLeft,
+  pageTop,
+  rowBounds,
+  rowEnd,
+  rowStart,
+  type SpreadMode,
+  turnBox,
+} from "./layout.ts";
 import type { ViewerState, ZoomMode } from "./state.ts";
 
-// The navigation rules: where the viewer scrolls to show a page, a
-// destination, a rectangle, or a position again, and the position it shows
-// now. The viewer lays the pages out, then asks them and writes the scroll
-// position: they read the scroller once its layout is up to date and before
-// that write, so they force no layout the viewer's methods did not. They run
-// once per navigation, never in the frame or gesture paths.
+// The navigation rules: the page a flip goes to, where the viewer scrolls to
+// show a page, a destination, a rectangle, or a position again, and the
+// position it shows now. The viewer lays the pages out, then asks them and
+// writes the scroll position: they read the scroller once its layout is up
+// to date and before that write, so they force no layout the viewer's
+// methods did not. They run once per navigation, never in the frame or
+// gesture paths.
 
 /** The scroller's position and size: the element, or what a test passes. */
 export interface ScrollBox {
@@ -35,6 +46,29 @@ export interface ViewerPosition {
   current: number;
   scale: number;
   zoomMode: ZoomMode;
+}
+
+/**
+ * The page a flip from page `current` goes to: the first page after its
+ * row, or the last before it; in "horizontal" mode, where all pages share
+ * one row, after or before its pair in `spread`. "page" mode flips from the
+ * row it shows, which the current page follows a frame later: a key pressed
+ * before then flipped to the same row. Null past the first or last page.
+ */
+export function flipTarget(
+  layout: Layout,
+  spread: SpreadMode,
+  current: number,
+  direction: 1 | -1,
+): number | null {
+  const count = layout.tops.length;
+  const row =
+    layout.shown ??
+    (layout.scrollMode === "horizontal"
+      ? rowBounds(spread, current, count)
+      : { first: rowStart(layout, current), last: rowEnd(layout, current) });
+  const target = direction > 0 ? row.last + 1 : row.first - 1;
+  return target < 0 || target >= count ? null : target;
 }
 
 /**

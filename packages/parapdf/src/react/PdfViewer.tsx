@@ -21,7 +21,7 @@ import {
   initialViewOpening,
 } from "../features/initial-view.ts";
 import type { PageColors, Rotation } from "../pdfjs/draw.ts";
-import type { AnnotationLabels } from "../pdfjs/editor.ts";
+import type { AnnotationLabels } from "../pdfjs/editor-types.ts";
 import type { Direction, ScrollMode, SpreadMode } from "../view/layout.ts";
 import type { ViewerOptions } from "../view/options.ts";
 import type { PointerTool, ViewerState } from "../view/state.ts";
@@ -33,8 +33,9 @@ import {
   type Viewer,
 } from "../view/viewer.ts";
 import { PageContext, useSelected, useSession } from "./context.ts";
-import { setFeatureOptions, useViewer } from "./features.ts";
+import { setFeatureOptions } from "./features.ts";
 import { VIEWER_CSS } from "./styles.ts";
+import { useViewer } from "./viewer.ts";
 
 /** A zoom: CSS pixels per PDF point, or a fit that keeps fitting as the viewport resizes. */
 export type Zoom = number | "fit-width" | "fit-page";

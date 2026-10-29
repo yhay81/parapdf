@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { ResolvedDestination } from "../src/pdfjs/destinations.ts";
-import { type Arrangement, destinationScale, fitScale, refits } from "../src/view/zoom.ts";
+import {
+  type Arrangement,
+  destinationScale,
+  fitScale,
+  refits,
+  requestedZoom,
+} from "../src/view/zoom.ts";
 
 // A US Letter page, an A4 page in landscape, and a second US Letter page.
 const sizes = [
@@ -150,6 +156,32 @@ describe("destinationScale", () => {
     const target: ResolvedDestination = { pageIndex: 0, x: 0, y: 0, view: { fit: "page" } };
     assert.equal(destinationScale(sizes, column, target, null, GAP, 0.25, 10), null);
     assert.equal(destination({ ...target, pageIndex: 5 }), null);
+  });
+});
+
+describe("requestedZoom", () => {
+  const before = { zoomMode: "fit-width" as const, scale: 1.5 };
+
+  it("takes a fitted mode, whose scale the viewer fits next", () => {
+    assert.deepEqual(requestedZoom("fit-page", before, 0.25, 10), {
+      scale: 1.5,
+      mode: "fit-page",
+    });
+  });
+
+  it("takes a scale as a custom zoom within the limits", () => {
+    assert.deepEqual(requestedZoom(2, before, 0.25, 10), { scale: 2, mode: "custom" });
+    assert.deepEqual(requestedZoom(20, before, 0.25, 10), { scale: 10, mode: "custom" });
+    assert.deepEqual(requestedZoom(0.1, before, 0.25, 10), { scale: 0.25, mode: "custom" });
+  });
+
+  it("keeps the zoom when the scale is left out or not a positive number", () => {
+    for (const requested of [undefined, 0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      assert.deepEqual(requestedZoom(requested, before, 0.25, 10), {
+        scale: 1.5,
+        mode: "fit-width",
+      });
+    }
   });
 });
 

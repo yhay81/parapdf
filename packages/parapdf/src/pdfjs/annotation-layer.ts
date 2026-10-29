@@ -3,9 +3,9 @@ import type { Destination } from "./destinations.ts";
 import {
   formLayerOf,
   type OptionalContentConfig,
+  pageViewport,
   RenderCancelledError,
   type Rotation,
-  viewportOf,
 } from "./draw.ts";
 import type { LoadedPdfjs } from "./loader.ts";
 import type { StructTreeBuilder } from "./struct-tree.ts";
@@ -229,7 +229,7 @@ export function buildAnnotationLayer(
       fieldObjects,
     ]);
     if (cancelled) throw new RenderCancelledError("annotation layer cancelled");
-    const viewport = viewportOf(page, cssScale, rotation);
+    const viewport = pageViewport(page, cssScale, rotation);
     const linkService = createLinkService(links, doc, editor?.eventBus, forms ? scripting : null);
     // Without forms, form fields stay in the drawing (pdf.js's default
     // annotation mode), so only links, popups, and other annotations
@@ -271,7 +271,7 @@ export function buildAnnotationLayer(
     return {
       layer,
       update(nextScale, nextRotation) {
-        layer.update({ viewport: viewportOf(page, nextScale, nextRotation) } as never);
+        layer.update({ viewport: pageViewport(page, nextScale, nextRotation) } as never);
       },
     };
   });

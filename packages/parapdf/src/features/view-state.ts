@@ -5,6 +5,7 @@ import {
   pageTop,
   type ScrollMode,
   type SpreadMode,
+  toRotation,
   turnBox,
   turnedSize,
 } from "../view/layout.ts";
@@ -46,9 +47,7 @@ const number = (value: unknown): value is number =>
  */
 export function toShownView(view: Partial<ViewState>): ShownView {
   const shown: ShownView = {};
-  if (number(view.rotation)) {
-    shown.rotation = ((((Math.round(view.rotation / 90) * 90) % 360) + 360) % 360) as Rotation;
-  }
+  if (number(view.rotation)) shown.rotation = toRotation(view.rotation);
   if (SPREADS.has(view.spread as string)) shown.spread = view.spread as SpreadMode;
   if (SCROLL_MODES.has(view.scrollMode as string)) {
     shown.scrollMode = view.scrollMode as ScrollMode;

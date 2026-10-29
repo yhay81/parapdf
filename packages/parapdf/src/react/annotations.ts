@@ -8,9 +8,10 @@ import type {
   AnnotationTool,
   SavedAnnotation,
   SignatureInput,
-} from "../pdfjs/editor.ts";
+} from "../pdfjs/editor-types.ts";
 import type { Viewer } from "../view/viewer.ts";
-import { useLoadedFeature, useStore } from "./features.ts";
+import { useStore } from "./context.ts";
+import { useLoadedFeature } from "./features.ts";
 
 export interface AnnotationControls extends AnnotationEditingStore {
   setTool(tool: AnnotationTool): Promise<void>;
