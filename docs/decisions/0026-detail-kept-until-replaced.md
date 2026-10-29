@@ -86,6 +86,17 @@ on the desktop and phone viewports; `zoom-kept-detail-bill-hr815-chromium.md`):
 every case drew the same, with the same canvas memory; times within the
 spread (load average 14 to 17).
 
+On October 30, `commit-bench.ts` compared commit 67d5b97 with the change
+in Playwright's Firefox 157 on the same machine, three runs each of
+zoom-step, zoom-out-far, and zoom-in-whole
+(`commit-kept-detail-firefox.md` and its JSON). The runs had no blank or
+down-to-base frames. Each scenario drew the same number of bases and
+details before and after; median canvas memory was also the same. One
+zoom-out-far run peaked at 112 MiB after versus 105 MiB before; the other
+two peaked at 105 MiB in both builds. Times varied, and the load average
+rose from 9 to 31 on 12 cores, so they do not establish a speed change.
+This covers three zoom scenarios, not the hidden-viewer memory tradeoff.
+
 No benchmark reaches the second case with the default budgets. The
 planner's tests keep its invariants through a zoom that leaves a quick
 detail no room (`maxCanvasPixels` 2 MP, `maxBasePixels` 1 MP), and the
