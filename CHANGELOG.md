@@ -208,6 +208,14 @@ change the API.
 - `autoLinks` links a page whose text layer was built again while its links
   were found, and a page whose first text item is empty. Until now those
   pages had no links.
+- A viewer hidden for a while, as in a hidden tab or `<Activity>`, keeps
+  its pages' details and shows them again at once (decision 0026). Until
+  now it gave them back as its viewport emptied, drew bases while hidden,
+  and drew the details again once shown.
+- A visible page keeps a detail that a zoom no longer plans until its
+  base is drawn, when the detail is all it shows (decision 0026). Until now
+  the page was blank until then, with budgets that leave a visible page no
+  detail, such as a small `maxCanvasPixels`.
 - What the document's scripts set on a field whose widgets are not built
   yet is stored apart for each widget. Until now the widgets shared what
   was stored, and the first one built changed it for the others: a radio

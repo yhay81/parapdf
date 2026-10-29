@@ -251,7 +251,10 @@ The renderer draws a viewer's mounted pages. It splits what 0.x
   a whole-page detail no larger than a base becomes the page's base, copied
   into it, when a detail of part of the page replaces it or the page leaves
   the viewport (decision 0012); a larger one gives way to a base drawn
-  again, since copying those cost more than it saved (decision 0008).
+  again, since copying those cost more than it saved (decision 0008), and
+  on a visible page with no other pixels shows until that base is drawn
+  (decision 0026). A viewer whose viewport is empty, as when hidden, keeps
+  the whole-page details its budgets allow.
 - The renderer owns each page's DOM inside the host React places: the
   canvases (base, detail, and the spare a new detail is drawn into while
   the old one shows), and the containers of the text, annotation, editor,
@@ -530,7 +533,8 @@ them in passing:
 
 - Node unit tests for every pure module: layout, the planner and its
   invariants (a visible page never blank, budgets kept except by visible
-  bases, no base under a whole-page detail), geometry, gestures' math,
+  bases and by a visible page's detail until the base that replaces it is
+  drawn, no base under a whole-page detail), geometry, gestures' math,
   search, the session registry, and the features' logic.
 - The Playwright functional checks (`check:*`) are the behavioral
   contract; changing an API on purpose changes them in the same change.

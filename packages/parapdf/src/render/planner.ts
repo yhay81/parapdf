@@ -235,17 +235,22 @@ export function baseScale({ input, budgets }: PlanContext, index: number): numbe
 
 /**
  * The most pixels page `index`'s detail may hold: maxDetailPixels, at most
- * maxDetailViewports viewports' worth of device pixels, and, while the page
- * is visible and maxCanvasPixels is set, its share of what the visible
- * pages' bases leave of that budget, by visible area. Every visible page is
- * counted with its base, drawn or not, so a share does not change when a
- * base arrives.
+ * maxDetailViewports viewports' worth of device pixels (no limit while
+ * unlimited, even of an empty viewport, as a hidden viewer's), and, while
+ * the page is visible and maxCanvasPixels is set, its share of what the
+ * visible pages' bases leave of that budget, by visible area. Every visible
+ * page is counted with its base, drawn or not, so a share does not change
+ * when a base arrives.
  */
 export function detailBudget(context: PlanContext, index: number): number {
   const { input, budgets } = context;
   const { viewport, devicePixelRatio } = input;
   const viewportPixels = viewport.width * viewport.height * devicePixelRatio ** 2;
-  const budget = Math.min(budgets.maxDetailPixels, budgets.maxDetailViewports * viewportPixels);
+  const viewports =
+    budgets.maxDetailViewports === Number.POSITIVE_INFINITY
+      ? Number.POSITIVE_INFINITY
+      : budgets.maxDetailViewports * viewportPixels;
+  const budget = Math.min(budgets.maxDetailPixels, viewports);
   if (budgets.maxCanvasPixels === Number.POSITIVE_INFINITY) return budget;
   if (!isVisible(input, index)) return budget;
   const scale = input.layout.scale * devicePixelRatio;
@@ -487,7 +492,8 @@ export function nextDrawing(
   // brought in.
   const coveredByDetail = (page: PageState) => {
     if (page.detailScale === 0 || page.detailRegion !== null) return false;
-    if (!wantsDetail(page)) return true;
+    // One no longer planned shows only until a base replaces it (staleDetail).
+    if (!wantsDetail(page)) return planOf(page) !== null;
     const plan = planOf(page);
     return (
       plan !== null &&
@@ -667,7 +673,9 @@ export function trim(
  * What the view moving makes of a page's detail: a running detail drawing
  * at another scale, or that a page scrolling in blank during a fling would
  * wait for, is cancelled; a page with no detail planned any more, which left
- * the viewport at a zoom that draws regions, gives its detail back.
+ * the viewport at a zoom that draws regions, gives its detail back. A
+ * visible page whose only pixels it holds keeps it until a base is drawn,
+ * unless it becomes the base (`demotes`).
  */
 export function staleDetail(
   context: PlanContext,
@@ -686,7 +694,10 @@ export function staleDetail(
   return {
     cancel:
       job?.layer === "detail" && (!planned || !sameScale(job.scale, planned.scale) || blankInView),
-    clear: !planned && page.detailScale > 0,
+    clear:
+      !planned &&
+      page.detailScale > 0 &&
+      (page.baseScale > 0 || !isVisible(input, page.index) || demotes(context, page)),
   };
 }
 

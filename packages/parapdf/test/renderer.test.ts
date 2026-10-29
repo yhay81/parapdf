@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { type AnnotationSetup, DEFAULT_ANNOTATION_SETUP } from "../src/render/dom-layers.ts";
 import type { ViewInput } from "../src/render/planner.ts";
 import { Renderer } from "../src/render/renderer.ts";
-import { computeLayout } from "../src/view/layout.ts";
+import { computeLayout, visibleRange } from "../src/view/layout.ts";
 import { canvasesOf, FakeDocument, type FakeElement, fakeHost } from "./fake-dom.ts";
 import { LETTER, openSession, settle } from "./fake-pdfjs.ts";
 
@@ -521,6 +521,52 @@ describe("Renderer view changes", () => {
     assert.equal(renderer.hasPixels(0), true);
     assert.deepEqual(painted, ["1 base", "1 detail"]);
     assert.equal(renderer.stats.failed, 0);
+  });
+
+  it("keeps a visible page's only pixels, a detail no longer planned, until its base is drawn", async (t) => {
+    const sizes = Array(4).fill(LETTER);
+    const { session, drawings: renders } = await openSession({ pages: sizes });
+    const renderer = new Renderer(session, {
+      ...drawingsOnly,
+      maxCanvasPixels: 2_000_000,
+      maxBasePixels: 1_000_000,
+    });
+    t.after(() => renderer.dispose());
+    const { base, detail } = mount(renderer, 0);
+    const at = (scale: number, top: number): ViewInput => {
+      const layout = computeLayout(sizes, scale, { gap: 10 });
+      const viewport = {
+        left: 0,
+        top,
+        width: 800,
+        height: 900,
+        scrollerWidth: 800,
+        scrollerHeight: 900,
+      };
+      const { first, last } = visibleRange(layout, viewport);
+      return { layout, first, last, focus: first, viewport, devicePixelRatio: 1, settled: true };
+    };
+    // At 1.5 the page draws its detail first, without a base.
+    renderer.update(at(1.5, 0));
+    await settle();
+    assert.deepEqual(
+      renders.map(({ request }) => [request.canvas, request.scale]),
+      [[detail, 1.5]],
+    );
+    renders[0]?.resolve();
+    await settle();
+    // At 3 the bases of the two visible pages leave it no room for a detail.
+    renderer.update(at(3, 1800));
+    await settle();
+    assert.equal(renders.length, 2);
+    assert.equal(renders[1]?.request.canvas, base);
+    assert.ok(detail.width > 0 && detail.style.visibility !== "hidden", "the detail still shows");
+    renders[1]?.resolve();
+    await settle();
+    assert.equal(base.style.visibility, "");
+    assert.equal(detail.width * detail.height, 0);
+    assert.equal(detail.style.visibility, "hidden");
+    assert.equal(renders.length, 2);
   });
 
   it("draws pages again when their drawings change, cancelling what is in progress", async (t) => {
