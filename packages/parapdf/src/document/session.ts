@@ -132,6 +132,26 @@ export interface PdfAttachment {
   description: string | null;
 }
 
+/**
+ * A comment of the file: a note's text, or another markup annotation's
+ * popup note, as its author left it.
+ */
+export interface PdfComment {
+  /** pdf.js's id of the annotation that carries it, such as "12R". */
+  id: string;
+  pageIndex: number;
+  /** The annotation's rectangle in PDF points from the page's bottom left: [x1, y1, x2, y2]. */
+  rect: readonly [number, number, number, number];
+  /** The annotation it is on: "Text" for a note, "Highlight", "Ink", and so on (its /Subtype). */
+  subtype: string;
+  text: string;
+  author: string | null;
+  /** When it was last changed, or else created; null when the file says neither. */
+  date: Date | null;
+  /** The `id` of the comment it answers; null for one of its own. */
+  replyTo: string | null;
+}
+
 /** What opening a document asks of whoever opens it. */
 export interface OpenCallbacks {
   /** Bytes received so far, and the document's size when the server reported it. */
@@ -519,6 +539,62 @@ export class DocumentSession {
         return { id, filename: filename || "unnamed", description: text(description) };
       }),
     );
+  }
+
+  /**
+   * The file's comments, in page order: its markup annotations that carry
+   * one, read across the pages at once. A free text annotation's text is
+   * what it shows, not a comment; annotations grouped with another share
+   * that one's comment.
+   */
+  comments(): Promise<readonly PdfComment[]> {
+    return this.#once("comments", async () => {
+      const { AnnotationType: type, PDFDateString } = this.pdfjs.pdfjs;
+      const markups = new Set([
+        type.TEXT,
+        type.LINE,
+        type.SQUARE,
+        type.CIRCLE,
+        type.POLYGON,
+        type.POLYLINE,
+        type.HIGHLIGHT,
+        type.UNDERLINE,
+        type.SQUIGGLY,
+        type.STRIKEOUT,
+        type.STAMP,
+        type.CARET,
+        type.INK,
+        type.FILEATTACHMENT,
+      ]);
+      const annotations = ((await this.proxy.getAnnotationsByType(markups, new Set())) ?? []) as {
+        id: string;
+        pageIndex: number;
+        rect: [number, number, number, number];
+        subtype: string;
+        contentsObj?: { str?: string };
+        titleObj?: { str?: string };
+        modificationDate?: string | null;
+        creationDate?: string | null;
+        inReplyTo?: string | null;
+        replyType?: string;
+      }[];
+      return annotations
+        .filter(({ contentsObj, replyType }) => contentsObj?.str?.trim() && replyType !== "Group")
+        .map((annotation) => {
+          const date = annotation.modificationDate ?? annotation.creationDate;
+          return {
+            id: annotation.id,
+            pageIndex: annotation.pageIndex,
+            rect: annotation.rect,
+            subtype: annotation.subtype,
+            text: annotation.contentsObj?.str ?? "",
+            author: text(annotation.titleObj?.str),
+            date: date ? PDFDateString.toDateObject(date) : null,
+            replyTo: annotation.inReplyTo ?? null,
+          };
+        })
+        .sort((a, b) => a.pageIndex - b.pageIndex);
+    });
   }
 
   /**

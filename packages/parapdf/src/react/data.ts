@@ -4,6 +4,7 @@ import { use, useSyncExternalStore } from "react";
 import type {
   OutlineNode,
   PdfAttachment,
+  PdfComment,
   PdfInitialView,
   PdfMetadata,
 } from "../document/session.ts";
@@ -35,6 +36,16 @@ export function useMetadata(): PdfMetadata | null {
 /** Files embedded in the document; empty when it has none. Suspends as `useOutline()` does. */
 export function useAttachments(): readonly PdfAttachment[] {
   return use(useSessionData("useAttachments").attachments());
+}
+
+/**
+ * The file's comments, in page order: its markup annotations that carry one
+ * (a note's text, another markup's popup note); empty when it has none.
+ * Those the viewers' editors add are `useAnnotationEditing()`'s. Suspends
+ * as `useOutline()` does.
+ */
+export function useComments(): readonly PdfComment[] {
+  return use(useSessionData("useComments").comments());
 }
 
 /**
