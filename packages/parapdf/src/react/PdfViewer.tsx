@@ -103,6 +103,13 @@ export interface PdfViewerProps extends InitialViewOptions {
    */
   annotationLayer?: boolean;
   /**
+   * Turn the URLs and e-mail addresses in the pages' text into links
+   * (default false), as pdf.js's viewer does, leaving out those the file
+   * already links. Needs `textLayer` and `annotationLayer`, and follows
+   * `externalLinks`. Its code loads only when set.
+   */
+  autoLinks?: boolean;
+  /**
    * Show form fields as HTML that the reader can fill in (default false: the
    * drawing shows them as they are). Typed values belong to the document,
    * which `save()` writes them into. Needs `annotationLayer`.
@@ -298,6 +305,7 @@ function ViewerViewport({
   onPageChange,
   initialView,
   initialViewState,
+  autoLinks = false,
   forms = false,
   formScripts = false,
   annotationEditing = false,
@@ -400,6 +408,7 @@ function ViewerViewport({
   useLayoutEffect(() => {
     setViewerOptions(viewer, options);
     setFeatureOptions(viewer, {
+      autoLinks,
       forms,
       formScripts,
       annotationEditing,

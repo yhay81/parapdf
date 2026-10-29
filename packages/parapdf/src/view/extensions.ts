@@ -1,6 +1,7 @@
 "use client";
 
 import type { DocumentSession } from "../document/session.ts";
+import type { AnnotationLayerHandle } from "../pdfjs/annotation-layer.ts";
 import type { TextLayerHandle } from "../pdfjs/text.ts";
 
 /**
@@ -36,6 +37,8 @@ export interface ViewerExtension {
   painted?(): void;
   /** A page's text layer was built, or, with null, removed. */
   textLayer?(pageIndex: number, handle: TextLayerHandle | null): void;
+  /** A page's annotation layer was built, or, with null, removed. */
+  annotationLayer?(pageIndex: number, handle: AnnotationLayerHandle | null): void;
   /** A link, outline entry, or named action is about to jump. */
   jumping?(): void;
   /** A link's named action the viewer does not carry out itself, such as "GoBack". */
@@ -125,6 +128,10 @@ export class ExtensionSet {
 
   textLayer(pageIndex: number, handle: TextLayerHandle | null): void {
     for (const extension of this.#extensions) extension.textLayer?.(pageIndex, handle);
+  }
+
+  annotationLayer(pageIndex: number, handle: AnnotationLayerHandle | null): void {
+    for (const extension of this.#extensions) extension.annotationLayer?.(pageIndex, handle);
   }
 
   jumping(): void {

@@ -2,7 +2,11 @@
 
 import { documentOf, type PdfSession } from "../document/pdf-session.ts";
 import type { DocumentSession, PageSize, PdfPermissions } from "../document/session.ts";
-import type { AnnotationLayerScripting, LinkHandlers } from "../pdfjs/annotation-layer.ts";
+import type {
+  AnnotationLayerHandle,
+  AnnotationLayerScripting,
+  LinkHandlers,
+} from "../pdfjs/annotation-layer.ts";
 import type { Destination, ResolvedDestination } from "../pdfjs/destinations.ts";
 import type { PageColors, Rotation } from "../pdfjs/draw.ts";
 import type { AnnotationEditor } from "../pdfjs/editor-types.ts";
@@ -181,6 +185,7 @@ export class Viewer {
   #pendingFocus: { index: number; source: Element } | null = null;
   #focusFrame = 0;
   #textPages = new Map<number, TextLayerHandle>();
+  #annotationPages = new Map<number, AnnotationLayerHandle>();
   #scroller: HTMLElement | null = null;
   #content: HTMLElement | null = null;
   #frame = 0;
@@ -346,6 +351,11 @@ export class Viewer {
     return this.#textPages;
   }
 
+  /** The annotation layers of the mounted pages that have one, by page. */
+  get annotationLayers(): ReadonlyMap<number, AnnotationLayerHandle> {
+    return this.#annotationPages;
+  }
+
   /** The colors pages are drawn in instead of their own (`pageColors`). */
   get pageColors(): PageColors | undefined {
     return this.#options.pageColors;
@@ -466,6 +476,7 @@ export class Viewer {
       this.#shown = null;
       this.#selection.clear();
       this.#textPages.clear();
+      this.#annotationPages.clear();
       this.store.set({ layout: null, first: 0, last: -1 });
     };
     const { source } = pdf;
@@ -556,6 +567,14 @@ export class Viewer {
       onTextRemoved: (pageIndex) => {
         this.#textPages.delete(pageIndex);
         this.#extensions.textLayer(pageIndex, null);
+      },
+      onAnnotationsReady: (pageIndex, handle) => {
+        this.#annotationPages.set(pageIndex, handle);
+        this.#extensions.annotationLayer(pageIndex, handle);
+      },
+      onAnnotationsRemoved: (pageIndex) => {
+        this.#annotationPages.delete(pageIndex);
+        this.#extensions.annotationLayer(pageIndex, null);
       },
       signal,
     });

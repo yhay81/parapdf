@@ -20,6 +20,15 @@ change the API.
   application keeps (#90). **Breaking:** `download()` names the file as
   the server does when it sends a name, and after the URL only otherwise.
 
+- `autoLinks`, a live option of `PdfViewer`, off by default: the URLs and
+  e-mail addresses in the pages' text become links, found as pdf.js's
+  viewer finds them, except where a link of the file already covers them
+  (#87). They need the text and annotation layers and follow
+  `externalLinks`; the option's code loads only when it is set. Features
+  hear a page's annotation layer through the `annotationLayer` hook of
+  `viewer.extend()`, and `viewer.annotationLayers` holds the mounted
+  pages' layers.
+
 - `"auto"` zoom beside `"fit-width"` and `"fit-page"`, wherever a zoom mode
   is taken or reported (`zoom`, `defaultZoom`, `onZoomChange`,
   `setScale()`, the view state's `zoomMode`, and `ViewState.scale`): it

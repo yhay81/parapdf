@@ -14,8 +14,9 @@
  * SCROLL (scroll modes: vertical, horizontal, wrapped, or a list; vertical), FILE
  * (bill-hr815.pdf), DPR (2), START_SCALE (CSS px per point, fit-width, or fit-page; fit
  * width), ZOOM (zoom factors, 1.25,1.25,1.25,1.25), SPEED (CSS px per second, 900), DURATION
- * (ms, 4000), RUNS (3), OUTPUT (main-thread), LABEL (a note on the code measured, for the
- * report).
+ * (ms, 4000), RUNS (3), QUERIES (demo parameters each variant is also measured with,
+ * separated by ";", such as "autoLinks=0;autoLinks=1"), OUTPUT (main-thread), LABEL (a note on
+ * the code measured, for the report). The variants follow each other run by run.
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { arch, cpus, loadavg, platform, release } from "node:os";
@@ -42,6 +43,7 @@ const engines = [
 const textModes = (process.env.TEXT ?? "1,0").split(",").map((mode) => mode !== "0");
 const linkModes = (process.env.LINKS ?? "1").split(",").map((mode) => mode !== "0");
 const scrollModes = (process.env.SCROLL ?? "vertical").split(",");
+const queries = process.env.QUERIES ? process.env.QUERIES.split(";") : [""];
 for (const mode of scrollModes) {
   if (!["vertical", "horizontal", "wrapped"].includes(mode)) {
     throw new Error(`scroll mode ${mode} is not one this benchmark scrolls`);
@@ -50,20 +52,24 @@ for (const mode of scrollModes) {
 const variants = engines.flatMap((engine) =>
   textModes.flatMap((text) =>
     linkModes.flatMap((links) =>
-      scrollModes.map((scroll) => ({
-        ...engine,
-        text,
-        links,
-        scroll,
-        label: [
-          engine.name,
-          text ? "" : "no text",
-          links ? "" : "no links",
-          process.env.SCROLL ? scroll : "",
-        ]
-          .filter(Boolean)
-          .join(", "),
-      })),
+      scrollModes.flatMap((scroll) =>
+        queries.map((extra) => ({
+          ...engine,
+          text,
+          links,
+          scroll,
+          extra,
+          label: [
+            engine.name,
+            text ? "" : "no text",
+            links ? "" : "no links",
+            process.env.SCROLL ? scroll : "",
+            extra,
+          ]
+            .filter(Boolean)
+            .join(", "),
+        })),
+      ),
     ),
   ),
 );
@@ -234,8 +240,8 @@ const results: { variant: string; scenario: Scenario; run: number; cost?: Cost; 
   [];
 try {
   for (const scenario of scenarios) {
-    for (const variant of variants) {
-      for (let index = 0; index < runs; index++) {
+    for (let index = 0; index < runs; index++) {
+      for (const variant of variants) {
         const outcome = await measureInTurn(launched, async (browser) => {
           const context = await browser.newContext({
             viewport: { width: 1280, height: 900 },
@@ -251,6 +257,7 @@ try {
               scroll: variant.scroll,
               file,
             });
+            for (const [key, value] of new URLSearchParams(variant.extra)) query.set(key, value);
             await page.goto(`${baseUrl}?${query}`);
             await settle(page);
             if (startScale !== null) {
@@ -367,6 +374,7 @@ const reproduceEnv = [
   "SPEED",
   "DURATION",
   "RUNS",
+  "QUERIES",
 ]
   .filter((name) => process.env[name] !== undefined)
   .map((name) => {

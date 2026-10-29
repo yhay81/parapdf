@@ -157,9 +157,13 @@ export function sourceChars(page: PageText): SourceChar[] {
  * `chars` with their line ends joined as search joins them: a line end
  * inside a CJK run or a word hyphenated across lines disappears, with the
  * hyphen; a dash before a line end stays and joins the lines; any other line
- * end becomes a space.
+ * end becomes a space. With `keepDashes`, a hyphen across lines stays too,
+ * as pdf.js's `normalize()` keeps it with `ignoreDashEOL`.
  */
-export function* joinLines(chars: readonly SourceChar[]): Generator<SourceChar> {
+export function* joinLines(
+  chars: readonly SourceChar[],
+  keepDashes = false,
+): Generator<SourceChar> {
   for (let i = 0; i < chars.length; i++) {
     const source = chars[i] as SourceChar;
     const before = chars[i - 1]?.char ?? "";
@@ -170,9 +174,10 @@ export function* joinLines(chars: readonly SourceChar[]): Generator<SourceChar> 
     if (source.char === "-" && chars[i + 1]?.char === "\n") {
       const after = chars[i + 2]?.char ?? "";
       if (
-        endsWithMark(before) ||
-        (LOWERCASE.test(before) && LOWERCASE.test(after)) ||
-        (UPPERCASE.test(before) && LETTER.test(after))
+        !keepDashes &&
+        (endsWithMark(before) ||
+          (LOWERCASE.test(before) && LOWERCASE.test(after)) ||
+          (UPPERCASE.test(before) && LETTER.test(after)))
       ) {
         // A word hyphenated across lines: drop the hyphen and the line end.
         i++;
@@ -189,8 +194,14 @@ export function* joinLines(chars: readonly SourceChar[]): Generator<SourceChar> 
   }
 }
 
-/** The page's searchable text; only `caseSensitive` and `matchDiacritics` change it. */
-export function buildPageIndex(page: PageText, options: SearchOptions = {}): PageIndex {
+/**
+ * The page's searchable text; only `caseSensitive` and `matchDiacritics`
+ * change it, and `keepDashes` (see `joinLines()`).
+ */
+export function buildPageIndex(
+  page: PageText,
+  options: SearchOptions & { keepDashes?: boolean } = {},
+): PageIndex {
   const parts: string[] = [];
   const itemOf: number[] = [];
   const startOf: number[] = [];
@@ -212,7 +223,7 @@ export function buildPageIndex(page: PageText, options: SearchOptions = {}): Pag
     }
   };
 
-  for (const source of joinLines(sourceChars(page))) {
+  for (const source of joinLines(sourceChars(page), options.keepDashes)) {
     append(normalizeChar(source.char, options), source);
   }
   return {

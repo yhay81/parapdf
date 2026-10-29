@@ -68,6 +68,8 @@ const settings = {
   source: params.get("source") === "data" ? "data" : "url",
   /** The password the source carries; the viewer asks for one when it is absent or wrong. */
   password: params.get("password"),
+  /** URLs and e-mail addresses in the text become links. */
+  autoLinks: params.get("autoLinks") === "1",
   /** Form fields the reader can fill in. */
   forms: params.get("forms") === "1",
   /** The document's scripts run in its form fields. */
@@ -203,6 +205,7 @@ const viewerProps: PdfViewerProps = {
   textLayer: settings.text,
   annotationLayer: settings.links,
   externalLinks: settings.externalLinks,
+  autoLinks: settings.autoLinks,
   forms: settings.forms,
   formScripts: settings.formScripts,
   annotationEditing: settings.annotations,

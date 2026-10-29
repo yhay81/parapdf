@@ -53,3 +53,10 @@ Generated stress documents live in `generated/`, are recreated with
   with and without a zoom, Fit, FitH, FitV, FitR) and an outline.
 - `synthetic-rtl.pdf` — six numbered pages whose /ViewerPreferences ask
   for /Direction /R2L, for right-to-left page order.
+- `synthetic-links-in-text.pdf` — addresses in the text with no link
+  annotation (a URL, a "www." address, an e-mail address), one a link of
+  the file already covers, text that is no address, and a URL on a page
+  /Rotate 90 turns, for links found in the text (`autoLinks`).
+- `synthetic-addresses.pdf` — 300 pages of 30 lines, each with a URL and
+  an e-mail address and no link annotation, as reference lists show them,
+  for the cost of links found in the text.

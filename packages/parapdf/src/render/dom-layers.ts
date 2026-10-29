@@ -95,6 +95,8 @@ export interface DomLayerOptions {
   selection?: TextSelectionTracker | undefined;
   onTextReady?: ((pageIndex: number, handle: TextLayerHandle) => void) | undefined;
   onTextRemoved?: ((pageIndex: number) => void) | undefined;
+  onAnnotationsReady?: ((pageIndex: number, handle: AnnotationLayerHandle) => void) | undefined;
+  onAnnotationsRemoved?: ((pageIndex: number) => void) | undefined;
 }
 
 /** How long `whenEditable` waits for a page's annotation editor layer. */
@@ -186,6 +188,7 @@ export class DomLayers {
     page.editorHandle?.destroy();
     this.#editorBuilt(index, false);
     if (page.textHandle) this.#options.onTextRemoved?.(index);
+    if (page.annotationHandle) this.#options.onAnnotationsRemoved?.(index);
     const { text, annotations, structure } = page.elements;
     if (text) {
       this.#options.selection?.remove(text);
@@ -250,6 +253,7 @@ export class DomLayers {
       if (!annotations) continue;
       page.annotationTask?.cancel();
       page.annotationTask = undefined;
+      if (page.annotationHandle) this.#options.onAnnotationsRemoved?.(page.index);
       page.annotationHandle = undefined;
       annotations.replaceChildren();
     }
@@ -454,6 +458,7 @@ export class DomLayers {
           page.annotationScale = cssScale;
           page.annotationRotation = rotation;
           this.#stats.annotations++;
+          this.#options.onAnnotationsReady?.(page.index, handle);
         },
         (error: unknown) => this.#failed(error, page, "annotation layer"),
       )

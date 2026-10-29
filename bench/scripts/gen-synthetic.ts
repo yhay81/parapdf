@@ -710,6 +710,69 @@ async function scripts(): Promise<Uint8Array> {
   return doc.save({ useObjectStreams: false });
 }
 
+/**
+ * A page whose text shows addresses with no link annotation, as documents
+ * made from text do: a URL, a "www." address, and an e-mail address, a URL
+ * that a link annotation of the file already covers, and a URL that turns
+ * the page with /Rotate 90 on a second page.
+ */
+async function linksInText(): Promise<Uint8Array> {
+  const doc = await PDFDocument.create({ updateMetadata: false });
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const context = doc.context;
+  const page = doc.addPage([612, 792]);
+  const lines = [
+    "Read the guide at https://example.com/guide?page=2 first.",
+    "The mirror is www.example.org/mirror for now.",
+    "Write to reader@example.net with questions.",
+    "Linked already: https://example.com/linked",
+    "Not an address: version 1.2.3 and a@b.",
+  ];
+  lines.forEach((line, index) => {
+    page.drawText(line, { x: 72, y: 700 - index * 40, size: 14, font });
+  });
+  const linkedY = 700 - 3 * 40;
+  page.node.set(
+    PDFName.of("Annots"),
+    context.obj([
+      context.register(
+        context.obj({
+          Type: "Annot",
+          Subtype: "Link",
+          Rect: [70, linkedY - 6, 400, linkedY + 18],
+          Border: [0, 0, 0],
+          A: context.obj({ S: "URI", URI: PDFString.of("https://example.com/from-the-file") }),
+        }),
+      ),
+    ]),
+  );
+  const turned = doc.addPage([612, 792]);
+  turned.setRotation(degrees(90));
+  turned.drawText("Turned: https://example.com/turned", { x: 72, y: 700, size: 14, font });
+  return doc.save({ useObjectStreams: false });
+}
+
+/**
+ * 300 Letter pages of 30 lines, each with a URL and an e-mail address and
+ * no link annotation, as reference lists show them: the most links found in
+ * the text a page is likely to have (`autoLinks`).
+ */
+async function addresses(): Promise<Uint8Array> {
+  const doc = await PDFDocument.create({ updateMetadata: false });
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  for (let pageIndex = 0; pageIndex < 300; pageIndex++) {
+    const page = doc.addPage([612, 792]);
+    for (let line = 0; line < 30; line++) {
+      const n = pageIndex * 30 + line + 1;
+      page.drawText(
+        `[${n}] See https://example.com/papers/${n}?ref=list or ask author${n}@example.org.`,
+        { x: 54, y: 740 - line * 23, size: 10, font },
+      );
+    }
+  }
+  return doc.save({ useObjectStreams: false });
+}
+
 mkdirSync(outDir, { recursive: true });
 for (const [name, build] of [
   ["synthetic-text-1000.pdf", longText],
@@ -724,6 +787,8 @@ for (const [name, build] of [
   ["synthetic-rtl.pdf", rightToLeft],
   ["synthetic-annotations.pdf", annotations],
   ["synthetic-scripts.pdf", scripts],
+  ["synthetic-links-in-text.pdf", linksInText],
+  ["synthetic-addresses.pdf", addresses],
 ] as const) {
   const bytes = await build();
   writeFileSync(join(outDir, name), bytes);
