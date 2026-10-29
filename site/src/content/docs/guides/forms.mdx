@@ -20,11 +20,15 @@ unmounts and mounts again.
   annotations created written in, and `download(viewer, filename?)` hands
   them to the browser as a download, named by default as the server names
   the file, or else after the document's URL.
-- `print(viewer, { resolution, onProgress, signal })` draws every page for
-  printing, the typed values and the annotations created included, with the
-  layers the viewer shows, at 150 dpi by default, and opens the
-  browser's print dialog with only those pages. A new print request stops the
-  previous job; that job resolves without opening another dialog.
+- `print(viewer, { resolution, autoRotate, onProgress, signal })` draws every
+  page for printing, the typed values and the annotations created included,
+  with the layers the viewer shows, at 150 dpi by default, and opens the
+  browser's print dialog with only those pages, on sheets the size of the
+  first page. A page whose orientation differs from the first page's is
+  turned to the sheet's, as pdf.js's viewer prints it; `autoRotate: false`
+  prints it upright. Pages are scaled to fit the first page's sheet. A new
+  print request stops the previous job; that job resolves without opening
+  another dialog.
 
 ## Reading and filling the form
 
