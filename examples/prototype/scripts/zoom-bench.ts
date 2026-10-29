@@ -5,7 +5,8 @@
  * of the visible pixels as a share of full device resolution, weighted by
  * area. Canvas memory counts width × height × 4 bytes for every canvas in the
  * document and those kept for pages that unmounted; pixels held inside
- * workers are not included.
+ * workers are not included. Renders count the base and detail drawings
+ * completed from the zoom until drawing stops after the pan.
  *
  * Usage: pnpm --filter @parapdf/prototype build && node examples/prototype/scripts/zoom-bench.ts
  * Environment: BROWSER (chromium, webkit, or firefox), VARIANTS (pdfjs-hwa,pdfjs-next-hwa),
@@ -65,6 +66,11 @@ interface Phase {
   canvasMiB: number;
 }
 
+interface Renders {
+  base: number;
+  detail: number;
+}
+
 interface JobResult {
   device: string;
   variant: string;
@@ -73,7 +79,34 @@ interface JobResult {
   error?: string;
   zoom?: Phase;
   pan?: Phase;
+  /** Renders completed from the zoom until none completed for a second after the pan. */
+  renders?: Renders;
 }
+
+const renderCount = (page: Page): Promise<Renders> =>
+  page.evaluate(() => {
+    const { stats } = (window as unknown as { __viewer: { stats: Renders | null } }).__viewer;
+    return { base: stats?.base ?? 0, detail: stats?.detail ?? 0 };
+  });
+
+/** Waits until no render has completed for a second, ten seconds at most, and counts those since `from`. */
+const rendersSince = (page: Page, from: Renders): Promise<Renders> =>
+  page.evaluate(async (from) => {
+    const viewer = (window as unknown as { __viewer: { stats: Renders | null } }).__viewer;
+    const count = () => ({ base: viewer.stats?.base ?? 0, detail: viewer.stats?.detail ?? 0 });
+    const start = performance.now();
+    let last = count();
+    let quietSince = start;
+    while (performance.now() - quietSince < 1000 && performance.now() - start < 10_000) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const now = count();
+      if (now.base !== last.base || now.detail !== last.detail) {
+        last = now;
+        quietSince = performance.now();
+      }
+    }
+    return { base: last.base - from.base, detail: last.detail - from.detail };
+  }, from);
 
 /**
  * Zooms or pans inside the page, then samples every animation frame until the
@@ -188,9 +221,11 @@ try {
               if (ratio !== device.deviceScaleFactor) {
                 throw new Error(`devicePixelRatio ${ratio}, expected ${device.deviceScaleFactor}`);
               }
+              const from = await renderCount(page);
               const zoom = await measure(page, { zoom: scale });
               const pan = await measure(page, { pan: true });
-              return { ...job, zoom, pan };
+              const renders = await rendersSince(page, from);
+              return { ...job, zoom, pan, renders };
             } catch (error) {
               return { ...job, error: error instanceof Error ? error.message : String(error) };
             } finally {
@@ -206,7 +241,7 @@ try {
             `${device.name} · ${scale}× · ${variant.name} · run ${run + 1}/${runs}: ${
               result.error
                 ? `ERROR ${result.error.split("\n")[0]}`
-                : `zoom ${format(result.zoom)}; pan ${format(result.pan)}`
+                : `zoom ${format(result.zoom)}; pan ${format(result.pan)}; renders ${result.renders?.base}/${result.renders?.detail}`
             }`,
           );
         }
@@ -251,6 +286,10 @@ const summaries = devices.flatMap((device) =>
         runs: ok.length,
         zoom: summarize(ok, "zoom"),
         pan: summarize(ok, "pan"),
+        renders: {
+          base: median(ok.map((result) => result.renders?.base ?? Number.NaN)),
+          detail: median(ok.map((result) => result.renders?.detail ?? Number.NaN)),
+        },
       };
     }),
   ),
@@ -290,13 +329,14 @@ const markdown = [
   `- Method: ${file} opens at the fit-width zoom on a desktop (1280×900, devicePixelRatio 2) and a phone-sized viewport (390×844, devicePixelRatio 3). Once page 1 is sharp, the view zooms around its center to the given scale in CSS pixels per PDF point, then pans by 60% of the viewport height and 30% of its width. Median of ${runs} runs.`,
   "- Sharpness: the resolution of the visible pixels as a share of full device resolution, weighted by area, when the measurement ended (it ends after half a second of sharpness or after 8 seconds). Time to sharp: until sharpness reached 0.99 and stayed there.",
   "- Canvas memory: width × height × 4 bytes for every canvas in the document and those kept for pages that unmounted when the measurement ended, with the peak in parentheses; pixels held inside workers are not included.",
+  "- Renders: the base and detail drawings completed from the zoom until none completed for a second after the pan.",
   `- Reproduce: \`pnpm --filter @parapdf/prototype build && BROWSER=${browserName} node examples/prototype/scripts/zoom-bench.ts\``,
   "",
-  "| Device | Scale | Variant | Zoom: sharpness | Zoom: time to sharp (ms) | Zoom: canvas MiB (peak) | Pan: sharpness | Pan: time to sharp (ms) | Pan: canvas MiB (peak) |",
-  "|---|---:|---|---:|---:|---:|---:|---:|---:|",
+  "| Device | Scale | Variant | Zoom: sharpness | Zoom: time to sharp (ms) | Zoom: canvas MiB (peak) | Pan: sharpness | Pan: time to sharp (ms) | Pan: canvas MiB (peak) | Renders: base / detail |",
+  "|---|---:|---|---:|---:|---:|---:|---:|---:|---:|",
   ...summaries.map(
     (summary) =>
-      `| ${summary.device} | ${summary.scale} | ${summary.variant} | ${cell(summary.zoom, summary.runs)} | ${cell(summary.pan, summary.runs)} |`,
+      `| ${summary.device} | ${summary.scale} | ${summary.variant} | ${cell(summary.zoom, summary.runs)} | ${cell(summary.pan, summary.runs)} | ${fmt(summary.renders.base)} / ${fmt(summary.renders.detail)} |`,
   ),
   "",
 ];

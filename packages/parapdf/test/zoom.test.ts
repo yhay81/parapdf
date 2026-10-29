@@ -56,6 +56,22 @@ describe("fitScale", () => {
     assert.equal(fit(0, "fit-width", { ...column, spread: "even" }), (1000 - 3 * GAP) / (2 * 612));
   });
 
+  it("fits a spread whole by its taller page", () => {
+    const wide = { clientWidth: 3000, clientHeight: 800 };
+    assert.equal(fit(1, "fit-page", { ...column, spread: "odd" }, wide), (800 - 2 * GAP) / 792);
+  });
+
+  it("fits the row of a spread in wrapped and page modes as in a column", () => {
+    const spread = (scrollMode: Arrangement["scrollMode"]): Arrangement => ({
+      ...column,
+      spread: "odd",
+      scrollMode,
+    });
+    for (const scrollMode of ["wrapped", "page"] as const) {
+      assert.equal(fit(0, "fit-width", spread(scrollMode)), (1000 - 3 * GAP) / (612 + 842));
+    }
+  });
+
   it("fits pages one by one where they share one row", () => {
     const row: Arrangement = { rotation: 0, spread: "odd", scrollMode: "horizontal" };
     assert.equal(fit(0, "fit-width", row), (1000 - 2 * GAP) / 612);
@@ -99,6 +115,24 @@ describe("fitScale", () => {
   it("keeps the fit within the scale limits", () => {
     assert.equal(fit(0, "fit-width", column, viewport, [0.25, 1]), 1);
     assert.equal(fit(0, "fit-width", column, viewport, [2, 10]), 2);
+  });
+
+  it("keeps to the smallest scale in a viewport narrower than its gaps", () => {
+    assert.equal(fit(0, "fit-width", column, { clientWidth: 10, clientHeight: 800 }), 0.25);
+    assert.equal(fit(0, "fit-page", column, { clientWidth: 0, clientHeight: 0 }), 0.25);
+  });
+
+  it("fits only the width of a page in a viewport without height", () => {
+    assert.equal(
+      fit(0, "fit-page", column, { clientWidth: 1000, clientHeight: 0 }),
+      (1000 - 2 * GAP) / 612,
+    );
+  });
+
+  it('fits a square page\'s width in "auto" mode, as a portrait one', () => {
+    const square = [{ width: 600, height: 600 }];
+    const wide = { clientWidth: 900, clientHeight: 500 };
+    assert.equal(fitScale(square, column, 0, "auto", wide, GAP, 0.25, 10), (900 - 2 * GAP) / 600);
   });
 
   it("is null while a page of the row has no size", () => {
@@ -187,6 +221,30 @@ describe("destinationScale", () => {
       destination({ pageIndex: 0, x: 0, y: 0, view: { fit: "zoom", zoom: 100 } })?.scale,
       10,
     );
+  });
+
+  it("keeps the zoom for a factor that is not positive", () => {
+    for (const zoom of [0, -2]) {
+      assert.equal(destination({ pageIndex: 0, x: 0, y: 0, view: { fit: "zoom", zoom } }), null);
+    }
+  });
+
+  it("fills the viewport with a rectangle of no width by its height, as pdf.js does", () => {
+    const line: ResolvedDestination = {
+      pageIndex: 0,
+      x: 10,
+      y: 10,
+      view: { fit: "rect", width: 0, height: 100 },
+    };
+    assert.equal(destination(line)?.scale, 800 / 100);
+  });
+
+  it("fits a page alone in a spread's row as the pair it stands for", () => {
+    const target: ResolvedDestination = { pageIndex: 0, x: null, y: null, view: { fit: "width" } };
+    assert.deepEqual(destination(target, { ...column, spread: "even" }), {
+      scale: (1000 - 3 * GAP) / (2 * 612),
+      mode: "fit-width",
+    });
   });
 
   it("keeps the zoom without a viewport or the page's size", () => {

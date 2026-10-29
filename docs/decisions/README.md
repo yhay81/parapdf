@@ -33,6 +33,7 @@ for the direction of the rebuild gets a new record, numbered next.
 | [0022](0022-runtime-policy-modules.md) | Keep runtime policies in the modules that own them | adopted |
 | [0023](0023-provider-url-fragments.md) | URL open parameters belong to the provider | adopted |
 | [0024](0024-links-found-in-the-text.md) | Links found in the text are a feature off by default | adopted |
+| [0025](0025-no-base-redrawn-under-whole-page-detail.md) | No base drawn again under a whole-page detail | adopted |
 
 ## Template
 

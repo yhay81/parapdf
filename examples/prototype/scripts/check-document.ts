@@ -590,6 +590,40 @@ try {
   {
     const { page, errors } = await open(
       launched.browser,
+      demo("file=synthetic-selected-radio.pdf&forms=1&page=2"),
+    );
+    await page.waitForSelector('.parapdf-annotation-layer input[name="color"]:checked');
+    const initial = await page.evaluate(async () => {
+      const demo = window as unknown as Demo;
+      const field = (await demo.__parapdf?.getFormFields(demo.__viewer))?.find(
+        ({ name }) => name === "color",
+      );
+      return field?.value;
+    });
+    check(
+      "a radio selected in the PDF is reported after its fields render",
+      initial === "red",
+      String(initial),
+    );
+    await page.locator('.parapdf-annotation-layer input[name="color"]').nth(1).check();
+    const changed = await page.evaluate(async () => {
+      const demo = window as unknown as Demo;
+      const field = (await demo.__parapdf?.getFormFields(demo.__viewer))?.find(
+        ({ name }) => name === "color",
+      );
+      return field?.value;
+    });
+    check("selecting another radio replaces the PDF's value", changed === "green", String(changed));
+    check(
+      "no errors reading the selected radio",
+      errors.length === 0,
+      errors.slice(0, 3).join(" | "),
+    );
+    await page.context().close();
+  }
+  {
+    const { page, errors } = await open(
+      launched.browser,
       demo("file=synthetic-features.pdf&forms=1&page=2"),
     );
     await page.waitForSelector('.parapdf-annotation-layer input[name="name"]');

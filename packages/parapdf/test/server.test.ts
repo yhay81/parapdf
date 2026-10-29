@@ -6,6 +6,7 @@ import { PdfSession } from "../src/document/pdf-session.ts";
 import { SessionContext } from "../src/react/context.ts";
 import {
   useAttachments,
+  useComments,
   useInitialView,
   useLayers,
   useMetadata,
@@ -19,6 +20,7 @@ const hooks = {
   usePageLabels,
   useMetadata,
   useAttachments,
+  useComments,
   useInitialView,
   useLayers,
   useFormFields,

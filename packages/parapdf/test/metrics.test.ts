@@ -44,9 +44,20 @@ describe("blankFraction", () => {
     );
   });
 
-  it("is 0 for a viewport with no height", () => {
+  it("is 0 for a viewport with no height or no width", () => {
     assert.equal(
       blankFraction(layout, view(0, 0), () => false),
+      0,
+    );
+    assert.equal(
+      blankFraction(layout, { ...view(0), width: 0, scrollerWidth: 0 }, () => false),
+      0,
+    );
+  });
+
+  it("is 0 for a viewport that shows only the gap between pages", () => {
+    assert.equal(
+      blankFraction(layout, view(802, 10), () => false),
       0,
     );
   });

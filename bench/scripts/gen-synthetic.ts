@@ -235,7 +235,7 @@ const FIXED_DATE = new Date("2026-01-01T00:00:00Z");
  * of them hidden at first, a comment (a text annotation with a popup), form
  * fields of every common kind with tooltips, and text for search options.
  */
-async function features(): Promise<Uint8Array> {
+async function features(selectedRadio = false): Promise<Uint8Array> {
   const doc = await PDFDocument.create({ updateMetadata: false });
   doc.setTitle("ParaPDF feature sampler");
   doc.setAuthor("ParaPDF");
@@ -358,6 +358,7 @@ async function features(): Promise<Uint8Array> {
     second.drawText(option, { x: 168 + index * 80, y: 552, size: 12, font });
     choice.addOptionToPage(option, second, { x: 140 + index * 80, y: 548, width: 18, height: 18 });
   }
+  if (selectedRadio) choice.select("red");
   const size = form.createDropdown("size");
   size.addOptions(["small", "medium", "large"]);
   size.addToPage(second, { x: 140, y: 500, width: 120, height: 24, font });
@@ -829,6 +830,7 @@ for (const [name, build] of [
   ["synthetic-cjk-nonembedded.pdf", cjkNonEmbedded],
   ["synthetic-mixed-sizes.pdf", mixedSizes],
   ["synthetic-features.pdf", features],
+  ["synthetic-selected-radio.pdf", () => features(true)],
   ["synthetic-encrypted.pdf", encrypted],
   ["synthetic-restricted.pdf", restricted],
   ["synthetic-navigation.pdf", navigation],

@@ -256,7 +256,8 @@ export function attachSearch(viewer: Viewer): Search {
     },
     previous() {
       const { matches, current } = store.get();
-      if (matches.length > 0) selectMatch((current - 1 + matches.length) % matches.length);
+      // From the first match or none, the last.
+      if (matches.length > 0) selectMatch(current > 0 ? current - 1 : matches.length - 1);
     },
     clear() {
       stop();

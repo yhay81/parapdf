@@ -3,12 +3,14 @@ import { afterEach, describe, it, mock } from "node:test";
 import type { PDFDataRangeTransport } from "pdfjs-dist";
 import { closeSession, DocumentSession } from "../src/document/session.ts";
 import {
+  askPassword,
   FakeRangeTransport,
   fakeDocument,
   fakeLayers,
   fakePdfjs,
   LETTER,
   openSession,
+  PasswordException,
   settle,
 } from "./fake-pdfjs.ts";
 
@@ -512,5 +514,182 @@ describe("DocumentSession", () => {
       DocumentSession.open(loader, { url: "/a.pdf" }, new AbortController()),
       /pdf\.js's worker did not load from \/pdf\.worker\.js/,
     );
+  });
+
+  it("destroys pdf.js's loading task of a document that fails to open, once", async () => {
+    const broken = fakePdfjs(async () => {
+      throw new Error("Invalid PDF structure.");
+    });
+    await assert.rejects(
+      DocumentSession.open(broken.loader, { url: "/a.pdf" }, new AbortController()),
+      /Invalid PDF structure/,
+    );
+    assert.equal(broken.calls.destroys, 1, "pdf.js's worker lets go of what it read");
+    const locked = fakePdfjs(async (task) => {
+      if ((await askPassword(task, "required")) === null) {
+        throw new PasswordException("No password given", 1);
+      }
+      return fakeDocument().proxy;
+    });
+    await assert.rejects(
+      DocumentSession.open(locked.loader, { url: "/b.pdf" }, new AbortController(), {
+        password: async () => null,
+      }),
+      { name: "PasswordException" },
+    );
+    assert.equal(locked.calls.destroys, 1, "giving up on the password");
+    let finish = (_proxy: unknown) => {};
+    const slow = fakePdfjs(
+      () => new Promise((resolve) => (finish = resolve as (proxy: unknown) => void)),
+    );
+    const controller = new AbortController();
+    const opening = DocumentSession.open(slow.loader, { url: "/c.pdf" }, controller);
+    await settle();
+    controller.abort();
+    finish(fakeDocument().proxy);
+    await assert.rejects(opening);
+    assert.equal(slow.calls.destroys, 1, "aborting destroyed it already");
+  });
+
+  it("asks for a password as pdf.js says why, and keeps the one that opened it for saving pages", async () => {
+    const reasons: string[] = [];
+    const answers = ["wrong", "secret"];
+    const { loader, calls } = fakePdfjs(async (task, { password: given }) => {
+      let password = given;
+      while (password !== "secret") {
+        const answer = await askPassword(task, password === undefined ? "required" : "incorrect");
+        if (answer === null) throw new PasswordException("No password given", 1);
+        password = answer;
+      }
+      return fakeDocument({ proxy: { annotationStorage: { size: 1, print: {} } } }).proxy;
+    });
+    const session = await DocumentSession.open(
+      loader,
+      { url: "/locked.pdf", password: "first" },
+      new AbortController(),
+      {
+        password: async (reason) => {
+          reasons.push(reason);
+          return answers.shift() ?? null;
+        },
+      },
+    );
+    assert.deepEqual(reasons, ["incorrect", "incorrect"]);
+    assert.equal(calls.parameters[0]?.password, "first", "the source's password goes first");
+    const entries: Record<string, unknown>[] = [];
+    Object.assign(session.proxy, {
+      extractPages: async (pages: Record<string, unknown>[]) => {
+        entries.push(...pages);
+        return new Uint8Array([3]);
+      },
+    });
+    const other = new Uint8Array([9]);
+    const image = {} as ImageBitmap;
+    await session.save([{ includePages: [0] }, { document: other, includePages: [0] }, { image }]);
+    assert.deepEqual(entries, [
+      { includePages: [0], document: new Uint8Array([2]), password: "secret" },
+      { document: other, includePages: [0] },
+      { image },
+    ]);
+  });
+
+  it("reports progress, without a total pdf.js does not know", async () => {
+    const heard: [number, number | null][] = [];
+    const { loader } = fakePdfjs(async (task) => {
+      task.onProgress?.({ loaded: 10, total: 100 });
+      task.onProgress?.({ loaded: 20, total: 0 });
+      task.onProgress?.({ loaded: 30 });
+      return fakeDocument().proxy;
+    });
+    await DocumentSession.open(loader, { url: "/a.pdf" }, new AbortController(), {
+      onProgress: (loaded, total) => heard.push([loaded, total]),
+    });
+    assert.deepEqual(heard, [
+      [10, 100],
+      [20, null],
+      [30, null],
+    ]);
+  });
+
+  it("measures every page once, a batch at a time, whatever their number", async () => {
+    for (const count of [1, 2, 65, 66, 129, 130]) {
+      const pages = Array.from({ length: count }, (_, index) => (index % 3 === 1 ? A4 : LETTER));
+      const { session, requested } = await openSession({ pages });
+      assert.deepEqual(await session.measurePages(), pages, `${count} pages`);
+      assert.deepEqual(await session.pageSizes(), pages, `${count} pages`);
+      assert.deepEqual(
+        requested,
+        pages.map((_, index) => index),
+        `${count} pages`,
+      );
+    }
+  });
+
+  it("gives every page the first one's size still after a pass fails to measure them", async () => {
+    const document = fakeDocument({ pages: [LETTER, A4, LETTER] });
+    const { session } = await openSession({
+      pages: [LETTER, A4, LETTER],
+      proxy: {
+        getPage: (pageNumber: number) =>
+          pageNumber === 3
+            ? Promise.reject(new Error("the page did not load"))
+            : document.proxy.getPage(pageNumber),
+      },
+    });
+    await assert.rejects(session.measurePages(), /did not load/);
+    assert.deepEqual(await session.pageSizes(), [LETTER, LETTER, LETTER]);
+  });
+
+  it("lets a viewer give back a page that failed to load", async () => {
+    const { session, cleaned } = await openSession();
+    await assert.rejects(session.page(4), /Invalid page request/);
+    session.holdPage(4);
+    session.releasePage(4);
+    await settle();
+    assert.deepEqual(cleaned, []);
+  });
+
+  it("permits nothing an encrypted document's flags leave out", async () => {
+    const { session } = await openSession({ proxy: { getPermissions: async () => new Set() } });
+    assert.deepEqual(await session.permissions(), {
+      restricted: true,
+      print: false,
+      printHighQuality: false,
+      modify: false,
+      copy: false,
+      copyForAccessibility: false,
+      annotate: false,
+      fillForms: false,
+      assemble: false,
+    });
+  });
+
+  it("reads how the document asks to be shown even when its destination points nowhere", async () => {
+    const { session } = await openSession({
+      proxy: {
+        getOpenAction: async () => new Map([["dest", [{ num: 7, gen: 0 }, { name: "Fit" }]]]),
+        getPageIndex: async () => {
+          throw new Error("Invalid pageIndex request.");
+        },
+        getPageLayout: async () => "SinglePage",
+        getPageMode: async () => "UseThumbs",
+      },
+    });
+    assert.deepEqual(await session.initialView(), {
+      destination: null,
+      pageLayout: "SinglePage",
+      pageMode: "UseThumbs",
+    });
+  });
+
+  it("calls no committer or output listener whose signal aborted before it was added", async () => {
+    const { session } = await openSession();
+    const heard: string[] = [];
+    const aborted = AbortSignal.abort();
+    session.onCommit(() => heard.push("commit"), aborted);
+    session.onOutput(async (event) => void heard.push(event), aborted);
+    session.commit();
+    await session.output("WillSave");
+    assert.deepEqual(heard, []);
   });
 });

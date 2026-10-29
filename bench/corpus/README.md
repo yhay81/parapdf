@@ -41,6 +41,8 @@ Generated stress documents live in `generated/`, are recreated with
   embedded file, two layers (optional content) of which one starts hidden, a
   comment with a popup, form fields of every common kind, metadata, and text
   for search options.
+- `synthetic-selected-radio.pdf` — the same sampler with the red radio
+  button initially selected, for reading form values after rendering.
 - `synthetic-encrypted.pdf` — three pages encrypted with the user password
   `parapdf` (standard security handler, revision 2), for password prompts.
 - `synthetic-restricted.pdf` — two pages with text and a text field,

@@ -62,10 +62,34 @@ describe("pageText", () => {
     assert.equal(pageText(lines, "keep", null, { item: 1, offset: 4 }), "First line");
   });
 
+  it("reads from a point up to another, the line end at a point included from it", () => {
+    const end = { item: 1, offset: 4 };
+    assert.equal(pageText(lines, "keep", end, end), "");
+    assert.equal(pageText(lines, "keep", { item: 2, offset: 0 }, end), "");
+    assert.equal(pageText(lines, "keep", end), "\nSecond line\nThird");
+    assert.equal(pageText(lines, "join", end), "Second line Third");
+  });
+
+  it("writes no space for line ends at the start or end of a page", () => {
+    const blankLines = page(["", "Text", ""], [true, true, true]);
+    assert.equal(pageText(blankLines, "join"), "Text");
+    assert.equal(pageText(blankLines), "\nText\n");
+  });
+
   it("reads surrogate pairs whole", () => {
     assert.equal(
       pageText(page(["𝐀𝐁", "c"], [true, false]), "keep", { item: 0, offset: 2 }),
       "𝐁\nc",
     );
+  });
+
+  it("keeps a newline in the text itself when reading from a point", () => {
+    const text = page(["First\n", "Last\n"], [true, false]);
+    assert.equal(pageText(text), "First\n\nLast\n");
+    assert.equal(pageText(text, "keep", { item: 0, offset: 0 }), "First\n\nLast\n");
+    assert.equal(pageText(text, "keep", { item: 1, offset: 0 }), "Last\n");
+    const lastLineEnds = page(["Last\n"], [true]);
+    assert.equal(pageText(lastLineEnds, "keep", { item: 0, offset: 0 }), "Last\n");
+    assert.equal(pageText(text, "keep", { item: 1, offset: 0 }, { item: 1, offset: 5 }), "Last\n");
   });
 });

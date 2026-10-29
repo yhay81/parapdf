@@ -20,6 +20,8 @@ export function downloadBytes(
 export function filenameFromUrl(url: string): string | null {
   try {
     const { pathname } = new URL(url, "http://localhost/");
+    // Data and blob URLs have no path of segments: theirs is the data, or another URL.
+    if (!pathname.startsWith("/")) return null;
     const name = decodeURIComponent(pathname.slice(pathname.lastIndexOf("/") + 1));
     return name || null;
   } catch {
