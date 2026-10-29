@@ -272,8 +272,9 @@ the sheet's, as pdf.js's viewer prints it, unless the application says
 not to), download and save (the whole document, or the pages chosen as
 pdf.js's `extractPages()` takes them: ranges of its pages, pages of other
 documents, and images as pages, with the form values and annotations
-saving keeps), thumbnails, layers (optional content), attachments,
-selection (in PDF points), and text (`getText()`).
+saving keeps: `save(viewer, { pages })` and
+`download(viewer, { filename, pages })`), thumbnails, layers (optional
+content), attachments, selection (in PDF points), and text (`getText()`).
 
 How features reach the core (M4):
 
@@ -322,7 +323,8 @@ How features reach the core (M4):
   script or the application, send the document's `WillSave` and `DidSave`,
   or `WillPrint` and `DidPrint`, around them, and printing draws the pages
   once what `WillPrint` changed has reached the fields; closing the
-  document sends `WillClose`. pdf.js's viewer component
+  document, or turning the scripts off, sends `WillClose`, after which
+  what the scripts change reaches nothing. pdf.js's viewer component
   (`PDFScriptingManager`) is the reference for the events it sends.
 - Links found in the text are an option of `PdfViewer`, `autoLinks`, off
   by default and loaded when set: once a page's text layer is built, the

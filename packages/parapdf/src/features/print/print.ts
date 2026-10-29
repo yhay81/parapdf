@@ -20,6 +20,8 @@ export interface PrintOptions {
 interface PrintJobOptions extends PrintOptions {
   /** The layers the viewer shows, which print as they show. */
   layers?: LayerState | null;
+  /** Called when the job is cleaned up, including after the print dialog closes. */
+  onEnd?(): void;
 }
 
 const CONTAINER_CLASS = "parapdf-print";
@@ -71,7 +73,7 @@ const toBlob = (canvas: HTMLCanvasElement): Promise<Blob> =>
  */
 export async function printDocument(
   session: DocumentSession,
-  { resolution = 150, autoRotate = true, onProgress, signal, layers }: PrintJobOptions = {},
+  { resolution = 150, autoRotate = true, onProgress, signal, layers, onEnd }: PrintJobOptions = {},
 ): Promise<void> {
   current?.cleanUp();
   signal?.throwIfAborted();
@@ -96,6 +98,7 @@ export async function printDocument(
       for (const url of urls) URL.revokeObjectURL(url);
       window.removeEventListener("afterprint", job.cleanUp);
       if (current === job) current = null;
+      onEnd?.();
     },
   };
   current = job;

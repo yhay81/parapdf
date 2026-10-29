@@ -12,6 +12,20 @@ change the API.
   identified by itself; ParaPDF hands pdf.js a transport of its own that
   forwards to the application's, which stays usable and opens again.
 
+- `save()` and `download()` take `pages`, the pages to save instead of the
+  whole document, as pdf.js's `extractPages()` takes them: ranges of its
+  pages, pages of other documents' bytes, and images as pages, with the
+  values typed and the annotations created (#93). An entry without
+  `document` is of the open document. **Breaking:** `download(viewer,
+  filename)` is now `download(viewer, { filename })`.
+
+- With `formScripts`, saving and printing, from a script or the
+  application, run the document's `WillSave` and `DidSave`, or `WillPrint`
+  and `DidPrint`, scripts around them, as pdf.js's viewer does: what
+  `WillSave` changes is in the saved bytes, and what `WillPrint` changes
+  prints (#86). The scripts hear `WillClose` when the document closes or
+  the scripts are turned off.
+
 - `useComments()` and `PdfSession.comments()` list the file's comments:
   its markup annotations that carry one (a note's text, another markup's
   popup note), read once across the pages with pdf.js's

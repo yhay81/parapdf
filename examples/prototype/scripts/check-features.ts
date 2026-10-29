@@ -2,7 +2,8 @@
  * Functional checks for what a document viewer offers besides its pages,
  * the features other React PDF viewers have: encrypted documents and the
  * password prompt, load progress, page labels, metadata, attachments, layers
- * (optional content), comments and their popups, form filling and saving, printing,
+ * (optional content), comments and their popups, form filling and saving
+ * (all pages or those chosen), printing,
  * downloading (named as the server names the file), thumbnails, "fit-page"
  * zoom, keyboard zoom, the initial page, the hand tool, search options,
  * spreads, selections in PDF points, links found in the text (autoLinks),
@@ -28,6 +29,9 @@ import {
   restoreScaleFactor,
 } from "../../../bench/scripts/browsers.ts";
 import { decodePng } from "./png.ts";
+
+/** pdf.js in Node, which reads what the checks save. */
+const pdfjsNode = await import("pdfjs-dist/legacy/build/pdf.mjs");
 
 const exampleDir = fileURLToPath(new URL("..", import.meta.url));
 const engine = process.env.ENGINE ?? "pdfjs-next";
@@ -195,6 +199,28 @@ try {
       (unlocked?.progress?.loaded ?? 0) > 0,
       JSON.stringify(unlocked?.progress),
     );
+    const extractEncrypted = async (target: Page) => {
+      const bytes = await target.evaluate(async () => {
+        const viewer = window.__viewer;
+        if (!viewer?.session) return null;
+        // A nonempty storage makes save() reopen the edited document's bytes.
+        viewer.session.proxy.annotationStorage.setValue("test", { value: "edited" });
+        const result = await window.__parapdf?.save(viewer, { pages: [{ includePages: [0] }] });
+        return result ? [...result] : null;
+      });
+      if (!bytes) return 0;
+      const result = await pdfjsNode.getDocument({
+        data: new Uint8Array(bytes),
+        password: "parapdf",
+      }).promise;
+      const count = result.numPages;
+      await result.loadingTask.destroy();
+      return count;
+    };
+    check(
+      "extracts edited encrypted pages after a password prompt",
+      (await extractEncrypted(page)) === 1,
+    );
     check(
       "no errors while asking for a password",
       errors.every((error) => /PasswordException|password/i.test(error)),
@@ -209,6 +235,10 @@ try {
     check(
       "a password in the source opens it without asking",
       (await documentState(given.page))?.status === "ready",
+    );
+    check(
+      "extracts edited encrypted pages with a source password",
+      (await extractEncrypted(given.page)) === 1,
     );
     await given.page.context().close();
 
@@ -470,6 +500,42 @@ try {
         /\/V\s*\/1\b/.test(saved),
       `${saved.length} bytes`,
     );
+
+    // Chosen pages: two of this document's, with the form, and one of another document's.
+    const extracted = await page.evaluate(async () => {
+      const viewer = window.__viewer;
+      const other = new Uint8Array(
+        await (await fetch("/corpus/synthetic-links-in-text.pdf")).arrayBuffer(),
+      );
+      const bytes = viewer
+        ? await window.__parapdf?.save(viewer, {
+            pages: [{ includePages: [[1, 2]] }, { document: other, includePages: [1] }],
+          })
+        : null;
+      return bytes ? [...bytes] : null;
+    });
+    const result = extracted
+      ? await pdfjsNode.getDocument({ data: new Uint8Array(extracted) }).promise
+      : null;
+    const lastText = result
+      ? (await (await result.getPage(result.numPages)).getTextContent()).items
+          .map((item) => ("str" in item ? item.str : ""))
+          .join(" ")
+      : "";
+    // The form's page comes first; its widgets carry the values typed.
+    const widgets = result
+      ? ((await (await result.getPage(1)).getAnnotations()) as {
+          fieldName?: string;
+          fieldValue?: unknown;
+        }[])
+      : [];
+    const extractedName = widgets.find(({ fieldName }) => fieldName === "name")?.fieldValue;
+    check(
+      "saving chosen pages keeps them, a page of another document, and the form's values",
+      result?.numPages === 3 && lastText.includes("Turned") && extractedName === "Ada Lovelace",
+      JSON.stringify({ pages: result?.numPages, lastText, name: extractedName }),
+    );
+    await result?.loadingTask.destroy();
 
     // Printing: every page drawn into an image, only those print, then they are gone.
     const printed = await page.evaluate(async () => {
