@@ -1,6 +1,7 @@
 import type { DocumentSession } from "../document/session.ts";
 import type { ResolvedDestination } from "../pdfjs/destinations.ts";
 import type { PageColors, Rotation } from "../pdfjs/draw.ts";
+import { DEFAULT_BUDGETS } from "../render/planner.ts";
 import type { RendererOptions } from "../render/renderer.ts";
 import type { Direction, ScrollMode, SpreadMode } from "./layout.ts";
 import type { FitMode, PointerTool } from "./state.ts";
@@ -160,12 +161,27 @@ const RENDERER_OPTIONS = [
 const samePageColors = (a: PageColors | undefined, b: PageColors | undefined): boolean =>
   a === b || (!!a && !!b && a.background === b.background && a.foreground === b.foreground);
 
+/**
+ * What the options the renderer is built with are when left out, which
+ * setting them to changes nothing; `maxKeptPixels` follows the viewport.
+ */
+const RENDERER_DEFAULTS: Partial<ViewerOptions> = {
+  textLayer: true,
+  annotationLayer: true,
+  externalLinks: "new-tab",
+  maxConcurrentRenders: 2,
+  ...DEFAULT_BUDGETS,
+};
+
 /** Whether going from `previous` to `next` builds the renderer again. */
 export const rendererChanged = (previous: ViewerOptions, next: ViewerOptions): boolean =>
   RENDERER_OPTIONS.some((name) =>
     name === "pageColors"
       ? !samePageColors(previous.pageColors, next.pageColors)
-      : !Object.is(previous[name], next[name]),
+      : !Object.is(
+          previous[name] ?? RENDERER_DEFAULTS[name],
+          next[name] ?? RENDERER_DEFAULTS[name],
+        ),
   );
 
 /**

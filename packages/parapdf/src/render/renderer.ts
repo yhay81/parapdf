@@ -689,6 +689,10 @@ export class Renderer {
             // top. Keep those pixels until this fallback is ready to show.
             if (version === this.#version && slot.detailVersion !== version) {
               this.#clearDetail(slot);
+            } else {
+              // A visible page keeps a detail no longer planned until now.
+              const context = this.#context();
+              if (context && staleDetail(context, slot).clear) this.#clearDetail(slot);
             }
             this.stats.base++;
           } else {

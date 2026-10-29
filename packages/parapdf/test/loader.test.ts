@@ -30,6 +30,13 @@ describe("documentRequestMode", () => {
     assert.equal(documentRequestMode({}), null);
   });
 
+  it("preloads a request whose headers are empty, which sends none", () => {
+    assert.equal(documentRequestMode({ httpHeaders: {} }), "anonymous");
+    configurePdfjs({ documentOptions: { httpHeaders: { Authorization: "Bearer t" } } });
+    // The source's own headers replace documentOptions', as in the request.
+    assert.equal(documentRequestMode({ httpHeaders: {} }), "anonymous");
+  });
+
   it("skips the preload without streaming", () => {
     configurePdfjs({ documentOptions: { disableStream: true } });
     assert.equal(documentRequestMode({}), null);
@@ -152,6 +159,10 @@ describe("loadPdfjs", () => {
     configurePdfjs(loaded());
     assert.equal(warn.mock.callCount(), 0);
     configurePdfjs({ ...loaded(), enableHWA: true });
+    assert.equal(warn.mock.callCount(), 1);
+    // The same configuration with its keys in another order is the same.
+    const { documentOptions, ...rest } = loaded();
+    configurePdfjs({ documentOptions: { disableAutoFetch: true, cMapUrl: "/cmaps/" }, ...rest });
     assert.equal(warn.mock.callCount(), 1);
     // The configuration it loaded with stays.
     assert.equal(documentRequestMode({}, undefined), "anonymous");

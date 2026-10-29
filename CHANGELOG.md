@@ -6,6 +6,9 @@ change the API.
 
 ## Unreleased
 
+- URL sources with explicit credentials now distinguish omitted headers,
+  which inherit the configured headers, from empty headers, which replace them.
+
 - A source may be `{ range }`, pdf.js's `PDFDataRangeTransport`, through
   which the application hands pdf.js the ranges it asks for, for documents
   it fetches with code of its own (#92). Like bytes, a transport is
@@ -163,6 +166,65 @@ change the API.
   or the document's value.
 - `setFormValues()` stores a single choice set to no option as an empty
   one, as pdf.js's widgets read it. Until now it stored null.
+- A zoom mode, such as "fit-width", fits again as `minScale` or
+  `maxScale` changes. Until now a fitted zoom that the old limits held
+  back stayed there until the viewport resized.
+- `setScale()`, `zoomBy()`, and `setRotation()` do nothing for NaN, nor
+  `setRotation()` for a rotation that is not finite, and `show()` keeps
+  the viewer's page and rotation for a NaN one. `revealRect()` truncates a
+  fractional page index and does nothing for NaN. Until now these made the
+  zoom, rotation, or current page NaN, or a fractional page.
+- A destination whose page is not in the document resolves to null, as
+  pdf.js's viewer ignores it, and an `XYZ` zoom that is not a positive
+  finite number keeps the zoom, as 0 does. Until now the first resolved to
+  a page index past the document, which `PdfInitialView.destination`
+  carried, and the second to that zoom.
+- What a `PdfSession` read while its password request showed as an error
+  (`passwordPrompt={false}`), and settled empty, is read anew once the
+  request is answered or shows as a request again, and `useOutline()` and
+  the other hooks of the document's data render again to show it. The
+  document is still read once. Until now those reads stayed empty after
+  the document opened.
+- A document whose viewers all left before it opened no longer publishes
+  `"error"` as its opening stops. Until now it did.
+- `back()` and `forward()` of the history feature keep its positions
+  while the viewer has no viewport. Until now they dropped the entry they
+  went to.
+- `download()` takes an empty `filename` as none given, and names the file
+  as the server, the URL, or `document.pdf` does. Until now the browser
+  named it.
+- The document's scripts tell the viewer of a field's change only when the
+  field's value reads differently: a choice's options item by item, and a
+  number as its text. Until now setting the same options again, or a
+  number for the text that showed it, told the viewer of a change.
+- An extension that `viewer.extend()` adds while a hook runs hears what
+  `extend()` replays, and not that hook a second time. Until now one added
+  while `ready` ran heard it twice.
+- `configurePdfjs()` with the configuration it loaded with, its keys in
+  another order, changes nothing and warns of nothing. Until now it warned
+  that another configuration was ignored.
+- A source whose `httpHeaders` are empty, which send none, is preloaded.
+  Until now it was not.
+- `PdfViewer` builds nothing again when a renderer option, such as
+  `textLayer` or `maxBasePixels`, moves between left out and its default.
+  Until now it drew its pages and built their layers again.
+- `autoLinks` links a page whose text layer was built again while its links
+  were found, and a page whose first text item is empty. Until now those
+  pages had no links.
+- A viewer hidden for a while, as in a hidden tab or `<Activity>`, keeps
+  its pages' details and shows them again at once (decision 0026). Until
+  now it gave them back as its viewport emptied, drew bases while hidden,
+  and drew the details again once shown.
+- A visible page keeps a detail that a zoom no longer plans until its
+  base is drawn, when the detail is all it shows (decision 0026). Until now
+  the page was blank until then, with budgets that leave a visible page no
+  detail, such as a small `maxCanvasPixels`.
+- What the document's scripts set on a field whose widgets are not built
+  yet is stored apart for each widget. Until now the widgets shared what
+  was stored, and the first one built changed it for the others: a radio
+  group a script set read as none once its page was built. pdf.js's radio
+  buttons still read such a value inverted, and check another button than
+  the one set.
 
 ## 0.7.0 — 2026-10-27
 

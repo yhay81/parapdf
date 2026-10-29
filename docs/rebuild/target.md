@@ -58,6 +58,9 @@ names pdf.js leaves to its viewer's localization (a comment's icon is named
 by the comment, a field by its tooltip, `/TU`, on the control rather than
 its section), the structure tree, form storage, and the annotation editor.
 No interface stands between this and the rest: callers use pdf.js's types.
+`configurePdfjs()` takes one configuration: the same one again, whatever
+the order of its keys, changes nothing, and another is ignored with a
+warning.
 
 ### document/
 
@@ -139,7 +142,9 @@ The session's state and its public surface (M6):
   secondary data (outline, page labels, metadata, attachments, comments,
   layers, form fields, the initial view), each read once and settled with
   an empty value when the read or the document fails (or, without a prompt,
-  once the state shows the request as an error). The provider creates it as
+  once the state shows the request as an error; once the request is
+  answered, or shows as a request again, what settled so is read anew, and
+  the hooks that read it render again). The provider creates it as
   it renders and holds the registry's session for it while mounted; held again
   after the registry closed that session, it follows the one opened anew.
   A `PdfSession` has no method
@@ -163,7 +168,8 @@ scroll mode, and tool: a split view, or thumbnails beside the pages.
 - Layout stays pure and immutable per zoom (typed arrays, rows, spreads,
   scroll modes, `pageLeft`/`pageTop`, `zoomTarget`), as in 0.x
   `runtime/layout.ts`.
-- A zoom mode fits again as the viewport resizes: "fit-width", "fit-page",
+- A zoom mode fits again as the viewport resizes and as `minScale` or
+  `maxScale` changes: "fit-width", "fit-page",
   and "auto", the default of pdf.js's viewer, which fits a portrait page's
   width and a landscape page whole, never above its 125%: a scale of 5/3
   (1.25 × 96/72 CSS pixels per point). A viewer opens at "fit-width"
@@ -184,6 +190,11 @@ scroll mode, and tool: a split view, or thumbnails beside the pages.
 - Navigation core: `goToPage`, destinations with their zoom, and the
   current page's rules. The back and forward stacks are the history
   feature's.
+- A number the viewer cannot use does nothing: a page, scale, zoom
+  factor, or rotation that is NaN, and a rotation that is not finite. A
+  fractional page index is truncated. As in pdf.js's viewer, a destination
+  whose page is not in the document points nowhere, and an `XYZ` zoom that
+  is not a positive finite number keeps the zoom, as 0 and null do.
 - The focus follows the page shown, because a screen reader reads on from
   where the focus is and otherwise enters the document at its first mounted
   page. Pages are focusable (`tabindex="-1"`) but not in the tab order.
@@ -240,7 +251,10 @@ The renderer draws a viewer's mounted pages. It splits what 0.x
   a whole-page detail no larger than a base becomes the page's base, copied
   into it, when a detail of part of the page replaces it or the page leaves
   the viewport (decision 0012); a larger one gives way to a base drawn
-  again, since copying those cost more than it saved (decision 0008).
+  again, since copying those cost more than it saved (decision 0008), and
+  on a visible page with no other pixels shows until that base is drawn
+  (decision 0026). A viewer whose viewport is empty, as when hidden, keeps
+  the whole-page details its budgets allow.
 - The renderer owns each page's DOM inside the host React places: the
   canvases (base, detail, and the spare a new detail is drawn into while
   the old one shows), and the containers of the text, annotation, editor,
@@ -273,7 +287,8 @@ not to), download and save (the whole document, or the pages chosen as
 pdf.js's `extractPages()` takes them: ranges of its pages, pages of other
 documents, and images as pages, with the form values and annotations
 saving keeps: `save(viewer, { pages })` and
-`download(viewer, { filename, pages })`), thumbnails, layers (optional
+`download(viewer, { filename, pages })`, where an empty `filename` is
+none given), thumbnails, layers (optional
 content), attachments, selection (in PDF points), and text (`getText()`).
 
 How features reach the core (M4):
@@ -421,7 +436,8 @@ Components:
     `destinationZoom`, `externalLinks`, `openAttachment`, `pageColors`,
     `gap`, `overscan`, `minScale`, `maxScale`, `maxConcurrentRenders`, and
     the budgets (`maxDetailPixels`, `maxDetailViewports`, `maxBasePixels`,
-    `maxCanvasPixels`, `maxKeptPixels`).
+    `maxCanvasPixels`, `maxKeptPixels`). An option set to its default is
+    the option left out: moving between the two builds nothing again.
   - Presentation: `className`, `style`, `label`, `pageLabel`, and
     `renderOverlay`, whose content React renders through a portal into a
     container the page's host holds after the renderer's layers; React
@@ -472,7 +488,9 @@ viewer renders an empty viewport on the server, and a URL source's preload
 goes into the page's head. A browser rendering the provider itself
 preloads the source only if it is not WebKit's: Safari gives a fetch a
 preloaded response only once it has finished downloading, so pdf.js's
-request downloads the PDF a second time (decision 0014). The server cannot
+request downloads the PDF a second time (decision 0014). Nor is a source
+whose request sends headers, which a preload cannot send; empty headers
+send none. The server cannot
 tell the browser, so its page keeps the preload. The server opens no document, so the hooks of
 secondary data throw there, through React's `use(browser())`, instead of
 suspending on a read that never settles: the nearest Suspense boundary
@@ -515,7 +533,8 @@ them in passing:
 
 - Node unit tests for every pure module: layout, the planner and its
   invariants (a visible page never blank, budgets kept except by visible
-  bases, no base under a whole-page detail), geometry, gestures' math,
+  bases and by a visible page's detail until the base that replaces it is
+  drawn, no base under a whole-page detail), geometry, gestures' math,
   search, the session registry, and the features' logic.
 - The Playwright functional checks (`check:*`) are the behavioral
   contract; changing an API on purpose changes them in the same change.

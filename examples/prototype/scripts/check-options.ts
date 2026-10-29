@@ -2,7 +2,8 @@
  * Functional checks for the options an embedding application sets: pages of
  * mixed sizes centered in the viewport, "fit-width" following the viewport's
  * width and the view's rotation, "auto" fitting again as the viewport
- * resizes and the page turns, per-canvas and total canvas pixel limits, one
+ * resizes and the page turns, per-canvas and total canvas pixel limits, a
+ * viewer hidden for a while keeping what its pages show, one
  * render for the first paint of a small page, inert external links, and
  * `<PdfViewer>`'s props: live options and controlled view state.
  *
@@ -671,6 +672,42 @@ try {
     JSON.stringify(canvases),
   );
   await thin.context().close();
+
+  // A viewer hidden for a while, as in a hidden tab or `<Activity>`, keeps
+  // what its pages show, and shows it again at once, drawing nothing again.
+  const hidden = await newPage("file=bill-hr815.pdf");
+  await settle(hidden, { quiet: true });
+  /** What the first page shows, read at once after showing the viewport again with `show`. */
+  const shownNow = (show: boolean) => {
+    const scroller = document.querySelector(".parapdf-viewport") as HTMLElement;
+    if (show) scroller.style.display = "";
+    const viewer = (window as unknown as { __viewer: { stats: Record<string, number> | null } })
+      .__viewer;
+    const section = document.querySelector('section[data-page="1"]') as HTMLElement;
+    const widths = [
+      ...section.querySelectorAll<HTMLCanvasElement>(":scope > div[aria-hidden] > canvas"),
+    ]
+      .filter((canvas) => canvas.width > 0 && canvas.style.visibility !== "hidden")
+      .map((canvas) => canvas.width);
+    const { base = 0, detail = 0 } = viewer.stats ?? {};
+    return { widest: Math.max(0, ...widths), drawn: base + detail };
+  };
+  const beforeHiding = await hidden.evaluate(shownNow, false);
+  await hidden.evaluate(() => {
+    (document.querySelector(".parapdf-viewport") as HTMLElement).style.display = "none";
+  });
+  await hidden.waitForTimeout(1000);
+  const shownAgain = await hidden.evaluate(shownNow, true);
+  await settle(hidden, { quiet: true });
+  const afterShowing = await hidden.evaluate(shownNow, false);
+  check(
+    "a viewer hidden for a while shows its pages again at once, drawing nothing again",
+    beforeHiding.widest > 0 &&
+      shownAgain.widest === beforeHiding.widest &&
+      afterShowing.drawn === beforeHiding.drawn,
+    JSON.stringify({ beforeHiding, shownAgain, afterShowing }),
+  );
+  await hidden.context().close();
 
   // A small visible page draws its detail once, without a base, and its text follows.
   const vector = await newPage("file=synthetic-vector-200k.pdf");

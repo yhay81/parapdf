@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type * as Pdfjs from "pdfjs-dist";
+import type { DocumentSession } from "../src/document/session.ts";
+import { sameFieldValue, updateField } from "../src/features/forms/scripts.ts";
 import type { LoadedPdfjs } from "../src/pdfjs/loader.ts";
 import { startScripting } from "../src/pdfjs/scripting.ts";
 
@@ -54,5 +56,42 @@ describe("a document's scripts", () => {
       errors.mock.calls.map((call) => call.arguments),
       [["starting the document's scripts failed", failure]],
     );
+  });
+});
+
+describe("a field's value as scripts change it", () => {
+  it("is the same for the same options in another array, and for a number and its text", () => {
+    assert.equal(sameFieldValue(["a", "b"], ["a", "b"]), true);
+    assert.equal(sameFieldValue(["a", "b"], ["b", "a"]), false);
+    assert.equal(sameFieldValue(["a"], ["a", "b"]), false);
+    assert.equal(sameFieldValue(5, "5"), true);
+    assert.equal(sameFieldValue("5", 5), true);
+    assert.equal(sameFieldValue(5, "5.0"), false);
+    assert.equal(sameFieldValue("a", "a"), true);
+    assert.equal(sameFieldValue(undefined, ""), false);
+    assert.equal(sameFieldValue(true, "true"), false);
+  });
+
+  it("is stored apart for each of its widgets not built yet, as pdf.js's storage changes what it keeps", () => {
+    const kept = new Map<string, Record<string, unknown>>();
+    // pdf.js's AnnotationStorage merges a later value into the object it keeps.
+    const annotationStorage = {
+      getRawValue: (id: string) => kept.get(id),
+      setValue(id: string, value: Record<string, unknown>) {
+        const old = kept.get(id);
+        if (old) Object.assign(old, value);
+        else kept.set(id, value);
+      },
+    };
+    const session = { proxy: { annotationStorage } } as unknown as DocumentSession;
+    const run = { viewers: new Set() } as unknown as Parameters<typeof updateField>[0];
+    // A radio group set to "b", whose three buttons no viewer has built.
+    const update = { value: "b" };
+    for (const id of ["1R", "2R", "3R"]) updateField(run, session, id, update);
+    // The first button built stores what it read, as pdf.js's element does.
+    annotationStorage.setValue("1R", { value: false });
+    assert.equal(kept.get("2R")?.value, "b");
+    assert.equal(kept.get("3R")?.value, "b");
+    assert.deepEqual(update, { value: "b" }, "what the scripts sent stays as sent");
   });
 });

@@ -45,6 +45,7 @@ const name = (value: string) => ({ name: value });
 function documentOf(pages: Pdfjs.PDFPageProxy[], named: Record<string, unknown[]> = {}) {
   const loaded: number[] = [];
   const doc = {
+    numPages: pages.length,
     async getPageIndex(ref: { num: number }) {
       if (!pages[ref.num]) throw new Error("Invalid pageIndex request.");
       return ref.num;
@@ -77,6 +78,14 @@ describe("an explicit destination", () => {
     for (const target of [null, undefined, "0", 1.5, Number.NaN, true]) {
       assert.equal(await resolve([target, name("Fit")]), null, String(target));
     }
+    assert.deepEqual(loaded, []);
+  });
+
+  it("is null when the page it names is not in the document, as in pdf.js's viewer", async () => {
+    const { resolve, loaded } = documentOf([page(612, 792), page(595, 842)]);
+    assert.equal(await resolve([2, name("Fit")]), null);
+    assert.equal(await resolve([-1, name("Fit")]), null);
+    assert.equal(await resolve([5, name("XYZ"), 72, 720, null]), null);
     assert.deepEqual(loaded, []);
   });
 
@@ -142,6 +151,14 @@ describe("an explicit destination", () => {
       y: 100.75,
       view: { fit: "zoom", zoom: 0.5 },
     });
+  });
+
+  it("keeps the zoom for an XYZ zoom that is not a positive finite number, as pdf.js's viewer does", async () => {
+    const { resolve } = letter();
+    const keep = { pageIndex: 0, x: null, y: null, view: { fit: "zoom", zoom: null } };
+    for (const zoom of [-2, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NaN]) {
+      assert.deepEqual(await resolve([0, name("XYZ"), null, null, zoom]), keep, String(zoom));
+    }
   });
 
   it("keeps a turned page's coordinate that the destination leaves null", async () => {

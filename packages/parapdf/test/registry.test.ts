@@ -182,6 +182,22 @@ describe("acquireSession", () => {
     );
   });
 
+  it("opens empty headers apart from inherited headers with explicit credentials", async () => {
+    const { loader, loaded, calls } = fakePdfjs();
+    Object.assign(loaded.documentParameters, { httpHeaders: { authorization: "token" } });
+    const inherited = acquireSession(loader, { url: "/a.pdf", withCredentials: false });
+    const empty = acquireSession(loader, {
+      url: "/a.pdf",
+      withCredentials: false,
+      httpHeaders: {},
+    });
+    assert.notEqual(await inherited.session, await empty.session);
+    assert.deepEqual(
+      calls.parameters.map((parameters) => parameters.httpHeaders),
+      [{ authorization: "token" }, {}],
+    );
+  });
+
   it("keeps the sessions of each pdf.js loader apart", async () => {
     const first = fakePdfjs();
     const second = fakePdfjs();
@@ -223,6 +239,23 @@ describe("acquireSession", () => {
     ready();
     await assert.rejects(lease.session, { name: "AbortError" });
     assert.equal(calls.opens, 0);
+  });
+
+  it("publishes no error for an open that stopped because its viewers all left", async () => {
+    const { loaded } = fakePdfjs();
+    let ready = () => {};
+    const loader = () =>
+      new Promise<typeof loaded>((resolve) => {
+        ready = () => resolve(loaded);
+      });
+    const lease = acquireSession(loader, { url: "/a.pdf" });
+    lease.release();
+    mock.timers.tick(1000);
+    ready();
+    await assert.rejects(lease.session, { name: "AbortError" });
+    await settle();
+    assert.equal(lease.state.get().status, "loading");
+    assert.equal(lease.state.get().error, null);
   });
 
   it("publishes a failed open, and starts the next viewer's attempt from loading", async () => {

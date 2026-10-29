@@ -135,7 +135,10 @@ export const sourceKey = (source: PdfSource): unknown => {
   const { httpHeaders, withCredentials } = source;
   const [url] = splitFragment(source.url);
   if (!httpHeaders && withCredentials === undefined) return `url:${url}`;
-  const headers = Object.entries(httpHeaders ?? {}).sort(([a], [b]) => (a < b ? -1 : 1));
+  // An omitted header set inherits documentOptions; an empty one replaces it.
+  const headers = httpHeaders
+    ? Object.entries(httpHeaders).sort(([a], [b]) => (a < b ? -1 : 1))
+    : null;
   // A source that leaves its credentials mode out takes the loader's documentOptions.
   return `url:${url} ${JSON.stringify([headers, withCredentials ?? null])}`;
 };
@@ -225,6 +228,8 @@ function openEntry(pdfjs: PdfjsLoader, source: PdfSource): Entry {
       });
     },
     (error: unknown) => {
+      // A session closed while it opened failed for no viewer.
+      if (entry.controller.signal.aborted) return;
       entry.state.set({ status: "error", error: String(error), passwordReason: null });
     },
   );

@@ -47,6 +47,8 @@ export async function resolveExplicit(
   else if (target && typeof target === "object") {
     pageIndex = await doc.getPageIndex(target as Parameters<typeof doc.getPageIndex>[0]);
   } else return null;
+  // A page not in the document is nowhere, as in pdf.js's viewer.
+  if (pageIndex < 0 || pageIndex >= doc.numPages) return null;
   const num = (value: unknown) => (typeof value === "number" ? value : null);
   // [left, top] in PDF user space, and the view asked for.
   let left: number | null = null;
@@ -54,12 +56,15 @@ export async function resolveExplicit(
   let view: DestinationView | undefined;
   let corner: [number, number] | null = null;
   switch (mode?.name) {
-    case "XYZ":
+    case "XYZ": {
       left = num(args[0]);
       top = num(args[1]);
-      // 0 and null keep the zoom.
-      view = { fit: "zoom", zoom: num(args[2]) || null };
+      // 0 and null keep the zoom, and so, as in pdf.js's viewer, does one
+      // that is not a positive finite number.
+      const zoom = num(args[2]) ?? 0;
+      view = { fit: "zoom", zoom: zoom > 0 && zoom < Number.POSITIVE_INFINITY ? zoom : null };
       break;
+    }
     case "Fit":
     case "FitB":
       view = { fit: "page" };

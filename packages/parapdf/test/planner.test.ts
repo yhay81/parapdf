@@ -136,10 +136,23 @@ function run(context: PlanContext, pages: Map<number, Page>, concurrent = 2) {
       const { cancel, clear } = staleDetail(context, page);
       if (cancel) page.job = undefined;
       if (clear) {
+        // A whole-page detail no larger than a base becomes the base first.
+        if (demotes(context, page)) {
+          const scale = Math.min(page.detailScale, baseScale(context, page.index));
+          if (page.baseVersion !== context.version || page.baseScale < scale) {
+            page.baseScale = scale;
+            page.baseVersion = context.version;
+            page.basePixels = pagePixels(context.input, page.index, scale, null);
+          }
+        }
         page.detailScale = 0;
         page.detailRegion = null;
         page.detailPixels = 0;
         page.sparePixels = 0;
+        assert.ok(
+          !visible(context, page.index) || page.baseScale > 0,
+          `page ${page.index + 1} is visible and gives back its only pixels`,
+        );
       }
     }
     for (const { index, layer } of trim(context, pages.values())) {
@@ -181,9 +194,12 @@ function run(context: PlanContext, pages: Map<number, Page>, concurrent = 2) {
     for (const drawing of drawings) {
       const page = pages.get(drawing.index) as Page;
       if (drawing.layer === "base") {
-        // Except one that gives back the pixels of a base drawn at a larger zoom.
+        // Except one that gives back the pixels of a base drawn at a larger
+        // zoom, or replaces a detail no longer planned.
         assert.ok(
-          !showsCurrentWholeDetail(context, page) || page.baseScale > drawing.scale * 2,
+          !showsCurrentWholeDetail(context, page) ||
+            page.baseScale > drawing.scale * 2 ||
+            detailPlan(context, page.index) === null,
           `no base under page ${drawing.index + 1}'s whole-page detail`,
         );
       }
@@ -281,6 +297,23 @@ describe("planner invariants", () => {
       checkSettled(plan, pages, budgets, true);
     });
   }
+
+  it("keeps its invariants through a zoom that leaves a detail drawn first no room", () => {
+    const sizes = Array(8).fill(LETTER);
+    const budgets = { maxCanvasPixels: 2_000_000, maxBasePixels: 1_000_000 };
+    let plan = context(view(sizes, 1.5).input, budgets);
+    let pages = new Map<number, Page>();
+    for (const [scale, top] of [
+      [1.5, 0],
+      [3, 1800],
+    ] as const) {
+      const { input, mounted } = view(sizes, scale, { top });
+      plan = context(input, budgets);
+      pages = new Map(mounted.map((index) => [index, pages.get(index) ?? blank(index)]));
+      run(plan, pages);
+    }
+    checkSettled(plan, pages, budgets, true);
+  });
 });
 
 /** What must hold once `pages` settle under `plan`. */
@@ -759,6 +792,46 @@ describe("planner boundaries", () => {
         clear: false,
       },
     );
+  });
+
+  it("keeps the whole-page details within maxDetailPixels of a viewer whose viewport is empty, as when hidden", () => {
+    const { input } = view([LETTER, LETTER], 2);
+    const empty = { left: 0, top: 0, width: 0, height: 0, scrollerWidth: 0, scrollerHeight: 0 };
+    const hidden = context({ ...input, viewport: empty });
+    assert.equal(detailBudget(hidden, 0), DEFAULT_BUDGETS.maxDetailPixels);
+    assert.deepEqual(detailPlan(hidden, 0), { scale: 2, region: null });
+    const shown = { ...blank(0), detailScale: 2, detailPixels: 1224 * 1584 };
+    assert.deepEqual(staleDetail(hidden, shown), { cancel: false, clear: false });
+    // A limit by the viewport's size leaves an empty one none.
+    const limited = context({ ...input, viewport: empty }, { maxDetailViewports: 2 });
+    assert.equal(detailBudget(limited, 0), 0);
+    assert.equal(detailPlan(limited, 0), null);
+  });
+
+  it("keeps a visible page's only pixels, a detail no longer planned, until a base replaces them", () => {
+    const sizes = Array(8).fill(LETTER);
+    const budgets = { maxCanvasPixels: 2_000_000, maxBasePixels: 1_000_000 };
+    // At 1.5 the first page drew its detail first, without a base: larger
+    // than a base, it cannot become one.
+    const before = context(view(sizes, 1.5).input, budgets);
+    assert.deepEqual(detailPlan(before, 0), { scale: 1.5, region: null });
+    const quick = { ...blank(0), detailScale: 1.5, detailPixels: 918 * 1188 };
+    assert.equal(demotes(before, quick), false);
+    // At 3 the bases of the two visible pages leave the first no room for a
+    // detail sharper than its base.
+    const after = context(view(sizes, 3, { top: 1800 }).input, budgets);
+    assert.ok(visible(after, 0) && visible(after, 1));
+    assert.equal(detailPlan(after, 0), null);
+    assert.deepEqual(staleDetail(after, quick), { cancel: false, clear: false });
+    const [first] = plan(after, [quick, blank(1)], 1);
+    assert.deepEqual([first?.index, first?.layer], [0, "base"]);
+    const based = { ...quick, baseScale: first?.scale ?? 0, basePixels: 1_000_000 };
+    assert.deepEqual(staleDetail(after, based), { cancel: false, clear: true });
+    // Outside the viewport, zoomed past its whole-page budget, it gives them back at once.
+    const away = context(view(sizes, 6, { top: 9000 }).input, budgets);
+    assert.ok(!visible(away, 0));
+    assert.equal(detailPlan(away, 0), null);
+    assert.deepEqual(staleDetail(away, quick), { cancel: false, clear: true });
   });
 
   it("weighs a page's sharpness by the area each layer covers", () => {

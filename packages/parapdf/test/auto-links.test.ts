@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { coveredByLink, findLinks } from "../src/features/auto-links.ts";
+import { afterEach, beforeEach, describe, it } from "node:test";
+import type { DocumentSession } from "../src/document/session.ts";
+import { attachAutoLinks, coveredByLink, findLinks } from "../src/features/auto-links.ts";
 import { buildPageIndex } from "../src/features/search/text-search.ts";
-import type { PageText } from "../src/pdfjs/text.ts";
+import type { AnnotationLayerHandle } from "../src/pdfjs/annotation-layer.ts";
+import type { PageText, TextLayerHandle } from "../src/pdfjs/text.ts";
+import type { ViewerExtension } from "../src/view/extensions.ts";
+import type { Viewer } from "../src/view/viewer.ts";
+import { settle } from "./fake-pdfjs.ts";
 
 /** A page of `lines`, an item each, each ending a line. */
 function page(...lines: string[]): PageText {
@@ -129,5 +134,146 @@ describe("coveredByLink", () => {
     assert.equal(coveredByLink(link, [{ rect: [0, 40, 200, 120], quadPoints }]), true);
     const elsewhere = [0, 50, 50, 50, 0, 40, 50, 40, 0, 70, 50, 70, 0, 60, 50, 60];
     assert.equal(coveredByLink(link, [{ rect: [0, 40, 200, 120], quadPoints: elsewhere }]), false);
+  });
+});
+
+describe("attachAutoLinks", () => {
+  /** The text node of a text layer's span. */
+  class FakeText {
+    readonly data: string;
+    constructor(data: string) {
+      this.data = data;
+    }
+    get length(): number {
+      return this.data.length;
+    }
+  }
+
+  /** A range in a text layer, which shows as one box. */
+  class FakeRange {
+    setStart(): void {}
+    setEnd(): void {}
+    getClientRects() {
+      return [{ left: 10, top: 10, right: 50, bottom: 20, width: 40, height: 10 }];
+    }
+  }
+
+  const names = ["Text", "Range"];
+  const saved = new Map<string, PropertyDescriptor | undefined>();
+
+  beforeEach(() => {
+    for (const name of names) saved.set(name, Object.getOwnPropertyDescriptor(globalThis, name));
+    for (const [name, value] of [
+      ["Text", FakeText],
+      ["Range", FakeRange],
+    ] as const) {
+      Object.defineProperty(globalThis, name, { configurable: true, writable: true, value });
+    }
+  });
+
+  afterEach(() => {
+    for (const [name, descriptor] of saved) {
+      if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+      else Reflect.deleteProperty(globalThis, name);
+    }
+  });
+
+  /** A document whose pages read `items`, with no links of their own. */
+  const documentOf = (...items: string[]) =>
+    ({
+      pdfjs: { pdfjs: { AnnotationType: { LINK: 2 } } },
+      text: async () => ({
+        items,
+        endsLine: items.map(() => true),
+        boxes: new Float32Array(items.length * 4),
+      }),
+      page: async () => ({
+        getAnnotations: async () => [],
+        getViewport: () => ({
+          width: 100,
+          height: 100,
+          convertToPdfPoint: (x: number, y: number) => [x, 100 - y],
+        }),
+      }),
+    }) as unknown as DocumentSession;
+
+  /** A text layer of `items`, a span each; an empty one is in no layer, as pdf.js builds it. */
+  const textLayer = (...items: string[]): TextLayerHandle => {
+    const container = {
+      getAttribute: () => null,
+      getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 100 }),
+    };
+    return {
+      elements: items.map((item) => ({
+        firstChild: item ? new FakeText(item) : null,
+        closest: () => (item ? container : null),
+      })) as unknown as HTMLElement[],
+      structTree: null,
+      update() {},
+    };
+  };
+
+  /** An annotation layer that keeps the links given to it. */
+  const annotationLayer = () => {
+    const given: { url: string }[] = [];
+    const handle = {
+      layer: {
+        div: { append() {}, querySelectorAll: () => [] },
+        addLinkAnnotations: async (links: { url: string }[]) => {
+          given.push(...links);
+        },
+      },
+      update() {},
+    } as unknown as AnnotationLayerHandle;
+    return { handle, given };
+  };
+
+  /** autoLinks on a viewer with no layers yet, whose hooks the test calls for `session`. */
+  const attach = (session: DocumentSession) => {
+    const extensions: ViewerExtension[] = [];
+    const viewer = {
+      textLayers: new Map(),
+      annotationLayers: new Map(),
+      extend(extension: ViewerExtension) {
+        extensions.push(extension);
+        return () => {};
+      },
+    } as unknown as Viewer;
+    const stop = attachAutoLinks(viewer);
+    const [hooks] = extensions;
+    assert.ok(hooks);
+    hooks.ready?.(session, new AbortController().signal);
+    return { hooks, stop };
+  };
+
+  it("finds the text layer by a span in it when the page's first item is empty", async () => {
+    const items = ["", "See https://example.com/guide"];
+    const { hooks, stop } = attach(documentOf(...items));
+    const { handle, given } = annotationLayer();
+    hooks.annotationLayer?.(0, handle);
+    hooks.textLayer?.(0, textLayer(...items));
+    await settle();
+    assert.deepEqual(
+      given.map(({ url }) => url),
+      ["https://example.com/guide"],
+    );
+    stop();
+  });
+
+  it("links a page whose text layer was built again while its links were found", async () => {
+    const items = ["See https://example.com/guide"];
+    const { hooks, stop } = attach(documentOf(...items));
+    const { handle, given } = annotationLayer();
+    hooks.annotationLayer?.(0, handle);
+    hooks.textLayer?.(0, textLayer(...items));
+    hooks.textLayer?.(0, null);
+    hooks.textLayer?.(0, textLayer(...items));
+    await settle();
+    assert.deepEqual(
+      given.map(({ url }) => url),
+      ["https://example.com/guide"],
+      "once, in the layer built again",
+    );
+    stop();
   });
 });

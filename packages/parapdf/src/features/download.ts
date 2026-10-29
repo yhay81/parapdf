@@ -14,7 +14,10 @@ export interface SaveOptions {
 }
 
 export interface DownloadOptions extends SaveOptions {
-  /** The file's name; by default as the server names the file, or else after the document's URL. */
+  /**
+   * The file's name; by default, or when empty, as the server names the
+   * file, or else after the document's URL.
+   */
   filename?: string;
 }
 
@@ -41,8 +44,8 @@ export async function save(
 
 /**
  * Save `viewer`'s document as `save()` does and hand it to the browser as a
- * download, named `filename`, by default as the server names the file, or
- * else after the document's URL.
+ * download, named `filename`, by default (or when empty) as the server
+ * names the file, or else after the document's URL.
  */
 export async function download(
   viewer: Viewer,
@@ -53,7 +56,8 @@ export async function download(
   const bytes = await save(viewer, { pages });
   if (!bytes) return;
   // A document whose metadata fails to read still downloads, under its URL.
+  // An empty name is none.
   const served = filename ? null : await session?.metadata().catch(() => null);
-  const name = filename ?? served?.filename ?? sourceName;
-  downloadBytes(bytes, name ?? "document.pdf", "application/pdf");
+  const name = filename || served?.filename || sourceName || "document.pdf";
+  downloadBytes(bytes, name, "application/pdf");
 }

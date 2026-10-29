@@ -261,6 +261,29 @@ try {
       );
       await failed.page.context().close();
     }
+
+    // Answered after it showed as an error, the request opens the document,
+    // and what was read meanwhile, the title here, is read anew.
+    const answered = await open(
+      launched.browser,
+      demo("file=synthetic-encrypted.pdf&passwordPrompt=0"),
+      { ready: false },
+    );
+    await answered.page.waitForFunction(() => window.__session?.state.get().status === "error");
+    await answered.page.evaluate(() => window.__session?.submitPassword("parapdf"));
+    const titled = await answered.page
+      .waitForFunction(() => document.querySelector("strong[title='Encrypted sampler']"), null, {
+        timeout: 10_000,
+      })
+      .then(
+        () => true,
+        () => false,
+      );
+    check(
+      "passwordPrompt: false reads the title anew once the request is answered",
+      titled && (await documentState(answered.page))?.status === "ready",
+    );
+    await answered.page.context().close();
   }
 
   // --- The feature sampler, with forms ---

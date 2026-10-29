@@ -12,6 +12,7 @@ import type { PdfjsLoader } from "../src/document/registry.ts";
 import type { PdfSource } from "../src/document/session.ts";
 import { attachSearch } from "../src/features/search/index.ts";
 import { getText } from "../src/features/text/index.ts";
+import type { Rotation } from "../src/pdfjs/draw.ts";
 import type { ViewerOptions } from "../src/view/options.ts";
 import { attachViewport, openViewer, setViewerOptions, Viewer } from "../src/view/viewer.ts";
 import {
@@ -683,6 +684,54 @@ describe("a viewer's viewport", () => {
     viewer.setScale(5);
     setViewerOptions(viewer, { minScale: 2, maxScale: 3 });
     assert.deepEqual(zoom(), [3, "custom"]);
+  });
+
+  it("fits again as the scale limits change, widening or narrowing", async () => {
+    const { viewer } = await viewing();
+    const zoom = () => [viewer.store.get().scale, viewer.store.get().zoomMode];
+    setViewerOptions(viewer, { maxScale: 1 });
+    assert.deepEqual(zoom(), [1, "fit-width"]);
+    setViewerOptions(viewer, {});
+    assert.deepEqual(zoom(), [fitWidth(1000), "fit-width"]);
+    setViewerOptions(viewer, { minScale: 2 });
+    assert.deepEqual(zoom(), [2, "fit-width"]);
+    setViewerOptions(viewer, { minScale: 1 });
+    assert.deepEqual(zoom(), [fitWidth(1000), "fit-width"]);
+  });
+
+  it("does nothing for a NaN scale, zoom factor, or rotation, or a rotation not finite", async () => {
+    const { viewer } = await viewing();
+    viewer.setScale(2);
+    viewer.setScale(Number.NaN);
+    viewer.zoomBy(Number.NaN);
+    viewer.setRotation(Number.NaN as Rotation);
+    viewer.setRotation(Number.POSITIVE_INFINITY as Rotation);
+    viewer.rotate(Number.NaN);
+    const { scale, zoomMode, rotation, layout } = viewer.store.get();
+    assert.deepEqual([scale, zoomMode, rotation, layout?.scale], [2, "custom", 0, 2]);
+  });
+
+  it("reveals a rect on the page a fractional index truncates to, and nothing for NaN", async () => {
+    const { viewer, scroller } = await viewing();
+    const rect = { x: 0, y: 400, width: 100, height: 20 };
+    const at = () => [viewer.store.get().currentPage, scroller.scrollTop];
+    viewer.revealRect(2, rect);
+    const revealed = at();
+    viewer.goToPage(0);
+    viewer.revealRect(2.7, rect);
+    assert.deepEqual(at(), revealed);
+    viewer.revealRect(Number.NaN, rect);
+    assert.deepEqual(at(), revealed);
+  });
+
+  it("keeps the page and rotation a view shows as NaN", async () => {
+    const { viewer } = await viewing();
+    viewer.goToPage(2);
+    viewer.show({
+      target: { pageIndex: Number.NaN, x: null, y: null },
+      rotation: Number.NaN as Rotation,
+    });
+    assert.deepEqual([viewer.store.get().currentPage, viewer.store.get().rotation], [2, 0]);
   });
 
   it("opens at an initial scale within the limits", async () => {

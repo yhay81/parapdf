@@ -243,8 +243,11 @@ export class Viewer {
     this.#options = options;
     this.#links.externalLinks = options.externalLinks ?? "new-tab";
     this.#destinationZoom = options.destinationZoom ?? true;
-    this.#minScale = options.minScale ?? 0.25;
-    this.#maxScale = options.maxScale ?? 10;
+    const minScale = options.minScale ?? 0.25;
+    const maxScale = options.maxScale ?? 10;
+    const limited = minScale !== this.#minScale || maxScale !== this.#maxScale;
+    this.#minScale = minScale;
+    this.#maxScale = maxScale;
     const gap = options.gap ?? 12;
     const overscan = options.overscan ?? 2;
     let arranged = gap !== this.#gap || overscan !== this.#overscan;
@@ -264,6 +267,11 @@ export class Viewer {
     if (arranged) {
       this.#gestures.finish();
       this.#arrange(this.store.get().currentPage);
+    }
+    if (limited && this.store.get().zoomMode !== "custom") {
+      // A zoom that fits fits again within the new limits, as on a resize.
+      this.#gestures.finish();
+      this.#fit();
     }
     const { scale } = this.store.get();
     // Clamped in the zoom mode it has: a zoom that fits goes on fitting.
@@ -968,12 +976,14 @@ export class Viewer {
     const scroller = this.#scroller;
     if (!before.layout || !scroller || before.layout.tops.length === 0) return;
     const count = before.layout.tops.length;
-    const rotation = view.rotation ?? before.rotation;
+    // A rotation not finite, and a page that is NaN, keep the viewer's.
+    const rotation = Number.isFinite(view.rotation) ? (view.rotation as Rotation) : before.rotation;
     const spread = view.spread ?? before.spread;
     const scrollMode = view.scrollMode ?? before.scrollMode;
-    const target: ResolvedDestination = view.target
-      ? { ...view.target, pageIndex: clamp(Math.trunc(view.target.pageIndex), 0, count - 1) }
-      : { pageIndex: before.currentPage, x: null, y: null };
+    const target: ResolvedDestination =
+      view.target && !Number.isNaN(view.target.pageIndex)
+        ? { ...view.target, pageIndex: clamp(Math.trunc(view.target.pageIndex), 0, count - 1) }
+        : { pageIndex: before.currentPage, x: null, y: null };
     const page = target.pageIndex;
     this.store.set({ rotation, spread, scrollMode, currentPage: page });
     const zoom = requestedZoom(view.scale, before, this.#minScale, this.#maxScale);
@@ -1002,10 +1012,9 @@ export class Viewer {
   ): void {
     const current = this.store.get().layout;
     const scroller = this.#scroller;
-    if (!current || !scroller || pageIndex < 0 || pageIndex >= current.tops.length) return;
-    this.#goTo(current, scroller, pageIndex, (layout) =>
-      rectTarget(layout, pageIndex, rect, scroller),
-    );
+    const index = Math.trunc(pageIndex);
+    if (!current || !scroller || !(index >= 0 && index < current.tops.length)) return;
+    this.#goTo(current, scroller, index, (layout) => rectTarget(layout, index, rect, scroller));
   }
 
   /**
@@ -1080,6 +1089,7 @@ export class Viewer {
   }
 
   zoomBy(factor: number): void {
+    if (Number.isNaN(factor)) return;
     this.#gestures.finish();
     this.setScale(this.store.get().scale * factor);
   }
@@ -1091,6 +1101,7 @@ export class Viewer {
 
   /** Show every page turned clockwise by `rotation` degrees. */
   setRotation(rotation: Rotation): void {
+    if (!Number.isFinite(rotation)) return;
     const turned = toRotation(rotation);
     if (turned === this.store.get().rotation) return;
     this.#gestures.finish();
@@ -1166,6 +1177,7 @@ export class Viewer {
    * opens documents, like its "auto"; a number stops that.
    */
   setScale(requested: number | FitMode, anchor?: { x: number; y: number }): void {
+    if (Number.isNaN(requested)) return;
     this.#gestures.finish();
     if (typeof requested === "string") {
       this.store.set({ zoomMode: requested });

@@ -113,10 +113,18 @@ export interface LoadedPdfjs {
 let config: PdfjsConfig = {};
 let loading: Promise<LoadedPdfjs> | null = null;
 
+/** JSON of `value` with every object's keys sorted, so that their order does not count. */
+const canonical = (value: unknown): string =>
+  JSON.stringify(value, (_key, item: unknown) =>
+    item && typeof item === "object" && !Array.isArray(item)
+      ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : item,
+  );
+
 /** Whether two configurations load pdf.js alike; loaders compare by presence. */
 const sameConfig = (a: PdfjsConfig, b: PdfjsConfig): boolean =>
-  JSON.stringify({ ...a, pdfjs: Boolean(a.pdfjs), build: a.build?.name }) ===
-  JSON.stringify({ ...b, pdfjs: Boolean(b.pdfjs), build: b.build?.name });
+  canonical({ ...a, pdfjs: Boolean(a.pdfjs), build: a.build?.name }) ===
+  canonical({ ...b, pdfjs: Boolean(b.pdfjs), build: b.build?.name });
 
 /**
  * Sets how ParaPDF loads pdf.js. Call it before the first document opens;
@@ -149,8 +157,9 @@ export function preloadPdfjs(): void {
  * The CORS mode of pdf.js's request for a URL source, which a preload must
  * match to be reused. The source's own headers and credentials replace those
  * of `documentOptions`, as they do in the request. Null when there is nothing
- * to preload: no preload carries headers, without streaming pdf.js reads
- * only the ranges it needs, and WebKit downloads it again (decision 0014).
+ * to preload: no preload carries headers (empty ones are none), without
+ * streaming pdf.js reads only the ranges it needs, and WebKit downloads it
+ * again (decision 0014).
  */
 export function documentRequestMode(
   source: {
@@ -160,7 +169,8 @@ export function documentRequestMode(
   userAgent: string | undefined = globalThis.navigator?.userAgent,
 ): "anonymous" | "use-credentials" | null {
   const options = config.documentOptions;
-  if ((source.httpHeaders ?? options?.httpHeaders) || options?.disableStream) return null;
+  const headers = source.httpHeaders ?? options?.httpHeaders;
+  if ((headers && Object.keys(headers).length > 0) || options?.disableStream) return null;
   if (userAgent && isWebKit(userAgent)) return null;
   return (source.withCredentials ?? options?.withCredentials) ? "use-credentials" : "anonymous";
 }

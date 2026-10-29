@@ -47,6 +47,9 @@ export function useSession(): PdfSession {
 export function useSessionData(hook: string): PdfSession {
   const session = useSession();
   use(browser(() => `${hook} reads the document, which only the browser opens`));
+  // What settled empty while the document showed as failed is read anew
+  // once it no longer does: render again to read it.
+  useSelected(session.state, (state) => state.status === "error");
   return session;
 }
 
