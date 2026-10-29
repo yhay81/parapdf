@@ -28,12 +28,25 @@ export async function print(viewer: Viewer, options?: PrintOptions): Promise<voi
   if (!session || !work) return;
   // Closing the document stops printing it, as the application's signal does.
   const control = linked(work, options?.signal);
+  let ended = false;
+  const end = () => {
+    if (ended) return;
+    ended = true;
+    void session.output("DidPrint");
+  };
   try {
     await session.output("WillPrint");
-    await printDocument(session, { ...options, signal: control.signal, layers: viewer.layers });
+    await printDocument(session, {
+      ...options,
+      signal: control.signal,
+      layers: viewer.layers,
+      onEnd: end,
+    });
+  } catch (error) {
+    end();
+    throw error;
   } finally {
     // Printed or stopped: the document's and the application's signals no longer follow it.
     control.abort();
-    void session.output("DidPrint");
   }
 }

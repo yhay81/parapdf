@@ -17,7 +17,7 @@ export async function save(viewer: Viewer): Promise<Uint8Array | null> {
   session.commit();
   await session.output("WillSave");
   const bytes = await session.save();
-  void session.output("DidSave");
+  await session.output("DidSave");
   return bytes;
 }
 

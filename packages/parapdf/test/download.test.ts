@@ -62,6 +62,5 @@ it("saves after the scripts ran WillSave, and sends DidSave once saved", async (
     },
   };
   assert.deepEqual(await save(viewer as unknown as Viewer), new Uint8Array([1]));
-  await Promise.resolve();
   assert.deepEqual(steps, ["commit", "WillSave", "save", "DidSave"]);
 });
