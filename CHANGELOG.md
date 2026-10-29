@@ -6,6 +6,13 @@ change the API.
 
 ## Unreleased
 
+- With `formScripts`, saving and printing, from a script or the
+  application, run the document's `WillSave` and `DidSave`, or `WillPrint`
+  and `DidPrint`, scripts around them, as pdf.js's viewer does: what
+  `WillSave` changes is in the saved bytes, and what `WillPrint` changes
+  prints (#86). The scripts hear `WillClose` when the document closes or
+  the scripts are turned off.
+
 - `useComments()` and `PdfSession.comments()` list the file's comments:
   its markup annotations that carry one (a note's text, another markup's
   popup note), read once across the pages with pdf.js's

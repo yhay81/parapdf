@@ -102,6 +102,28 @@ describe("print orientation", () => {
 });
 
 describe("print job replacement", () => {
+  it("sends DidPrint after the browser closes the print dialog", async (t) => {
+    const env = environment(t);
+    const document = fakeDocument();
+    const viewer = new Viewer();
+    const { close } = show(viewer, { url: "/a.pdf" }, fakePdfjs(async () => document.proxy).loader);
+    t.after(close);
+    await settle();
+    const events: string[] = [];
+    viewer.session?.onOutput(
+      async (event) => void events.push(event),
+      new AbortController().signal,
+    );
+    const printing = print(viewer);
+    await settle();
+    document.drawings[0]?.resolve();
+    await printing;
+    assert.deepEqual(events, ["WillPrint"]);
+    env.afterPrint();
+    await settle();
+    assert.deepEqual(events, ["WillPrint", "DidPrint"]);
+  });
+
   it("cancels an active render and prints only its replacement, with no cleanup left behind", async (t) => {
     const env = environment(t);
     const { doc, renders } = await controlledDocument();

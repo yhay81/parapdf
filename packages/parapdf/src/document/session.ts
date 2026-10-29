@@ -209,6 +209,9 @@ const MEASURED_PAGES = 64;
 /** How each session closes, which only the registry asks for (`closeSession()`). */
 const closers = new WeakMap<DocumentSession, () => Promise<void>>();
 
+/** The document's events around saving and printing, named as its scripts know them. */
+export type OutputEvent = "WillSave" | "DidSave" | "WillPrint" | "DidPrint";
+
 /**
  * One open document, shared by every viewer of its source (see
  * registry.ts): pdf.js's document and its pages, and what the viewers read
@@ -237,6 +240,8 @@ export class DocumentSession {
   readonly #reads = new Map<string, Promise<unknown>>();
   /** What finishes the edits in progress in the session's viewers; see `commit()`. */
   readonly #commits = new Set<() => void>();
+  /** What hears the document being saved and printed; see `output()`. */
+  readonly #outputs = new Set<(event: OutputEvent) => Promise<void>>();
   /** Every page's size, once the background pass has learned them. */
   #sizes: readonly PageSize[] | null = null;
 
@@ -624,6 +629,25 @@ export class DocumentSession {
   /** Finish the edits in progress in every viewer of the document, before saving or printing. */
   commit(): void {
     for (const commit of this.#commits) commit();
+  }
+
+  /**
+   * Call `listener` at each `output()` until `signal` aborts: the document's
+   * scripts hear it being saved and printed.
+   */
+  onOutput(listener: (event: OutputEvent) => Promise<void>, signal: AbortSignal): void {
+    if (signal.aborted) return;
+    this.#outputs.add(listener);
+    signal.addEventListener("abort", () => this.#outputs.delete(listener), { once: true });
+  }
+
+  /**
+   * The document is about to be, or was, saved or printed: resolves once
+   * every listener is done with it, so that what `WillSave` and `WillPrint`
+   * change is in what saves and prints. A listener that fails holds nothing up.
+   */
+  async output(event: OutputEvent): Promise<void> {
+    await Promise.allSettled([...this.#outputs].map((listener) => listener(event)));
   }
 
   /**

@@ -580,6 +580,13 @@ values, and `useFormChange()` hears it; `setFormValues()` does not run
 them. A script's request to turn the page, zoom, print, or save acts on the
 viewer whose field ran it, and its alerts are the browser's own dialogs.
 
+Saving and printing, from a script or the application (`save()`,
+`download()`, `print()`), run the document's `WillSave` and `DidSave`, or
+`WillPrint` and `DidPrint`, scripts around them: what `WillSave` changes is
+in the saved bytes, and what `WillPrint` changes prints. The scripts hear
+`WillClose` when the document closes or the scripts are turned off; what
+they change then reaches nothing.
+
 ## Permissions
 
 An encrypted PDF may refuse printing, copying, changing, or annotating it.
@@ -1116,8 +1123,7 @@ with `PdfThumbnails`'s.
 - Released pdfjs-dist draws pages on the main thread. Drawing in a worker
   needs pdf.js's renderer worker (`configurePdfjs({ rendererSrc })`), which
   is only in unreleased pdf.js builds so far.
-- Not yet supported: XFA forms, and `WillSave`, `DidSave`, `WillPrint`, and
-  `DidPrint` scripts, which do not run. Of the annotations the PDF already holds, only
+- Not yet supported: XFA forms. Of the annotations the PDF already holds, only
   text, drawings, highlights, and images can be edited; others stay as they
   are drawn.
 - The current page is reported, never controlled: `onPageChange` reports it
