@@ -12,6 +12,12 @@ change the API.
   identified by itself; ParaPDF hands pdf.js a transport of its own that
   forwards to the application's, which stays usable and opens again.
 
+- `useComments()` and `PdfSession.comments()` list the file's comments:
+  its markup annotations that carry one (a note's text, another markup's
+  popup note), read once across the pages with pdf.js's
+  `getAnnotationsByType()`, each with its page, rectangle, kind, text,
+  author, date, and the comment it answers (#94).
+
 - Printing turns a page whose orientation differs from the first page's to
   the sheet's, as pdf.js's viewer prints it, so that a landscape page among
   portrait ones fits a matching sheet without extra scaling (#88). Pages

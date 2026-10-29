@@ -239,6 +239,86 @@ describe("DocumentSession", () => {
     assert.equal(await unlabelled.session.pageLabels(), null);
   });
 
+  it("reads the file's comments once, across the pages, leaving out markup without one", async () => {
+    let reads = 0;
+    const asked = new Set<number>();
+    const { session } = await openSession({
+      proxy: {
+        getAnnotationsByType: async (types: Set<number>) => {
+          reads++;
+          for (const type of types) asked.add(type);
+          return [
+            {
+              id: "9R",
+              pageIndex: 2,
+              rect: [0, 0, 10, 10],
+              subtype: "Highlight",
+              contentsObj: { str: "Check this" },
+              titleObj: { str: " Ada " },
+              modificationDate: null,
+              creationDate: "D:2024",
+              inReplyTo: null,
+            },
+            {
+              id: "3R",
+              pageIndex: 0,
+              rect: [1, 2, 3, 4],
+              subtype: "Text",
+              contentsObj: { str: "A note" },
+              titleObj: { str: "" },
+              modificationDate: "D:2025",
+              inReplyTo: "1R",
+              replyType: "R",
+            },
+            {
+              id: "4R",
+              pageIndex: 0,
+              rect: [0, 0, 1, 1],
+              subtype: "Square",
+              contentsObj: { str: " " },
+            },
+            {
+              id: "5R",
+              pageIndex: 1,
+              rect: [0, 0, 1, 1],
+              subtype: "Square",
+              contentsObj: { str: "Shared" },
+              replyType: "Group",
+            },
+          ];
+        },
+      },
+    });
+    const comments = await session.comments();
+    assert.equal(await session.comments(), comments);
+    assert.equal(reads, 1);
+    assert.equal(asked.has(1), true, "notes");
+    assert.equal(asked.has(3), false, "free text shows its text");
+    assert.equal(asked.has(16), false, "popups belong to their markup");
+    assert.deepEqual(comments, [
+      {
+        id: "3R",
+        pageIndex: 0,
+        rect: [1, 2, 3, 4],
+        subtype: "Text",
+        text: "A note",
+        author: null,
+        date: new Date("2025-01-01T00:00:00Z"),
+        replyTo: "1R",
+      },
+      {
+        id: "9R",
+        pageIndex: 2,
+        rect: [0, 0, 10, 10],
+        subtype: "Highlight",
+        text: "Check this",
+        author: "Ada",
+        date: new Date("2024-01-01T00:00:00Z"),
+        replyTo: null,
+      },
+    ]);
+  });
+
   it("reads the downloaded length when metadata has no length", async () => {
     for (const contentLength of [null, 0]) {
       const { session } = await openSession({

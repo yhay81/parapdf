@@ -2,7 +2,7 @@
  * Functional checks for what a document viewer offers besides its pages,
  * the features other React PDF viewers have: encrypted documents and the
  * password prompt, load progress, page labels, metadata, attachments, layers
- * (optional content), comment popups, form filling and saving, printing,
+ * (optional content), comments and their popups, form filling and saving, printing,
  * downloading (named as the server names the file), thumbnails, "fit-page"
  * zoom, keyboard zoom, the initial page, the hand tool, search options,
  * spreads, selections in PDF points, links found in the text (autoLinks),
@@ -51,11 +51,12 @@ const documentData = (page: Page) =>
   page.evaluate(async () => {
     const session = window.__session;
     if (!session) return null;
-    const [pageLabels, metadata, attachments, layers] = await Promise.all([
+    const [pageLabels, metadata, attachments, layers, comments] = await Promise.all([
       session.pageLabels(),
       session.metadata(),
       session.attachments(),
       session.layers(),
+      session.comments(),
     ]);
     return {
       pageLabels,
@@ -65,6 +66,10 @@ const documentData = (page: Page) =>
       },
       attachments,
       layers: layers?.layers() ?? null,
+      comments: comments.map(({ date, ...comment }) => ({
+        ...comment,
+        date: date?.toISOString() ?? null,
+      })),
     };
   });
 
@@ -253,6 +258,25 @@ try {
       "attachments are listed",
       loaded?.attachments?.length === 1 && loaded.attachments[0]?.filename === "notes.txt",
       JSON.stringify(loaded?.attachments),
+    );
+    const comments = loaded?.comments ?? [];
+    const [note, marked, reply] = comments;
+    check(
+      "comments: a note, a highlight's popup note, and a reply, with authors and dates",
+      comments.length === 3 &&
+        note?.pageIndex === 0 &&
+        note.subtype === "Text" &&
+        note.text === "A comment on the sampler" &&
+        note.author === "Reviewer" &&
+        marked?.pageIndex === 5 &&
+        marked.subtype === "Highlight" &&
+        marked.text === "Check this figure" &&
+        marked.author === "Editor" &&
+        marked.date === "2024-01-02T03:04:05.000Z" &&
+        JSON.stringify(marked.rect) === JSON.stringify([70, 600, 300, 624]) &&
+        reply?.text === "Fixed" &&
+        reply.replyTo === marked.id,
+      JSON.stringify(comments),
     );
     const content = await page.evaluate(async () => {
       const viewer = window.__viewer;
