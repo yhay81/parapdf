@@ -61,7 +61,7 @@ viewer (see [Components and hooks](/reference/components/#functions)).
 | `session` | The open document's session, once it has loaded, else null: pdf.js's `proxy`, `pageCount`, the pages, and what features read from the document. |
 | `permissions` | What the open document permits, everything when it is not encrypted; null until it has loaded. |
 | `layers` | Which of the open document's layers show, once known. |
-| `sourceName` | The file name the document's URL gives, which `download()` uses; null for bytes. |
+| `sourceName` | The file name the document's URL gives, which `download()` uses when the server names none; null for bytes. |
 | `scroller`, `content` | The scroll container and the element that holds the pages, while a viewport is attached. |
 | `signal` | Aborted while no viewport is attached. |
 | `workSignal` | What the viewer does for its open document stops with it: aborts when the document closes or the viewport detaches; null while no document is open. |
