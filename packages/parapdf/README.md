@@ -112,6 +112,6 @@ Security Policy and files served from another origin.
 
 ## License
 
-[MIT](https://github.com/yhay81/parapdf/blob/main/LICENSE). Parts of
-ParaPDF are derived from pdf.js, licensed under the Apache License 2.0: see
+[Apache License 2.0](https://github.com/yhay81/parapdf/blob/main/LICENSE).
+Parts of ParaPDF are derived from pdf.js: see
 [NOTICE.md](https://github.com/yhay81/parapdf/blob/main/NOTICE.md).

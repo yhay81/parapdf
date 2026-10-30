@@ -52,7 +52,6 @@ try {
     "README.md",
     "LICENSE",
     "NOTICE.md",
-    "LICENSES/pdf.js-Apache-2.0.txt",
     "dist/index.js",
     "dist/index.d.ts",
     "pdfjs/LICENSE",
@@ -87,6 +86,12 @@ try {
   );
 
   const manifest = JSON.parse(readFileSync(join(installed, "package.json"), "utf8"));
+  check(
+    "the manifest and shipped license identify Apache-2.0",
+    manifest.license === "Apache-2.0" &&
+      readFileSync(join(installed, "LICENSE"), "utf8").includes("Apache License\n") &&
+      readFileSync(join(installed, "NOTICE.md"), "utf8").includes("Copyright Mozilla Foundation"),
+  );
   const exported = manifest.exports?.["."];
   check(
     "the manifest is public and exports the built files",

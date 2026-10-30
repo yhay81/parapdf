@@ -92,4 +92,4 @@ pdf.js; the bug report asks about that.
 
 ## License
 
-Contributions are licensed under the [MIT License](LICENSE), as ParaPDF is.
+Contributions are licensed under the [Apache License 2.0](LICENSE), as ParaPDF is.
