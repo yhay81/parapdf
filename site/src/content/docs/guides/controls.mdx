@@ -44,11 +44,6 @@ export function App() {
 
 <ControlsExample client:visible />
 
-The viewer lives as long as the component that called `useViewer()`: it
-keeps its view and edits while its `<PdfViewer>` unmounts, and closes the
-document once that component unmounts. Several viewers can show one
-`PdfDocument`'s document, each with a view of its own.
-
 ## Reading state
 
 Two hooks read state, and re-render their component only when the selected
@@ -115,3 +110,32 @@ space scroll it, or turn pages in `"page"` mode, and Ctrl or ⌘ with +, -, and
 Ctrl or ⌘ with the wheel, trackpad pinches, touch pinches, and Safari's
 gesture events zoom the document around the pointer or the fingers instead of
 zooming the page. One finger still scrolls natively.
+
+## Several viewers
+
+A `PdfDocument` may hold any number of viewers, each with its own position,
+zoom, rotation, spread, scroll mode, tool, search, history, and pixel
+budgets. The document is opened once for all of them: its text, outline,
+layers' visibility, and form values are shared.
+
+```tsx
+function SplitView() {
+  const left = useViewer();
+  const right = useViewer();
+  return (
+    <PdfDocument source="/manual.pdf">
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", height: "100vh" }}>
+        <PdfViewer viewer={left} />
+        <PdfViewer viewer={right} defaultPage={10} />
+      </div>
+    </PdfDocument>
+  );
+}
+```
+
+A viewer lives as long as the component that called `useViewer()`. While
+its `PdfViewer` is unmounted it stops drawing and searching but keeps its
+view and annotations, and a `PdfViewer` given it again returns to where it
+was. To keep a view while it is hidden, for example in React's
+`<Activity>`, create the viewer above what hides it: a `PdfViewer` without
+a `viewer` prop has one of its own, which goes with it.

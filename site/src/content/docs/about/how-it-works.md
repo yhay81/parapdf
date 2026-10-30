@@ -174,7 +174,8 @@ it measures better.
 `parapdf` depends on one exact pdfjs-dist and ships its worker and the files
 it loads on demand, each referenced with `new URL(…, import.meta.url)` so
 bundlers emit them. The first `PdfDocument` starts the worker at once and
-preloads its PDF with React's `preload()`, which pdf.js then takes.
+preloads its PDF with React's `preload()`, which pdf.js then takes, except
+in WebKit browsers, where pdf.js cannot take a preload still downloading.
 
 Some parts are ported from pdf.js's viewer, under the Apache License 2.0:
 [NOTICE.md](https://github.com/yhay81/parapdf/blob/main/NOTICE.md) lists

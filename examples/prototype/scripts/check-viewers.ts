@@ -1,7 +1,7 @@
 // biome-ignore-all lint/style/noNonNullAssertion: the probes await both viewers before asserting their state.
 /**
- * M3: independent viewports of one document session, including viewport-only
- * teardown and StrictMode; M4: viewers that edit annotations sharing the
+ * Independent viewports of one document session, including viewport-only
+ * teardown and StrictMode, and viewers that edit annotations sharing the
  * session, and an annotation of the file one of them deletes. Run after
  * build; BROWSER, ENGINE, and DIST apply.
  */

@@ -794,7 +794,7 @@ try {
   );
   await passed.context().close();
 
-  // PdfViewer's props are live, and its view state controlled or not (M6).
+  // PdfViewer's props are live, and its view state controlled or not.
   const live = await newPage("file=bill-hr815.pdf&count=1");
   type Demo = {
     __viewer: Viewer;

@@ -474,7 +474,7 @@ async function measure(
           __session?: { state: { get(): { status: string } } };
           __viewer?: { store: { get(): { status?: string } } };
         };
-        // The session publishes the status; in builds before M6, the viewer.
+        // The session publishes the status; in builds before 0.5.0, the viewer.
         const status = demo.__session?.state.get().status ?? demo.__viewer?.store.get().status;
         return status === "ready";
       },

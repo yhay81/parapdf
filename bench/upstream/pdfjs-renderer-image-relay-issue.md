@@ -6,8 +6,8 @@ pdf.js, drawing on the main thread, hardly blocks it. The draft report for
 pdf.js is at the end; it has not been filed.
 
 ParaPDF ships pdfjs-dist 6.4.299, which has no renderer worker, so its
-users do not meet this today. It matters for target.md's open question on
-moving to the renderer worker once it is released.
+users do not meet this today. It matters for the open question in
+`docs/architecture.md` on moving to the renderer worker once it is released.
 
 ## Reproduction
 
@@ -97,7 +97,7 @@ than a patch.
 
 Nothing in its code: ParaPDF does not patch pdf.js (decision 0001), and
 the shipped pdf.js has no renderer worker. When the renderer worker ships,
-this is the first thing to measure (target.md, open questions), and the
+this is the first thing to measure (`docs/architecture.md`, open questions), and the
 check that the report's fix landed: rerun the scans with
 `ENGINES=pdfjs-hwa,pdfjs-next-hwa` and see `pdfjs-next-hwa`'s blocked time
 near `pdfjs-hwa`'s.
