@@ -74,5 +74,5 @@ ENGINE=pdfjs pnpm --filter @parapdf/prototype check:text
 
 ## License
 
-[MIT](LICENSE). Parts of ParaPDF are derived from pdf.js, licensed under the
-Apache License 2.0: see [NOTICE.md](NOTICE.md).
+[Apache License 2.0](LICENSE). Parts of ParaPDF are derived from pdf.js:
+see [NOTICE.md](NOTICE.md).

@@ -34,6 +34,10 @@ change the API.
   popup note), read once across the pages with pdf.js's
   `getAnnotationsByType()`, each with its page, rectangle, kind, text,
   author, date, and the comment it answers (#94).
+- ParaPDF is licensed under Apache-2.0 instead of MIT, aligning it with
+  pdf.js. Previously released versions remain available under their original
+  terms; pdf.js and its bundled third-party files retain their notices and
+  licenses.
 
 - Printing turns a page whose orientation differs from the first page's to
   the sheet's, as pdf.js's viewer prints it, so that a landscape page among

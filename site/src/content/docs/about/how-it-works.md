@@ -177,6 +177,6 @@ bundlers emit them. The first `PdfDocument` starts the worker at once and
 preloads its PDF with React's `preload()`, which pdf.js then takes, except
 in WebKit browsers, where pdf.js cannot take a preload still downloading.
 
-Some parts are ported from pdf.js's viewer, under the Apache License 2.0:
+ParaPDF is licensed under Apache-2.0. Some parts are ported from pdf.js's viewer:
 [NOTICE.md](https://github.com/yhay81/parapdf/blob/main/NOTICE.md) lists
 them.
