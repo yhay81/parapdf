@@ -7,32 +7,26 @@ ParaPDF is licensed under the [Apache License, Version 2.0](LICENSE).
 
 ## PDF.js
 
-Parts of ParaPDF are derived from [PDF.js](https://github.com/mozilla/pdf.js),
-Copyright Mozilla Foundation, licensed under the Apache License, Version 2.0.
-The full license text is in [`LICENSE`](LICENSE).
+Parts of ParaPDF are derived from [PDF.js](https://github.com/mozilla/pdf.js)
+(pdfjs-dist 6.4.299), Copyright Mozilla Foundation, licensed under the
+Apache License, Version 2.0. These files in `packages/parapdf/src/` are
+derived from the PDF.js files beside them and changed for ParaPDF:
 
-| ParaPDF file | Derived from | Notes |
-|---|---|---|
-| `packages/parapdf/src/features/initial-view.ts` | `web/pdf_link_service.js` (pdfjs-dist 6.4.299), `PDFLinkService.setHash()` | Reading a URL's fragment: its parameters with lowercased names, `page` and `zoom` made into a destination (numbers truncated, a percentage, or a fit with its arguments, `FitR` only with four), on the current page when it names none, and `nameddest`. pdf.js's named zooms become fits; `search`, `pagemode`, and a fragment without parameters are left out. |
-| `packages/parapdf/src/react/editor-styles.ts` | `web/pdf_viewer.css` (pdfjs-dist 6.4.299), the `.annotationEditorLayer`, `.canvasWrapper svg`, `.editToolbar`, `.colorPicker`, and `.textLayer.highlighting` rules | Renamed to `.parapdf-editor-layer`, `.parapdf-canvas-wrapper`, and `.parapdf-text-layer`, nesting written out, `light-dark()` resolved to its light colors, and custom properties other than the two pdf.js reads moved under the viewport with ParaPDF names; the browser's own cursors instead of pdf.js's, and the alt text, comment, and signature dialogs left out. The toolbar's delete and menu arrow icons are pdf.js's `web/images/editor-toolbar-delete.svg` and `toolbarButton-menuArrow.svg`, inlined by `scripts/pdfjs-files.ts` into `src/react/editor-icons.ts`. |
-| `packages/parapdf/src/pdfjs/editor.ts` | `web/annotation_editor_layer_builder.js` and `web/draw_layer_builder.js` (pdfjs-dist 6.4.299), `AnnotationEditorLayerBuilder` and `DrawLayerBuilder`; the English strings of `l10n/en-US/viewer.ftl` | How a page's editor layer and draw layer are created on pdf.js's display API: the cloned viewport without flipping, the draw layer in the canvases' parent, the layer's direction. The event bus, the labels applied by localization id, restoring exported annotations, and keeping re-added editors from taking focus and adding undo steps are ParaPDF's own. The default labels follow pdf.js's English strings. |
-| `packages/parapdf/src/react/styles.ts` | `web/pdf_viewer.css` (pdfjs-dist 6.4.299), `.textLayer` and `.annotationLayer` rules | Renamed to `.parapdf-text-layer` and `.parapdf-annotation-layer`, nesting written out; the rules for links, form fields, and comment popups kept, editing and image rules omitted. |
-| `packages/parapdf/src/pdfjs/struct-tree.ts` | `web/struct_tree_layer_builder.js` (pdfjs-dist 6.4.299), `StructTreeLayerBuilder` | The structure tree of a tagged page as elements with ARIA roles that own the text layer's runs, figures' images in the text layer, MathML, and the attributes it gives annotations. Typed, without pdf.js's `Map` extensions; the tree goes into a canvas the page renders for it. |
-| `packages/parapdf/src/features/print/print.ts` | `web/pdf_print_service.js` and the print rules of `web/pdf_viewer.css` (pdfjs-dist 6.4.299) | Printing by drawing every page with the print intent and stored form values into images in a print-only container, one per sheet, on sheets the size of the first page, at 150 dpi by default. |
-| `packages/parapdf/src/render/dom-layers.ts` | `web/text_layer_builder.js` | The `endOfContent` element appended after each text layer. |
-| `packages/parapdf/src/features/search/text-search.ts` | `web/pdf_find_controller.js` (pdfjs-dist 6.4.299), `normalize()` and `PDFFindController`'s matching | `CHARACTERS_TO_NORMALIZE`, `DIACRITICS_EXCEPTION`, the rules for line ends: joining after CJK characters and inside hyphenated words, keeping a dash before a line end, and reading other line ends as spaces, the case-sensitive and diacritics options, and keeping a hyphen before a line end (`ignoreDashEOL`). Diacritics are stripped from both the page and the query instead of being skipped by a regular expression; the whole-word rule is ParaPDF's own. |
-| `packages/parapdf/src/features/auto-links.ts` | `web/autolinker.js` and `web/pdf_page_view.js` (pdfjs-dist 6.4.299), `Autolinker` and `PDFPageView#checkInferredLinks()` | The regular expression that finds URLs and e-mail addresses, the checks on their hosts and URLs, the links' rectangles and quadrilaterals from the text's client rectangles, and leaving out a link that a link of the file covers by more than half. The text is the search feature's normalization of the page with case, diacritics, and hyphens before a line end kept, instead of pdf.js's `normalize()` of every text item on a line of its own; finding a page's links once per document for every viewer is ParaPDF's own. |
-| `packages/parapdf/src/render/planner.ts` | `web/pdf_page_detail_view.js` (pdfjs-dist 6.4.299), `PDFPageDetailView` | Choosing the detail region: the visible area grown by up to its own size on each side within the pixel budget, and redrawing once the view leaves the region or its margin on one side exceeds three times the opposite margin. |
-| `packages/parapdf/src/pdfjs/scripting.ts` and `packages/parapdf/src/features/forms/scripts.ts` | `web/pdf_scripting_manager.js` and `web/generic_scripting.js` (pdfjs-dist 6.4.299), `PDFScriptingManager` and `GenericScripting` | Running a document's scripts in pdf.js's sandbox: the data it is created with (field objects, calculation order, application and document information, the document's actions), the events it is sent (the document's Open, a page's PageOpen with its actions on its first opening and PageClose), each in a task of its own, and how its updates reach fields (their elements, or the annotation storage) and the viewer (pages, zoom, printing, saving, the console). One sandbox per session shared by its viewers, its window's events kept to it, and loading QuickJS through a module of ParaPDF's own are ParaPDF's own. |
-| `packages/parapdf/src/view/viewer.ts` | `web/pdf_viewer.js` (pdfjs-dist 6.4.299), `PDFViewer` | Two rules of its scroll modes: horizontal scrolling fits one page, not a spread, to the viewport, and the current page stays current while all of it is in view. The layout of the scroll modes, flipping pages, and the keys that flip them are ParaPDF's own. |
-| `packages/parapdf/src/render/selection.ts` | `web/text_layer_builder.js` (pdfjs-dist 6.4.299), `TextLayerBuilder` | The selection handling: the `selecting` class on text layers a selection touches, its reset on pointer release, blur, and key release, and moving `endOfContent` next to the changing end of the selection in browsers other than Firefox and Chromium 148 or later. Each viewer owns its listeners instead of sharing static ones, and a reset leaves `endOfContent` in place when it already is the layer's last child; the drag handling for the space around the pages, including drags that start there, and for text layers above the selection is ParaPDF's own. |
+| ParaPDF | PDF.js |
+|---|---|
+| `features/auto-links.ts` | `web/autolinker.js`, `web/pdf_page_view.js` |
+| `features/forms/scripts.ts`, `pdfjs/scripting.ts` | `web/pdf_scripting_manager.js`, `web/generic_scripting.js` |
+| `features/initial-view.ts` | `web/pdf_link_service.js` |
+| `features/print/print.ts` | `web/pdf_print_service.js`, `web/pdf_viewer.css` |
+| `features/search/text-search.ts` | `web/pdf_find_controller.js` |
+| `pdfjs/editor.ts` | `web/annotation_editor_layer_builder.js`, `web/draw_layer_builder.js`, `l10n/en-US/viewer.ftl` |
+| `pdfjs/struct-tree.ts` | `web/struct_tree_layer_builder.js` |
+| `react/editor-icons.ts` | `web/images/editor-toolbar-delete.svg`, `web/images/toolbarButton-menuArrow.svg` |
+| `react/editor-styles.ts`, `react/styles.ts` | `web/pdf_viewer.css` |
+| `render/dom-layers.ts`, `render/selection.ts` | `web/text_layer_builder.js` |
+| `render/planner.ts` | `web/pdf_page_detail_view.js` |
+| `view/viewer.ts` | `web/pdf_viewer.js` |
 
-The `parapdf` package depends on pdfjs-dist 6.4.299 and redistributes parts
-of it in `pdfjs/`: pdf.js's worker and legacy worker, each behind ParaPDF's
-prelude, the CMaps, standard fonts, image decoders, ICC profile, and
-annotation icons it loads on demand, and QuickJS compiled to WebAssembly,
-which form scripts run in (`pdfjs/wasm/quickjs-eval.js` and
-`quickjs-eval.wasm`); `pdfjs/quickjs.js` is ParaPDF's own. They stay under the Apache License 2.0
-and the licenses that pdfjs-dist ships with them, copied alongside
-(`pdfjs/LICENSE` and the license files in its directories); the
-toolbar icons of the annotation editor are inlined, as noted above.
+The `parapdf` package also redistributes files of pdfjs-dist in `pdfjs/`:
+the worker, behind ParaPDF's prelude, and the files it loads on demand. They
+keep their licenses, which are copied alongside them.

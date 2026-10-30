@@ -1,3 +1,7 @@
+// Derived from PDF.js `web/pdf_link_service.js` (pdfjs-dist 6.4.299), Copyright
+// Mozilla Foundation, Apache License 2.0, and changed for ParaPDF; see
+// NOTICE.md.
+
 import type { DocumentSession, PdfInitialView, PdfPageLayout } from "../document/session.ts";
 import type { ReadableStore } from "../document/store.ts";
 import type { Destination, ResolvedDestination } from "../pdfjs/destinations.ts";

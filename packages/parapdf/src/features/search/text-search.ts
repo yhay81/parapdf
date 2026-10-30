@@ -1,3 +1,7 @@
+// Derived from PDF.js `web/pdf_find_controller.js` (pdfjs-dist 6.4.299),
+// Copyright Mozilla Foundation, Apache License 2.0, and changed for ParaPDF;
+// see NOTICE.md.
+
 import type { PageText } from "../../pdfjs/text.ts";
 
 /** A position inside one text item; `offset` counts UTF-16 code units like DOM ranges. */
@@ -36,11 +40,10 @@ export interface PageIndex {
 
 /*
  * Search normalization follows normalize() and the matching options of
- * PDFFindController in PDF.js `web/pdf_find_controller.js` (pdfjs-dist
- * 6.4.299; Copyright Mozilla Foundation, Apache License 2.0; see NOTICE.md):
- * compatibility forms are ignored, and by default case and diacritics too; a
- * line end inside a CJK run or a hyphenated word joins the lines, and any
- * other line end reads as a space. pdf.js keeps diacritics in the page text
+ * PDFFindController in PDF.js `web/pdf_find_controller.js`: compatibility
+ * forms are ignored, and by default case and diacritics too; a line end
+ * inside a CJK run or a hyphenated word joins the lines, and any other line
+ * end reads as a space. pdf.js keeps diacritics in the page text
  * and lets its query regular expression skip them; stripping them from both
  * sides gives the same matches with plain substring search. With
  * `matchDiacritics`, both keep them, and a match may not end before a mark

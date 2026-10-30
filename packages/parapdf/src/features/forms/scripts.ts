@@ -1,5 +1,9 @@
 "use client";
 
+// Derived from PDF.js `web/pdf_scripting_manager.js` and
+// `web/generic_scripting.js` (pdfjs-dist 6.4.299), Copyright Mozilla
+// Foundation, Apache License 2.0, and changed for ParaPDF; see NOTICE.md.
+
 import type { DocumentSession } from "../../document/session.ts";
 import type { AnnotationLayerScripting } from "../../pdfjs/annotation-layer.ts";
 import { type DocumentScripting, startScripting } from "../../pdfjs/scripting.ts";

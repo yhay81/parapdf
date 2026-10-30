@@ -1,5 +1,9 @@
 "use client";
 
+// Derived from PDF.js `web/text_layer_builder.js` (pdfjs-dist 6.4.299),
+// Copyright Mozilla Foundation, Apache License 2.0, and changed for ParaPDF;
+// see NOTICE.md.
+
 import type { DocumentSession } from "../document/session.ts";
 import {
   type AnnotationLayerHandle,

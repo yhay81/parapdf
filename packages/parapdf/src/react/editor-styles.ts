@@ -1,3 +1,7 @@
+// Derived from PDF.js `web/pdf_viewer.css` (pdfjs-dist 6.4.299), Copyright
+// Mozilla Foundation, Apache License 2.0, and changed for ParaPDF; see
+// NOTICE.md.
+
 import { DELETE_ICON, MENU_ARROW_ICON } from "./editor-icons.ts";
 
 /**
@@ -6,8 +10,7 @@ import { DELETE_ICON, MENU_ARROW_ICON } from "./editor-icons.ts";
  *
  * Derived from the `.annotationEditorLayer`, `.canvasWrapper svg`,
  * `.editToolbar`, `.colorPicker`, and `.textLayer.highlighting` rules in
- * PDF.js `web/pdf_viewer.css` (pdfjs-dist 6.4.299; Copyright Mozilla
- * Foundation, Apache License 2.0; see NOTICE.md): renamed to
+ * PDF.js `web/pdf_viewer.css`: renamed to
  * `.parapdf-editor-layer`, `.parapdf-canvas-wrapper`, and
  * `.parapdf-text-layer`, nesting written out, `light-dark()` resolved to
  * its light colors, as the layers are `color-scheme: only light`. The

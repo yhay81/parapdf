@@ -1,8 +1,11 @@
+// Derived from PDF.js `web/struct_tree_layer_builder.js` (pdfjs-dist 6.4.299),
+// Copyright Mozilla Foundation, Apache License 2.0, and changed for ParaPDF;
+// see NOTICE.md.
+
 /**
  * The structure tree of a tagged PDF page as accessible fallback content.
  * Ported from `StructTreeLayerBuilder` in PDF.js
- * `web/struct_tree_layer_builder.js` (pdfjs-dist 6.4.299; Copyright Mozilla
- * Foundation, Apache License 2.0; see NOTICE.md).
+ * `web/struct_tree_layer_builder.js`.
  *
  * pdf.js's text layer wraps the runs of each marked-content sequence in a
  * span whose id the structure tree refers to. The tree becomes elements
