@@ -8,7 +8,7 @@ import { cpSync, rmSync } from "node:fs";
 
 const root = new URL("../../../", import.meta.url);
 const here = new URL("../", import.meta.url);
-for (const name of ["LICENSE", "NOTICE.md", "LICENSES"]) {
+for (const name of ["LICENSE", "NOTICE.md"]) {
   const target = new URL(name, here);
   if (process.argv[2] === "remove") rmSync(target, { recursive: true, force: true });
   else cpSync(new URL(name, root), target, { recursive: true });

@@ -6,7 +6,18 @@
     <title>ParaPDF minimal</title>
     <style>
       html, body, #root { margin: 0; height: 100%; }
-      body { font: 13px system-ui, sans-serif; background: #525659; }
+      body { font: 13px system-ui, sans-serif; color: #e8eaed; background: #525659; color-scheme: dark; }
+      .toolbar {
+        height: 40px; box-sizing: border-box; display: flex; gap: 8px; align-items: center;
+        padding: 0 8px; background: #26272a; border-bottom: 1px solid #3d4044;
+      }
+      .toolbar button {
+        height: 28px; padding: 0 10px; font: inherit; color: inherit; cursor: pointer;
+        border: 1px solid #3d4044; border-radius: 6px; background: #2d2f32;
+      }
+      .toolbar button:hover:not(:disabled) { background: #393c40; }
+      .toolbar button:disabled { opacity: 0.4; cursor: default; }
+      .toolbar span { min-width: 6em; text-align: center; font-variant-numeric: tabular-nums; }
       .viewport { position: absolute; inset: 40px 0 0 0; }
     </style>
   </head>

@@ -42,7 +42,7 @@ export default function SplitView({
   const [open, setOpen] = useState(true);
   const [mounted, setMounted] = useState([true, true]);
   return (
-    <main style={{ display: "flex", flexDirection: "column", height: "100dvh" }}>
+    <main className="split" style={{ display: "flex", flexDirection: "column", height: "100dvh" }}>
       <button type="button" onClick={() => setOpen((value) => !value)}>
         {open ? "Close document" : "Open document"}
       </button>
@@ -52,6 +52,7 @@ export default function SplitView({
             {mounted.map((show, index) => (
               <div
                 key={index === 0 ? "left" : "right"}
+                className="split"
                 data-viewer={index}
                 style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}
               >
@@ -89,7 +90,7 @@ function Pane({ index, viewerProps }: { index: number; viewerProps: PdfViewerPro
   }, [index, viewer]);
   return (
     <>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: 6 }}>
+      <div className="split-bar">
         <strong>{index === 0 ? "Left view" : "Right view"}</strong>
         <span aria-live="polite">
           {shown ? `Page ${page + 1}, ${Math.round(scale * 75)}%` : status}

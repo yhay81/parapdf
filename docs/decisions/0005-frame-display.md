@@ -3,49 +3,28 @@
 - Status: rejected
 - Date: 2026-10-24
 
-## Idea
+## Decision
 
-Draw each page into an OffscreenCanvas and show the finished drawing as an
-ImageBitmap through a `bitmaprenderer` canvas, which replaces what it shows
-in one step: no canvas would hide while it draws, a new detail would need
-no spare canvas, and kept drawings could move without copies.
+Pages draw into their canvases in place. Drawing each page into an
+OffscreenCanvas and showing the result as an ImageBitmap through a
+`bitmaprenderer` canvas, so that a canvas never hides while it draws, is not
+done: it is never faster, it is slower in Chromium after zooming, and the
+spare canvas already swaps details in one step.
 
 ## Evidence
 
-- pdf.js draws into an OffscreenCanvas as it is, and pdf.js master's
-  renderer worker copies its frames into one; neither needs a patch.
-- Engine benchmark, `-frame` variants (`bench/results/frames-*.md`; 14
-  files, 3 runs, median across files), frames against drawing in place:
-
-  | | Chromium | WebKit | Firefox |
-  |---|---:|---:|---:|
-  | First page committed, GPU canvases (ms) | 51.2 / 51.9 | 58.5 / 57.7 | 57.7 / 60.8 |
-  | Main thread blocked over ten pages, GPU (ms) | 5 / 5 | 0 / 0 | 30 / 24 |
-  | Main thread blocked over ten pages, CPU (ms) | 29 / 19 | 1 / 1 | 30 / 28 |
-  | Handover per page, GPU / CPU (ms) | 1.2 / 6.5 | 0.1 / 0.1 | 1.5 / 1.45 |
-
-- In Chromium on f1040.pdf and synthetic-cjk-nonembedded.pdf, drawings
-  differed only in hairlines, in at most 0.04% of a 256-pixel-wide sample,
-  by up to 40 levels, about as much as two runs of the same GPU drawing
-  differ (0.01%, 30 levels) (`bench/scripts/fidelity.ts`).
-- Runtime, zoom commits (`commit-bench.ts`, three runs, medians): no blank
-  page and no page down to its base without the spare canvas, but in
-  Chromium the pages got sharp later in every scenario except the two
-  pinches in, by 6 to 29 ms (`examples/prototype/results/commit-frames-chromium.md`),
-  and by 9 to 27 ms with OffscreenCanvases kept for later frames
-  (`commit-frames-pool-chromium.md`). WebKit matched drawing in place.
-- Coming back to pages (`return-bench.ts`, `return-frames-*.md`, three runs,
-  medians), frames alone got sharp as soon as drawing in place, within
-  6 ms, except flipping back over bill-hr815.pdf in Firefox (15 against
-  6 ms), but they blocked Firefox's main thread longer: 40 and 35 against
-  23 and 24 ms over a jump back (bill-hr815.pdf, the vector pages), and 135
-  against 70 over a scroll back on the vector pages (37 against 48 on
-  bill-hr815.pdf).
-
-## Why rejected
-
-It is never faster, it is slower in Chromium after zooming, and the spare
-canvas already swaps details in one step. The code was not kept.
+- Engine benchmark, `-frame` variants against drawing in place, 14 files,
+  3 runs, median across files
+  ([`frames-browsers.md`](../../bench/results/frames-browsers.md)): first
+  page committed within 1 to 3 ms either way; main thread blocked over ten
+  pages on CPU canvases 29 against 19 ms in Chromium.
+- Zoom commits in Chromium got sharp 6 to 29 ms later in every scenario but
+  the pinches in
+  ([`commit-frames-chromium.md`](../../examples/prototype/results/commit-frames-chromium.md));
+  WebKit matched drawing in place.
+- Coming back to pages, frames blocked Firefox's main thread longer: 135
+  against 70 ms over a scroll back on the vector pages
+  ([`return-frames-firefox.md`](../../examples/prototype/results/return-frames-firefox.md)).
 
 ## Reopen if
 

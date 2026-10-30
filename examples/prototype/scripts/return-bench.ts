@@ -222,7 +222,7 @@ async function runScenario(scenario: string): Promise<InPageResult> {
   if (scenario === "flip-back") viewer.setScrollMode("page");
   viewer.goToPage(0);
   await settle();
-  // The viewer's state has the page count in builds before M6.
+  // The viewer's state has the page count in builds before 0.5.0.
   const pageCount = viewer.store.get().pageCount ?? viewer.store.get().layout?.tops.length ?? 0;
   if (scenario === "jump-back") {
     viewer.goToPage(Math.min(12, pageCount - 1));
@@ -393,7 +393,7 @@ async function measure(
           __session?: { state: { get(): { status: string } } };
           __viewer?: { store: { get(): { status?: string } } };
         };
-        // The session publishes the status; in builds before M6, the viewer.
+        // The session publishes the status; in builds before 0.5.0, the viewer.
         const status = demo.__session?.state.get().status ?? demo.__viewer?.store.get().status;
         return status === "ready";
       },

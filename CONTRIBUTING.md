@@ -7,7 +7,7 @@ before code.
 
 [`AGENTS.md`](AGENTS.md) is the full development context: the layout of the
 repository, every command, and how the benchmarks measure.
-[`docs/rebuild/target.md`](docs/rebuild/target.md) describes how the runtime
+[`docs/architecture.md`](docs/architecture.md) describes how the runtime
 is built, and [`docs/decisions/`](docs/decisions) records why, with the
 measurements. This file is the short version for people.
 
@@ -65,10 +65,9 @@ ENGINE=pdfjs pnpm --filter @parapdf/prototype check:text
   `BROWSER=firefox` on your machine too: CI's browsers run on Linux without
   a GPU, and Playwright's WebKit is not Safari.
 - A change to the package gets an entry under "Unreleased" in
-  [`CHANGELOG.md`](CHANGELOG.md), and both
-  [`packages/parapdf/README.md`](packages/parapdf/README.md), the package's
-  documentation on npm, and the documentation site in [`site/`](site)
-  follow the API. `pnpm --filter @parapdf/site dev` shows the site.
+  [`CHANGELOG.md`](CHANGELOG.md), and the documentation site in
+  [`site/`](site), the one home of the API's documentation, follows it.
+  `pnpm --filter @parapdf/site dev` shows the site.
 - Measure performance with the benchmarks described under "Benchmark
   methodology" in `AGENTS.md`, on AC power.
 - Write code, comments, documentation, and commit messages in English;
@@ -93,4 +92,4 @@ pdf.js; the bug report asks about that.
 
 ## License
 
-Contributions are licensed under the [MIT License](LICENSE), as ParaPDF is.
+Contributions are licensed under the [Apache License 2.0](LICENSE), as ParaPDF is.

@@ -1,23 +1,21 @@
 # Decisions
 
-One file per decision: its status, why it came up, what was decided, the
-evidence, and what would reopen it. A decision is final until new
-measurements, or a change of direction by the maintainer, reopen it; nobody
-re-derives or re-litigates it from the code or from
-`docs/history/AGENTS-v0.md`. A new choice that matters for performance or
-for the direction of the rebuild gets a new record, numbered next.
+One file per decision that matters for performance or direction: what was
+decided, the evidence, and what would reopen it. Rejected ideas are kept so
+they are not tried again without new measurements. A decision is final
+until new measurements, or a change of direction by the maintainer, reopen
+it. A new choice gets a new record, numbered next.
 
 | # | Decision | Status |
 |---|---|---|
 | [0001](0001-pdfjs-only.md) | pdf.js is the only engine; no engine boundary | adopted |
-| [0002](0002-no-compatibility.md) | No compatibility to keep: break APIs freely | adopted |
-| [0003](0003-rebuild-process.md) | How the rebuild is run | adopted |
+| [0002](0002-no-compatibility.md) | No compatibility to keep before 1.0 | adopted |
 | [0004](0004-kept-canvases.md) | Pages keep their canvases when they unmount | adopted |
 | [0005](0005-frame-display.md) | Frame display (OffscreenCanvas, ImageBitmap) | rejected |
 | [0006](0006-partial-rendering.md) | pdf.js's partial rendering of regions | rejected |
 | [0007](0007-keep-parsed-pages.md) | Keeping unmounted pages' parsed content | rejected |
-| [0008](0008-demote-whole-page-detail.md) | A whole-page detail becomes the base when zooming past its budget | rejected |
-| [0009](0009-viewer-lifetimes.md) | Each viewport owns its viewer work; separate hot and cold snapshots | adopted |
+| [0008](0008-demote-whole-page-detail.md) | Every whole-page detail becomes the base when zooming past its budget | rejected |
+| [0009](0009-viewer-lifetimes.md) | Each viewport owns its viewer work | adopted |
 | [0010](0010-renderer-owns-page-dom.md) | The renderer owns each page's DOM, and kept canvases move | adopted |
 | [0011](0011-react-api.md) | The React API: viewers of their own, live options, the session's state | adopted |
 | [0012](0012-demote-small-whole-page-detail.md) | A whole-page detail no larger than a base becomes the base | adopted |
@@ -26,9 +24,9 @@ for the direction of the rebuild gets a new record, numbered next.
 | [0015](0015-toward-1.0.md) | What 1.0 requires, and what 1.x promises | proposed |
 | [0016](0016-form-scripts-after-first-paint.md) | Form scripts start after the first paint | adopted |
 | [0017](0017-measured-against-react-pdf.md) | ParaPDF is measured against react-pdf | adopted |
-| [0018](0018-keep-the-size-query-container.md) | The scroller stays a size query container | rejected |
+| [0018](0018-keep-the-size-query-container.md) | The scroller stops being a size query container | rejected |
 | [0019](0019-pdfjs-viewer-parity.md) | What ParaPDF takes from pdf.js's viewer, and what it leaves | adopted |
-| [0020](0020-text-layers-built-in-the-document.md) | Text layers are built in the document | rejected |
+| [0020](0020-text-layers-built-in-the-document.md) | Text layers are built out of the document | rejected |
 | [0021](0021-focus-follows-the-page.md) | Focus follows the page being read | adopted |
 | [0022](0022-runtime-policy-modules.md) | Keep runtime policies in the modules that own them | adopted |
 | [0023](0023-provider-url-fragments.md) | URL open parameters belong to the provider | adopted |
@@ -41,14 +39,14 @@ for the direction of the rebuild gets a new record, numbered next.
 ```markdown
 # NNNN. Title
 
-- Status: proposed | adopted | rejected | pending | superseded by NNNN
+- Status: proposed | adopted | rejected | superseded by NNNN
 - Date: YYYY-MM-DD
 
-## Context
-## Decision (or Idea, for one not adopted)
+## Decision
+What was decided, and in a sentence or two why it came up. For a rejected
+idea, what stays instead and why.
 ## Evidence
-Measurements with the script, the build or branch, the browsers, the runs,
-and the result files. Wins and losses both.
-## Consequences
+The script, the browsers, the runs, the result files, and the numbers that
+decide it. Wins and losses both.
 ## Reopen if
 ```

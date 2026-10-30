@@ -1,5 +1,5 @@
 /**
- * M4: features are modules that only applications using them pay for.
+ * Features are modules that only applications using them pay for.
  * Builds the demo with source maps and Vite's manifest, and reads which of
  * the package's modules each entry loads: the code of its own chunk and of
  * the chunks it imports statically, which the browser loads with it. The

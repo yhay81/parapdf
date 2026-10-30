@@ -5,33 +5,22 @@ The development context for coding agents.
 
 ParaPDF is a React PDF viewer built on pdf.js for maximum performance.
 "Para" carries two meanings: flipping quickly through pages (Japanese
-"parapara") and parallel, off-main-thread rendering. It is being rebuilt,
-on `main`, toward the design in `docs/rebuild/target.md`.
+"parapara") and parallel, off-main-thread rendering. `parapdf` is published
+on npm; releases before 0.5.0 are not supported.
 
 ## Read first
 
 What decides, highest first:
 
-1. `docs/rebuild/target.md`: the destination.
+1. `docs/architecture.md`: the design as it is.
 2. `docs/decisions/`: what was decided and why, with the evidence. Final
    until new measurements reopen them.
 3. The rules in this file.
 4. The code.
-5. `docs/history/AGENTS-v0.md`: the 0.x development context. Facts and
-   reasons for the code being ported, never rules.
 
-When none of them answers a question, stop and ask; do not infer the answer
-from the 0.x code or the history. The answer goes into `target.md` before
-the code that follows it.
-
-## Status
-
-The rebuild ran milestone by milestone on `main`
-(`docs/rebuild/milestones.md`); M0 to M7 are done, and 0.5.0 is its first
-release. 0.x was published on npm as `parapdf` 0.1.0 to 0.4.0, from the tags
-`v0.1.0` to `v0.4.0`, and is no longer supported. New work follows the same
-rules: `target.md` first when the destination changes, and a decision record
-when the choice matters for performance or direction.
+When none of them answers a question, stop and ask. When the design
+changes, `docs/architecture.md` changes in the same change, and a choice
+that matters for performance or direction gets a decision record.
 
 ## Rules
 
@@ -64,36 +53,19 @@ when the choice matters for performance or direction.
 
 ## How to work
 
-- One milestone at a time (decision 0003): a session of its own, on a
-  branch `rebuild-m<N>-<topic>` from `main`, in a worktree of its own,
-  merged into `main` through a pull request once the milestone's "Done
-  when" holds and CI passes. Sessions that change the runtime's core never
-  run in parallel.
-- A task names its milestone and follows this template:
-
-  ```
-  Milestone: M<N> (docs/rebuild/milestones.md)
-  Goal: …
-  Scope: the files or modules it may change
-  Out of scope: …
-  Done when: the milestone's criteria, and …
-  If target.md does not cover a question: stop and ask.
-  ```
-
-- Port the modules `target.md` lists under "Ported unchanged" with their
-  tests; read the history for why they are as they are, and do not
-  redesign them in passing.
-- Do not keep old names working, reintroduce an engine abstraction, update
-  the documentation for people per change, or reopen a decision without new
-  measurements.
-- When the destination has to change, change `target.md` first, as part of
-  the milestone that needs it, and record a decision if the choice matters
-  for performance or direction.
-- Keep this file true of the repository: its layout, commands, and rules.
+- One change per branch from `main`, in a worktree of its own, merged
+  through a pull request once CI passes. Sessions that change the runtime's
+  core never run in parallel.
+- Do not keep old names working, reintroduce an engine abstraction, or
+  reopen a decision without new measurements.
+- A change to the package gets an entry under "Unreleased" in
+  `CHANGELOG.md`, and the site (`site/`), the one home of the API's
+  documentation, follows it. The package's README stays a short overview.
+- Keep this file and `docs/architecture.md` true of the repository.
 
 ## Repository layout
 
-`target.md` describes where the runtime's code goes.
+`docs/architecture.md` describes what each part of the runtime owns.
 
 - `packages/parapdf/` — the runtime, published as `parapdf`: the loader
   that starts pdf.js with the package's worker and files, and how ParaPDF
@@ -153,8 +125,9 @@ when the choice matters for performance or direction.
 - `site/` — the documentation site (Astro with Starlight), deployed by
   `.github/workflows/site.yml` to https://parapdf.yhay81.com from release
   tags.
-- `docs/` — `rebuild/` (target and milestones), `decisions/`, and
-  `history/`.
+- `docs/` — `architecture.md` and `decisions/`.
+- `bench/upstream/` — investigations of pdf.js and WebKit bugs not filed
+  yet, with their reproduction pages.
 - `.github/` — CI, the script it installs Playwright's browsers with
   (`scripts/install-browser.sh`), issue forms, the pull request template,
   and Dependabot.
@@ -212,8 +185,7 @@ when the choice matters for performance or direction.
   (`examples/prototype/results/safari-macos.md`). `preload-reuse.ts`
   counts, on the server, the PDF's downloads with React's preload, and
   `preload-timing.ts` whether a fetch takes a preload still downloading, in
-  any of them. What each covers is listed in
-  `docs/history/AGENTS-v0.md`, "Commands".
+  any of them. Each script's header comment says what it covers.
 - Runtime benchmarks in `examples/prototype/scripts/`: `scroll-bench.ts`
   (also `pnpm --filter @parapdf/prototype bench`), `commit-bench.ts` (zoom
   commits), `zoom-bench.ts`, `return-bench.ts` (pages the reader comes back

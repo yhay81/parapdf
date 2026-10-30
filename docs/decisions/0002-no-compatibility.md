@@ -1,32 +1,25 @@
-# 0002. No compatibility to keep
+# 0002. No compatibility to keep before 1.0
 
-- Status: adopted
+- Status: adopted (until 1.0, when decision 0015 takes over)
 - Date: 2026-10-24
-
-## Context
-
-`parapdf` 0.x is published on npm (0.1.0 to 0.4.0, 2026-10-20), but nobody
-depends on it.
 
 ## Decision
 
-The rebuild changes APIs, options, published state, file layout, and
-behavior whenever that makes ParaPDF faster or simpler. It adds no
-deprecations, aliases, shims, or compatibility layers, and does not ask
-whether a break is acceptable.
+Before 1.0, ParaPDF changes APIs, options, published state, file layout,
+and behavior whenever that makes it faster or simpler. It adds no
+deprecations, aliases, shims, or compatibility layers. Every break is
+listed in the release's `CHANGELOG.md` entry.
 
-Documentation for people follows the result, not each change: the
-package's README, the documentation site (`site/`), the root `README.md`,
-`CONTRIBUTING.md`, and `SECURITY.md` keep describing 0.x until M7 rewrites
-them. `CHANGELOG.md` gets one entry per merged milestone.
+The functional checks (`check:*`) are the behavioral contract: a change
+that alters an API on purpose changes the checks in the same change; a check
+that fails for any other reason is a bug.
 
-## Consequences
+## Evidence
 
-- The functional checks (`check:*`) are the behavioral contract. A
-  milestone that changes an API on purpose changes the checks in the same
-  change; a check that fails for any other reason is a bug.
-- Nothing is released before M7.
+None measured: a direction the maintainer set while few applications
+depend on ParaPDF.
 
 ## Reopen if
 
-ParaPDF gets users who depend on a 0.x API.
+Applications come to depend on a 0.x API in a way that makes free breaks
+costlier than they are worth, or 1.0 ships.

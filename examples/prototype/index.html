@@ -5,57 +5,132 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ParaPDF prototype</title>
     <style>
-      html, body, #root { margin: 0; height: 100%; }
-      body { font: 13px system-ui, sans-serif; color: #e8e8e8; background: #3b3d40; }
-      .toolbar {
-        position: absolute; inset: 0 0 auto 0; height: 40px; display: flex; gap: 12px;
-        align-items: center; padding: 0 12px; background: #2a2b2e; box-sizing: border-box;
+      :root {
+        color-scheme: dark;
+        --bar: #26272a; --bar-2: #2d2f32; --panel: #2b2d30; --field: #1d1e21;
+        --line: #3d4044; --hover: #393c40; --text: #e8eaed; --muted: #9aa0a6;
+        --accent: #8ab4f8; --accent-bg: rgb(138 180 248 / 0.18);
       }
-      .toolbar button { min-width: 28px; }
-      .toolbar .engine { color: #9aa0a6; }
+      html, body, #root { margin: 0; height: 100%; }
+      body { font: 13px/1.3 system-ui, sans-serif; color: var(--text); background: #3b3d40; }
+      .status { padding: 16px; color: var(--muted); }
+
       .viewport { position: absolute; inset: 40px 0 0 0; background: #525659; }
-      .status { padding: 16px; }
-      .search { display: flex; gap: 4px; align-items: center; margin-left: auto; }
-      .search input { width: 200px; }
-      .search-summary { min-width: 9em; color: #c9cdd2; }
       .viewport.with-sidebar { left: 280px; }
+      .viewport.with-annotations { top: 80px; }
+
       .sidebar {
         position: absolute; inset: 40px auto 0 0; width: 280px; overflow: auto;
-        background: #2f3134; box-sizing: border-box; padding: 8px 4px;
+        background: var(--panel); border-right: 1px solid var(--line);
+        box-sizing: border-box; padding: 8px;
       }
+      .sidebar:has(~ .stage > .with-annotations) { top: 80px; }
       .sidebar ul, .sidebar ol { list-style: none; margin: 0; padding-left: 12px; }
       .sidebar > ul, .sidebar > ol, .sidebar > nav > ol { padding-left: 0; }
       .outline :is(button, a), .attachments button {
-        display: block; width: 100%; text-align: left; padding: 4px 8px; border: 0;
-        background: none; color: #e8e8e8; font: inherit; cursor: pointer; border-radius: 4px;
+        display: block; width: 100%; text-align: left; padding: 5px 8px; border: 0;
+        background: none; color: var(--text); font: inherit; cursor: pointer; border-radius: 6px;
+        text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       }
-      .outline :is(button, a):hover, .outline :is(button, a):focus-visible,
-      .attachments button:hover { background: #45484c; }
+      .outline :is(button, a):hover, .attachments button:hover { background: var(--hover); }
       .thumbnails li { display: flex; justify-content: center; padding: 6px 0; }
       .thumbnails button {
         display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 4px;
-        border: 2px solid transparent; border-radius: 4px; background: none; color: #e8e8e8;
+        border: 2px solid transparent; border-radius: 6px; background: none; color: var(--muted);
         font: inherit; cursor: pointer;
       }
-      .thumbnails button[aria-current="page"] { border-color: #8ab4f8; }
-      .layers label { display: flex; gap: 6px; align-items: center; padding: 4px 8px; }
-      .layers .heading { display: block; padding: 4px 8px; color: #9aa0a6; }
+      .thumbnails button:hover { background: var(--hover); }
+      .thumbnails button[aria-current="page"] { border-color: var(--accent); color: var(--text); }
+      .layers label { display: flex; gap: 8px; align-items: center; padding: 5px 8px; }
+      .layers input { accent-color: var(--accent); }
+      .layers .heading { display: block; padding: 5px 8px; color: var(--muted); }
+
       .password {
-        position: absolute; inset: 40px 0 auto 0; z-index: 10; display: flex; gap: 8px;
-        align-items: center; padding: 12px; background: #2a2b2e;
+        position: absolute; top: 52px; left: 16px; right: 16px; z-index: 10;
+        width: fit-content; margin: 0 auto; box-sizing: border-box; padding: 12px 14px;
+        display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+        background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+        box-shadow: 0 8px 24px rgb(0 0 0 / 0.4);
       }
+      .annotation-toolbar ~ .password { top: 92px; }
       .password label { display: flex; gap: 8px; align-items: center; }
-      .toolbar { overflow-x: auto; white-space: nowrap; }
-      .annotation-toolbar { top: 40px; background: #303236; }
-      .annotation-toolbar [aria-pressed="true"] { outline: 2px solid #8ab4f8; }
-      .viewport.with-annotations { top: 80px; }
-      .sidebar:has(~ .stage > .with-annotations) { top: 80px; }
+
       .stage:not(:fullscreen) { display: contents; }
       .stage:fullscreen .viewport { inset: 0; background: #000; }
       .presentation-controls {
         position: absolute; right: 16px; bottom: 16px; display: flex; gap: 4px; opacity: 0.2;
       }
       .presentation-controls:hover, .presentation-controls:focus-within { opacity: 1; }
+
+      /* The split view (?split=1). */
+      .split > button { margin: 6px 6px 0; align-self: flex-start; }
+      .split-bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px; }
+
+      /* One row of controls each, 40 pixels high, which scrolls rather than squeezes. */
+      .toolbar {
+        position: absolute; inset: 0 0 auto 0; height: 40px; box-sizing: border-box;
+        display: flex; gap: 4px; align-items: center; padding: 0 8px;
+        background: var(--bar); border-bottom: 1px solid var(--line);
+        overflow: auto hidden; white-space: nowrap; scrollbar-width: thin;
+      }
+      .toolbar > *, .group > * { flex: none; }
+      .group { display: flex; gap: 2px; align-items: center; }
+      .group:empty { display: none; }
+      .group + .group { padding-left: 4px; border-left: 1px solid var(--line); }
+      .toolbar strong { font-weight: 600; padding: 0 2px 0 4px; }
+      .engine {
+        margin-left: 4px; padding: 2px 6px; border-radius: 4px;
+        font-size: 11px; color: var(--muted); background: var(--hover);
+      }
+      .page, .zoom { text-align: center; font-variant-numeric: tabular-nums; }
+      .page { min-width: 6.5em; padding: 0 4px; }
+      .zoom { min-width: 3.5em; }
+      /* The field gives up width before anything else scrolls out of sight. */
+      .toolbar > .search {
+        flex: 0 1 auto; min-width: 0; display: flex; gap: 2px; align-items: center;
+        margin-left: auto; padding-left: 8px;
+      }
+      .toolbar .search input { flex: 0 1 180px; min-width: 96px; width: 0; margin-right: 2px; }
+      .search-summary, .message { padding-left: 4px; color: var(--muted); }
+      :is(.search-summary, .message):empty { display: none; }
+
+      /* Controls of the demo's own, apart from those of the PDF's forms. */
+      :is(.toolbar, .password, .split-bar) :is(button, select, input, textarea),
+      .split > button { font: inherit; color: inherit; }
+      :is(.toolbar, .password, .split-bar) button, .split > button {
+        display: inline-flex; gap: 6px; align-items: center; justify-content: center;
+        height: 28px; padding: 0 10px; box-sizing: border-box; cursor: pointer;
+        border: 1px solid var(--line); border-radius: 6px; background: var(--bar-2);
+      }
+      :is(.toolbar, .password, .split-bar) button:hover:not(:disabled),
+      .split > button:hover { background: var(--hover); }
+      :is(.toolbar, .password, .split-bar) button:disabled { opacity: 0.4; cursor: default; }
+      .toolbar .icon-button { width: 28px; padding: 0; border-color: transparent; background: none; }
+      .icon {
+        width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.75;
+        stroke-linecap: round; stroke-linejoin: round;
+      }
+      :is(.toolbar, .password) :is(select, input:not([type="checkbox"], [type="range"]), textarea) {
+        height: 28px; box-sizing: border-box; padding: 0 8px;
+        border: 1px solid var(--line); border-radius: 6px; background: var(--field);
+      }
+      .toolbar input[type="color"] { width: 32px; padding: 2px; }
+      .toolbar input[type="number"] { width: 4.5em; }
+      .toolbar input[type="range"] { width: 96px; accent-color: var(--accent); }
+      .toolbar textarea { padding: 5px 8px; resize: none; }
+      :is(.toolbar, .password, .split-bar, .sidebar) :focus-visible,
+      .split > button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+      .annotation-toolbar { top: 40px; background: var(--bar-2); }
+      .annotation-toolbar button:not(.segmented button) { background: var(--bar); }
+      .segmented { padding: 2px; border-radius: 8px; background: var(--field); }
+      .toolbar .segmented button { height: 24px; border-color: transparent; background: none; }
+      .toolbar button:is([aria-pressed="true"], [aria-expanded="true"]) {
+        color: var(--accent); background: var(--accent-bg);
+      }
+      .selected-annotation { display: flex; gap: 6px; align-items: center; padding-left: 6px; }
+      .selected-annotation label { display: flex; gap: 6px; align-items: center; }
+      .password button[type="submit"] { border-color: var(--accent); background: var(--accent-bg); }
     </style>
   </head>
   <body>

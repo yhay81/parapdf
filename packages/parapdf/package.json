@@ -11,7 +11,7 @@
     "react-component",
     "viewer"
   ],
-  "license": "MIT",
+  "license": "Apache-2.0",
   "author": "Yusuke Hayashi",
   "homepage": "https://parapdf.yhay81.com",
   "repository": {
@@ -48,8 +48,7 @@
     "src",
     "pdfjs",
     "LICENSE",
-    "NOTICE.md",
-    "LICENSES"
+    "NOTICE.md"
   ],
   "scripts": {
     "build": "node scripts/pdfjs-files.ts && node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json && node scripts/declaration-imports.ts",
