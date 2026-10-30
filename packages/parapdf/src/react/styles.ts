@@ -1,11 +1,14 @@
+// Derived from PDF.js `web/pdf_viewer.css` (pdfjs-dist 6.4.299), Copyright
+// Mozilla Foundation, Apache License 2.0, and changed for ParaPDF; see
+// NOTICE.md.
+
 /**
  * Viewer styles, injected once through React 19's `<style href precedence>`.
  *
  * The `.parapdf-text-layer` and `.parapdf-annotation-layer` rules are derived
  * from the `.textLayer` and `.annotationLayer` rules in PDF.js
- * `web/pdf_viewer.css` (Copyright Mozilla Foundation, Apache License 2.0; see
- * NOTICE.md): links, form fields, and comment popups, without the editor's
- * rules. pdf.js's `TextLayer` and `AnnotationLayer` size and position
+ * `web/pdf_viewer.css`: links, form fields, and comment popups, without the
+ * editor's rules. pdf.js's `TextLayer` and `AnnotationLayer` size and position
  * their elements through these classes and custom properties, so the rules
  * must match its expectations. Like pdf.js's, they declare
  * `-webkit-user-select` next to `user-select`: Playwright's WebKit 27.2

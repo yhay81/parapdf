@@ -22,7 +22,8 @@ measurements. This file is the short version for people.
   `TextLayer`, and `AnnotationLayer`; not the viewer components in
   `pdfjs-dist/web/`. ParaPDF does not fork or patch pdf.js: changes it needs
   go upstream. Code ported from pdf.js's viewer needs Apache-2.0
-  attribution in [`NOTICE.md`](NOTICE.md) and in the file.
+  attribution in [`NOTICE.md`](NOTICE.md) and in a comment at the top of
+  the file, after its directives.
 - **Domain-neutral.** ParaPDF shows PDFs as documents: reading, search,
   selection, links, annotations, and forms. Scales, real-world lengths,
   measuring tools, and CAD layers belong in libraries built on a PDF engine.

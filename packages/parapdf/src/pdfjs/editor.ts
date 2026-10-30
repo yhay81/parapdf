@@ -1,3 +1,8 @@
+// Derived from PDF.js `web/annotation_editor_layer_builder.js`,
+// `web/draw_layer_builder.js`, and `l10n/en-US/viewer.ftl` (pdfjs-dist
+// 6.4.299), Copyright Mozilla Foundation, Apache License 2.0, and changed for
+// ParaPDF; see NOTICE.md.
+
 import type * as Pdfjs from "pdfjs-dist";
 import type { AnnotationLayerEditing } from "./annotation-layer.ts";
 import { RenderCancelledError, type Rotation } from "./draw.ts";

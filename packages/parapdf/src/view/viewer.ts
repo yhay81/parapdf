@@ -1,5 +1,9 @@
 "use client";
 
+// Derived from PDF.js `web/pdf_viewer.js` (pdfjs-dist 6.4.299), Copyright
+// Mozilla Foundation, Apache License 2.0, and changed for ParaPDF; see
+// NOTICE.md.
+
 import { documentOf, type PdfSession } from "../document/pdf-session.ts";
 import type { DocumentSession, PageSize, PdfPermissions } from "../document/session.ts";
 import type {

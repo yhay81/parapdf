@@ -1,5 +1,9 @@
 "use client";
 
+// Derived from PDF.js `web/autolinker.js` and `web/pdf_page_view.js`
+// (pdfjs-dist 6.4.299), Copyright Mozilla Foundation, Apache License 2.0, and
+// changed for ParaPDF; see NOTICE.md.
+
 import type * as Pdfjs from "pdfjs-dist";
 import type { DocumentSession } from "../document/session.ts";
 import type { AnnotationLayerHandle } from "../pdfjs/annotation-layer.ts";
@@ -11,11 +15,10 @@ import { buildPageIndex, type PageIndex, type SearchMatch } from "./search/text-
 /*
  * Finding links in the text follows `Autolinker` in PDF.js
  * `web/autolinker.js`, and leaving out those the file already has
- * `PDFPageView#checkInferredLinks()` in `web/pdf_page_view.js` (pdfjs-dist
- * 6.4.299; Copyright Mozilla Foundation, Apache License 2.0; see NOTICE.md):
- * the same regular expression and URL checks, on the page's text as search
- * normalizes it, with case and diacritics kept and a dash before a line end
- * kept, as pdf.js's `normalize()` with `ignoreDashEOL` keeps it.
+ * `PDFPageView#checkInferredLinks()` in `web/pdf_page_view.js`: the same
+ * regular expression and URL checks, on the page's text as search normalizes
+ * it, with case and diacritics kept and a dash before a line end kept, as
+ * pdf.js's `normalize()` with `ignoreDashEOL` keeps it.
  */
 
 /** A URL or e-mail address found in a page's text. */

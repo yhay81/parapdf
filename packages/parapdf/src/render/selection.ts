@@ -1,10 +1,13 @@
 "use client";
 
+// Derived from PDF.js `web/text_layer_builder.js` (pdfjs-dist 6.4.299),
+// Copyright Mozilla Foundation, Apache License 2.0, and changed for ParaPDF;
+// see NOTICE.md.
+
 /**
  * Keeps a drag selection from jumping across a page. Ported from the
  * selection handling of `TextLayerBuilder` in PDF.js
- * `web/text_layer_builder.js` (pdfjs-dist 6.4.299; Copyright Mozilla
- * Foundation, Apache License 2.0; see NOTICE.md).
+ * `web/text_layer_builder.js`.
  *
  * Every text layer ends with an `.endOfContent` element. While a selection
  * touches a layer, the layer has the `selecting` class, and the viewer CSS
