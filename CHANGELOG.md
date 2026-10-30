@@ -39,7 +39,7 @@ change the API.
   terms; pdf.js and its bundled third-party files retain their notices and
   licenses.
 
-- Document partial screen reader verification with NVDA and Firefox on
+- Document screen reader verification with NVDA and Firefox on
   Windows, and the interactions that still need checking (#32).
 
 - Printing turns a page whose orientation differs from the first page's to

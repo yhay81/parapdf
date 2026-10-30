@@ -54,11 +54,15 @@ after a link starts at the top of the page it goes to, not at the exact
 destination.
 
 NVDA 2026.3 in Firefox 157 on Windows has also been tried with the demo:
-the partial [results](https://github.com/yhay81/parapdf/blob/main/examples/prototype/results/nvda-firefox-windows.md)
-cover tagged text and lists, reading across pages, an internal link,
-form labels and some operations, search announcements, and a copy-restricted
-document. Page-change focus, external links, tables, and other interactions
-still need verification ([#32](https://github.com/yhay81/parapdf/issues/32)).
+the [results](https://github.com/yhay81/parapdf/blob/main/examples/prototype/results/nvda-firefox-windows.md)
+cover headings, lists and a table, reading across pages, links, form labels
+and some operations, search announcements, annotation controls, and a
+copy-restricted document. Page Down, Page Up, Home and End announced the
+page shown and moved focus to it, including when the old page unmounted.
+The demo's thumbnail buttons kept focus on the selected button. These
+checks recorded NVDA's speech queue; audio quality and other combinations
+of reader and browser have not been evaluated. The results describe the
+remaining unverified interactions.
 
 Applications own the rest of the interface: label your toolbar, announce
 search results with an `aria-live` region as [the search
