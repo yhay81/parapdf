@@ -37,7 +37,8 @@ change the API.
 - ParaPDF is licensed under Apache-2.0 instead of MIT, aligning it with
   pdf.js. Previously released versions remain available under their original
   terms; pdf.js and its bundled third-party files retain their notices and
-  licenses.
+  licenses. The source files derived from pdf.js identify their origins and
+  license, and `NOTICE.md` lists their corresponding pdf.js files (#117).
 
 - Document screen reader verification with NVDA and Firefox on
   Windows, and the interactions that still need checking (#32).
