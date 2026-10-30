@@ -1,5 +1,6 @@
 import { type SearchOptions, useDocumentState, useSearch, type Viewer } from "parapdf";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Icon } from "./Icon.tsx";
 
 /**
  * Find-in-document. Typing searches after a short pause; Enter and Shift+Enter
@@ -83,14 +84,23 @@ export function SearchBox({ viewer }: { viewer: Viewer }) {
       />
       <button
         type="button"
+        className="icon-button"
         onClick={search.previous}
         disabled={total === 0}
         aria-label="Previous match"
+        title="Previous match"
       >
-        ↑
+        <Icon name="up" />
       </button>
-      <button type="button" onClick={search.next} disabled={total === 0} aria-label="Next match">
-        ↓
+      <button
+        type="button"
+        className="icon-button"
+        onClick={search.next}
+        disabled={total === 0}
+        aria-label="Next match"
+        title="Next match"
+      >
+        <Icon name="down" />
       </button>
       {(
         [
@@ -102,7 +112,9 @@ export function SearchBox({ viewer }: { viewer: Viewer }) {
         <button
           key={name}
           type="button"
+          className="icon-button"
           aria-label={label}
+          title={label}
           aria-pressed={Boolean(options[name])}
           onClick={() => toggle(name)}
         >

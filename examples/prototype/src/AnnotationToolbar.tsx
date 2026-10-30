@@ -58,96 +58,106 @@ export function AnnotationToolbar({ viewer, file }: { viewer: Viewer; file: stri
 
   return (
     <div className="toolbar annotation-toolbar" role="toolbar" aria-label="Annotations">
-      {TOOLS.map(([value, label]) => (
-        <button
-          key={value}
-          type="button"
-          aria-pressed={tool === value}
-          disabled={!ready}
-          onClick={() => void annotations?.setTool(value)}
-        >
-          {label}
+      <div className="group segmented">
+        {TOOLS.map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={tool === value}
+            disabled={!ready}
+            onClick={() => void annotations?.setTool(value)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <div className="group">
+        {styled ? (
+          <input
+            type="color"
+            aria-label="Color"
+            value={color.toLowerCase()}
+            onChange={(event) => annotations?.setStyle(styled, { color: event.target.value })}
+          />
+        ) : null}
+        {styled === "ink" && styles ? (
+          <input
+            type="range"
+            aria-label="Thickness"
+            min={1}
+            max={20}
+            value={styles.ink.thickness}
+            onChange={(event) =>
+              annotations?.setStyle("ink", { thickness: Number(event.target.value) })
+            }
+          />
+        ) : null}
+        {styled === "freetext" && styles ? (
+          <input
+            type="number"
+            aria-label="Font size"
+            min={5}
+            max={100}
+            value={styles.freetext.fontSize}
+            onChange={(event) =>
+              annotations?.setStyle("freetext", { fontSize: Number(event.target.value) })
+            }
+          />
+        ) : null}
+      </div>
+      <div className="group">
+        <button type="button" disabled={!editing?.canUndo} onClick={() => annotations?.undo()}>
+          Undo
         </button>
-      ))}
-      {styled ? (
+        <button type="button" disabled={!editing?.canRedo} onClick={() => annotations?.redo()}>
+          Redo
+        </button>
+        <button
+          type="button"
+          disabled={!editing?.hasSelection}
+          onClick={() => annotations?.deleteSelected()}
+        >
+          Delete
+        </button>
+      </div>
+      <div className="group">
         <input
-          type="color"
-          aria-label="Color"
-          value={color.toLowerCase()}
-          onChange={(event) => annotations?.setStyle(styled, { color: event.target.value })}
+          ref={imageRef}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={(event) => {
+            const image = event.target.files?.[0];
+            if (image) void annotations?.addImage(image, { altText: image.name });
+            event.target.value = "";
+          }}
         />
-      ) : null}
-      {styled === "ink" && styles ? (
-        <input
-          type="range"
-          aria-label="Thickness"
-          min={1}
-          max={20}
-          value={styles.ink.thickness}
-          onChange={(event) =>
-            annotations?.setStyle("ink", { thickness: Number(event.target.value) })
-          }
-        />
-      ) : null}
-      {styled === "freetext" && styles ? (
-        <input
-          type="number"
-          aria-label="Font size"
-          min={5}
-          max={100}
-          value={styles.freetext.fontSize}
-          onChange={(event) =>
-            annotations?.setStyle("freetext", { fontSize: Number(event.target.value) })
-          }
-        />
-      ) : null}
-      <button type="button" disabled={!editing?.canUndo} onClick={() => annotations?.undo()}>
-        Undo
-      </button>
-      <button type="button" disabled={!editing?.canRedo} onClick={() => annotations?.redo()}>
-        Redo
-      </button>
-      <button
-        type="button"
-        disabled={!editing?.hasSelection}
-        onClick={() => annotations?.deleteSelected()}
-      >
-        Delete
-      </button>
-      <input
-        ref={imageRef}
-        type="file"
-        accept="image/*"
-        hidden
-        onChange={(event) => {
-          const image = event.target.files?.[0];
-          if (image) void annotations?.addImage(image, { altText: image.name });
-          event.target.value = "";
-        }}
-      />
-      <button type="button" disabled={!ready} onClick={() => imageRef.current?.click()}>
-        Add image
-      </button>
-      <button
-        type="button"
-        disabled={!ready}
-        onClick={() => {
-          const name = prompt("Signature");
-          if (name) void annotations?.addSignature({ text: name }, { description: name });
-        }}
-      >
-        Sign
-      </button>
-      <button type="button" disabled={!ready} onClick={keep}>
-        Keep
-      </button>
-      <button type="button" disabled={!ready} onClick={() => void restore()}>
-        Restore
-      </button>
-      <button type="button" disabled={!ready} onClick={() => void copyText()}>
-        Copy text
-      </button>
-      <output>{message}</output>
+        <button type="button" disabled={!ready} onClick={() => imageRef.current?.click()}>
+          Add image
+        </button>
+        <button
+          type="button"
+          disabled={!ready}
+          onClick={() => {
+            const name = prompt("Signature");
+            if (name) void annotations?.addSignature({ text: name }, { description: name });
+          }}
+        >
+          Sign
+        </button>
+      </div>
+      <div className="group">
+        <button type="button" disabled={!ready} onClick={keep}>
+          Keep
+        </button>
+        <button type="button" disabled={!ready} onClick={() => void restore()}>
+          Restore
+        </button>
+        <button type="button" disabled={!ready} onClick={() => void copyText()}>
+          Copy text
+        </button>
+      </div>
+      <output className="message">{message}</output>
       {annotations && editing?.selected ? (
         <SelectedAnnotationForm
           // Starts again when another is selected, or undo changes this one.

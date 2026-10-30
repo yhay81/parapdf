@@ -41,6 +41,7 @@ import {
 import { AnnotationToolbar } from "./AnnotationToolbar.tsx";
 import { BenchDriver } from "./BenchDriver.tsx";
 import { configureEngine, type Pdfjs } from "./engines.ts";
+import { Icon, type IconName } from "./Icon.tsx";
 import { attachViewport, showWith } from "./internals.ts";
 import { PasswordPrompt } from "./PasswordPrompt.tsx";
 import { SearchBox } from "./SearchBox.tsx";
@@ -490,99 +491,144 @@ function Toolbar({
   return (
     <header className="toolbar">
       {/* The document's data loads apart from the pages, which never wait for it. */}
-      <Suspense fallback={null}>
-        <PanelButtons sidebar={sidebar} onToggleSidebar={onToggleSidebar} />
-        {settings.initialView === "document" ? <AskedPanel onOpenSidebar={onOpenSidebar} /> : null}
-      </Suspense>
-      <button type="button" onClick={back} disabled={!navigation.canGoBack}>
-        Back
-      </button>
-      <button type="button" onClick={forward} disabled={!navigation.canGoForward}>
-        Forward
-      </button>
-      <Suspense fallback={<strong>ParaPDF prototype</strong>}>
-        <Title />
-      </Suspense>
-      <span className="engine">{settings.engine}</span>
-      <button type="button" onClick={() => viewer.previousPage()} aria-label="Previous page">
-        ‹
-      </button>
-      {status === "ready" ? (
-        <Suspense fallback={<span>{pageText}</span>}>
-          <PageText page={page} numbers={pageNumbers} />
+      <div className="group">
+        <Suspense fallback={null}>
+          <PanelButtons sidebar={sidebar} onToggleSidebar={onToggleSidebar} />
+          {settings.initialView === "document" ? (
+            <AskedPanel onOpenSidebar={onOpenSidebar} />
+          ) : null}
         </Suspense>
-      ) : (
-        <span>{pageText}</span>
-      )}
-      <button type="button" onClick={() => viewer.nextPage()} aria-label="Next page">
-        ›
-      </button>
-      <button type="button" onClick={() => viewer.zoomBy(1 / 1.25)} aria-label="Zoom out">
-        −
-      </button>
-      {/* 100% is the page at 96 CSS pixels per inch. */}
-      <span>{Math.round((scale * 72 * 100) / 96)}%</span>
-      <button type="button" onClick={() => viewer.zoomBy(1.25)} aria-label="Zoom in">
-        +
-      </button>
-      <button
-        type="button"
-        aria-pressed={zoomMode === "fit-width"}
-        onClick={() => viewer.setScale("fit-width")}
-      >
-        Fit width
-      </button>
-      <button
-        type="button"
-        aria-pressed={zoomMode === "fit-page"}
-        onClick={() => viewer.setScale("fit-page")}
-      >
-        Fit page
-      </button>
-      <select
-        aria-label="Spread"
-        value={spread}
-        onChange={(event) => viewer.setSpread(event.target.value as SpreadMode)}
-      >
-        <option value="none">Single pages</option>
-        <option value="odd">Odd spreads</option>
-        <option value="even">Even spreads</option>
-      </select>
-      <select
-        aria-label="Scrolling"
-        value={scrollMode}
-        onChange={(event) => viewer.setScrollMode(event.target.value as ScrollMode)}
-      >
-        <option value="vertical">Vertical</option>
-        <option value="horizontal">Horizontal</option>
-        <option value="wrapped">Wrapped</option>
-        <option value="page">Page by page</option>
-      </select>
-      <button
-        type="button"
-        aria-pressed={tool === "hand"}
-        onClick={() => viewer.setTool(tool === "hand" ? "select" : "hand")}
-      >
-        Hand tool
-      </button>
-      <button type="button" onClick={() => viewer.rotate(-90)} aria-label="Rotate counterclockwise">
-        ↺
-      </button>
-      <button type="button" onClick={() => viewer.rotate(90)} aria-label="Rotate clockwise">
-        ↻
-      </button>
-      <button
-        type="button"
-        onClick={() => void print(viewer)}
-        disabled={status !== "ready" || (settings.enforcePermissions && !canPrint)}
-      >
-        Print
-      </button>
-      <button type="button" onClick={() => void download(viewer)} disabled={status !== "ready"}>
-        Download
-      </button>
+      </div>
+      <div className="group">
+        <IconButton icon="back" label="Back" onClick={back} disabled={!navigation.canGoBack} />
+        <IconButton
+          icon="forward"
+          label="Forward"
+          onClick={forward}
+          disabled={!navigation.canGoForward}
+        />
+      </div>
+      <div className="group">
+        <Suspense fallback={<strong>ParaPDF</strong>}>
+          <Title />
+        </Suspense>
+        <span className="engine">{settings.engine}</span>
+      </div>
+      <div className="group">
+        <IconButton icon="up" label="Previous page" onClick={() => viewer.previousPage()} />
+        {status === "ready" ? (
+          <Suspense fallback={<span className="page">{pageText}</span>}>
+            <PageText page={page} numbers={pageNumbers} />
+          </Suspense>
+        ) : (
+          <span className="page">{pageText}</span>
+        )}
+        <IconButton icon="down" label="Next page" onClick={() => viewer.nextPage()} />
+      </div>
+      <div className="group">
+        <IconButton icon="minus" label="Zoom out" onClick={() => viewer.zoomBy(1 / 1.25)} />
+        {/* 100% is the page at 96 CSS pixels per inch. */}
+        <span className="zoom">{Math.round((scale * 72 * 100) / 96)}%</span>
+        <IconButton icon="plus" label="Zoom in" onClick={() => viewer.zoomBy(1.25)} />
+        <IconButton
+          icon="fitWidth"
+          label="Fit width"
+          pressed={zoomMode === "fit-width"}
+          onClick={() => viewer.setScale("fit-width")}
+        />
+        <IconButton
+          icon="fitPage"
+          label="Fit page"
+          pressed={zoomMode === "fit-page"}
+          onClick={() => viewer.setScale("fit-page")}
+        />
+      </div>
+      <div className="group">
+        <select
+          aria-label="Spread"
+          title="Spread"
+          value={spread}
+          onChange={(event) => viewer.setSpread(event.target.value as SpreadMode)}
+        >
+          <option value="none">No spreads</option>
+          <option value="odd">Odd spreads</option>
+          <option value="even">Even spreads</option>
+        </select>
+        <select
+          aria-label="Scrolling"
+          title="Scrolling"
+          value={scrollMode}
+          onChange={(event) => viewer.setScrollMode(event.target.value as ScrollMode)}
+        >
+          <option value="vertical">Vertical</option>
+          <option value="horizontal">Horizontal</option>
+          <option value="wrapped">Wrapped</option>
+          <option value="page">Page by page</option>
+        </select>
+      </div>
+      <div className="group">
+        <IconButton
+          icon="hand"
+          label="Hand tool"
+          pressed={tool === "hand"}
+          onClick={() => viewer.setTool(tool === "hand" ? "select" : "hand")}
+        />
+        <IconButton
+          icon="rotateLeft"
+          label="Rotate counterclockwise"
+          onClick={() => viewer.rotate(-90)}
+        />
+        <IconButton icon="rotateRight" label="Rotate clockwise" onClick={() => viewer.rotate(90)} />
+      </div>
+      <div className="group">
+        <IconButton
+          icon="print"
+          label="Print"
+          onClick={() => void print(viewer)}
+          disabled={status !== "ready" || (settings.enforcePermissions && !canPrint)}
+        />
+        <IconButton
+          icon="download"
+          label="Download"
+          onClick={() => void download(viewer)}
+          disabled={status !== "ready"}
+        />
+      </div>
       {settings.text ? <SearchBox viewer={viewer} /> : null}
     </header>
+  );
+}
+
+/** A button that shows an icon and names itself in its label and tooltip. */
+function IconButton({
+  icon,
+  label,
+  pressed,
+  onClick,
+  disabled,
+  ...rest
+}: {
+  icon: IconName;
+  label: string;
+  pressed?: boolean;
+  onClick: () => void;
+  disabled?: boolean;
+  "aria-expanded"?: boolean;
+  "aria-controls"?: string;
+}) {
+  return (
+    <button
+      type="button"
+      className="icon-button"
+      aria-label={label}
+      title={label}
+      aria-pressed={pressed}
+      onClick={onClick}
+      disabled={disabled}
+      {...rest}
+    >
+      <Icon name={icon} />
+    </button>
   );
 }
 
@@ -597,15 +643,14 @@ function PanelButtons({
   const hasOutline = useOutline().length > 0;
   const hasLayers = useLayers().length > 0;
   const hasAttachments = useAttachments().length > 0;
-  const sidebarButton = (view: SidebarView, text: string) => (
-    <button
-      type="button"
+  const sidebarButton = (view: SidebarView, label: string) => (
+    <IconButton
+      icon={view}
+      label={label}
       aria-expanded={sidebar === view}
       aria-controls={sidebar === view ? "sidebar" : undefined}
       onClick={() => onToggleSidebar(view)}
-    >
-      {text}
-    </button>
+    />
   );
   return (
     <>
@@ -630,11 +675,11 @@ function AskedPanel({ onOpenSidebar }: { onOpenSidebar: (view: SidebarView) => v
 /** The demo's name, titled with the document's own. */
 function Title() {
   const title = useMetadata()?.title ?? null;
-  return <strong title={title ?? undefined}>ParaPDF prototype</strong>;
+  return <strong title={title ?? undefined}>ParaPDF</strong>;
 }
 
 /** The current page's label, and its number of the pages. */
 function PageText({ page, numbers }: { page: number; numbers: string }) {
   const label = usePageLabels()?.[page] ?? null;
-  return <span>{`${label ?? page + 1} (${numbers})`}</span>;
+  return <span className="page">{`${label ?? page + 1} (${numbers})`}</span>;
 }

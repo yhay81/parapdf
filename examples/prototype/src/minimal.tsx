@@ -13,7 +13,7 @@ function Toolbar({ viewer }: { viewer: Viewer }) {
   const page = useViewState(viewer, (state) => state.currentPage);
   const pageCount = useViewState(viewer, (state) => state.layout?.sizes.length ?? 0);
   return (
-    <header style={{ display: "flex", gap: 8, padding: 8 }}>
+    <header className="toolbar">
       <button type="button" onClick={back} disabled={!canGoBack}>
         Back
       </button>
