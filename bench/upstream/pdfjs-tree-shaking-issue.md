@@ -2,8 +2,11 @@
 
 Why an application that bundles pdfjs-dist's `build/pdf.mjs` gets all of
 it, the annotation editor included, whatever it imports, and what pdf.js
-would have to change for bundlers to leave out what is unused. The draft
-report for pdf.js is at the end; it has not been filed.
+would have to change for bundlers to leave out what is unused. The report
+at the end was filed as
+[mozilla/pdf.js#22396](https://github.com/mozilla/pdf.js/issues/22396) on
+2026-10-30, with permalinks to master at 22f5df126, where `stamp.js`'s line
+is 50.
 
 ## The cost to ParaPDF's users
 
@@ -133,7 +136,7 @@ Nothing until pdf.js does. Then, two changes, which decision 0002 allows:
   if they never import the editor, which makes annotation editing a choice
   made where the application imports it.
 
-## Draft report
+## Report
 
 > **Title:** The generic `pdf.mjs` cannot be tree-shaken: every bundle
 > includes the annotation editor
