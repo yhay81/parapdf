@@ -53,8 +53,12 @@ Where it falls short: links are read after their page's text, and reading
 after a link starts at the top of the page it goes to, not at the exact
 destination.
 
-NVDA has not been tried yet
-([#32](https://github.com/yhay81/parapdf/issues/32)).
+NVDA 2026.3 in Firefox 157 on Windows has also been tried with the demo:
+the partial [results](https://github.com/yhay81/parapdf/blob/main/examples/prototype/results/nvda-firefox-windows.md)
+cover tagged text and lists, reading across pages, an internal link,
+form labels and some operations, search announcements, and a copy-restricted
+document. Page-change focus, external links, tables, and other interactions
+still need verification ([#32](https://github.com/yhay81/parapdf/issues/32)).
 
 Applications own the rest of the interface: label your toolbar, announce
 search results with an `aria-live` region as [the search

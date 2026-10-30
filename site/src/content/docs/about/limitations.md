@@ -33,9 +33,9 @@ builds so far.
   ([results](https://github.com/yhay81/parapdf/blob/main/examples/prototype/results/safari-macos.md)).
   Playwright's WebKit is not Safari, and real iOS and iPadOS devices are not
   verified yet ([#13](https://github.com/yhay81/parapdf/issues/13)).
-- Of the screen readers, only VoiceOver in Safari on macOS has been tried,
-  with the gaps the [accessibility page](/about/accessibility/) lists; NVDA
-  and VoiceOver on iOS have not
+- VoiceOver in Safari on macOS and NVDA in Firefox on Windows have been
+  tried, with the gaps the [accessibility page](/about/accessibility/)
+  lists; VoiceOver on iOS has not
   ([#32](https://github.com/yhay81/parapdf/issues/32)).
 - Whether iOS Safari counts the canvases pages keep when they unmount
   (`maxKeptPixels`) toward its canvas memory cap is not verified; it needs a

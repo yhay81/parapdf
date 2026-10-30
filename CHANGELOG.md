@@ -39,6 +39,9 @@ change the API.
   terms; pdf.js and its bundled third-party files retain their notices and
   licenses.
 
+- Document partial screen reader verification with NVDA and Firefox on
+  Windows, and the interactions that still need checking (#32).
+
 - Printing turns a page whose orientation differs from the first page's to
   the sheet's, as pdf.js's viewer prints it, so that a landscape page among
   portrait ones fits a matching sheet without extra scaling (#88). Pages
