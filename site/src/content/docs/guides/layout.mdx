@@ -76,3 +76,86 @@ row, fitting counts one.
 
 Pages of different sizes are each centered in the viewport, and a page wider
 than the viewport starts at its left edge.
+
+## Presenting
+
+ParaPDF has no presentation mode of its own, as pdf.js's viewer has: it is
+the `"page"` scroll mode, `"fit-page"`, and the browser's Fullscreen API on
+an element of your choosing, with the keys and controls you choose. This
+one puts the viewer and a few controls full screen, shows the document a
+page at a time while it stays there, and goes back to the scroll mode and
+zoom from before, at the page the reader turned to, as pdf.js's viewer
+does:
+
+```tsx
+"use client";
+
+import { PdfDocument, PdfViewer, type ScrollMode, useViewer, type Viewer, type Zoom } from "parapdf";
+import { useEffect, useRef, useState } from "react";
+
+function usePresentation(viewer: Viewer) {
+  const stage = useRef<HTMLDivElement>(null);
+  const [presenting, setPresenting] = useState(false);
+  useEffect(() => {
+    let before: { scrollMode: ScrollMode; zoom: Zoom } | null = null;
+    const onChange = () => {
+      const now = document.fullscreenElement === stage.current;
+      setPresenting(now);
+      if (now && !before) {
+        const { scrollMode, zoomMode, scale } = viewer.store.get();
+        before = { scrollMode, zoom: zoomMode === "custom" ? scale : zoomMode };
+        viewer.setScrollMode("page");
+        viewer.setScale("fit-page");
+        // The viewer's keys turn the pages while the viewport has focus.
+        viewer.scroller?.focus({ preventScroll: true });
+      } else if (!now && before) {
+        viewer.setScrollMode(before.scrollMode);
+        viewer.setScale(before.zoom);
+        before = null;
+      }
+    };
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, [viewer]);
+  const present = () => void stage.current?.requestFullscreen();
+  return { stage, presenting, present };
+}
+
+export function App() {
+  const viewer = useViewer();
+  const { stage, presenting, present } = usePresentation(viewer);
+  return (
+    <PdfDocument source="/slides.pdf">
+      <button type="button" onClick={present}>Present</button>
+      <div ref={stage} className="stage">
+        <PdfViewer viewer={viewer} style={{ height: "100%" }} />
+        {presenting ? (
+          // A click leaves the focus in the viewport, whose keys turn the pages.
+          <div
+            role="toolbar"
+            aria-label="Presentation"
+            className="controls"
+            onMouseDown={(event) => event.preventDefault()}
+          >
+            <button type="button" onClick={() => viewer.previousPage()}>Previous</button>
+            <button type="button" onClick={() => viewer.nextPage()}>Next</button>
+            <button type="button" onClick={() => void document.exitFullscreen()}>Exit</button>
+          </div>
+        ) : null}
+      </div>
+    </PdfDocument>
+  );
+}
+```
+
+```css
+.stage { position: relative; height: 80vh; }
+.stage:fullscreen { background: #000; }
+.stage .controls { position: absolute; right: 16px; bottom: 16px; }
+```
+
+While it presents, the keys of `"page"` mode and swipes turn the pages,
+Escape leaves full screen, and the buttons do what they say. A spread, a
+rotation, and `direction` hold as they were. `document.fullscreenEnabled` is
+false where an element cannot go full screen, as on the iPhone: hide the
+button there.
