@@ -4,7 +4,7 @@ Changes to the `parapdf` package. It follows
 [Semantic Versioning](https://semver.org/); until 1.0, a minor release may
 change the API.
 
-## Unreleased
+## 0.8.0 — 2026-10-30
 
 - URL sources with explicit credentials now distinguish omitted headers,
   which inherit the configured headers, from empty headers, which replace them.
@@ -90,9 +90,9 @@ change the API.
   `viewer.goToDestination(dest, signal?)` also accepts an `AbortSignal` to
   cancel an unresolved navigation.
 
-- Renamed the per-page diagnostic on `Viewer.renderer` from `sharpness()`
-  to `pageSharpness()`, distinguishing it from the viewport's
-  `Viewer.sharpness()`.
+- **Breaking:** the per-page diagnostic on `Viewer.renderer` is renamed
+  from `sharpness()` to `pageSharpness()`, distinguishing it from the
+  viewport's `Viewer.sharpness()`.
 
 - Screen readers read on from the page shown (#32). Pages are focusable
   (`tabindex="-1"`) but not in the tab order. While the focus is on the
