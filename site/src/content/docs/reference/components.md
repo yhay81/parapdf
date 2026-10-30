@@ -16,7 +16,7 @@ any more.
 
 | Prop | |
 |---|---|
-| `source` | The document: its URL, `{ url }`, or `{ data }` with its bytes (see [Sources](/reference/sources/)). It reopens when its URL, request headers, credentials mode, or password change or, for data, when the bytes are another object or the password changes; a new object for the same URL keeps the open document. A URL's fragment, such as `#page=3`, opens it where it points, and a new fragment moves its viewers there (see [Sources](/reference/sources/#sessions)). |
+| `source` | The document: its URL, `{ url }`, `{ data }` with its bytes, or `{ range }` with a pdf.js transport (see [Sources](/reference/sources/)). It reopens when its URL, request headers, credentials mode, or password change or, for data and transports, when they are another object or the password changes; a new object for the same URL keeps the open document. A URL's fragment, such as `#page=3`, opens it where it points, and a new fragment moves its viewers there (see [Sources](/reference/sources/#sessions)). |
 | `passwordPrompt` | `true` by default: an encrypted document waits for a password (status `"password"`), which `useSession().submitPassword()` gives. `false` fails it at once (status `"error"`) when the source has no password or a wrong one, for this `PdfDocument` only: others of the same document may still answer. Changing it does not open the document again. |
 | `children` | Viewers, thumbnails, and your controls. |
 
@@ -95,7 +95,7 @@ too, and those that take none read the nearest `PdfDocument`.
 | `useViewState(viewer, selector)` | The selected part of the viewer's view state, rendering again only when it changes (see [State](/reference/state/#view-state)). |
 | `useSession()` | The nearest `PdfDocument`'s `PdfSession` (see [State](/reference/state/#the-session)). |
 | `useDocumentState(selector)` | The selected part of the document's state: status, error, password request, progress, page count, and permissions (see [State](/reference/state/#document-state)). |
-| `useOutline()` | The outline (bookmarks), empty when the document has none. |
+| `useOutline()` | The outline (bookmarks) as `OutlineNode`s: `title`, `dest`, `url`, `bold`, `italic`, and `items`; empty when the document has none. |
 | `usePageLabels()` | Each page's label, such as `"iv"` or `"A-3"`; null when the document defines none. |
 | `useMetadata()` | Title, author, subject, keywords, creator, producer, creation and modification dates, PDF version, and language, with the file name the server gives (`Content-Disposition`), the file's length, whether it is linearized (Fast Web View), and the fingerprint, which identifies the document for a view an application keeps; null when they cannot be read. |
 | `useAttachments()` | The embedded files, empty when there are none (see [Layers and attachments](/guides/layers-attachments/)). |

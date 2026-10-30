@@ -3,7 +3,7 @@
  * `AbortSignal.any()` that nothing references, so aborting its source no
  * longer aborts it, and listeners added with `{ signal }` stay. pdf.js's
  * `combinedSignal()` makes such signals; ParaPDF keeps them referenced
- * (`src/pdfjs/editor.ts`). Report draft: bench/upstream/webkit-abort-any-issue.md.
+ * (`src/pdfjs/editor.ts`). Filed as https://bugs.webkit.org/show_bug.cgi?id=329251.
  *
  * On about:blank, each case makes 500 controllers and a signal per
  * controller, adds a `pointerdown` listener to the window with that signal,
