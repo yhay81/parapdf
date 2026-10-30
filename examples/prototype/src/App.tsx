@@ -44,6 +44,7 @@ import { configureEngine, type Pdfjs } from "./engines.ts";
 import { Icon, type IconName } from "./Icon.tsx";
 import { attachViewport, showWith } from "./internals.ts";
 import { PasswordPrompt } from "./PasswordPrompt.tsx";
+import { PresentationControls, usePresentation } from "./Presentation.tsx";
 import { SearchBox } from "./SearchBox.tsx";
 import { Sidebar, type SidebarView } from "./Sidebar.tsx";
 
@@ -329,6 +330,7 @@ function Viewer({ fragment }: { renders: number; fragment: string }) {
   const data = settings.source === "data" ? use(bytesPromise) : null;
   const range = settings.source === "range" ? use(rangePromise) : null;
   const viewer = useViewer();
+  const presentation = usePresentation(viewer);
   const [sidebar, setSidebar] = useState<SidebarView | null>(null);
   // Props a check sets on the viewer while it shows the document.
   const [changed, setChanged] = useState<Partial<PdfViewerProps>>({});
@@ -351,25 +353,30 @@ function Viewer({ fragment }: { renders: number; fragment: string }) {
           sidebar={sidebar}
           onToggleSidebar={(view) => setSidebar((open) => (open === view ? null : view))}
           onOpenSidebar={setSidebar}
+          onPresent={presentation.present}
         />
         <Probes viewer={viewer} />
         {settings.annotations ? <AnnotationToolbar viewer={viewer} file={settings.file} /> : null}
         <PasswordPrompt />
         {sidebar ? <Sidebar viewer={viewer} view={sidebar} id="sidebar" /> : null}
-        <PdfViewer
-          {...viewerProps}
-          {...changed}
-          viewer={viewer}
-          className={[
-            "viewport",
-            sidebar ? "with-sidebar" : "",
-            settings.annotations ? "with-annotations" : "",
-          ]
-            .filter(Boolean)
-            .join(" ")}
-          {...(japanese ? { label: "PDF 文書", pageLabel } : {})}
-          renderOverlay={renderOverlay}
-        />
+        {/* Takes no box of its own until it presents (index.html). */}
+        <div ref={presentation.stage} className="stage">
+          <PdfViewer
+            {...viewerProps}
+            {...changed}
+            viewer={viewer}
+            className={[
+              "viewport",
+              sidebar ? "with-sidebar" : "",
+              settings.annotations ? "with-annotations" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            {...(japanese ? { label: "PDF 文書", pageLabel } : {})}
+            renderOverlay={renderOverlay}
+          />
+          {presentation.presenting ? <PresentationControls viewer={viewer} /> : null}
+        </div>
         {settings.autoscroll > 0 ? (
           <BenchDriver
             viewer={viewer}
@@ -445,11 +452,13 @@ function Toolbar({
   sidebar,
   onToggleSidebar,
   onOpenSidebar,
+  onPresent,
 }: {
   viewer: PdfViewerController;
   sidebar: SidebarView | null;
   onToggleSidebar: (view: SidebarView) => void;
   onOpenSidebar: (view: SidebarView) => void;
+  onPresent: () => void;
 }) {
   const navigation = useHistory(viewer);
   const { back, forward } = navigation;
@@ -593,6 +602,11 @@ function Toolbar({
           onClick={() => void download(viewer)}
           disabled={status !== "ready"}
         />
+        {document.fullscreenEnabled ? (
+          <button type="button" onClick={onPresent} disabled={status !== "ready"}>
+            Present
+          </button>
+        ) : null}
       </div>
       {settings.text ? <SearchBox viewer={viewer} /> : null}
     </header>

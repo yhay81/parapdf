@@ -24,7 +24,7 @@
         background: var(--panel); border-right: 1px solid var(--line);
         box-sizing: border-box; padding: 8px;
       }
-      .with-annotations ~ .sidebar, .sidebar:has(~ .with-annotations) { top: 80px; }
+      .sidebar:has(~ .stage > .with-annotations) { top: 80px; }
       .sidebar ul, .sidebar ol { list-style: none; margin: 0; padding-left: 12px; }
       .sidebar > ul, .sidebar > ol, .sidebar > nav > ol { padding-left: 0; }
       .outline :is(button, a), .attachments button {
@@ -54,6 +54,13 @@
       }
       .annotation-toolbar ~ .password { top: 92px; }
       .password label { display: flex; gap: 8px; align-items: center; }
+
+      .stage:not(:fullscreen) { display: contents; }
+      .stage:fullscreen .viewport { inset: 0; background: #000; }
+      .presentation-controls {
+        position: absolute; right: 16px; bottom: 16px; display: flex; gap: 4px; opacity: 0.2;
+      }
+      .presentation-controls:hover, .presentation-controls:focus-within { opacity: 1; }
 
       /* The split view (?split=1). */
       .split > button { margin: 6px 6px 0; align-self: flex-start; }
