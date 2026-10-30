@@ -126,8 +126,8 @@ that matters for performance or direction gets a decision record.
   `.github/workflows/site.yml` to https://parapdf.yhay81.com from release
   tags.
 - `docs/` — `architecture.md` and `decisions/`.
-- `bench/upstream/` — investigations of pdf.js and WebKit bugs not filed
-  yet, with their reproduction pages.
+- `bench/upstream/` — investigations of pdf.js and WebKit bugs, with their
+  reproduction pages and the reports drafted or filed from them.
 - `.github/` — CI, the script it installs Playwright's browsers with
   (`scripts/install-browser.sh`), issue forms, the pull request template,
   and Dependabot.
