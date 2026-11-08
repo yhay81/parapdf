@@ -255,39 +255,49 @@ try {
   );
 
   // --- Text ---
+  const typing = section.locator('.freeTextEditor .internal[contenteditable="true"]:focus');
   await page.evaluate(() => (window as unknown as Demo).__annotations?.setTool("freetext"));
   await page.mouse.click(box.x + 300, box.y + 300);
-  await page.waitForTimeout(200);
+  await typing.waitFor({ state: "visible" });
   await page.keyboard.type("Hello ParaPDF");
-  await page.mouse.click(box.x + 600, box.y + 700);
-  await page.waitForTimeout(200);
+  // Leaving the editor commits its text. The font size field takes focus
+  // without starting another annotation or changing tools.
+  await page.getByRole("spinbutton", { name: "Font size" }).click();
+  await section
+    .locator('.freeTextEditor .internal[contenteditable="false"]')
+    .waitFor({ state: "attached" });
   annotations = await exported(page);
   const text = annotations.find((annotation) => annotation.type === "freetext");
   check(
     "a click adds text the reader types",
     text?.data.value === "Hello ParaPDF",
-    String(text?.data.value),
+    JSON.stringify({ value: text?.data.value ?? null }),
   );
   // Switching tools while typing finishes the text and keeps the new tool.
   await page.mouse.click(box.x + 300, box.y + 450);
-  await page.waitForTimeout(200);
+  await typing.waitFor({ state: "visible" });
   await page.keyboard.type("Second");
   await page.evaluate(() => (window as unknown as Demo).__annotations?.setTool("highlight"));
-  const second = (await exported(page)).find((annotation) => annotation.data.value === "Second");
+  const texts = (await exported(page))
+    .filter((annotation) => annotation.type === "freetext")
+    .map((annotation) => annotation.data.value);
+  const { annotationTool } = await viewerState(page);
+  const hasSecond = texts.includes("Second");
   check(
     "choosing another tool while typing keeps the text and the new tool",
-    second !== undefined && (await viewerState(page))?.annotationTool === "highlight",
-    String((await viewerState(page))?.annotationTool),
+    hasSecond && annotationTool === "highlight",
+    JSON.stringify({ texts, tool: annotationTool }),
   );
-  if (second) {
+  if (hasSecond) {
     // The second text goes: what follows counts one of each kind.
-    await page.locator(".freeTextEditor", { hasText: "Second" }).click();
+    const second = section.locator(".freeTextEditor", { hasText: "Second" });
+    await second.click();
     await page.keyboard.press("Delete");
-    await page.waitForTimeout(200);
+    await second.waitFor({ state: "detached" });
   }
   check(
     "a selected annotation is deleted with its key",
-    !(await exported(page)).some((annotation) => annotation.data.value === "Second"),
+    hasSecond && !(await exported(page)).some((annotation) => annotation.data.value === "Second"),
   );
   const editorLabel = await section
     .locator(".freeTextEditor .internal")
