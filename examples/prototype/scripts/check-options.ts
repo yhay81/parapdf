@@ -828,6 +828,11 @@ try {
   await live.evaluate(() =>
     (window as unknown as Demo).__setViewerProps({ textLayer: false, gap: 40 }),
   );
+  await live
+    .waitForFunction(() => window.__viewer?.store.get().layout?.gap === 40, null, {
+      timeout: 5_000,
+    })
+    .catch(() => {});
   await settle(live);
   const changedOptions = await viewState(live);
   check(
@@ -839,6 +844,11 @@ try {
     JSON.stringify({ opened, changedOptions }),
   );
   await live.evaluate(() => (window as unknown as Demo).__setViewerProps({ textLayer: true }));
+  await live
+    .locator(".parapdf-text-layer")
+    .first()
+    .waitFor({ state: "attached", timeout: 5_000 })
+    .catch(() => {});
   await settle(live);
   check(
     "turning an option back on builds its layers again",
@@ -898,6 +908,9 @@ try {
   await live.evaluate(() =>
     (window as unknown as Demo).__setViewerProps({ zoom: 1.5, onZoomChange: undefined }),
   );
+  await live
+    .waitForFunction(() => window.__viewer?.store.get().scale === 1.5, null, { timeout: 5_000 })
+    .catch(() => {});
   await settle(live);
   const controlledZoom = await viewState(live);
   await live.evaluate(() => (window as unknown as Demo).__viewer.zoomBy(1.25));

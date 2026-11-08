@@ -192,7 +192,7 @@ try {
     (window as { __viewer?: { goToPage(index: number): void } }).__viewer?.goToPage(25);
   });
   const external = pageLinks(page, 26).first();
-  await external.waitFor({ state: "attached", timeout: 15_000 });
+  await external.waitFor({ state: "visible", timeout: 15_000 });
   const attributes = await external.evaluate((element) => ({
     href: element.getAttribute("href"),
     target: element.getAttribute("target"),
@@ -208,17 +208,22 @@ try {
 
   // The focus a page holds as it unmounts moves to the current page
   // instead of falling to the body.
-  await external.focus();
-  await page.evaluate(() => {
-    (window as { __viewer?: { goToPage(index: number): void } }).__viewer?.goToPage(0);
+  const linkHadFocus = await external.evaluate((link) => {
+    link.focus();
+    const focused = document.activeElement === link;
+    window.__viewer?.goToPage(0);
+    return focused;
   });
   await page.waitForFunction(() => !document.querySelector('section[data-page="26"]'));
-  await page.waitForTimeout(100);
+  await page
+    .locator('section[data-page="1"]:focus')
+    .waitFor({ state: "attached", timeout: 5_000 })
+    .catch(() => {});
   const focusedAfterUnmount = await focusedPage(page);
   check(
     "focus on a page that unmounts moves to the current page",
-    focusedAfterUnmount === 1,
-    `focus on ${focusedAfterUnmount}`,
+    linkHadFocus && focusedAfterUnmount === 1,
+    `link had focus: ${linkHadFocus}, focus on ${focusedAfterUnmount}`,
   );
 
   const rotatedContext = await launched.browser.newContext();

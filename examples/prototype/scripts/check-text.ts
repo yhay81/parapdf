@@ -501,8 +501,8 @@ try {
     if (!search) throw new Error("Search is not attached");
     return new Promise<number>((resolve) => {
       const unsubscribe = search.store.subscribe(() => {
-        const { current, pagesSearched } = search.store.get();
-        if (current < 0) return;
+        const { current, pagesSearched, status } = search.store.get();
+        if (current < 0 && status !== "done") return;
         unsubscribe();
         search.previous();
         resolve(pagesSearched);
@@ -522,6 +522,7 @@ try {
     selectedRun === "Mixed sizes marker 8",
     String(selectedRun),
   );
+  await page.context().close();
 
   // On a Japanese page the same PDF's text takes Japanese, whose generic
   // fonts are wider. Chromium and WebKit resolve an unknown language to
