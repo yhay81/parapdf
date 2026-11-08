@@ -1244,10 +1244,28 @@ try {
       window.__setViewerProps?.({ textLayer: false });
       window.__setFragment?.("page=3");
     });
-    await settle(page);
+    // The previous page can still be fully drawn before React applies either update.
+    const rebuilt = await page
+      .waitForFunction(
+        () => {
+          const viewer = window.__viewer;
+          return (
+            viewer?.store.get().currentPage === 2 &&
+            viewer.hasPixels(2) &&
+            !document.querySelector(".parapdf-text-layer")
+          );
+        },
+        undefined,
+        { timeout: 10_000 },
+      )
+      .then(
+        () => true,
+        () => false,
+      );
     check(
       "a fragment changed during a renderer rebuild is applied once ready",
-      (await state(page))?.currentPage === 2,
+      rebuilt,
+      `page index ${(await state(page))?.currentPage}`,
     );
 
     await page.evaluate(() => {
