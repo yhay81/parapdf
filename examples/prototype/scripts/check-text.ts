@@ -40,29 +40,36 @@ async function openViewer(page: Page, baseUrl: string, file: string, query = "")
   });
 }
 
-async function searchFor(page: Page, query: string): Promise<{ total: number; summary: string }> {
+async function searchFor(page: Page, query: string): Promise<number> {
   const input = page.getByRole("searchbox", { name: "Find in document" });
   await input.fill(query);
   await input.press("Enter");
-  await page.waitForFunction(() => window.__search?.store.get().status === "done", undefined, {
-    timeout: 60_000,
-  });
-  // Let the selected match's page build its text layer and highlights.
-  await page.waitForTimeout(800);
-  return page.evaluate(() => {
-    return {
-      total: window.__search?.store.get().matches.length ?? 0,
-      summary: document.querySelector(".search-summary")?.textContent ?? "",
-    };
-  });
+  await page.waitForFunction(
+    (query) => {
+      const state = window.__search?.store.get();
+      return state?.query === query && state.status === "done";
+    },
+    query,
+    { timeout: 60_000 },
+  );
+  return page.evaluate(() => window.__search?.store.get().matches.length ?? 0);
 }
 
+/** The index can finish before the selected page has built its text layer. */
 const currentHighlightText = (page: Page) =>
-  page.evaluate(() => {
-    const highlight = CSS.highlights.get("parapdf-search-current");
-    const [range] = highlight ? [...highlight] : [];
-    return range instanceof Range ? range.toString() : null;
-  });
+  page
+    .waitForFunction(
+      () => {
+        const [range] = CSS.highlights.get("parapdf-search-current") ?? [];
+        return range instanceof Range ? range.toString() : null;
+      },
+      undefined,
+      { timeout: 10_000 },
+    )
+    .then(
+      (text) => text.jsonValue(),
+      () => null,
+    );
 
 interface RunOffsets {
   /** Text runs compared with pdf.js's own glyph boxes. */
@@ -463,14 +470,24 @@ try {
 
   // Search across the whole document and land on the first match.
   const israel = await searchFor(page, "israel");
-  check("search finds matches across pages", israel.total > 5, `${israel.total} matches`);
+  check("search finds matches across pages", israel > 5, `${israel} matches`);
   check(
     "the selected match is highlighted",
     (await currentHighlightText(page))?.toLowerCase() === "israel",
   );
-  check("result count is announced", /^1 of \d+$/.test(israel.summary), israel.summary);
+  const expectedSummary = `1 of ${israel}`;
+  const announced = await page
+    .waitForFunction(
+      (expected) => document.querySelector(".search-summary")?.textContent === expected,
+      expectedSummary,
+      { timeout: 10_000 },
+    )
+    .then(
+      () => true,
+      () => false,
+    );
+  check("result count is announced", announced, `expected ${expectedSummary}`);
   await page.getByRole("searchbox", { name: "Find in document" }).press("Enter");
-  await page.waitForTimeout(800);
   const second = await page.evaluate(() => window.__search?.store.get().current);
   check("Enter moves to the next match", second === 1, `current=${second}`);
   check(
@@ -484,8 +501,8 @@ try {
   const divisions = await searchFor(page, "divisions");
   check(
     "a word hyphenated across lines matches",
-    divisions.total === 3,
-    `${divisions.total} matches for divisions, 3 expected`,
+    divisions === 3,
+    `${divisions} matches for divisions, 3 expected`,
   );
 
   // Choose the last match on page 8 while only that page's matches are known.
@@ -556,14 +573,10 @@ try {
   page = await newPage();
   await openViewer(page, baseUrl, "synthetic-cjk-nonembedded.pdf");
   const japanese = await searchFor(page, "非埋め込み");
-  check("Japanese search", japanese.total >= 6, `${japanese.total} matches`);
+  check("Japanese search", japanese >= 6, `${japanese} matches`);
   check("Japanese match is highlighted", (await currentHighlightText(page)) === "非埋め込み");
   const fullWidth = await searchFor(page, "ＣＭａｐ");
-  check(
-    "full-width query matches ASCII text",
-    fullWidth.total >= 6,
-    `${fullWidth.total} matches for ＣＭａｐ`,
-  );
+  check("full-width query matches ASCII text", fullWidth >= 6, `${fullWidth} matches for ＣＭａｐ`);
 
   // Japanese has no spaces, so a line can end inside a word: page 1 of the
   // MHLW notice breaks 厚生労働 after 厚生, its only occurrence.
@@ -578,20 +591,22 @@ try {
     `lang ${JSON.stringify(declared)}`,
   );
   const kosei = await searchFor(page, "厚生労働");
+  const highlightedKosei = await currentHighlightText(page);
   check(
     "a Japanese word broken across lines matches",
-    kosei.total === 1 && (await currentHighlightText(page)) === "厚生労働",
-    `${kosei.total} matches, highlighted ${JSON.stringify(await currentHighlightText(page))}`,
+    kosei === 1 && highlightedKosei === "厚生労働",
+    `${kosei} matches, highlighted ${JSON.stringify(highlightedKosei)}`,
   );
 
   // Page 24 of the LaTeX guide shows ßüé; a query without the diacritics finds it.
   page = await newPage();
   await openViewer(page, baseUrl, "usrguide.pdf");
   const diacritics = await searchFor(page, "ßue");
+  const highlightedDiacritics = await currentHighlightText(page);
   check(
     "a query without diacritics matches letters with them",
-    diacritics.total === 5 && (await currentHighlightText(page)) === "ßüé",
-    `${diacritics.total} matches, highlighted ${JSON.stringify(await currentHighlightText(page))}`,
+    diacritics === 5 && highlightedDiacritics === "ßüé",
+    `${diacritics} matches, highlighted ${JSON.stringify(highlightedDiacritics)}`,
   );
 
   // Dragging into the blank space past a line's end must select the dragged
