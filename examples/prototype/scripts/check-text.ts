@@ -488,6 +488,42 @@ try {
     `${divisions.total} matches for divisions, 3 expected`,
   );
 
+  // Choose the last match on page 8 while only that page's matches are known.
+  page = await newPage();
+  await page.goto(`${baseUrl}?engine=${engine}&file=synthetic-mixed-sizes.pdf&page=8`);
+  await page.waitForFunction(
+    () =>
+      window.__viewer?.store.get().currentPage === 7 &&
+      document.querySelector('section[data-page="8"] .parapdf-text-layer .endOfContent'),
+  );
+  const firstBatch = await page.evaluate(() => {
+    const search = window.__search;
+    if (!search) throw new Error("Search is not attached");
+    return new Promise<number>((resolve) => {
+      const unsubscribe = search.store.subscribe(() => {
+        const { current, pagesSearched, status } = search.store.get();
+        if (current < 0 && status !== "done") return;
+        unsubscribe();
+        search.previous();
+        resolve(pagesSearched);
+      });
+      search.search("a");
+    });
+  });
+  check("search selects a match after reading the current page", firstBatch === 1);
+  await page.waitForFunction(() => window.__search?.store.get().status === "done");
+  const selectedRun = await page.evaluate(() => {
+    const highlight = CSS.highlights.get("parapdf-search-current");
+    const [range] = highlight ?? [];
+    return range instanceof Range ? range.startContainer.textContent : null;
+  });
+  check(
+    "the chosen match stays highlighted after search wraps",
+    selectedRun === "Mixed sizes marker 8",
+    String(selectedRun),
+  );
+  await page.context().close();
+
   // On a Japanese page the same PDF's text takes Japanese, whose generic
   // fonts are wider. Chromium and WebKit resolve an unknown language to
   // their default fonts, so before text layers took the language pdf.js

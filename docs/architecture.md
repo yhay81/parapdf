@@ -199,6 +199,9 @@ it undoes what it added. The core imports no feature.
   pdf.js's `extractPages()`, with the form values and annotations.
 - Search ports pdf.js's find normalization (`text-search.ts`), CJK
   included, and highlights matches with the CSS Custom Highlight API.
+  It scans forward from the viewer's current page and wraps at the end.
+  Each progress update puts both runs of matches in document order and
+  preserves the selected match as earlier pages arrive (decision 0027).
 
 ## React
 

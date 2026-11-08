@@ -33,6 +33,7 @@ it. A new choice gets a new record, numbered next.
 | [0024](0024-links-found-in-the-text.md) | Links found in the text are a feature off by default | adopted |
 | [0025](0025-no-base-redrawn-under-whole-page-detail.md) | No base drawn again under a whole-page detail | adopted |
 | [0026](0026-detail-kept-until-replaced.md) | A detail kept while hidden, and until a base replaces it | adopted |
+| [0027](0027-search-from-the-current-page.md) | Search from the current page | adopted |
 
 ## Template
 

@@ -80,25 +80,78 @@ describe("the search feature", () => {
     assert.equal(search.store.get().current, 0);
   });
 
-  it("goes back from no selection to the last match", async (context) => {
+  it("keeps the next match selected as the search publishes more pages and finishes", async (context) => {
     const document = fakeDocument({
       pages: [LETTER, LETTER, LETTER],
-      texts: [[{ str: "rose rose" }], [], [{ str: "rose" }]],
+      texts: [
+        [
+          { str: "rose", x: 10 },
+          { str: "rose", x: 50 },
+        ],
+        [],
+        [{ str: "rose" }],
+      ],
     });
     const viewer = new Viewer();
     close.push(show(viewer, { url: "/a.pdf" }, fakePdfjs(async () => document.proxy).loader).close);
     await settle();
-    viewer.store.set({ currentPage: 2 });
     // Each page takes long enough for what was found so far to be published.
     let now = 0;
     context.mock.method(performance, "now", () => (now += 200));
     const search = attachSearch(viewer);
+    const scroll = context.mock.method(viewer, "revealRect");
+    const unsubscribe = search.store.subscribe(() => {
+      if (search.store.get().current < 0) return;
+      unsubscribe();
+      search.next();
+    });
     search.search("rose");
     await settle();
-    const { status, matches, current } = search.store.get();
-    assert.deepEqual([status, matches.length, current], ["searching", 2, -1]);
+    const second = search.store.get().matches[1];
+    assert.ok(second);
+    assert.deepEqual(
+      scroll.mock.calls.map((call) => call.arguments[1].x),
+      [50],
+    );
+    mock.timers.tick(0);
+    await settle();
+    const partial = search.store.get();
+    assert.deepEqual([partial.status, partial.pagesSearched], ["searching", 2]);
+    assert.strictEqual(partial.matches[partial.current], second);
+    await finish();
+    const done = search.store.get();
+    assert.equal(done.status, "done");
+    assert.strictEqual(done.matches[done.current], second);
+  });
+
+  it("starts on the current page and keeps the selected match as earlier pages arrive", async (context) => {
+    const { viewers, textsRead } = await twoViewers();
+    viewers[0].store.set({ currentPage: 2 });
+    let now = 0;
+    context.mock.method(performance, "now", () => (now += 200));
+    const search = attachSearch(viewers[0]);
+    search.search("rose");
+    await settle();
+    assert.deepEqual(textsRead, [2]);
+    const first = search.store.get();
+    assert.deepEqual([first.pagesSearched, first.current, first.matches.length], [1, 0, 2]);
+    const last = first.matches[1];
+    assert.ok(last);
     search.previous();
-    assert.equal(search.store.get().current, 1);
+    mock.timers.tick(0);
+    await settle();
+    const wrapped = search.store.get();
+    assert.deepEqual([wrapped.status, wrapped.pagesSearched, wrapped.current], ["searching", 2, 2]);
+    assert.deepEqual(
+      wrapped.matches.map((match) => match.pageIndex),
+      [0, 2, 2],
+    );
+    assert.strictEqual(wrapped.matches[wrapped.current], last);
+    await finish();
+    const done = search.store.get();
+    assert.deepEqual(textsRead, [2, 0, 1]);
+    assert.deepEqual([done.status, done.pagesSearched], ["done", 3]);
+    assert.strictEqual(done.matches[done.current], last);
   });
 
   it("does nothing for a blank query, or to move through no matches", async () => {
