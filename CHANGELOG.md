@@ -4,6 +4,12 @@ Changes to the `parapdf` package. It follows
 [Semantic Versioning](https://semver.org/); until 1.0, a minor release may
 change the API.
 
+## Unreleased
+
+- Search starts on the current page and wraps at the end of the document.
+  Choosing the next or previous match during a search keeps it selected
+  as more results arrive.
+
 ## 0.8.0 — 2026-10-30
 
 - URL sources with explicit credentials now distinguish omitted headers,

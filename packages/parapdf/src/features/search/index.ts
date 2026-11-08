@@ -30,9 +30,10 @@ export interface SearchState {
 export interface Search {
   readonly store: ReadableStore<SearchState>;
   /**
-   * Search the whole document. Results arrive progressively; the first match
-   * at or after the current page is selected and scrolled into view. By
-   * default case and diacritics are ignored and matches may be parts of words.
+   * Search from the current page, wrapping at the end. The first match is
+   * selected and scrolled into view. Each update lists matches in document
+   * order and preserves the selection. By default case and diacritics are
+   * ignored and matches may be parts of words.
    */
   search(query: string, options?: SearchOptions): void;
   next(): void;
@@ -132,7 +133,8 @@ export function attachSearch(viewer: Viewer): Search {
     const signal = viewer.workSignal;
     if (!session || !signal) return;
     const text = await session.text(match.pageIndex);
-    if (signal.aborted) return;
+    const { matches, current } = store.get();
+    if (signal.aborted || matches[current] !== match) return;
     const at = match.start.item * 4;
     viewer.revealRect(match.pageIndex, {
       x: text.boxes[at] ?? 0,
@@ -153,44 +155,42 @@ export function attachSearch(viewer: Viewer): Search {
 
   const run = async (
     session: DocumentSession,
-    query: string,
     normalized: string,
     options: SearchOptions,
     signal: AbortSignal,
   ): Promise<void> => {
-    const matches: SearchMatch[] = [];
     const startPage = viewer.store.get().currentPage;
-    let current = -1;
-    let pagesSearched = 0;
+    const fromStart: SearchMatch[] = [];
+    const beforeStart: SearchMatch[] = [];
     let publishedAt = performance.now();
-    const publish = (status: SearchState["status"]) => {
-      store.set({ query, options, status, matches: [...matches], current, pagesSearched });
+    const publish = (status: SearchState["status"], pagesSearched: number) => {
+      const previous = store.get();
+      const matches = beforeStart.concat(fromStart);
+      const selected = previous.matches[previous.current] ?? matches[0];
+      const current = selected ? matches.indexOf(selected) : -1;
+      store.set({ status, matches, current, pagesSearched });
       refreshHighlights();
+      if (previous.current === -1 && selected) background(scrollToMatch(selected), signal);
     };
-    for (let page = 0; page < session.pageCount; page++) {
+    for (let offset = 0; offset < session.pageCount; offset++) {
+      const page = (startPage + offset) % session.pageCount;
       const index = await pageIndex(session, page, options);
       if (signal.aborted) return;
       const found = findMatches(index, normalized, page, undefined, options);
-      const select = current === -1 && page >= startPage && found.length > 0;
-      if (select) current = matches.length;
-      matches.push(...found);
-      pagesSearched = page + 1;
+      const group = page < startPage ? beforeStart : fromStart;
+      for (const match of found) group.push(match);
       const now = performance.now();
-      if (select || now - publishedAt > SEARCH_PUBLISH_INTERVAL) {
-        publish("searching");
-        const match = matches[current];
-        if (select && match) background(scrollToMatch(match), viewer.workSignal);
+      if (
+        (found.length > 0 && store.get().current === -1) ||
+        now - publishedAt > SEARCH_PUBLISH_INTERVAL
+      ) {
+        publish("searching", offset + 1);
         publishedAt = now;
         await yieldToMain();
         if (signal.aborted) return;
       }
     }
-    if (current === -1 && matches.length > 0) {
-      current = 0;
-      const match = matches[0];
-      if (match) background(scrollToMatch(match), viewer.workSignal);
-    }
-    publish("done");
+    publish("done", session.pageCount);
   };
 
   const stop = () => {
@@ -244,7 +244,7 @@ export function attachSearch(viewer: Viewer): Search {
         current: -1,
         pagesSearched: 0,
       });
-      run(session, query, normalized, options, signal).catch((error: unknown) => {
+      run(session, normalized, options, signal).catch((error: unknown) => {
         if (signal.aborted) return;
         console.error("search failed", error);
         store.set({ status: "done" });
