@@ -6,6 +6,9 @@ change the API.
 
 ## Unreleased
 
+- A tagged PDF shown in multiple viewers gives each page its own accessible
+  text and form controls, including figure descriptions and MathML.
+
 - Updated pdfjs-dist to 6.5.438. JPEG 2000 images wrapped in LZW now render
   from the bundled decoder. Set `configurePdfjs({ rendererSrc: true })` to
   use the packaged drawing worker with either the modern or legacy build.

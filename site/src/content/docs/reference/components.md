@@ -25,7 +25,9 @@ any more.
 One viewport onto the nearest `PdfDocument`'s document: the scroll
 container, with only the pages near the viewport mounted. Give it a
 definite height. It is focusable, so the browser's own keys scroll it.
-Several `PdfViewer`s may show one document, each with its own view.
+Several `PdfViewer`s may show one document, each with its own view. On a
+tagged PDF, each viewer's reading order refers to its own text and form
+fields.
 
 Its props are the viewer's options and stay live: changing one needs no
 remount (see [Options](/reference/options/)).
