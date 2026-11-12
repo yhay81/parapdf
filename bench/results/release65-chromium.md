@@ -14,7 +14,6 @@
 |---|---|---:|---:|---:|
 | pdfjs | 2 | 1677 KiB | 500 KiB | 411 KiB |
 | pdfjs renderer | 1 | 119 KiB | 35 KiB | 31 KiB |
-| pdfjs-next (workers unminified) | 2 | 1 KiB | 0 KiB | 0 KiB |
 | pdfium | 3 | 4691 KiB | 2136 KiB | 1645 KiB |
 | hayro | 3 | 3967 KiB | 1707 KiB | 1364 KiB |
 

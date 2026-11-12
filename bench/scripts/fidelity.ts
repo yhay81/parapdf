@@ -16,6 +16,7 @@ import { deflateSync } from "node:zlib";
 import type { Browser } from "playwright";
 import { preview } from "vite";
 import { browserFromEnv, launchBrowser } from "./browsers.ts";
+import { hasBuiltPdfjsNext } from "./built-engines.ts";
 
 const benchDir = fileURLToPath(new URL("..", import.meta.url));
 const distDir = join(benchDir, "dist");
@@ -23,9 +24,7 @@ const resultsDir = join(benchDir, "results");
 if (!existsSync(join(distDir, "index.html"))) {
   throw new Error("dist/ is missing; run `pnpm bench:build` first.");
 }
-const hasPdfjsNext = existsSync(
-  join(benchDir, "vendor/pdf.js/build/generic/build/pdf.renderer.mjs"),
-);
+const hasPdfjsNext = hasBuiltPdfjsNext(distDir);
 const engines = ["pdfjs", "pdfjs-hwa", ...(hasPdfjsNext ? ["pdfjs-next", "pdfjs-next-hwa"] : [])];
 const pairs = (
   process.env.PAIRS?.split(",") ?? engines.map((engine) => `${engine}:${engine}-frame`)

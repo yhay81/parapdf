@@ -69,19 +69,44 @@ const median = (values: number[]): number => {
 const requestsRenderer = (engine: string) =>
   engine.startsWith("pdfjs-next") || engine.endsWith("-renderer");
 
-const engineLine = (versions: Record<string, string | undefined>, engines: string[]): string =>
-  `pdfjs-dist ${versions["pdfjs-dist"]} (main-thread drawing${engines.some((engine) => engine.endsWith("-renderer")) ? ", -renderer enables the drawing worker" : ""})${versions["pdf.js master"] ? `, pdf.js master ${versions["pdf.js master"]} (renderer worker)` : ""}, @embedpdf/pdfium ${versions["@embedpdf/pdfium"]} (worker), hayro ${versions.hayro} (worker, wasm simd128). \`-hwa\` variants set \`enableHWA\` for a GPU-backed canvas.${engines.some((engine) => engine.endsWith("-frame")) ? " `-frame` variants draw into an OffscreenCanvas instead of the displayed canvas and show the finished page as an ImageBitmap through a `bitmaprenderer` context." : ""}` +
-  (engines.some((engine) => engine.endsWith("-webgpu"))
-    ? " `-webgpu` requests GPU rasterization of mesh shadings. The fidelity run counts actual GPU draws."
-    : "");
+const engineLine = (versions: Record<string, string | undefined>, engines: string[]): string => {
+  const renderer = engines.some((engine) => engine.endsWith("-renderer"));
+  const descriptions: Record<string, string> = {
+    "pdfjs-dist": `main-thread drawing${renderer ? ", -renderer enables the drawing worker" : ""}`,
+    "pdf.js master": "renderer worker",
+    "@embedpdf/pdfium": "worker",
+    hayro: "worker, wasm simd128",
+  };
+  const labels = Object.entries(versions).map(
+    ([name, version]) => `${name} ${version} (${descriptions[name]})`,
+  );
+  if (!labels.length) return "No successful measurements.";
+  const notes = [
+    ...(engines.some((engine) => engine.includes("-hwa"))
+      ? ["`-hwa` variants set `enableHWA` for a GPU-backed canvas."]
+      : []),
+    ...(engines.some((engine) => engine.endsWith("-frame"))
+      ? [
+          "`-frame` variants draw into an OffscreenCanvas and show the finished page through a `bitmaprenderer` context.",
+        ]
+      : []),
+    ...(engines.some((engine) => engine.endsWith("-webgpu"))
+      ? [
+          "`-webgpu` requests GPU rasterization of mesh shadings. The fidelity run counts actual GPU draws.",
+        ]
+      : []),
+  ];
+  return [`${labels.join(", ")}.`, ...notes].join(" ");
+};
 
 /** The command that measures the same engines, files, and settings again. */
 const reproduceLine = (
-  { browserName, settings }: BrowserResults["environment"],
+  { browserName, headless, settings }: BrowserResults["environment"],
   files: string[],
 ): string => {
   const variables = [
     `BROWSER=${browserName}`,
+    ...(!headless && browserName !== "safari" ? ["HEADED=1"] : []),
     `FILES=${files.join(",")}`,
     `PAGES=${settings.pages}`,
     `RUNS=${settings.runs}`,
@@ -91,6 +116,11 @@ const reproduceLine = (
   ];
   return `\`pnpm bench:build && ${variables.join(" ")} pnpm bench\``;
 };
+
+const browserMode = ({ browserName, headless }: BrowserResults["environment"]): string =>
+  browserName === "safari"
+    ? "safaridriver, headed"
+    : `Playwright build, ${headless ? "headless" : "headed"}`;
 
 const powerLine = ({ power }: BrowserResults["environment"]): string =>
   power?.source === "ac" && !power.lowPowerMode
@@ -130,10 +160,10 @@ export function renderReport({ environment, payload, summaries }: BrowserResults
     "",
     `- Run at: ${environment.runAt}`,
     `- Machine: ${environment.os}, ${environment.cpu}, ${environment.memoryGiB} GiB`,
-    `- Browser: ${environment.browser} (Playwright build, ${environment.headless ? "headless" : "headed"}), WebGL renderer: ${environment.gpu}, crossOriginIsolated: ${environment.crossOriginIsolated}`,
+    `- Browser: ${environment.browser} (${browserMode(environment)}), WebGL renderer: ${environment.gpu}, crossOriginIsolated: ${environment.crossOriginIsolated}`,
     `- Power: ${powerLine(environment)}. Idle baseline: ${idleLine(environment)}.${environment.turnTaking ? ` The run ${environment.turnTaking}.` : ""}`,
     `- Engines: ${engineLine(environment.versions, engines)}`,
-    `- Method: scale ${settings.scale} (100% zoom at devicePixelRatio 2), first ${settings.pages} pages rendered one after another, fresh page per job, median of ${settings.runs} runs. "Visible" waits two animation frames after the pixels are committed to the canvas.`,
+    `- Method: scale ${settings.scale} pixels per PDF point, first ${settings.pages} pages rendered one after another, fresh page per job, median of ${settings.runs} runs. "Visible" waits two animation frames after the pixels are committed to the canvas.`,
     `- Reproduce: ${reproduceLine(environment, files)}`,
     "",
     ...(errors.length || fallbacks.length
@@ -272,10 +302,9 @@ export function renderComparison(all: BrowserResults[], prefix = ""): string {
     "",
     `- Machine: ${all[0]?.environment.os}, ${all[0]?.environment.cpu}`,
     `- Engines: ${all[0] ? engineLine(all[0].environment.versions, engines) : ""}`,
-    "- Browsers are Playwright's builds, headless. WebKit is not Safari and its results do not stand for Safari's.",
     ...all.map(
       (results) =>
-        `- ${results.environment.browser}: power ${powerLine(results.environment)}; ${idleLine(results.environment)}.`,
+        `- ${results.environment.browser} (${browserMode(results.environment)}): power ${powerLine(results.environment)}; ${idleLine(results.environment)}.`,
     ),
     `- Method: the per-browser method on the same ${measuredFiles.length} files; "median across files" takes the median of each file's median. Main thread blocked counts timer lateness beyond 2 ms or the browser's idle 95th percentile, whichever is larger; compare it within a browser, and compare browsers by their longest stalls.`,
     "",
