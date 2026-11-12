@@ -11,6 +11,8 @@ export interface PdfjsAdapterOptions {
   /** Base URL of the cmaps/, standard_fonts/, wasm/, and iccs/ directories. */
   assetBase: string;
   hwa: boolean;
+  /** Ask pdf.js to rasterize mesh shadings with WebGPU where available. */
+  webGPU?: boolean;
   /**
    * Draw each page into an OffscreenCanvas and show the finished drawing as
    * a frame: `transferToImageBitmap()` hands its pixels to an ImageBitmap,
@@ -66,6 +68,7 @@ export function createPdfjsAdapter(options: PdfjsAdapterOptions): EngineAdapter 
         data,
         worker,
         enableHWA: hwa,
+        ...(options.webGPU ? { enableWebGPU: true } : {}),
         disableFontFace: options.pathText ?? false,
         cMapUrl: `${assetBase}cmaps/`,
         cMapPacked: true,

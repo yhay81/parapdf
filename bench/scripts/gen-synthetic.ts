@@ -58,6 +58,38 @@ async function longText(): Promise<Uint8Array> {
   return doc.save({ useObjectStreams: true });
 }
 
+/** A PDF type 5 lattice. Each vertex has two 16-bit coordinates and three RGB bytes. */
+async function meshShading(side: number): Promise<Uint8Array> {
+  const doc = await PDFDocument.create({ updateMetadata: false });
+  const page = doc.addPage([612, 792]);
+  const vertices = Buffer.alloc(side * side * 7);
+  for (let row = 0; row < side; row++) {
+    for (let col = 0; col < side; col++) {
+      const x = col / (side - 1);
+      const y = row / (side - 1);
+      const at = (row * side + col) * 7;
+      vertices.writeUInt16BE(Math.round(x * 65535), at);
+      vertices.writeUInt16BE(Math.round(y * 65535), at + 2);
+      vertices[at + 4] = Math.round(255 * x);
+      vertices[at + 5] = Math.round(255 * y);
+      vertices[at + 6] = Math.round(127.5 * (1 + Math.cos(4 * Math.PI * (x + y))));
+    }
+  }
+  const mesh = doc.context.register(
+    doc.context.flateStream(vertices, {
+      ShadingType: 5,
+      ColorSpace: "DeviceRGB",
+      BitsPerCoordinate: 16,
+      BitsPerComponent: 8,
+      VerticesPerRow: side,
+      Decode: [24, 588, 24, 768, 0, 1, 0, 1, 0, 1],
+    }),
+  );
+  page.node.set(PDFName.of("Resources"), doc.context.obj({ Shading: { Mesh: mesh } }));
+  page.node.addContentStream(doc.context.register(doc.context.flateStream("/Mesh sh")));
+  return doc.save();
+}
+
 async function vectorHeavy(): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   const [width, height] = [842, 1191];
@@ -826,6 +858,8 @@ mkdirSync(outDir, { recursive: true });
 for (const [name, build] of [
   ["synthetic-text-1000.pdf", longText],
   ["synthetic-vector-200k.pdf", vectorHeavy],
+  ["synthetic-mesh-sparse.pdf", () => meshShading(9)],
+  ["synthetic-mesh-dense.pdf", () => meshShading(65)],
   ["synthetic-vector-pages.pdf", vectorPages],
   ["synthetic-cjk-nonembedded.pdf", cjkNonEmbedded],
   ["synthetic-mixed-sizes.pdf", mixedSizes],

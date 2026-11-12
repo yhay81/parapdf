@@ -27,6 +27,9 @@ Generated stress documents live in `generated/`, are recreated with
 
 - `synthetic-text-1000.pdf` — 1,000 pages of Helvetica text, for long-document
   behavior.
+- `synthetic-mesh-sparse.pdf` and `synthetic-mesh-dense.pdf` — one RGB lattice
+  mesh shading (PDF type 5) covering the same area of a Letter page, with 128
+  and 8,192 triangles respectively, for comparing CPU and WebGPU drawing.
 - `synthetic-vector-200k.pdf` — one A3 page with 200,000 stroked segments, for
   operator-heavy drawings such as maps and plans.
 - `synthetic-vector-pages.pdf` — 24 US Letter pages of 50,000 stroked

@@ -48,15 +48,25 @@ interface PagePixels {
   sample: { width: number; height: number; rgba: string };
 }
 
-async function pixelsOf(
-  browser: Browser,
-  baseUrl: string,
-  engine: string,
-  file: string,
-): Promise<PagePixels[]> {
+async function pixelsOf(browser: Browser, baseUrl: string, engine: string, file: string) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 1000 } });
   try {
     const page = await context.newPage();
+    if (engine.endsWith("-webgpu")) {
+      // Only instrument the fidelity run. A working WebGPU API can still
+      // leave pdf.js on its CPU path, for example for a small mesh.
+      await page.addInitScript(() => {
+        const diagnostics = window as Window & { meshDraws?: number };
+        diagnostics.meshDraws = 0;
+        if (typeof GPURenderPassEncoder === "undefined") return;
+        const prototype = GPURenderPassEncoder.prototype;
+        const draw = prototype.draw;
+        prototype.draw = function (...args) {
+          diagnostics.meshDraws = (diagnostics.meshDraws ?? 0) + 1;
+          return draw.apply(this, args);
+        };
+      });
+    }
     const query = new URLSearchParams({
       engine,
       file,
@@ -73,7 +83,10 @@ async function pixelsOf(
       pixels?: PagePixels[];
     };
     if (result.error) throw new Error(result.error.split("\n")[0]);
-    return result.pixels ?? [];
+    const meshDraws = await page.evaluate(
+      () => (window as Window & { meshDraws?: number }).meshDraws,
+    );
+    return { pixels: result.pixels ?? [], meshDraws };
   } finally {
     await context.close();
   }
@@ -199,6 +212,7 @@ interface Row {
   variant: string;
   pages: number;
   identical: number;
+  meshDraws?: number;
   error?: string;
   differing: {
     page: number;
@@ -214,11 +228,17 @@ try {
     for (const { engine, variant } of pairs) {
       const row: Row = { file, engine, variant, pages: 0, identical: 0, differing: [] };
       try {
-        const [drawn, framed] = [
+        const [baseline, candidate] = [
           await pixelsOf(launched.browser, baseUrl, engine, file),
           await pixelsOf(launched.browser, baseUrl, variant, file),
         ];
-        row.pages = Math.min(drawn.length, framed.length);
+        const drawn = baseline.pixels;
+        const framed = candidate.pixels;
+        if (!drawn.length || drawn.length !== framed.length) {
+          throw new Error(`Different or empty page counts: ${drawn.length} and ${framed.length}`);
+        }
+        row.meshDraws = candidate.meshDraws;
+        row.pages = drawn.length;
         for (let page = 0; page < row.pages; page++) {
           const a = drawn[page] as PagePixels;
           const b = framed[page] as PagePixels;
@@ -257,12 +277,13 @@ writeFileSync(
   `${JSON.stringify({ runAt, browser: launched.label, pages, scale, rows }, null, 2)}\n`,
 );
 const percent = (share: number) => `${(share * 100).toFixed(share < 0.01 ? 2 : 1)}%`;
+const pairNames = pairs.map(({ engine, variant }) => [engine, variant].join(":")).join(",");
 const report = [
-  `# Frame display fidelity: ${launched.label}`,
+  `# Rendering fidelity: ${launched.label}`,
   "",
   `- Run at: ${runAt}`,
   `- Method: the first ${pages} pages of each file at scale ${scale}, read back from the displayed canvas through a 2D canvas after each render, in a fresh page per engine. Identical means the same size and the same SHA-256 of every pixel. Pages that differ are compared on 256 px wide samples: the largest channel difference, the share of sample pixels off by more than 16, and the box around them as shares of the page (left top right bottom). bench/results/raw/ keeps each such page's samples and a mask of those pixels.`,
-  `- Reproduce: \`pnpm bench:build && BROWSER=${browserName} node bench/scripts/fidelity.ts\``,
+  `- Reproduce: \`pnpm bench:build && BROWSER=${browserName} FILES=${files.join(",")} PAGES=${pages} SCALE=${scale} PAIRS=${pairNames} OUTPUT=${output} node bench/scripts/fidelity.ts\``,
   "",
   "| File | Engine | Variant | Identical pages | Differing pages (largest difference, share off, where) |",
   "|---|---|---|---:|---|",
@@ -275,7 +296,8 @@ const report = [
               `p${page.page} (${page.maxDiff}, ${percent(page.offShare)}${page.offBox ? ` in ${page.offBox.join(" ")}` : ""})`,
           )
           .join(", ") || "—";
-    return `| ${row.file} | ${row.engine} | ${row.variant} | ${row.identical}/${row.pages} | ${differing} |`;
+    const draws = row.meshDraws === undefined ? "" : ` (${row.meshDraws} WebGPU draws)`;
+    return `| ${row.file} | ${row.engine} | ${row.variant}${draws} | ${row.identical}/${row.pages} | ${differing} |`;
   }),
   "",
 ].join("\n");
