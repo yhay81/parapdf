@@ -577,7 +577,12 @@ describe("a viewer's viewport", () => {
     clientLeft = 0;
     clientTop = 0;
     readonly ownerDocument = { activeElement: null };
-    readonly classList = { toggle: () => {}, remove: () => {} };
+    readonly classes = new Set<string>();
+    readonly classList = {
+      toggle: (name: string, on: boolean) =>
+        on ? this.classes.add(name) : this.classes.delete(name),
+      remove: (name: string) => this.classes.delete(name),
+    };
     readonly style = {};
     #left = 0;
     #top = 0;
@@ -644,6 +649,38 @@ describe("a viewer's viewport", () => {
 
   /** The width of a Letter page fitted to a viewport `width` wide, with the gaps. */
   const fitWidth = (width: number) => (width - 24) / 612;
+
+  it("opens another document at its own starting position with its own tool", async () => {
+    for (const scrollMode of ["vertical", "horizontal"] as const) {
+      for (const direction of ["ltr", "rtl"] as const) {
+        const { viewer, scroller } = await viewing({
+          initialScale: 2,
+          initialScrollMode: scrollMode,
+          direction,
+        });
+        const position = () => [
+          scroller.scrollLeft,
+          scroller.scrollTop,
+          viewer.store.get().currentPage,
+        ];
+        const opening = position();
+        viewer.goToPage(3);
+        scroller.scrollLeft += 100;
+        scroller.scrollTop += 100;
+        viewer.setTool("hand");
+        assert.notDeepEqual(position(), opening);
+        assert.ok(scroller.classes.has("parapdf-hand"));
+
+        const document = fakeDocument({ pages: Array.from({ length: 5 }, () => LETTER) });
+        const loader = fakePdfjs(async () => document.proxy).loader;
+        release.push(show(viewer, { url: `/next-${direction}-${scrollMode}.pdf` }, loader).close);
+        await settle();
+        assert.deepEqual(position(), opening, `${direction} ${scrollMode}`);
+        assert.equal(viewer.store.get().tool, "select");
+        assert.equal(scroller.classes.has("parapdf-hand"), false);
+      }
+    }
+  });
 
   it("goes to the page in range an index names: clamped, truncated, or not at all for NaN", async () => {
     const { viewer, scroller } = await viewing();
@@ -767,6 +804,19 @@ describe("a viewer's viewport", () => {
     resize(scroller, 1000, 800);
     assert.equal(viewer.store.get().scale, fitWidth(1000));
     assert.deepEqual([viewer.store.get().currentPage, scroller.scrollTop], [2, top]);
+  });
+
+  it("opens the new document at the start when it replaces one while detached", async () => {
+    const { viewer, scroller } = await viewing();
+    viewer.goToPage(3);
+    release.shift()?.();
+    const document = fakeDocument({ pages: Array.from({ length: 5 }, () => LETTER) });
+    release.push(
+      show(viewer, { url: "/replacement.pdf" }, fakePdfjs(async () => document.proxy).loader).close,
+    );
+    attach(viewer, scroller);
+    await settle();
+    assert.deepEqual([viewer.store.get().currentPage, scroller.scrollTop], [0, 0]);
   });
 
   it("keeps the fitted zoom of a viewport that attaches again while hidden", async () => {

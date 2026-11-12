@@ -14,6 +14,9 @@ change the API.
 - `documentOptions.enableWebGPU` is typed for applications that opt in to
   GPU drawing of mesh shadings. The default is off.
 
+- Opening a new document in the same viewer resets the previous document's
+  scroll position and applies the new document's pointer tool.
+
 - Search starts on the current page and wraps at the end of the document.
   Choosing the next or previous match during a search keeps it selected
   as more results arrive.
