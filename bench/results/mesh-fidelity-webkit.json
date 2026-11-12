@@ -1,0 +1,42 @@
+{
+  "runAt": "2026-11-12T14:22:08.933Z",
+  "browser": "WebKit 27.2",
+  "pages": 1,
+  "scale": 2.6667,
+  "rows": [
+    {
+      "file": "synthetic-mesh-sparse.pdf",
+      "engine": "pdfjs-hwa",
+      "variant": "pdfjs-hwa-webgpu",
+      "pages": 1,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 2,
+          "offShare": 0,
+          "offBox": null
+        }
+      ],
+      "meshDraws": 2
+    },
+    {
+      "file": "synthetic-mesh-dense.pdf",
+      "engine": "pdfjs-hwa",
+      "variant": "pdfjs-hwa-webgpu",
+      "pages": 1,
+      "identical": 0,
+      "differing": [
+        {
+          "page": 1,
+          "sizes": "1632×2112 / 1632×2112",
+          "maxDiff": 2,
+          "offShare": 0,
+          "offBox": null
+        }
+      ],
+      "meshDraws": 2
+    }
+  ]
+}

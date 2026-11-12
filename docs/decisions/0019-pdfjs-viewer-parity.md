@@ -47,10 +47,12 @@ scrolling or zooming does (#97 tracks them).
   verification through NSS.
 - The viewer's interface and its translations.
 
+### Measured
+
+- WebGPU for mesh shadings is opt-in ([decision 0029](0029-webgpu-mesh-shadings.md), #96).
+
 ### Waiting
 
-- WebGPU for mesh shadings (`enableWebGPU`): a drawing path, measured with
-  fidelity before anything is decided (#96).
 - Digital signatures (`getSignatures()`, `getSignatureData()`): pdf.js
   verifies them only inside Firefox, and a signer's name shown unverified
   reads as a verified one.
@@ -73,6 +75,5 @@ would (WebGPU) waits for its measurements.
 - pdf.js's generic viewer turns page reordering, the comment tool, or
   signature verification on in its releases, or a verifier ParaPDF could
   ship appears.
-- WebGPU's measurements are in.
 - An application needs a presentation mode or the browser's history in a
   way it cannot build from ParaPDF's API.

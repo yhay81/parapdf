@@ -35,6 +35,7 @@ it. A new choice gets a new record, numbered next.
 | [0026](0026-detail-kept-until-replaced.md) | A detail kept while hidden, and until a base replaces it | adopted |
 | [0027](0027-search-from-the-current-page.md) | Search from the current page | adopted |
 | [0028](0028-released-renderer-worker.md) | Ship pdf.js 6.5.438 with opt-in worker drawing | adopted |
+| [0029](0029-webgpu-mesh-shadings.md) | WebGPU drawing of mesh shadings is opt-in | adopted |
 
 ## Template
 

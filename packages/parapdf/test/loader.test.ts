@@ -102,7 +102,7 @@ describe("loadPdfjs", () => {
     },
     rendererSrc: "/renderer.js",
     enableHWA: false,
-    documentOptions: { cMapUrl: "/cmaps/", disableAutoFetch: true },
+    documentOptions: { cMapUrl: "/cmaps/", disableAutoFetch: true, enableWebGPU: true },
   });
 
   it("loads nothing on the server when asked to start early", async (context) => {
@@ -153,6 +153,7 @@ describe("loadPdfjs", () => {
       wasmUrl: "/assets/wasm/",
       iccUrl: "/assets/iccs/",
       disableAutoFetch: true,
+      enableWebGPU: true,
     });
     assert.equal(pdfjs.imageResourcesPath, "/assets/web/images/");
     assert.equal(pdfjs.iconUrls, null);
@@ -171,7 +172,10 @@ describe("loadPdfjs", () => {
     assert.equal(warn.mock.callCount(), 1);
     // The same configuration with its keys in another order is the same.
     const { documentOptions, ...rest } = loaded();
-    configurePdfjs({ documentOptions: { disableAutoFetch: true, cMapUrl: "/cmaps/" }, ...rest });
+    configurePdfjs({
+      documentOptions: { enableWebGPU: true, disableAutoFetch: true, cMapUrl: "/cmaps/" },
+      ...rest,
+    });
     assert.equal(warn.mock.callCount(), 1);
     // The configuration it loaded with stays.
     assert.equal(documentRequestMode({}, undefined), "anonymous");

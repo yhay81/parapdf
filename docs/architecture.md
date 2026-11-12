@@ -60,6 +60,9 @@ optional content (`layers.ts`), the structure tree, form scripting's
 sandbox (`scripting.ts`), and the annotation editor with the labels pdf.js
 leaves to its viewer's localization (`editor*.ts`).
 
+WebGPU rasterization of mesh shadings is opt-in through
+`documentOptions.enableWebGPU` (decision 0029).
+
 The package ships pdf.js's worker and the files it loads on demand.
 `scripts/pdfjs-files.ts` copies them into `pdfjs/` and writes `files.ts`,
 which references each with `new URL(…, import.meta.url)`, so bundlers emit

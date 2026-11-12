@@ -25,6 +25,16 @@ configurePdfjs({ documentOptions: { withCredentials: true } });
 | `documentOptions` | More pdf.js `getDocument` parameters for every document, such as `withCredentials`, `httpHeaders`, `disableAutoFetch`, or `maxImageSize`; they override ParaPDF's own. ParaPDF sets the source and the worker. |
 | `rendererSrc` | Set to `true` to draw pages in the bundled renderer worker, or supply a worker URL. The worker matches the modern or legacy build and is loaded only when enabled. By default pdf.js draws on the main thread. |
 
+## Mesh shadings
+
+Applications displaying PDFs with mesh gradients can ask pdf.js to draw them
+using WebGPU. pdf.js tries to acquire a GPU device when the first document
+opens. It uses the CPU if WebGPU is unavailable. The option defaults to off.
+
+```ts
+configurePdfjs({ documentOptions: { enableWebGPU: true } });
+```
+
 ## Loading early
 
 `preloadPdfjs()` starts loading pdf.js and its worker before any
