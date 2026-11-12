@@ -352,6 +352,7 @@ function ViewerViewport({
     ...(initialScrollMode !== undefined ? { initialScrollMode } : {}),
     ...(defaultPage !== undefined ? { initialPage: defaultPage } : {}),
   };
+  const fragment = fragmentOf(session);
   const options: ViewerOptions = {
     ...explicit,
     ...(initialRotation !== undefined ? { initialRotation } : {}),
@@ -360,7 +361,7 @@ function ViewerViewport({
       initialView,
       initialViewState,
       ...explicit,
-      fragment: () => openingFragment(viewer, fragmentOf(session)),
+      fragment: () => openingFragment(viewer, fragment),
     }),
     textLayer,
     annotationLayer,
@@ -459,8 +460,8 @@ function ViewerViewport({
 
   // A new fragment of the source's URL moves the viewer where it points.
   useEffect(() => {
-    return followFragments(viewer, fragmentOf(session));
-  }, [viewer, session]);
+    return followFragments(viewer, fragment);
+  }, [viewer, fragment]);
 
   const pages: ReactNode[] = [];
   if (layout) {

@@ -22,8 +22,6 @@ export async function print(viewer: Viewer, options?: PrintOptions): Promise<voi
   if (session && !permits(viewer, "print")) {
     throw new Error("The document does not permit printing");
   }
-  // What is being typed, in any viewer of the document, prints.
-  session?.commit();
   const work = viewer.workSignal;
   if (!session || !work) return;
   // Closing the document stops printing it, as the application's signal does.
@@ -35,6 +33,8 @@ export async function print(viewer: Viewer, options?: PrintOptions): Promise<voi
     void session.output("DidPrint");
   };
   try {
+    // Include editing and restoration in every viewer of the document.
+    await session.commit();
     await session.output("WillPrint");
     await printDocument(session, {
       ...options,

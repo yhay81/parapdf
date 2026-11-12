@@ -7,6 +7,7 @@ import {
   PdfSession,
   setFragment,
   setPasswordPrompt,
+  startSession,
 } from "../document/pdf-session.ts";
 import { sourceKey, splitFragment } from "../document/registry.ts";
 import type { PdfSource } from "../document/session.ts";
@@ -41,10 +42,12 @@ interface Held {
 }
 
 /**
- * Opens `source`, or joins the session other providers opened of it, and
- * gives that session to its children, which it renders at once: viewers
- * (`<PdfViewer>`), thumbnails, and the application's own controls. Viewers
- * of one provider share its session; it closes once no provider holds it.
+ * Opens `source` as it renders, or joins the session other providers
+ * opened of it, and gives that session to its children, which it renders
+ * at once: viewers (`<PdfViewer>`), thumbnails, and the application's own
+ * controls. Viewers of one provider share its session, which the provider
+ * holds while it is mounted and shown; the document closes once no
+ * provider holds it, and opens again for one React shows again.
  */
 export function PdfDocument({ source, passwordPrompt = true, children }: PdfDocumentProps) {
   const resolved: PdfSource = typeof source === "string" ? { url: source } : source;
@@ -76,9 +79,16 @@ export function PdfDocument({ source, passwordPrompt = true, children }: PdfDocu
     setHeld(current);
   }
   const { session } = current;
-  // The session is held while the provider is mounted. StrictMode's
+  // The document starts to open as the provider renders, not once React
+  // has mounted it: what its children read of it (`useOutline()` and the
+  // like) arrives while a transition or a Suspense boundary above the
+  // provider still waits for them, and neither mounts the provider before
+  // they do. The server opens no document.
+  if (typeof window !== "undefined") startSession(session);
+  // The session is held while the provider is mounted and shown. StrictMode's
   // mount-unmount-mount cycle and quick remounts reuse the open document
-  // instead of opening it again (document/registry.ts).
+  // instead of opening it again, and a provider React rendered but never
+  // mounted leaves its document to close (document/registry.ts).
   useEffect(() => connectSession(session), [session]);
   // The prompt changes what the session shows, not the document.
   useEffect(() => setPasswordPrompt(session, passwordPrompt), [session, passwordPrompt]);

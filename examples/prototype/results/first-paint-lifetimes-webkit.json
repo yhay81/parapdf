@@ -1,0 +1,113 @@
+{
+  "environment": {
+    "runAt": "2026-11-12T19:24:14.717Z",
+    "os": "darwin 27.2.0 arm64",
+    "cpu": "Apple M2 Pro (12 logical cores)",
+    "browserName": "webkit",
+    "browser": "WebKit 27.2",
+    "headless": true,
+    "power": {
+      "source": "ac",
+      "lowPowerMode": false
+    },
+    "loadAverage": {
+      "start": 3.9,
+      "end": 4.3
+    },
+    "turnTaking": {
+      "waits": 0,
+      "waitedMs": 0,
+      "repeatedJobs": 0
+    },
+    "before": "main ce61e6e",
+    "versions": {
+      "pdfjs": "6.5.438"
+    },
+    "idle": {
+      "timerLagP50Ms": 3.8,
+      "timerLagP95Ms": 5.7,
+      "frameIntervalMs": 13.9
+    },
+    "settings": {
+      "runs": 30,
+      "durationMs": 200,
+      "latencyMs": 0,
+      "bandwidthMbps": 0,
+      "scrollModes": ["vertical"],
+      "scales": ["fit-width"],
+      "viewport": "1280x900",
+      "devicePixelRatio": 2,
+      "focusViewport": false
+    }
+  },
+  "summaries": [
+    {
+      "file": "bill-hr815.pdf",
+      "speed": 900,
+      "variant": "pdfjs-hwa",
+      "runs": 30,
+      "scrollMode": "vertical",
+      "scale": "fit-width",
+      "firstPaintMs": 173.6,
+      "firstPaintRunsMs": [
+        180.4, 180.6, 179.4, 166.1, 179.2, 167.1, 166.9, 177.5, 180.6, 176.4, 156.5, 178.3, 180.3,
+        176.6, 170.7, 168.7, 213.9, 166.6, 166.3, 164.1, 167.6, 177, 162.6, 167.3, 176.8, 177.8,
+        178.1, 166.1, 168.4, 167
+      ],
+      "pagesCrossed": 0,
+      "commitsDuringScroll": 0,
+      "commitsPerSecond": 0,
+      "storeUpdates": 0,
+      "windowChanges": 0,
+      "currentPageChanges": 0,
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "blockedMs": 0.4,
+      "lagP95Ms": 5.5,
+      "lagMaxMs": 6,
+      "droppedFrames": 0,
+      "frames": 15,
+      "baseRenders": 0,
+      "detailRenders": 0,
+      "textLayers": 0,
+      "annotationLayers": 0,
+      "cancelledRenders": 0,
+      "settleMs": 0,
+      "canvasMiB": 110.7
+    },
+    {
+      "file": "bill-hr815.pdf",
+      "speed": 900,
+      "variant": "pdfjs-hwa, before",
+      "runs": 30,
+      "scrollMode": "vertical",
+      "scale": "fit-width",
+      "firstPaintMs": 176.3,
+      "firstPaintRunsMs": [
+        193.7, 174.8, 181.3, 164.8, 166.4, 175.9, 179.6, 167.7, 165.4, 176.4, 179.2, 177.9, 184.4,
+        175.4, 178, 178.1, 197.9, 176.3, 176.3, 151.1, 164.3, 164.5, 182.9, 167.1, 180.8, 162,
+        179.2, 165.9, 177.9, 165.8
+      ],
+      "pagesCrossed": 0,
+      "commitsDuringScroll": 0,
+      "commitsPerSecond": 0,
+      "storeUpdates": 0,
+      "windowChanges": 0,
+      "currentPageChanges": 0,
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "blockedMs": 0.6,
+      "lagP95Ms": 5.6,
+      "lagMaxMs": 6.2,
+      "droppedFrames": 0,
+      "frames": 15,
+      "baseRenders": 0,
+      "detailRenders": 0,
+      "textLayers": 0,
+      "annotationLayers": 0,
+      "cancelledRenders": 0,
+      "settleMs": 0,
+      "canvasMiB": 110.7
+    }
+  ]
+}

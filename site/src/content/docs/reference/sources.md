@@ -68,11 +68,15 @@ and opens again after its document was closed.
   viewers there, as following a link does, without opening the document
   again. `search` and `pagemode` are left to the application, whose find
   bar and sidebars they address.
-- A document is closed a second after the last `PdfDocument` of it
-  unmounts, so React's StrictMode and a quick remount reuse it instead of
-  loading it again; one still loading or waiting for a password stops
-  loading. Closing it stops everything started for it: drawing, searches,
-  background reads, the annotation editor, and printing.
+- A document opens as a `PdfDocument` renders, and is held by every
+  `PdfDocument` of it that is mounted and shown. It is closed a second
+  after the last one unmounts or is hidden (`<Activity>`), so React's
+  StrictMode and a quick remount reuse it instead of loading it again; one
+  still loading or waiting for a password stops loading. Closing it stops
+  everything started for it: drawing, searches, background reads, the
+  annotation editor, and printing. A `PdfDocument` shown again opens it
+  again. A document whose `PdfDocument` rendered and never mounted, as in
+  a transition React abandoned, closes ten seconds after it loaded.
 - Under one `PdfDocument`, any number of `PdfViewer`s and `PdfThumbnails`
   show the document, each viewer with its own view. Viewers that edit
   annotations share the document too: `save()` and `print()` from any of

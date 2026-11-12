@@ -200,15 +200,18 @@ changed.
 Annotations belong to the viewer that created them: they stay while its
 `PdfViewer` unmounts and mounts again, and are gone once the component that
 called `useViewer()` unmounts or `annotationEditing` turns off, so export or
-save them before.
+save them before. They stay too while React hides the viewer or its
+`PdfDocument` and keeps their state (`<Activity>`), and come back with the
+document, also when it closed meanwhile and opens again.
 
 ## Several viewers
 
 Viewers of one `PdfDocument` that edit annotations share its document.
 `save()`, `download()`, and `print()` from any of them include every
 viewer's annotations, those of a viewer whose `PdfViewer` is unmounted too,
-and what is being typed in any of them. Each viewer shows the annotations it
-created. An annotation of the PDF one viewer changed or deleted is left out
+and what is being typed in any of them; those of a viewer React hides
+(`<Activity>`) are left out until it is shown again. Each viewer shows the
+annotations it created. An annotation of the PDF one viewer changed or deleted is left out
 by the others once they draw its page again, without the change, until that
 viewer goes.
 

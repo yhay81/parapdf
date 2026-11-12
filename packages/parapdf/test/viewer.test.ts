@@ -14,7 +14,13 @@ import { attachSearch } from "../src/features/search/index.ts";
 import { getText } from "../src/features/text/index.ts";
 import type { Rotation } from "../src/pdfjs/draw.ts";
 import type { ViewerOptions } from "../src/view/options.ts";
-import { attachViewport, openViewer, setViewerOptions, Viewer } from "../src/view/viewer.ts";
+import {
+  attachViewport,
+  holdViewer,
+  openViewer,
+  setViewerOptions,
+  Viewer,
+} from "../src/view/viewer.ts";
 import {
   askPassword,
   fakeDocument,
@@ -71,8 +77,8 @@ describe("a session's document state", () => {
 
   /** A provider of `source`, as `<PdfDocument>` holds one. */
   const provide = (source: PdfSource, loader: PdfjsLoader, passwordPrompt = true) => {
-    const session = new PdfSession(source, { passwordPrompt });
-    close.push(connectSession(session, loader));
+    const session = new PdfSession(source, { passwordPrompt, pdfjs: loader });
+    close.push(connectSession(session));
     return session;
   };
 
@@ -134,12 +140,12 @@ describe("a session's document state", () => {
   });
 
   it("preserves the prompt when a waiting provider remounts within the release delay", async () => {
-    const session = new PdfSession({ url: "/locked.pdf" });
     const loader = lockedPdfjs();
-    const release = connectSession(session, loader);
+    const session = new PdfSession({ url: "/locked.pdf" }, { pdfjs: loader });
+    const release = connectSession(session);
     await settle();
     release();
-    close.push(connectSession(session, loader));
+    close.push(connectSession(session));
     assert.equal(session.state.get().status, "password");
     assert.equal(session.state.get().passwordReason, "required");
   });
@@ -182,9 +188,9 @@ describe("a session's document state", () => {
     });
     const wrong = new PdfSession(
       { url: "/locked.pdf", password: "wrong" },
-      { passwordPrompt: false },
+      { passwordPrompt: false, pdfjs: loader },
     );
-    const release = connectSession(wrong, loader);
+    const release = connectSession(wrong);
     await settle();
     assert.equal(wrong.state.get().status, "error");
     release();
@@ -201,15 +207,15 @@ describe("a session's document state", () => {
 
   it("follows the session opened again after a hold that outlived it", async () => {
     const { loader, calls } = fakePdfjs();
-    const session = new PdfSession({ url: "/a.pdf" });
-    const release = connectSession(session, loader);
+    const session = new PdfSession({ url: "/a.pdf" }, { pdfjs: loader });
+    const release = connectSession(session);
     const first = await documentOf(session);
     const outline = session.outline();
     release();
     mock.timers.tick(1000);
     await settle();
     assert.equal(first.signal.aborted, true, "the registry closed the first session");
-    close.push(connectSession(session, loader));
+    close.push(connectSession(session));
     const second = await documentOf(session);
     assert.notEqual(second, first);
     assert.equal(second.signal.aborted, false);
@@ -833,5 +839,162 @@ describe("a viewer's viewport", () => {
     resize(scroller, 1000, 800);
     assert.equal(viewer.store.get().scale, fitWidth(1000));
     assert.deepEqual([viewer.store.get().currentPage, scroller.scrollTop], [2, top]);
+  });
+
+  /**
+   * A provider's session, its viewer, and the viewer's owner as React
+   * mounts them: the viewport's layout effect, then the passive ones, a
+   * child's before its parent's. The returned `hide` destroys them in that
+   * order, as React does when it hides the tree or unmounts it.
+   */
+  function mount(viewer: Viewer, scroller: Scroller, session: PdfSession): () => void {
+    const detach = attach(viewer, scroller);
+    openViewer(viewer, session);
+    const releaseSession = connectSession(session);
+    const releaseViewer = holdViewer(viewer);
+    const hide = () => {
+      detach();
+      releaseSession();
+      releaseViewer();
+    };
+    release.push(hide);
+    return hide;
+  }
+
+  /** pdf.js whose documents have five Letter pages. */
+  const fivePages = () =>
+    fakePdfjs(async () => fakeDocument({ pages: Array.from({ length: 5 }, () => LETTER) }).proxy);
+
+  it("shows a session again where and how it showed it, once React shows what it hid", async () => {
+    // Within the second the document stays open for, and after it closed.
+    for (const away of [999, 1000]) {
+      const { loader, calls } = fivePages();
+      const session = new PdfSession({ url: "/a.pdf" }, { pdfjs: loader });
+      const viewer = new Viewer();
+      const scroller = new Scroller();
+      const hide = mount(viewer, scroller, session);
+      await settle();
+      viewer.setScale(2);
+      viewer.setRotation(90);
+      viewer.setTool("hand");
+      viewer.goToPage(3);
+      const shown = viewer.session;
+      const view = () => {
+        const { currentPage, scale, zoomMode, rotation, tool } = viewer.store.get();
+        return [currentPage, scale, zoomMode, rotation, tool, scroller.scrollTop];
+      };
+      const before = view();
+      assert.deepEqual(before.slice(0, 5), [3, 2, "custom", 90, "hand"]);
+      assert.ok(shown && scroller.scrollTop > 0);
+
+      hide();
+      assert.deepEqual(
+        [viewer.session, viewer.renderer, viewer.sourceName, viewer.store.get().layout],
+        [null, null, null, null],
+      );
+      mock.timers.tick(away);
+      await settle();
+      assert.equal(shown.signal.aborted, away === 1000);
+
+      mount(viewer, scroller, session);
+      await settle();
+      assert.equal(viewer.session === shown, away < 1000, "the document that stayed open");
+      assert.equal(viewer.sourceName, "a.pdf");
+      assert.deepEqual(view(), before, `away for ${away} ms`);
+      assert.equal(calls.opens, away < 1000 ? 1 : 2);
+    }
+  });
+
+  it("forgets the previous document when its URL returns different content or a new revision", async () => {
+    for (const fingerprints of [["different", null], ["original", "updated"]]) {
+      let identity: (string | null)[] = ["original", null];
+      const { loader } = fakePdfjs(async () => fakeDocument({
+        pages: [LETTER, LETTER],
+        proxy: { fingerprints: identity },
+      }).proxy);
+      const session = new PdfSession({ url: "/latest.pdf" }, { pdfjs: loader });
+      const viewer = new Viewer();
+      const scroller = new Scroller();
+      const forgotten: boolean[] = [];
+      viewer.extend({ closed: (kept) => void forgotten.push(kept) });
+      const hide = mount(viewer, scroller, session);
+      await settle();
+      viewer.setScale(2);
+      viewer.goToPage(1);
+      hide();
+      mock.timers.tick(1000);
+      await settle();
+      identity = fingerprints;
+      mount(viewer, scroller, session);
+      await settle();
+      assert.deepEqual(forgotten, [true, false], "clear edits and search before restoring");
+      assert.equal(viewer.store.get().currentPage, 0);
+      assert.equal(viewer.store.get().zoomMode, "fit-width");
+    }
+  });
+
+  it("shows a document once, however often React runs the effects that mount it", async () => {
+    const { loader, calls } = fivePages();
+    const session = new PdfSession({ url: "/a.pdf" }, { pdfjs: loader });
+    const viewer = new Viewer({ initialScale: 2 });
+    const heard: string[] = [];
+    viewer.extend({
+      ready: () => void heard.push("ready"),
+      closed: (kept) => void heard.push(`closed ${kept}`),
+    });
+    const scroller = new Scroller();
+    // StrictMode mounts, unmounts, and mounts again, before the document loads.
+    mount(viewer, scroller, session)();
+    mount(viewer, scroller, session);
+    await settle();
+    assert.ok(viewer.store.get().layout);
+    assert.equal(viewer.store.get().scale, 2);
+    assert.deepEqual(heard, ["closed true", "ready"]);
+    assert.equal(calls.opens, 1);
+  });
+
+  it("lets go of a document its owner lets go, whatever the provider holds, and shows it again", async () => {
+    const { loader, calls } = fivePages();
+    const viewer = new Viewer();
+    const scroller = new Scroller();
+    attach(viewer, scroller);
+    // The provider stays mounted; React hides the component that owns the viewer.
+    release.push(show(viewer, { url: "/a.pdf" }, loader).close);
+    const letGo = holdViewer(viewer);
+    await settle();
+    viewer.goToPage(2);
+    const top = scroller.scrollTop;
+    const shown = viewer.session;
+    assert.ok(shown);
+    letGo();
+    assert.deepEqual([viewer.session, viewer.store.get().layout], [null, null]);
+    assert.equal(scroller.scrollTop, 0, "the viewport shows nothing of it");
+    letGo();
+    release.push(holdViewer(viewer));
+    await settle();
+    assert.equal(viewer.session, shown);
+    assert.deepEqual([viewer.store.get().currentPage, scroller.scrollTop], [2, top]);
+    assert.equal(calls.opens, 1);
+  });
+
+  it("forgets the view of a session it let go once another session opens", async () => {
+    const { loader } = fivePages();
+    const viewer = new Viewer();
+    const heard: boolean[] = [];
+    viewer.extend({ closed: (kept) => void heard.push(kept) });
+    const scroller = new Scroller();
+    const first = new PdfSession({ url: "/a.pdf" }, { pdfjs: loader });
+    const hide = mount(viewer, scroller, first);
+    await settle();
+    viewer.setScale(2);
+    viewer.goToPage(3);
+    hide();
+    assert.deepEqual(heard, [true]);
+    mount(viewer, scroller, new PdfSession({ url: "/b.pdf" }, { pdfjs: loader }));
+    assert.deepEqual(heard, [true, false], "features drop what they kept for the first");
+    await settle();
+    const { currentPage, scale, zoomMode } = viewer.store.get();
+    assert.deepEqual([currentPage, scale, zoomMode], [0, fitWidth(1000), "fit-width"]);
+    assert.equal(scroller.scrollTop, 0);
   });
 });

@@ -29,10 +29,14 @@ export interface ViewerExtension {
   /** The viewport is about to detach, its pages still in place. */
   detaching?(): void;
   /**
-   * The document is closing, its pages still in place: what was kept for it
-   * goes. The `ready` signal aborts right after.
+   * The viewer lets go of the document, its pages still in place; the
+   * `ready` signal aborts right after. With `kept`, the viewer may show the
+   * session again, in the same pdf.js document or in another one of the
+   * same source: what a feature keeps for the reader stays, out of the
+   * document. Without, the viewer forgets the session, and what was kept
+   * for it goes; this may follow a call with `kept`.
    */
-  closed?(): void;
+  closed?(kept: boolean): void;
   /** The document's pages first showed pixels, once each time it is shown. */
   painted?(): void;
   /** A page's text layer was built, or, with null, removed. */
@@ -133,8 +137,9 @@ export class ExtensionSet {
     if (rebuilding) this.#ready = null;
   }
 
-  closed(): void {
-    this.#each((extension) => extension.closed?.());
+  /** The viewer lets go of the document; with `kept`, it may show its session again. */
+  closed(kept: boolean): void {
+    this.#each((extension) => extension.closed?.(kept));
     this.#ready = null;
     this.#painted = false;
   }

@@ -17,7 +17,7 @@ function listening() {
     viewport: (element, inner) =>
       heard.push(`viewport ${element === scroller && inner === content}`),
     detaching: () => heard.push("detaching"),
-    closed: () => heard.push("closed"),
+    closed: (kept) => heard.push(`closed ${kept}`),
     painted: () => heard.push("painted"),
     textLayer: (index, handle) => heard.push(`text ${index} ${handle}`),
     annotationLayer: (index, handle) => heard.push(`annotations ${index} ${handle}`),
@@ -47,7 +47,7 @@ describe("ExtensionSet", () => {
     set.layersChanged();
     remove();
     set.detaching();
-    set.closed();
+    set.closed(true);
     const told = [
       "prepare true false",
       "ready true false",
@@ -59,7 +59,7 @@ describe("ExtensionSet", () => {
       "action Print",
       "layers",
     ];
-    assert.deepEqual(kept.heard, [...told, "detaching", "closed"]);
+    assert.deepEqual(kept.heard, [...told, "detaching", "closed true"]);
     assert.deepEqual(removed.heard, told);
   });
 
@@ -140,7 +140,7 @@ describe("ExtensionSet", () => {
     const { signal } = new AbortController();
     set.ready(session, signal);
     set.painted();
-    set.closed();
+    set.closed(false);
     const late = listening();
     set.add(late.extension, null);
     assert.deepEqual(late.heard, []);

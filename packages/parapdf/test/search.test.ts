@@ -247,6 +247,29 @@ describe("the search feature", () => {
     assert.deepEqual(search.store.get().matches, []);
   });
 
+  it("keeps what it found while the viewer lets its document go, and forgets it with the session", async () => {
+    const document = fakeDocument({
+      pages: [LETTER, LETTER],
+      texts: [[{ str: "a rose" }], [{ str: "rose" }]],
+    });
+    const { loader } = fakePdfjs(async () => document.proxy);
+    const viewer = new Viewer();
+    const shown = show(viewer, { url: "/a.pdf" }, loader);
+    await settle();
+    const search = attachSearch(viewer);
+    search.search("rose");
+    await finish();
+    const found = search.store.get();
+    assert.deepEqual([found.status, found.matches.length], ["done", 2]);
+    // Its provider lets the session go, as one React hides does.
+    shown.close();
+    assert.equal(viewer.session, null);
+    assert.equal(search.store.get(), found, "the viewer may show the session again");
+    close.push(show(viewer, { url: "/b.pdf" }, loader).close);
+    assert.equal(search.store.get().status, "idle");
+    assert.deepEqual(search.store.get().matches, []);
+  });
+
   it("stops when detached, and the viewer hears nothing more of it", async () => {
     const { viewers, textsRead } = await twoViewers();
     const search = attachSearch(viewers[0]);

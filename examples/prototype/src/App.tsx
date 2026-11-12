@@ -287,6 +287,11 @@ const renderOverlay = (pageIndex: number) =>
   ) : null;
 
 const SplitView = lazy(() => import("./SplitView.tsx"));
+/** What React puts a document and its viewer through (`?lifetimes=`), for check-lifecycle.ts. */
+const Lifetimes = lazy(() => import("./Lifetimes.tsx"));
+const lifetime = (["above", "transition", "activity"] as const).find(
+  (name) => name === params.get("lifetimes"),
+);
 
 export function App() {
   const [fragment, setFragment] = useState(params.get("fragment") ?? "");
@@ -314,6 +319,13 @@ export function App() {
         <SplitView
           source={{ url: fragment ? `${url}#${fragment}` : url }}
           passwordPrompt={settings.passwordPrompt}
+          viewerProps={viewerProps}
+        />
+      ) : lifetime ? (
+        <Lifetimes
+          lifetime={lifetime}
+          owner={params.get("owner") === "outside" ? "outside" : "inside"}
+          file={settings.file}
           viewerProps={viewerProps}
         />
       ) : mounted ? (

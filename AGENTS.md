@@ -71,8 +71,9 @@ that matters for performance or direction gets a decision record.
   that starts pdf.js with the package's worker and files, and how ParaPDF
   draws pages and builds layers with it (`src/pdfjs/`); document sessions,
   one per open document, shared by its viewers through a registry that
-  publishes each session's document state, and the `PdfSession` a
-  `PdfDocument` holds of it, which applications see (`src/document/`); one
+  publishes each session's document state and keeps what renders read of
+  it, and the `PdfSession` a `PdfDocument` starts as it renders and holds
+  of it, which applications see (`src/document/`); one
   `Viewer` per viewport, its options (`options.ts`), layout, scrolling,
   gestures, keys and the hand tool (`input.ts`), hot/cold state
   (`state.ts`), the pure rules of its zoom (`zoom.ts`) and navigation
@@ -163,7 +164,11 @@ that matters for performance or direction gets a decision record.
   `PdfDocument` and checks independent view state, closing one while the
   other works, viewport-only detach/reattach, the provider releasing the
   session, StrictMode, and two viewers editing annotations in one session;
-  the prototype shows it with `?split=1`. `check:options` covers
+  the prototype shows it with `?split=1`. `check:lifecycle` covers when
+  documents open and close, and the lifetimes React gives a provider and
+  its viewer: a Suspense boundary above the provider, a source changed in
+  a transition, and an `<Activity>` that hides them, which the prototype
+  shows with `?lifetimes=` (`src/Lifetimes.tsx`). `check:options` covers
   `PdfViewer`'s live options and controlled view state. `check:modules` builds the demo with source maps and
   checks which features' modules each page loads: `minimal.html` none of
   search, forms, annotation editing, and print. Each feature has one primary home among
@@ -235,6 +240,11 @@ that matters for performance or direction gets a decision record.
 - Compare a change with the build before it in the same run, variants
   following each other job by job, never with results from another day.
   Background load moves the numbers: check it, and rerun when in doubt.
+- A first paint falls on an animation frame, so its median over a few runs
+  moves by a whole frame when one or two runs change frames.
+  `scroll-bench.ts` lists every run's: count the runs on each frame, over
+  enough of them, before calling a frame's difference a change (decision
+  0032).
 - Before trusting a speed win, check fidelity: an engine or a change that
   skips content is fast for the wrong reason.
 

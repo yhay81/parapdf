@@ -201,7 +201,7 @@ export function attachSearch(viewer: Viewer): Search {
 
   const detachExtension = viewer.extend({
     ready(_session, signal) {
-      // Closing the document or detaching the viewport stops the search.
+      // Letting go of the document or detaching the viewport stops the search.
       signal.addEventListener(
         "abort",
         () => {
@@ -211,8 +211,10 @@ export function attachSearch(viewer: Viewer): Search {
         { once: true },
       );
     },
-    closed() {
-      store.set(IDLE_SEARCH);
+    closed(kept) {
+      // A finished search holds for the session: its matches are
+      // highlighted again on the pages the viewer shows next.
+      if (!kept) store.set(IDLE_SEARCH);
     },
     textLayer(pageIndex, handle) {
       if (handle) highlightPage(pageIndex);

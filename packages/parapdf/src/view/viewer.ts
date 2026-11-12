@@ -72,18 +72,29 @@ const whole = (area: PageArea | null): boolean =>
   area !== null && area.minX === 0 && area.minY === 0 && area.maxX === 1 && area.maxY === 1;
 
 /**
- * What a viewer holds of the document it shows, from `openViewer()` until
- * it closes: closing drops it whole.
+ * What a viewer holds of the session it shows, from `openViewer()` until
+ * another session opens: the document while it shows it, and where it
+ * showed it, for when it shows it again.
  */
 interface Showing {
-  /** The session, whose signal stops what the viewer started for the document. */
-  readonly pdf: PdfSession;
-  readonly close: () => void;
+  /** React holds the provider. A longer-lived viewer must not keep its source after unmount. */
+  readonly pdf: WeakRef<PdfSession>;
+  /** The file ID and modification ID of the last document shown. */
+  fingerprints: readonly (string | null)[] | null;
+  /**
+   * Aborted when the viewer lets the document go, which its provider
+   * letting the session go and its owner letting the viewer go make it do;
+   * null from then until it shows the session again.
+   */
+  connection: AbortController | null;
   /** The file name the document's URL gives, for download(). */
   readonly sourceName: string | null;
   /** Work for the viewport and the document; either ending aborts it. */
   work: AbortController | null;
-  /** Where a viewport that detached showed the document, for the next one. */
+  /**
+   * Where the viewer showed the document when its viewport detached or it
+   * let the document go, for the next time it shows it.
+   */
   savedPosition: ViewerPosition | null;
   /** The document, once it has loaded. */
   session: DocumentSession | null;
@@ -99,8 +110,8 @@ interface Showing {
 
 /** Opens a session in a viewer; the React bindings' to call (`openViewer()`). */
 let open: (viewer: Viewer, session: PdfSession) => void;
-/** Closes what a viewer shows; see `closeViewer()`. */
-let close: (viewer: Viewer) => void;
+/** Holds a viewer for its owner; see `holdViewer()`. */
+let hold: (viewer: Viewer) => () => void;
 /** Sets a viewer's options; see `setViewerOptions()`. */
 let configure: (viewer: Viewer, options: ViewerOptions) => void;
 /** Binds a viewport; see `attachViewport()`. */
@@ -116,7 +127,13 @@ let bindPage: (viewer: Viewer, index: number, host: HTMLElement) => () => void;
 export class Viewer {
   static {
     open = (viewer, session) => viewer.#open(session);
-    close = (viewer) => viewer.#shown?.close();
+    hold = (viewer) => {
+      // What its owner let go, it shows again.
+      if (viewer.#shown) viewer.#connect(viewer.#shown);
+      return () => {
+        if (viewer.#shown) viewer.#stop(viewer.#shown, true);
+      };
+    };
     configure = (viewer, options) => viewer.#configure(options);
     bindViewport = (viewer, scroller, content) => viewer.#attachViewport(scroller, content);
     bindPage = (viewer, index, host) => viewer.#attachPage(index, host);
@@ -379,7 +396,8 @@ export class Viewer {
 
   /** The file name the open document's URL gives; null for bytes and with no document open. */
   get sourceName(): string | null {
-    return this.#shown?.sourceName ?? null;
+    const shown = this.#shown;
+    return shown?.connection ? shown.sourceName : null;
   }
 
   /** Render counters for the current document. */
@@ -472,43 +490,27 @@ export class Viewer {
   }
 
   /**
-   * Show `pdf` until it closes, it is closed here (`closeViewer()`), or
-   * another session opens; a viewer shows one document at a time, and
-   * opening the one it shows changes nothing. Closing aborts the work this
-   * viewer started for the document: drawing, searches, and background work
-   * stop with it.
+   * Show `pdf` until another session opens; a viewer shows one session at
+   * a time, and opening the one it shows changes nothing. It shows the
+   * session's document while the session's provider and its own owner hold
+   * them (`holdViewer()`): React lets both go when it hides them, and
+   * nothing then says whether it shows them again. So the viewer lets go of
+   * the document, which stops the work it started for it, and keeps its
+   * view of it; opened again with the same session, it shows the document
+   * where it showed it, in the pdf.js document the session then has.
    */
   #open(pdf: PdfSession): void {
-    if (this.#shown?.pdf === pdf && !pdf.signal.aborted) return;
-    this.#shown?.close();
-    const ended = new AbortController();
-    const close = () => {
-      if (ended.signal.aborted) return;
-      ended.abort();
-      // Features let go of the document while its pages are still there,
-      // then stop what they started for it with this signal.
-      this.#extensions.closed();
-      shown.work?.abort();
-      this.#shown = null;
-      this.#selection.clear();
-      this.#gestures.drop();
-      this.#input.release();
-      // A new document in the same viewport starts with its own opening.
-      // The old pages' dimensions and scroll offsets outlive their React hosts.
-      if (this.#content) {
-        this.#content.style.width = "";
-        this.#content.style.height = "";
-      }
-      if (this.#scroller) this.#scroller.scrollTo(0, 0);
-      this.#fromRight = 0;
-      this.#textPages.clear();
-      this.#annotationPages.clear();
-      this.store.set({ layout: null, first: 0, last: -1 });
-    };
+    const showing = this.#shown;
+    if (showing?.pdf.deref() === pdf) {
+      this.#connect(showing);
+      return;
+    }
+    if (showing) this.#stop(showing, false);
     const { source } = pdf;
     const shown: Showing = {
-      pdf,
-      close,
+      pdf: new WeakRef(pdf),
+      fingerprints: null,
+      connection: null,
       sourceName: "url" in source ? filenameFromUrl(source.url) : null,
       work: null,
       savedPosition: null,
@@ -521,18 +523,75 @@ export class Viewer {
     this.#shown = shown;
     this.#firstPaintAt = null;
     this.#resetView();
-    // The session closes when its provider lets it go: so does what shows it,
-    // its features hearing it before the work stops.
-    pdf.signal.addEventListener("abort", close, { once: true, signal: ended.signal });
+    this.#connect(shown);
+  }
+
+  /** Show `shown`'s document until the viewer lets it go, unless it shows it already. */
+  #connect(shown: Showing): void {
+    const pdf = shown.pdf.deref();
+    if (!pdf || shown.connection || pdf.signal.aborted) return;
+    const connection = new AbortController();
+    shown.connection = connection;
+    // The provider lets the session go: so does what shows its document.
+    pdf.signal.addEventListener("abort", () => this.#stop(shown, true), {
+      once: true,
+      signal: connection.signal,
+    });
     this.#start(shown);
+  }
+
+  /**
+   * Let go of the document `shown` shows: features hear of it, the work
+   * started for the document stops, and its pages go. With `kept`, the
+   * viewer may show the session again (`#connect()`), and keeps where and
+   * how it showed it; without, it forgets the session, also one it let go
+   * of before, whose features then drop what they kept.
+   */
+  #stop(shown: Showing, kept: boolean): void {
+    if (this.#shown !== shown) return;
+    const { connection } = shown;
+    if (!connection && kept) return;
+    shown.connection = null;
+    connection?.abort();
+    // An attached viewport says where the reader is; one that detached left it.
+    if (connection && this.#scroller && this.store.get().layout) {
+      shown.savedPosition = this.position();
+    }
+    // Features let go of the document while its pages are still there,
+    // then stop what they started for it with this signal.
+    this.#extensions.closed(kept);
+    shown.work?.abort();
+    shown.work = null;
+    if (!kept) this.#shown = null;
+    shown.session = null;
+    shown.permissions = null;
+    shown.layers = null;
+    shown.renderer = null;
+    this.#selection.clear();
+    this.#gestures.drop();
+    this.#input.release();
+    // Whatever the viewport shows next starts with its own opening or
+    // position. The old pages' dimensions and scroll offsets outlive their
+    // React hosts.
+    if (this.#content) {
+      this.#content.style.width = "";
+      this.#content.style.height = "";
+    }
+    if (this.#scroller) this.#scroller.scrollTo(0, 0);
+    this.#fromRight = 0;
+    this.#sizes = [];
+    this.#textPages.clear();
+    this.#annotationPages.clear();
+    this.store.set({ layout: null, first: 0, last: -1 });
   }
 
   /** Start showing the open session in the attached viewport, or wait for one. */
   #start(shown: Showing): void {
-    const { pdf } = shown;
+    const pdf = shown.pdf.deref();
+    if (!pdf) return;
     shown.work = linked(pdf.signal, this.#viewportControl.signal);
     const { signal } = shown.work;
-    this.#load(shown, signal).catch((error: unknown) => {
+    this.#load(shown, pdf, signal).catch((error: unknown) => {
       // A document that fails to open says so in its session's state.
       if (!signal.aborted && pdf.state.get().status === "ready") {
         console.error("showing the document failed", error);
@@ -545,9 +604,22 @@ export class Viewer {
    * background: as it opens (`opening`), or, in a viewport that reattached
    * after it showed, where the last one showed it.
    */
-  async #load(shown: Showing, signal: AbortSignal): Promise<void> {
-    const session = await documentOf(shown.pdf);
+  async #load(shown: Showing, pdf: PdfSession, signal: AbortSignal): Promise<void> {
+    const session = await documentOf(pdf);
     signal.throwIfAborted();
+    const previous = shown.fingerprints;
+    const ids = session.proxy.fingerprints;
+    if (previous && (previous[0] !== ids[0] || previous[1] !== ids[1])) {
+      // Reopening a URL can return another document or an incremental update.
+      // Forget edits, search hits and positions before any feature sees its pages.
+      this.#extensions.closed(false);
+      shown.savedPosition = null;
+      shown.direction = null;
+      this.#scroller?.scrollTo(0, 0);
+      this.#firstPaintAt = null;
+      this.#resetView();
+    }
+    shown.fingerprints = ids;
     const opening = shown.savedPosition ? undefined : this.#options.opening;
     // Fetched beside the first page's size: features read the permissions
     // before the pages are drawn, and the first layout follows the opening.
@@ -686,7 +758,8 @@ export class Viewer {
     if (resuming && this.#shown) {
       // React can reuse a hidden viewport's DOM after its source changed.
       if (!this.#shown.savedPosition) scroller.scrollTo(0, 0);
-      this.#start(this.#shown);
+      // A viewer that let the document go shows it once it is opened again.
+      if (this.#shown.connection) this.#start(this.#shown);
     }
     this.#shown?.renderer?.setKeeping(true);
     const layout = this.store.get().layout;
@@ -707,8 +780,10 @@ export class Viewer {
       detached = true;
       // A provider may keep the session while its viewport is hidden (Activity).
       // Only viewport work ends; its view and edits return on the next attach.
+      // One that shows no pages yet keeps the position it is about to show,
+      // as does one that let the document go.
       const shown = this.#shown;
-      if (shown) shown.savedPosition = this.store.get().layout ? this.position() : null;
+      if (shown?.connection && this.store.get().layout) shown.savedPosition = this.position();
       this.#extensions.detaching();
       control.abort();
       if (shown) shown.renderer = null;
@@ -1529,16 +1604,26 @@ export class Viewer {
 }
 
 /**
- * Show `session` in `viewer` until it closes or `closeViewer()`: what
- * `<PdfViewer>` does with the session of its `<PdfDocument>`.
+ * Show `session` in `viewer` until another session opens there, its
+ * document while the session's provider and the viewer's owner hold them:
+ * what `<PdfViewer>` does with the session of its `<PdfDocument>`. A viewer
+ * that let go of the document of `session` shows it again where it showed it.
  */
 export function openViewer(viewer: Viewer, session: PdfSession): void {
   open(viewer, session);
 }
 
-/** Stop showing the open document, as when its viewer's owner goes. */
-export function closeViewer(viewer: Viewer): void {
-  close(viewer);
+/**
+ * Hold `viewer` for its owner until the returned release: what
+ * `useViewer()` does while its component is mounted. Released, the viewer
+ * lets go of its document, which stops what it started for it and leaves
+ * nothing of the viewer behind in the session; it keeps its view, and a
+ * later hold shows the session again where the viewer showed it. React
+ * runs neither again for a component it removed while hidden, so the
+ * release is all a viewer that is never shown again gets.
+ */
+export function holdViewer(viewer: Viewer): () => void {
+  return hold(viewer);
 }
 
 /** Take `options` from now on: `<PdfViewer>`'s props. */

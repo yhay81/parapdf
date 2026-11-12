@@ -16,6 +16,13 @@ when a tab hides it, and shows the document again where it was when a
 `PdfViewer` of another document, or until the component that created it
 unmounts.
 
+While React hides the `PdfDocument` or the component that created the
+viewer and keeps their state (`<Activity>`), the viewer lets go of the
+document and shows nothing: `session`, `sourceName`, and the layout are
+null. It keeps the view, the history, a finished search, and the
+annotations, and shows them again with the document once React shows
+both.
+
 The methods below act on a document laid out in an attached viewport;
 before that, they do nothing. The view a document opens with is
 `PdfViewer`'s (see [Options](/reference/options/)).
@@ -61,7 +68,7 @@ viewer (see [Components and hooks](/reference/components/#functions)).
 | `session` | The open document's session, once it has loaded, else null: pdf.js's `proxy`, `pageCount`, the pages, and what features read from the document. |
 | `permissions` | What the open document permits, everything when it is not encrypted; null until it has loaded. |
 | `layers` | Which of the open document's layers show, once known. |
-| `sourceName` | The file name the document's URL gives, which `download()` uses when the server names none; null for bytes. |
+| `sourceName` | The file name the document's URL gives, which `download()` uses when the server names none; null for bytes, and while the viewer shows no document. |
 | `scroller`, `content` | The scroll container and the element that holds the pages, while a viewport is attached. |
 | `signal` | Aborted while no viewport is attached. |
 | `workSignal` | What the viewer does for its open document stops with it: aborts when the document closes or the viewport detaches; null while no document is open. |
@@ -86,7 +93,7 @@ viewer knows none of them by name.
 
 | Member | |
 |---|---|
-| `extend(extension)` | Registers a `ViewerExtension` and returns the function that removes it. Its optional hooks hear the document about to be laid out (`prepare`) or ready (`ready`, with a signal that aborts when the document closes or the viewport detaches), a viewport attaching (`viewport`) or detaching (`detaching`), the document closing (`closed`), a page's text layer built or removed (`textLayer`), a page's annotation layer built or removed (`annotationLayer`), a link or outline jump about to happen (`jumping`), a named action the viewer does not handle (`namedAction`), and layers shown or hidden (`layersChanged`). Hooks for what already happened are called at once. |
+| `extend(extension)` | Registers a `ViewerExtension` and returns the function that removes it. Its optional hooks hear the document about to be laid out (`prepare`) or ready (`ready`, with a signal that aborts when the viewer lets go of the document or the viewport detaches), a viewport attaching (`viewport`) or detaching (`detaching`), the viewer letting go of the document (`closed(kept)`: `kept` is true when it may show the session again, as after React hid it, and what a feature keeps for the reader stays; false when it forgets the session, which may follow), a page's text layer built or removed (`textLayer`), a page's annotation layer built or removed (`annotationLayer`), a link or outline jump about to happen (`jumping`), a named action the viewer does not handle (`namedAction`), and layers shown or hidden (`layersChanged`). Hooks for what already happened are called at once. |
 | `defer(loading)` | Makes the next document's first layout wait for `loading`, a feature loading that changes how pages are drawn. |
 | `renderer` | The renderer of the open document's pages, once it has loaded. Its per-page resolution diagnostic is `pageSharpness(index, area, needed)`, where `area` is in PDF points and `needed` is device pixels per PDF point. |
 | `textLayers` | The text layers of the mounted pages that have one, by page. |

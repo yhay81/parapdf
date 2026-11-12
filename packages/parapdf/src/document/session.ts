@@ -294,7 +294,7 @@ export class DocumentSession {
    */
   readonly #reads = new Map<string, Promise<unknown>>();
   /** What finishes the edits in progress in the session's viewers; see `commit()`. */
-  readonly #commits = new Set<() => void>();
+  readonly #commits = new Set<() => unknown>();
   /** The password that opened this document, for reopening its saved bytes when extracting pages. */
   readonly #password: string | undefined;
   /** What hears the document being saved and printed; see `output()`. */
@@ -696,15 +696,15 @@ export class DocumentSession {
    * Call `commit` at each `commit()` until `signal` aborts: a viewer's
    * annotation editor finishes what the reader is typing or drawing there.
    */
-  onCommit(commit: () => void, signal: AbortSignal): void {
+  onCommit(commit: () => unknown, signal: AbortSignal): void {
     if (signal.aborted) return;
     this.#commits.add(commit);
     signal.addEventListener("abort", () => this.#commits.delete(commit), { once: true });
   }
 
   /** Finish the edits in progress in every viewer of the document, before saving or printing. */
-  commit(): void {
-    for (const commit of this.#commits) commit();
+  async commit(): Promise<void> {
+    await Promise.all(Array.from(this.#commits, (commit) => commit()));
   }
 
   /**

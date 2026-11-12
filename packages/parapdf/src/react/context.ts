@@ -2,7 +2,7 @@
 
 import { createContext, use, useContext, useSyncExternalStore } from "react";
 import { browser } from "react-dom";
-import type { PdfSession } from "../document/pdf-session.ts";
+import { type PdfSession, readsOf } from "../document/pdf-session.ts";
 import type { DocumentState } from "../document/registry.ts";
 import type { ReadableStore } from "../document/store.ts";
 import type { ViewerState } from "../view/state.ts";
@@ -47,9 +47,10 @@ export function useSession(): PdfSession {
 export function useSessionData(hook: string): PdfSession {
   const session = useSession();
   use(browser(() => `${hook} reads the document, which only the browser opens`));
-  // What settled empty while the document showed as failed is read anew
-  // once it no longer does: render again to read it.
-  useSelected(session.state, (state) => state.status === "error");
+  // What settled empty while the document waited for a password is read
+  // anew once it is answered, and so is everything once the provider holds
+  // the document opened again: render again to read it.
+  useSelected(session.state, () => readsOf(session));
   return session;
 }
 

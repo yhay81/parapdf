@@ -55,7 +55,7 @@
     "check:package": "node scripts/check-package.ts",
     "prepack": "pnpm run build && node scripts/legal-files.ts copy",
     "postpack": "node scripts/legal-files.ts remove",
-    "test": "node --test \"test/*.test.ts\"",
+    "test": "node --expose-gc --test \"test/*.test.ts\"",
     "typecheck": "tsc -p . && tsc -p test",
     "prepare": "node scripts/pdfjs-files.ts"
   },

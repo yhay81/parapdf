@@ -4,12 +4,7 @@ import { describe, it } from "node:test";
 import "../src/features/annotations.ts";
 import "../src/features/forms/layers.ts";
 import type { AnnotationLabels } from "../src/pdfjs/editor-types.ts";
-import {
-  detachFeatures,
-  type FeatureOptions,
-  loadedFeatures,
-  setFeatureOptions,
-} from "../src/react/features.ts";
+import { type FeatureOptions, loadedFeatures, setFeatureOptions } from "../src/react/features.ts";
 import { Viewer } from "../src/view/viewer.ts";
 import { settle } from "./fake-pdfjs.ts";
 
@@ -34,14 +29,14 @@ describe("the features of a viewer's options", () => {
     setFeatureOptions(viewer, { ...OFF, annotationEditing: true });
     assert.equal(loadedFeatures(viewer).get().formLayers, null);
     assert.equal(loadedFeatures(viewer).get().annotations, annotations);
-    detachFeatures(viewer);
+    setFeatureOptions(viewer, OFF);
     assert.deepEqual(loadedFeatures(viewer).get(), { formLayers: null, annotations: null });
   });
 
   it("attaches nothing for options turned off before their modules load", async () => {
     const viewer = new Viewer();
     setFeatureOptions(viewer, { ...OFF, forms: true, annotationEditing: true });
-    detachFeatures(viewer);
+    setFeatureOptions(viewer, OFF);
     await settle();
     assert.deepEqual(loadedFeatures(viewer).get(), { formLayers: null, annotations: null });
   });
@@ -59,7 +54,7 @@ describe("the features of a viewer's options", () => {
     const { formLayers, annotations } = loadedFeatures(viewer).get();
     assert.ok(formLayers);
     assert.ok(annotations);
-    detachFeatures(viewer);
+    setFeatureOptions(viewer, OFF);
   });
 
   it("sets labels only when they name a control differently, and scripts only when they change", async () => {
@@ -88,6 +83,6 @@ describe("the features of a viewer's options", () => {
     setFeatureOptions(viewer, { ...options, annotationLabels: undefined });
     assert.deepEqual(setScripts, [true, false]);
     assert.equal(setLabels.length, 2);
-    detachFeatures(viewer);
+    setFeatureOptions(viewer, OFF);
   });
 });

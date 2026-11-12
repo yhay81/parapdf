@@ -73,14 +73,15 @@ creates as it renders: its children read it at once.
 | `state` | The document state's store, as above. |
 | `submitPassword(password)` | Tries a password while the document asks for one; a wrong one asks again, with the reason `"incorrect"`, and null stops opening it, which then fails. Any `PdfDocument` of the document may answer. |
 | `proxy` | pdf.js's `PDFDocumentProxy`, for its APIs ParaPDF does not wrap; null until it loads (see [Sources](/reference/sources/#pdfjss-own-api)). |
-| `signal` | Aborted once the `PdfDocument` lets the session go, or the session closes. |
-| `outline()`, `pageLabels()`, `metadata()`, `attachments()`, `comments()`, `layers()`, `initialView()` | Promises of the document's secondary data, each read once and settled with an empty value when the read or the document fails. `useOutline()` and the other data hooks read them with `use()`. |
+| `signal` | Aborted once the `PdfDocument` lets the session go, or the session closes; a `PdfDocument` that holds it again, as one React shows again, gives it another. |
+| `outline()`, `pageLabels()`, `metadata()`, `attachments()`, `comments()`, `layers()`, `initialView()` | Promises of the document's secondary data, each read once and settled with an empty value when the read or the document fails, and while the document waits for a password: ask again once it is ready. `useOutline()` and the other data hooks, which do, read them with `use()`. |
 
 The metadata’s `author` field lists XMP creators in document order,
 separated by commas.
 
 A `PdfSession` has no method that opens, closes, or releases anything:
-`PdfDocument` holds the document while it is mounted.
+`PdfDocument` opens the document as it renders and holds it while it is
+mounted and shown.
 
 ## Features' state
 

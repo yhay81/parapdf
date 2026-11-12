@@ -120,11 +120,22 @@ describe("the history feature", () => {
     assert.deepEqual(fake.restored, [0, 3]);
   });
 
-  it("forgets the positions when the document closes, and detaches", () => {
+  it("keeps the positions while the viewer lets its document go, to show it again", () => {
     const fake = fakeViewer();
     const history = attachHistory(fake.viewer);
     fake.jump(2);
-    fake.hear("closed");
+    fake.hear("closed", true);
+    assert.deepEqual(history.store.get(), { canGoBack: true, canGoForward: false });
+    history.back();
+    assert.deepEqual(fake.restored, [0]);
+  });
+
+  it("forgets the positions when the viewer forgets its session, and detaches", () => {
+    const fake = fakeViewer();
+    const history = attachHistory(fake.viewer);
+    fake.jump(2);
+    fake.hear("closed", true);
+    fake.hear("closed", false);
     assert.deepEqual(history.store.get(), { canGoBack: false, canGoForward: false });
     history.detach();
     assert.equal(fake.extensions.size, 0, "the viewer hears nothing more of it");

@@ -124,6 +124,7 @@ export function attachFormLayers(viewer: Viewer, { scripts = false } = {}): Form
       startScripts();
     },
     closed() {
+      open = null;
       painted = false;
       stopScripts();
     },
