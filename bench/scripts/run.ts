@@ -54,11 +54,15 @@ const output = process.env.OUTPUT ?? "";
 const runs = Number(process.env.RUNS ?? "3");
 const pages = Number(process.env.PAGES ?? "10");
 const scale = Number(process.env.SCALE ?? "2.6667");
+if (!Number.isSafeInteger(runs) || runs < 1) throw new Error("RUNS must be a positive integer");
+if (!Number.isSafeInteger(pages) || pages < 1) throw new Error("PAGES must be a positive integer");
+if (!Number.isFinite(scale) || scale <= 0) throw new Error("SCALE must be finite and positive");
 const files = process.env.FILES
   ? process.env.FILES.split(",")
   : readdirSync(join(distDir, "corpus"))
       .filter((name) => name.endsWith(".pdf"))
       .sort();
+if (!files.length) throw new Error("No PDFs to measure");
 
 interface JobResult {
   engine: string;
@@ -245,16 +249,21 @@ const summaries = files.flatMap((file) =>
   engines.map((engine) => {
     const jobs = results.filter((result) => result.file === file && result.engine === engine);
     const ok = jobs.filter((job) => !job.error);
+    const firstFailure = jobs.find((job) => job.error);
     const presented = ok.flatMap((job) => job.presentMs ?? []);
     const handovers = ok.flatMap((job) => job.frameMs ?? []);
     return {
       file,
       engine,
       runs: ok.length,
-      error: ok.length === 0 ? jobs[0]?.error?.split("\n")[0] : undefined,
+      error: firstFailure
+        ? `${jobs.length - ok.length} of ${jobs.length} runs failed. Run ${firstFailure.run + 1}: ${firstFailure.error?.split("\n")[0]}`
+        : undefined,
       pageCount: ok[0]?.pageCount,
       renderedPages: ok[0]?.renderedPages,
-      usesRendererWorker: ok[0]?.usesRendererWorker,
+      usesRendererWorker: ok.some((job) => job.usesRendererWorker !== undefined)
+        ? ok.every((job) => job.usesRendererWorker)
+        : undefined,
       initMs: median(ok.map((job) => job.initMs ?? Number.NaN)),
       openMs: median(ok.map((job) => job.openMs ?? Number.NaN)),
       firstRenderMs: median(ok.map((job) => job.firstRenderMs ?? Number.NaN)),
@@ -309,3 +318,4 @@ writeFileSync(join(resultsDir, "raw", `${output}${browserName}-contact.html`), c
 
 console.log(`\nWrote ${writeReport(resultsDir, browserName, output)}`);
 console.log(`Wrote ${writeComparison(resultsDir, output)}`);
+if (summaries.some((summary) => summary.error)) process.exitCode = 1;
