@@ -18,6 +18,10 @@ change the API.
   Choosing the next or previous match during a search keeps it selected
   as more results arrive.
 
+- Changing `enforcePermissions` on an open PDF now updates its form fields
+  and annotation editor. The viewer keeps existing edits when enforcement
+  pauses editing.
+
 ## 0.8.0 — 2026-10-30
 
 - URL sources with explicit credentials now distinguish omitted headers,

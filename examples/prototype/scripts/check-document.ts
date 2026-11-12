@@ -543,6 +543,22 @@ try {
       JSON.stringify(enforced.editing),
     );
     check("with permission to fill forms, fields can be filled in", enforced.field);
+    await page.evaluate(() =>
+      (window as unknown as Demo).__setViewerProps({ enforcePermissions: false }),
+    );
+    await page.waitForFunction(
+      () => (window as unknown as Demo).__annotations?.store.get().state != null,
+    );
+    await page.evaluate(() =>
+      (window as unknown as Demo).__setViewerProps({ enforcePermissions: true }),
+    );
+    await page.waitForFunction(
+      () => (window as unknown as Demo).__annotations?.store.get().state === null,
+    );
+    check(
+      "enabling and disabling enforcement updates the annotation editor on the open document",
+      true,
+    );
     check(
       "no errors following permissions",
       errors.every((error) => error.includes("does not permit printing")),

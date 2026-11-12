@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { PdfPermissions } from "../src/document/session.ts";
+import { attachFormLayers } from "../src/features/forms/layers.ts";
 import { enforcePermissions, permits, permitted } from "../src/features/permissions.ts";
 import { Viewer } from "../src/view/viewer.ts";
 import { fakeDocument, fakePdfjs, settle, show } from "./fake-pdfjs.ts";
@@ -31,6 +32,29 @@ describe("permissions", () => {
     assert.equal(permitted({ ...restricted, fillForms: false, annotate: true }, "fillForms"), true);
   });
 
+  it("updates existing form layers when enforcement changes", async (context) => {
+    context.mock.timers.enable({ apis: ["setTimeout"] });
+    const viewer = new Viewer();
+    const layers = context.mock.method(viewer, "setFormLayers");
+    const forms = attachFormLayers(viewer);
+    const document = fakeDocument({ proxy: { getPermissions: async () => new Set<number>() } });
+    const { close } = show(
+      viewer,
+      { url: "/locked.pdf" },
+      fakePdfjs(async () => document.proxy).loader,
+    );
+    await settle();
+    assert.equal(layers.mock.calls.at(-1)?.arguments[0], true);
+    const release = enforcePermissions(viewer);
+    assert.equal(layers.mock.calls.at(-1)?.arguments[0], false);
+    release();
+    assert.equal(layers.mock.calls.at(-1)?.arguments[0], true);
+    forms.detach();
+    close();
+    context.mock.timers.tick(1000);
+    await settle();
+  });
+
   it("bind a viewer only while it follows them", async (context) => {
     context.mock.timers.enable({ apis: ["setTimeout"] });
     // Permitted: filling in forms, copying for accessibility, and assembling.
@@ -43,7 +67,11 @@ describe("permissions", () => {
     const stop = enforcePermissions(viewer);
     assert.equal(permits(viewer, "print"), false);
     assert.equal(permits(viewer, "fillForms"), true);
+    const second = enforcePermissions(viewer);
     stop();
+    stop();
+    assert.equal(permits(viewer, "print"), false, "another caller still enforces permissions");
+    second();
     assert.equal(permits(viewer, "print"), true);
     close();
     context.mock.timers.tick(1000);
