@@ -209,8 +209,15 @@ describe("DocumentSession", () => {
         getPageLabels: async () => ["i", "ii"],
         fingerprints: ["f00d", null],
         getMetadata: async () => ({
-          info: { Title: " Report ", Author: "", PDFFormatVersion: "1.7", IsLinearized: true },
-          metadata: { get: (name: string) => (name === "dc:creator" ? "Someone" : null) },
+          info: {
+            Title: " Report ",
+            Author: "Earlier author",
+            PDFFormatVersion: "1.7",
+            IsLinearized: true,
+          },
+          metadata: {
+            get: (name: string) => (name === "dc:creator" ? [" Someone ", "", "Another"] : null),
+          },
           contentDispositionFilename: "report.pdf",
           contentLength: 1234,
         }),
@@ -223,7 +230,7 @@ describe("DocumentSession", () => {
     assert.deepEqual(await session.pageLabels(), ["i", "ii"]);
     const metadata = await session.metadata();
     assert.equal(metadata.title, "Report");
-    assert.equal(metadata.author, "Someone", "XMP metadata wins");
+    assert.equal(metadata.author, "Someone, Another", "XMP metadata wins");
     assert.equal(metadata.pdfVersion, "1.7");
     assert.equal(metadata.subject, null);
     assert.equal(metadata.filename, "report.pdf");

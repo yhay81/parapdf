@@ -291,12 +291,12 @@ export class Viewer {
     this.store.set({
       currentPage: 0,
       zoomMode: this.#initialZoomMode(),
-      tool: options.initialTool ?? "select",
       rotation: options.initialRotation ?? 0,
       spread: options.initialSpread ?? "none",
       scrollMode: options.initialScrollMode ?? "vertical",
       direction: this.#direction(),
     });
+    this.setTool(options.initialTool ?? "select");
   }
 
   /** The page order: the option's, or the document's, or "ltr". */
@@ -491,6 +491,16 @@ export class Viewer {
       shown.work?.abort();
       this.#shown = null;
       this.#selection.clear();
+      this.#gestures.drop();
+      this.#input.release();
+      // A new document in the same viewport starts with its own opening.
+      // The old pages' dimensions and scroll offsets outlive their React hosts.
+      if (this.#content) {
+        this.#content.style.width = "";
+        this.#content.style.height = "";
+      }
+      if (this.#scroller) this.#scroller.scrollTo(0, 0);
+      this.#fromRight = 0;
       this.#textPages.clear();
       this.#annotationPages.clear();
       this.store.set({ layout: null, first: 0, last: -1 });
@@ -673,7 +683,11 @@ export class Viewer {
     const control = this.#viewportControl;
     this.#scroller = scroller;
     this.#content = content;
-    if (resuming && this.#shown) this.#start(this.#shown);
+    if (resuming && this.#shown) {
+      // React can reuse a hidden viewport's DOM after its source changed.
+      if (!this.#shown.savedPosition) scroller.scrollTo(0, 0);
+      this.#start(this.#shown);
+    }
     this.#shown?.renderer?.setKeeping(true);
     const layout = this.store.get().layout;
     if (layout) this.#sizeContent(layout);

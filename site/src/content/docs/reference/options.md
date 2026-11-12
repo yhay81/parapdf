@@ -35,7 +35,7 @@ React nothing unless you set state in them.
 | `spread`, `defaultSpread`, `onSpreadChange` | `"none"` | `"odd"` or `"even"` shows pages in pairs (see [Scroll modes and spreads](/guides/layout/)). |
 | `scrollMode`, `defaultScrollMode`, `onScrollModeChange` | `"vertical"` | `"horizontal"`, `"wrapped"`, or `"page"` arranges pages otherwise (see [Scroll modes and spreads](/guides/layout/)). |
 | `tool`, `defaultTool`, `onToolChange` | `"select"` | What a mouse drag does: select text, or, with `"hand"`, scroll the document. |
-| `defaultPage` | `0` | The zero-based page a document opens at, at the top of the viewport. |
+| `defaultPage` | `0` | The zero-based page a document opens at, at the top of the viewport. This also applies when the source changes in the same viewer. |
 | `onPageChange` | none | `(pageIndex) => void`: hears the current page change as the reader scrolls, follows a link, or `goToPage()` shows another. |
 
 The current page is never controlled: `viewer.goToPage()` sets it.

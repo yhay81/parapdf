@@ -39,6 +39,15 @@ describe("acquireSession", () => {
     assert.equal(calls.opens, 2);
   });
 
+  it("keeps URLs containing serialized request options separate from credentialed requests", async () => {
+    const { loader } = fakePdfjs();
+    const plain = acquireSession(loader, { url: "/report.pdf [null,true]" });
+    const credentialed = acquireSession(loader, { url: "/report.pdf", withCredentials: true });
+    assert.notEqual(await plain.session, await credentialed.session);
+    plain.release();
+    credentialed.release();
+  });
+
   it("closes a session a second after its last viewer releases it", async () => {
     const { loader, calls } = fakePdfjs();
     const a = acquireSession(loader, { url: "/a.pdf" });

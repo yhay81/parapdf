@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import react from "@astrojs/react";
@@ -18,7 +18,8 @@ function stageSamples(): AstroIntegration {
   return {
     name: "parapdf-stage-samples",
     hooks: {
-      "astro:config:setup": () => {
+      "astro:config:setup": ({ command }) => {
+        if (command !== "dev" && command !== "build") return;
         const out = join(siteDir, "public/samples");
         mkdirSync(out, { recursive: true });
         for (const { file, generated } of samples) {
@@ -27,6 +28,10 @@ function stageSamples(): AstroIntegration {
             throw new Error(`${source} is missing: run pnpm --filter @parapdf/bench corpus`);
           }
           copyFileSync(source, join(out, file));
+        }
+        const current = new Set(samples.map((sample) => sample.file));
+        for (const file of readdirSync(out)) {
+          if (file.endsWith(".pdf") && !current.has(file)) unlinkSync(join(out, file));
         }
       },
     },

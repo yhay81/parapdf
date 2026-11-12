@@ -6,21 +6,32 @@ change the API.
 
 ## Unreleased
 
-- Text selection, links, form fields, and annotation editors align with the
-  drawing on pages with a nondefault PDF user-space unit. Search uses the
-  page's unit and intrinsic rotation when locating text.
+- Distinct URLs and request options can no longer share the wrong PDF.
+  Form fields settle empty when a provider shows a password error and are
+  read again when the document opens. Metadata lists all authors in the
+  PDF's XMP creator sequence. Extracting edited pages from an encrypted
+  PDF also works when `documentOptions.password` supplied its password.
 
 - Updated pdfjs-dist to 6.5.438. JPEG 2000 images wrapped in LZW now render
   from the bundled decoder. Set `configurePdfjs({ rendererSrc: true })` to
   use the packaged drawing worker with either the modern or legacy build.
   Default rendering still uses GPU-backed canvases on the main thread.
 
+- Text selection, links, form fields, and annotation editors align with the
+  drawing on pages with a nondefault PDF user-space unit. Search uses the
+  page's unit and intrinsic rotation when locating text.
+
 - `documentOptions.enableWebGPU` is typed for applications that opt in to
   GPU drawing of mesh shadings. The default is off.
+
+- Opening a new document in the same viewer resets the previous document's
+  scroll position and applies the new document's pointer tool.
 
 - Search starts on the current page and wraps at the end of the document.
   Choosing the next or previous match during a search keeps it selected
   as more results arrive.
+
+- A partial `initialViewState` keeps `defaultPage` when it omits the page.
 
 ## 0.8.0 — 2026-10-30
 

@@ -23,6 +23,8 @@ size, so the view moves between a phone and a desktop.
 `initialViewState` opens the document with it, before anything is drawn
 elsewhere. It wins over `defaultPage`, the zoom, the spread, the scroll
 mode, and `initialView`, and the fields it leaves out still follow them.
+For example, `defaultPage={2}` with `initialViewState={{ scale: 1.5 }}`
+opens the third page at that scale.
 Neither adds a back entry, and values out of range are clamped or ignored,
 so a view read from a URL needs no checking:
 

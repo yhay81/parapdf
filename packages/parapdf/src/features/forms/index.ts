@@ -1,3 +1,4 @@
+import { type PdfSession, readSessionData } from "../../document/pdf-session.ts";
 import type { DocumentSession } from "../../document/session.ts";
 import type { Viewer } from "../../view/viewer.ts";
 import { createFormAccess, type FormField, type FormValue } from "./fields.ts";
@@ -15,6 +16,11 @@ export function formsOf(session: DocumentSession): ReturnType<typeof createFormA
     access.set(session, forms);
   }
   return forms;
+}
+
+/** The fields as first read by this provider, or an empty list when opening failed. */
+export function initialFormFields(provider: PdfSession): Promise<readonly FormField[]> {
+  return readSessionData(provider, "formFields", (session) => formsOf(session).getFormFields(), []);
 }
 
 /**

@@ -140,7 +140,7 @@ export const sourceKey = (source: PdfSource): unknown => {
     ? Object.entries(httpHeaders).sort(([a], [b]) => (a < b ? -1 : 1))
     : null;
   // A source that leaves its credentials mode out takes the loader's documentOptions.
-  return `url:${url} ${JSON.stringify([headers, withCredentials ?? null])}`;
+  return `request:${JSON.stringify([url, headers, withCredentials ?? null])}`;
 };
 
 function registryOf(pdfjs: PdfjsLoader): Map<unknown, Entry> {
