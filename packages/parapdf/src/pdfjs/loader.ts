@@ -17,7 +17,7 @@ export type PdfjsDocumentOptions = Omit<
 export interface PdfjsBuild {
   readonly name: string;
   readonly pdfjs: () => Promise<typeof Pdfjs>;
-  readonly workerUrl: () => URL;
+  readonly workerUrl: (assetBase?: string) => URL;
   /** Selects the build's drawing worker when rendererSrc is true. Defaults to the modern one. */
   readonly rendererUrl?: (assetBase?: string) => URL;
 }
@@ -276,7 +276,11 @@ async function load(options: PdfjsConfig): Promise<LoadedPdfjs> {
     workerSrc = `${workerLocation}#${encodeURIComponent(JSON.stringify(Object.fromEntries(urls)))}`;
     started = startWorker(workerSrc);
   } else {
-    workerSrc = options.workerSrc ?? `${assetBase}pdf.worker.js`;
+    workerSrc =
+      options.workerSrc ??
+      (options.build && assetBase !== undefined
+        ? options.build.workerUrl(absolute(assetBase)).href
+        : `${assetBase}pdf.worker.js`);
     workerLocation = workerSrc;
   }
   // Without a started worker, pdf.js starts its own from workerSrc, and
