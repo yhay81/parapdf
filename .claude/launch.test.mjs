@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { setTimeout as wait } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
+import { stripVTControlCharacters } from "node:util";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const { configurations } = JSON.parse(await readFile(new URL("launch.json", import.meta.url)));
@@ -37,11 +38,12 @@ for (const { name, runtimeExecutable, runtimeArgs, port } of configurations) {
     try {
       // Verify the launcher itself claimed its port before requesting it.
       const address = new URL(`http://127.0.0.1:${port}`);
+      const listening = () => stripVTControlCharacters(log).includes(address.host);
       const deadline = Date.now() + 30_000;
-      while (!log.includes(address.host) && Date.now() < deadline && server.exitCode === null) {
+      while (!listening() && Date.now() < deadline && server.exitCode === null) {
         await wait(100);
       }
-      assert.ok(log.includes(address.host) && server.exitCode === null, log);
+      assert.ok(listening() && server.exitCode === null, log);
       const response = await fetch(address, { signal: AbortSignal.timeout(10_000) });
       assert.equal(response.status, 200);
       assert.match(response.headers.get("content-type"), /text\/html/);
