@@ -33,12 +33,8 @@
       "durationMs": 2000,
       "latencyMs": 0,
       "bandwidthMbps": 0,
-      "scrollModes": [
-        "vertical"
-      ],
-      "scales": [
-        "fit-width"
-      ],
+      "scrollModes": ["vertical"],
+      "scales": ["fit-width"],
       "viewport": "1280x900",
       "devicePixelRatio": 2,
       "focusViewport": false
@@ -53,13 +49,7 @@
       "scrollMode": "vertical",
       "scale": "fit-width",
       "firstPaintMs": 165.1,
-      "firstPaintRunsMs": [
-        165.1,
-        178,
-        156.3,
-        163.7,
-        166.4
-      ],
+      "firstPaintRunsMs": [165.1, 178, 156.3, 163.7, 166.4],
       "pagesCrossed": 4,
       "commitsDuringScroll": 9,
       "commitsPerSecond": 4.5,
@@ -89,13 +79,7 @@
       "scrollMode": "vertical",
       "scale": "fit-width",
       "firstPaintMs": 178.1,
-      "firstPaintRunsMs": [
-        171,
-        178.1,
-        170.5,
-        184.7,
-        184.2
-      ],
+      "firstPaintRunsMs": [171, 178.1, 170.5, 184.7, 184.2],
       "pagesCrossed": 4,
       "commitsDuringScroll": 9,
       "commitsPerSecond": 4.5,
