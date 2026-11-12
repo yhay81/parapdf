@@ -33,8 +33,9 @@ export interface ViewerExtension {
    * `ready` signal aborts right after. With `kept`, the viewer may show the
    * session again, in the same pdf.js document or in another one of the
    * same source: what a feature keeps for the reader stays, out of the
-   * document. Without, the viewer forgets the session, and what was kept
-   * for it goes; this may follow a call with `kept`.
+   * document. A call with false discards saved state when the provider
+   * changes or the reopened PDF has a different file or revision fingerprint.
+   * This may follow an earlier call with true.
    */
   closed?(kept: boolean): void;
   /** The document's pages first showed pixels, once each time it is shown. */

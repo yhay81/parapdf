@@ -906,12 +906,18 @@ describe("a viewer's viewport", () => {
   });
 
   it("forgets the previous document when its URL returns different content or a new revision", async () => {
-    for (const fingerprints of [["different", null], ["original", "updated"]]) {
+    for (const fingerprints of [
+      ["different", null],
+      ["original", "updated"],
+    ]) {
       let identity: (string | null)[] = ["original", null];
-      const { loader } = fakePdfjs(async () => fakeDocument({
-        pages: [LETTER, LETTER],
-        proxy: { fingerprints: identity },
-      }).proxy);
+      const { loader } = fakePdfjs(
+        async () =>
+          fakeDocument({
+            pages: [LETTER, LETTER],
+            proxy: { fingerprints: identity },
+          }).proxy,
+      );
       const session = new PdfSession({ url: "/latest.pdf" }, { pdfjs: loader });
       const viewer = new Viewer();
       const scroller = new Scroller();

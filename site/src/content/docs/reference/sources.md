@@ -75,7 +75,9 @@ and opens again after its document was closed.
   still loading or waiting for a password stops loading. Closing it stops
   everything started for it: drawing, searches, background reads, the
   annotation editor, and printing. A `PdfDocument` shown again opens it
-  again. A document whose `PdfDocument` rendered and never mounted, as in
+  again. The viewer restores its view and edits when both pdf.js fingerprints
+  (document and revision) match. A change to either opens a fresh view.
+  A document whose `PdfDocument` rendered and never mounted, as in
   a transition React abandoned, closes ten seconds after it loaded.
 - Under one `PdfDocument`, any number of `PdfViewer`s and `PdfThumbnails`
   show the document, each viewer with its own view. Viewers that edit

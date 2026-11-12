@@ -1,0 +1,121 @@
+{
+  "environment": {
+    "runAt": "2026-11-12T23:34:54.067Z",
+    "os": "darwin 27.2.0 arm64",
+    "cpu": "Apple M2 Pro (12 logical cores)",
+    "browserName": "webkit",
+    "browser": "WebKit 27.2",
+    "headless": true,
+    "power": {
+      "source": "ac",
+      "lowPowerMode": false
+    },
+    "loadAverage": {
+      "start": 6.5,
+      "end": 4.9
+    },
+    "turnTaking": {
+      "waits": 0,
+      "waitedMs": 0,
+      "repeatedJobs": 0
+    },
+    "before": "before lifetime review fixes",
+    "versions": {
+      "pdfjs": "6.5.438"
+    },
+    "idle": {
+      "timerLagP50Ms": 3.9,
+      "timerLagP95Ms": 4.9,
+      "frameIntervalMs": 13.9
+    },
+    "settings": {
+      "runs": 5,
+      "durationMs": 2000,
+      "latencyMs": 0,
+      "bandwidthMbps": 0,
+      "scrollModes": [
+        "vertical"
+      ],
+      "scales": [
+        "fit-width"
+      ],
+      "viewport": "1280x900",
+      "devicePixelRatio": 2,
+      "focusViewport": false
+    }
+  },
+  "summaries": [
+    {
+      "file": "bill-hr815.pdf",
+      "speed": 3600,
+      "variant": "pdfjs-hwa",
+      "runs": 5,
+      "scrollMode": "vertical",
+      "scale": "fit-width",
+      "firstPaintMs": 165.1,
+      "firstPaintRunsMs": [
+        165.1,
+        178,
+        156.3,
+        163.7,
+        166.4
+      ],
+      "pagesCrossed": 4,
+      "commitsDuringScroll": 9,
+      "commitsPerSecond": 4.5,
+      "storeUpdates": 9,
+      "windowChanges": 5,
+      "currentPageChanges": 4,
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "blockedMs": 22.4,
+      "lagP95Ms": 5,
+      "lagMaxMs": 10.7,
+      "droppedFrames": 1,
+      "frames": 145,
+      "baseRenders": 4,
+      "detailRenders": 0,
+      "textLayers": 0,
+      "annotationLayers": 0,
+      "cancelledRenders": 0,
+      "settleMs": 0,
+      "canvasMiB": 117.5
+    },
+    {
+      "file": "bill-hr815.pdf",
+      "speed": 3600,
+      "variant": "pdfjs-hwa, before",
+      "runs": 5,
+      "scrollMode": "vertical",
+      "scale": "fit-width",
+      "firstPaintMs": 178.1,
+      "firstPaintRunsMs": [
+        171,
+        178.1,
+        170.5,
+        184.7,
+        184.2
+      ],
+      "pagesCrossed": 4,
+      "commitsDuringScroll": 9,
+      "commitsPerSecond": 4.5,
+      "storeUpdates": 9,
+      "windowChanges": 5,
+      "currentPageChanges": 4,
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "blockedMs": 37.1,
+      "lagP95Ms": 5.6,
+      "lagMaxMs": 9.9,
+      "droppedFrames": 1,
+      "frames": 145,
+      "baseRenders": 4,
+      "detailRenders": 0,
+      "textLayers": 0,
+      "annotationLayers": 0,
+      "cancelledRenders": 0,
+      "settleMs": 0,
+      "canvasMiB": 117.5
+    }
+  ]
+}

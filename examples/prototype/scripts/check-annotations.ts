@@ -214,8 +214,9 @@ const demo = (query: string) => `${baseUrl}?engine=${engine}&annotations=1&${que
 /** Read the saved bytes with a separate pdf.js document, including hidden edits. */
 const savedTypes = (page: Page) =>
   page.evaluate(async () => {
-    const bytes = await window.__parapdf!.save(window.__viewer!);
-    const task = window.pdfjsLib!.getDocument({ data: bytes! });
+    const bytes = window.__viewer && (await window.__parapdf?.save(window.__viewer));
+    if (!bytes || !window.pdfjsLib) throw new Error("No document to save");
+    const task = window.pdfjsLib.getDocument({ data: bytes });
     const document = await task.promise;
     try {
       return (await (await document.getPage(1)).getAnnotations()).map((item) => item.subtype);
@@ -225,7 +226,7 @@ const savedTypes = (page: Page) =>
   });
 
 const hide = async (page: Page) => {
-  await page.evaluate(() => window.__lifetimes!.show!(false));
+  await page.evaluate(() => window.__lifetimes?.show?.(false));
   await page.waitForFunction(() => window.__viewer?.session === null);
 };
 
@@ -235,7 +236,7 @@ try {
       launched.browser,
       demo("lifetimes=activity&file=synthetic-annotations.pdf"),
     );
-    await page.evaluate(() => window.__annotations!.setTool("ink"));
+    await page.evaluate(() => window.__annotations?.setTool("ink"));
     await page.locator(".freeTextEditor").click();
     await page.keyboard.press("Delete");
     await page.locator(".freeTextEditor").waitFor({ state: "detached" });
@@ -243,10 +244,10 @@ try {
     for (const reopen of [false, true]) {
       await hide(page);
       if (reopen) await page.waitForTimeout(1200);
-      await page.evaluate(() => window.__lifetimes!.show!(true));
+      await page.evaluate(() => window.__lifetimes?.show?.(true));
       await editorLayer(page, 1);
       const saved = await savedTypes(page);
-      await page.evaluate(() => window.__annotations!.setTool("ink"));
+      await page.evaluate(() => window.__annotations?.setTool("ink"));
       await page.locator(".inkEditor").waitFor();
       check(
         `the deletion survives hiding with the document ${reopen ? "reopened" : "still open"}`,
@@ -262,14 +263,14 @@ try {
     const { page } = await open(launched.browser, demo("lifetimes=activity&file=usrguide.pdf"));
     const added = await page.evaluate(async () => {
       const canvas = new OffscreenCanvas(40, 20);
-      canvas.getContext("2d")!.fillRect(0, 0, 40, 20);
-      return window.__annotations!.addImage(await canvas.convertToBlob(), {
+      canvas.getContext("2d")?.fillRect(0, 0, 40, 20);
+      return window.__annotations?.addImage(await canvas.convertToBlob(), {
         altText: "Kept image",
       });
     });
     check(
       "a stamp is saved before its editor hides",
-      added && (await savedTypes(page)).includes("Stamp"),
+      added === true && (await savedTypes(page)).includes("Stamp"),
     );
     for (const hideAgain of [false, true]) {
       await hide(page);
@@ -283,7 +284,7 @@ try {
             return waiting.then(() => create(...args));
           }) as typeof create;
         });
-        window.__lifetimes!.show!(true);
+        window.__lifetimes?.show?.(true);
       });
       await page.waitForFunction(() => Boolean(window.__releaseStampDecode));
       // Start saving before the decoder can finish. A second hide interrupts
@@ -292,11 +293,11 @@ try {
       if (hideAgain) await hide(page);
       else saving = savedTypes(page);
       await page.evaluate(() => {
-        window.__releaseStampDecode!();
+        window.__releaseStampDecode?.();
         delete window.__releaseStampDecode;
       });
       if (hideAgain) {
-        await page.evaluate(() => window.__lifetimes!.show!(true));
+        await page.evaluate(() => window.__lifetimes?.show?.(true));
         await editorLayer(page, 1);
       }
       const saved = await (saving ?? savedTypes(page));
@@ -305,7 +306,7 @@ try {
           ? "a hide during restoration preserves the stamp for the next editor"
           : "saving during restoration includes the stamp",
         saved.filter((type) => type === "Stamp").length === 1,
-        saved.join(", "),
+        `${saved.filter((type) => type === "Stamp").length} stamp(s)`,
       );
     }
     await page.context().close();

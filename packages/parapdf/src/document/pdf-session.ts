@@ -338,8 +338,8 @@ export function documentOf(session: PdfSession): Promise<DocumentSession> {
 
 /**
  * What `session`'s readers got so far, as an object that is another once
- * they are to read again: the provider holds another session of the
- * document, or its password was answered. Null before it follows a session.
+ * they are to read again: the provider holds another session, a password
+ * was answered, or a failed read can be retried. Null before it follows a session.
  */
 export function readsOf(session: PdfSession): object | null {
   return reads(session);

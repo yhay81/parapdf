@@ -217,6 +217,10 @@ that matters for performance or direction gets a decision record.
   after `build`, `check:demo` (with `BROWSER`) checks what the demo keeps of
   the reader's changes across the annotation tools and other documents.
 
+After building the site, `node --test .claude/launch.test.mjs` starts each
+local preview configuration, checks that it serves the checkout, and checks
+that development ports stay outside the functional checks' range.
+
 ## Benchmark methodology
 
 - Every job runs in a fresh browser context of Playwright's headless

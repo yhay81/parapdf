@@ -15,7 +15,10 @@ change the API.
   its `PdfDocument` (`<Activity>`), wherever `useViewer()` is called,
   instead of resetting the view, or failing once the document had closed;
   a document hidden for more than a second closes, and opens again when
-  shown. What this changes for applications:
+  shown. If that URL now returns another PDF or revision, its view, search,
+  and annotations start fresh. Saving or printing after a hide includes
+  restored images and deletions of original annotations. What this changes
+  for applications:
   - The session's promises (`outline()` and the others) and the data hooks
     give their empty value while the document waits for a password, with
     or without `passwordPrompt`, and read it once the password is

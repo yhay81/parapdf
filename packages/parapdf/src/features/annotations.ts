@@ -234,7 +234,7 @@ export function attachAnnotationEditing(
         // Pages leave out the annotations of the file being edited, and
         // then those changed.
         onRedraw: () => {
-          if (created && !restoring && !signal.aborted) viewer.invalidateDrawings();
+          if (created && !signal.aborted) viewer.invalidateDrawings();
         },
       },
     );
@@ -249,27 +249,31 @@ export function attachAnnotationEditing(
     };
     forgetKept?.();
     forgetKept = null;
-    if (kept && (kept.annotations.length || kept.deletions.length)) {
-      // Finish importing before attaching editor layers or accepting input.
-      // A second hide can then discard this partial editor and retry the
-      // original snapshot. An output from any viewer waits for it below.
-      restoring = editing.restore(kept).then(() => {
-        signal.throwIfAborted();
-        kept = null;
-        restoring = null;
-        publish();
-      });
-      restoring.catch((error: unknown) => {
-        if (!signal.aborted) console.error("restoring annotations failed", error);
-      });
-    } else {
-      kept = null;
-      publish();
-    }
+    // Register before publishing the editor: a subscriber may immediately save.
     session.onCommit(() => {
       if (restoring) return restoring.then(() => editing.commit());
       editing.commit();
     }, signal);
+    if (!kept || (!kept.annotations.length && !kept.deletions.length)) {
+      kept = null;
+      publish();
+      return;
+    }
+    // Finish importing before attaching editor layers or accepting input.
+    // A second hide can discard this partial editor and retry the entire
+    // snapshot. A save or print cannot silently proceed with partial edits.
+    const ended = new Promise<never>((_, reject) => {
+      signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+    });
+    restoring = Promise.race([editing.restore(kept), ended]).then(() => {
+      signal.throwIfAborted();
+      kept = null;
+      restoring = null;
+      publish();
+    });
+    restoring.catch((error: unknown) => {
+      if (!signal.aborted) console.error("restoring annotations failed", error);
+    });
   };
 
   /**

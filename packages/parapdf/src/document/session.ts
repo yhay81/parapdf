@@ -694,7 +694,8 @@ export class DocumentSession {
 
   /**
    * Call `commit` at each `commit()` until `signal` aborts: a viewer's
-   * annotation editor finishes what the reader is typing or drawing there.
+   * annotation editor finishes what the reader is typing or drawing there,
+   * or returns a promise for the edits it is still restoring.
    */
   onCommit(commit: () => unknown, signal: AbortSignal): void {
     if (signal.aborted) return;
@@ -702,7 +703,7 @@ export class DocumentSession {
     signal.addEventListener("abort", () => this.#commits.delete(commit), { once: true });
   }
 
-  /** Finish the edits in progress in every viewer of the document, before saving or printing. */
+  /** Wait for all viewers' edits, including a restored viewer's, before saving or printing. */
   async commit(): Promise<void> {
     await Promise.all(Array.from(this.#commits, (commit) => commit()));
   }

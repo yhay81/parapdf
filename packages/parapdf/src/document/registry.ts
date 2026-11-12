@@ -107,16 +107,17 @@ export interface SharedSession {
   /**
    * What `read` reads from the document, once for every reader of `what`:
    * the same promise each time, so that a component reading it with `use()`
-   * renders with it however often React renders it anew. `fallback` when
-   * the read fails, and while the document cannot be read (it failed to
+   * renders with it however often React renders it anew. A failed read
+   * gives `fallback` until a provider mounts and may retry it, as does a
+   * read while the document cannot be read (it failed to
    * open, waits for a password, or closed), so that the component renders
    * what the document's state says instead of waiting.
    */
   read<T>(what: string, read: (session: DocumentSession) => Promise<T>, fallback: T): Promise<T>;
   /**
    * What its readers got so far. Another object once they are to read
-   * again: a password was answered, and what settled empty waits for the
-   * document.
+   * again: a password was answered, or a newly mounted provider can retry
+   * a failed data read.
    */
   readonly reads: object;
 }

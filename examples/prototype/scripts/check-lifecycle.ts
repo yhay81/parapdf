@@ -7,7 +7,9 @@
  * source keeps the application's bytes and opens again after its document
  * was destroyed, and a transport source shows its document from the ranges
  * it serves and opens again too. The StrictMode part runs on the Vite development server,
- * because production React does not double-mount.
+ * because production React does not double-mount. The development server
+ * also renders the HTML for two roots that hydrate at different times, and
+ * checks a new provider's ready proxy and a child's first password answer.
  *
  * And the lifetimes React gives what it renders (`?lifetimes=`,
  * src/Lifetimes.tsx): a provider under a Suspense boundary mounts once what
@@ -197,14 +199,22 @@ async function checkReaders(browser: Browser, dev: ViteDevServer, base: string):
       },
       { url, markup },
     );
-    await page.waitForFunction(
-      () => Number(document.querySelector("#hydrated output")?.textContent) > 0,
-    );
     const joined = await page.locator("#joined output").textContent();
     check(
       "a new provider of a ready document exposes its proxy during render",
       joined === count,
       String(joined),
+    );
+    const hydrated = await comes(
+      page,
+      () => Number(document.querySelector("#hydrated output")?.textContent) > 0,
+    );
+    check(
+      "a second server-rendered root hydrates from its opening snapshot and then shows the ready document",
+      hydrated &&
+        (await page.locator("#hydrated output").textContent()) === count &&
+        errors.length === 0,
+      errors.slice(0, 3).join(" | "),
     );
     const unlocked = await comes(
       page,
@@ -214,11 +224,6 @@ async function checkReaders(browser: Browser, dev: ViteDevServer, base: string):
       "a child's first effect can answer the pending password request",
       unlocked,
       (await page.locator("#encrypted").textContent()) ?? "",
-    );
-    check(
-      "a second server-rendered root hydrates from its opening snapshot and then shows the ready document",
-      (await page.locator("#hydrated output").textContent()) === count && errors.length === 0,
-      errors.slice(0, 3).join(" | "),
     );
   } finally {
     await page.context().close();
@@ -589,7 +594,7 @@ try {
     root: exampleDir,
     configFile,
     logLevel: "warn",
-    server: { port: 4189, host: "127.0.0.1", strictPort: false },
+    server: { port: 4189, host: "127.0.0.1", strictPort: false, watch: null, hmr: false },
   });
   await dev.listen();
   try {

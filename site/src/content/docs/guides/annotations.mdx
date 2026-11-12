@@ -202,7 +202,10 @@ Annotations belong to the viewer that created them: they stay while its
 called `useViewer()` unmounts or `annotationEditing` turns off, so export or
 save them before. They stay too while React hides the viewer or its
 `PdfDocument` and keeps their state (`<Activity>`), and come back with the
-document, also when it closed meanwhile and opens again.
+same document and revision, including deletions of annotations originally
+in the file. Saving and printing wait for images and other edits to finish
+restoring. If the URL now serves a different PDF or revision, it opens with
+its own annotations.
 
 ## Several viewers
 

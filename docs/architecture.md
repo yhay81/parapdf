@@ -100,7 +100,10 @@ search and `getText()`.
   once a frame), and, once ready, the page count and permissions. It also
   keeps what was read of the document for every provider of the source,
   one promise for each thing read, which a render React suspended finds
-  again when it renders anew (decision 0032).
+  again when it renders anew (decision 0032). Reads in progress postpone the
+  timeout for an unheld render. A new provider's first hold retries failed
+  reads and publishes the new promises. The shared entry exposes its loaded
+  proxy to every ready provider, including one that just joined.
 - A session owns an `AbortController`: everything started for it (drawing,
   text, searches, background passes, the editor, form scripts) takes its
   signal, and closing aborts it all. No generation counters.
@@ -162,13 +165,14 @@ that created it, or the `PdfViewer` that made its own.
 A viewer shows a session while the session's provider holds the document
 and the viewer's owner holds the viewer (`holdViewer()`). When either lets
 go, the viewer lets go of the document: it stops its work, releases what
-it drew, and tells its extensions (`closed(true)`), but keeps the session
-it showed with its position, its view state, and what its features keep
-for the reader (the history, a finished search, and annotation edits,
-which leave the document's storage meanwhile). Once both hold again it
-shows the session where the reader left it, in the same pdf.js document or
-in another opened of the source. Only opening another session forgets them
-(`closed(false)`). React destroys effects alike when it hides a tree
+it drew, and tells its extensions (`closed(true)`). It keeps a weak reference
+to the provider, the view position, history, finished search and annotation
+edits. Edits leave the document's storage while hidden, including deletions
+of original annotations. Saving and printing await restoration when shown.
+On reopening, the viewer compares both pdf.js fingerprints, for the file
+and its revision. A changed fingerprint or a different provider starts a
+fresh view and clears the kept edits and search (`closed(false)`).
+React destroys effects alike when it hides a tree
 (`<Activity>`), runs them again (StrictMode), and unmounts, and says
 nothing more of a tree it removes while hidden: the viewer keeps only what
 the garbage collector takes with it (decision 0032).
@@ -252,7 +256,10 @@ the DOM declares `"use client"`.
   the render. Everything held is held by an effect and let go by its
   cleanup: the provider's lease, the viewer's hold (`useViewer()`), and the
   viewport. What the reader gets back after React hid a tree lives in the
-  viewer, which the component's state keeps.
+  viewer, which the component's state keeps. During hydration,
+  `useDocumentState()` uses the server's opening snapshot before reading
+  the live state. A password submitted by a child's first effect answers
+  the pending request once the provider takes its lease.
 - `PdfViewer` is one viewport. View state (`zoom`, `rotation`, `spread`,
   `scrollMode`, `tool`) is controlled or uncontrolled; the current page is
   reported (`onPageChange`) and set with `viewer.goToPage()`. Every other

@@ -102,7 +102,7 @@ describe("print orientation", () => {
 });
 
 describe("print job replacement", () => {
-  it("sends DidPrint after the browser closes the print dialog", async (t) => {
+  it("waits for pending edits before WillPrint and sends DidPrint when the dialog closes", async (t) => {
     const env = environment(t);
     const document = fakeDocument();
     const viewer = new Viewer();
@@ -114,7 +114,19 @@ describe("print job replacement", () => {
       async (event) => void events.push(event),
       new AbortController().signal,
     );
+    let restored = () => {};
+    viewer.session?.onCommit(
+      () =>
+        new Promise<void>((resolve) => {
+          restored = resolve;
+        }),
+      new AbortController().signal,
+    );
     const printing = print(viewer);
+    await settle();
+    assert.deepEqual(events, []);
+    assert.equal(document.drawings.length, 0);
+    restored();
     await settle();
     document.drawings[0]?.resolve();
     await printing;

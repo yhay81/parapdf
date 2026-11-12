@@ -104,13 +104,11 @@ export interface KeptAnnotations {
     id: string;
     popupRef: string;
     /** pdf.js's editor class creates its own lightweight deletion record. */
-    editorType: {
-      deleteAnnotationElement(editor: {
-        _uiManager: object;
-        parent: object;
-        annotationElementId: string;
-      }): void;
-    };
+    deleteAnnotationElement(editor: {
+      _uiManager: object;
+      parent: object;
+      annotationElementId: string;
+    }): void;
   }[];
 }
 

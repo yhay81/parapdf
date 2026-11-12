@@ -26,5 +26,8 @@ it("collects the provider, document and input bytes after unmount with a survivi
     globalThis.gc();
   }
   assert.equal(viewer.session, null);
-  assert.deepEqual(refs.map((ref) => Boolean(ref.deref())), [false, false, false]);
+  assert.deepEqual(
+    refs.map((ref) => Boolean(ref.deref())),
+    [false, false, false],
+  );
 });

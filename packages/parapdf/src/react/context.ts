@@ -3,7 +3,7 @@
 import { createContext, use, useContext, useSyncExternalStore } from "react";
 import { browser } from "react-dom";
 import { type PdfSession, readsOf } from "../document/pdf-session.ts";
-import type { DocumentState } from "../document/registry.ts";
+import { type DocumentState, OPENING } from "../document/registry.ts";
 import type { ReadableStore } from "../document/store.ts";
 import type { ViewerState } from "../view/state.ts";
 import type { Viewer } from "../view/viewer.ts";
@@ -61,7 +61,14 @@ export function useSessionData(hook: string): PdfSession {
  * compare equal; the component then renders again only when that slice changes.
  */
 export function useDocumentState<T>(selector: (state: DocumentState) => T): T {
-  return useSelected(useSession().state, selector);
+  const { state } = useSession();
+  // The server opened no document. A later root may hydrate after another
+  // root already opened the same source; its first snapshot must match the HTML.
+  return useSyncExternalStore(
+    state.subscribe,
+    () => selector(state.get()),
+    () => selector(OPENING),
+  );
 }
 
 /**

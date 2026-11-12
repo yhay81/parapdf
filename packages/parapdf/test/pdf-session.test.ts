@@ -240,7 +240,13 @@ describe("a PdfSession", () => {
     const next = render();
     const retry = next.pageLabels();
     assert.equal(render().pageLabels(), retry, "a suspended render finds the same promise");
+    const failedReads = readsOf(next);
+    const published: (object | null)[] = [];
+    const unsubscribe = next.state.subscribe(() => published.push(readsOf(next)));
     close.push(connectSession(next));
+    unsubscribe();
+    assert.notEqual(readsOf(next), failedReads, "React must read the document again");
+    assert.deepEqual(published, [readsOf(next)], "mounted data hooks hear about the retry");
     assert.deepEqual(await next.pageLabels(), ["i"], "a new provider can recover");
     assert.equal(next.outline(), outline, "successful reads are still shared");
     assert.equal(attempts, 2);

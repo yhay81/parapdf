@@ -48,7 +48,12 @@ So:
   annotation edits, which leave the document's storage. Extensions hear
   `closed(true)`. Held again, it shows the session where the reader left
   it, in the same pdf.js document or in another opened of the source.
-  Opening another session forgets them (`closed(false)`).
+  Opening another session, or reopening a file whose permanent or revision
+  fingerprint changed, forgets them (`closed(false)`). A weak reference to
+  the provider lets an application close a file and keep its viewer without
+  retaining the input bytes. Snapshots include deletions of original
+  annotations. Saving and printing wait for a complete restore. Hiding
+  during a restore keeps the last complete snapshot for the next attempt.
 - Nothing waits for a cleanup that may not come: a viewer that let go
   holds nothing outside itself, and goes with the component state that
   holds it.
@@ -146,6 +151,38 @@ recording of the messages between pdf.js and its worker in Chromium, thirty
 runs of each build, has the document asked for 102 and 103 ms after the
 navigation started and the first page's operator list back at 129 and
 130 ms, with the same requests in the same order.
+
+### Retention, first paint, and scrolling after the review fixes
+
+The input bytes can be reclaimed when the provider unmounts and its viewer
+survives. In Node 26.13.0 on the M2 Pro, a viewer with form layers opened
+16 MiB of bytes through the test pdf.js. After the provider released its
+lease, the test waited 1.1 seconds and forced five collections on separate
+event-loop turns. Weak references to the input, provider, and loaded
+document all survived in three of three runs with the original lifetime
+change. All three were collected in three of three runs with the fixes.
+The two runtimes alternated in the same process. The package's
+[`released-document.test.ts`](../../packages/parapdf/test/released-document.test.ts)
+keeps the same assertion with a smaller input.
+
+`scroll-bench.ts` alternated the reviewed build and the fixes, five runs
+per build in each browser. The prototype opened bill-hr815.pdf with
+pdfjs-dist 6.5.438 and hardware acceleration, then scrolled for two
+seconds at 3600 CSS pixels/s (1280×900, devicePixelRatio 2).
+The table gives the medians, before the fixes → after. The viewer chunks
+are `PdfViewer-g5kMBxgN.js` before and `PdfViewer-DWrOUPTv.js` after.
+
+| Browser | First paint (ms) | Main thread blocked (ms) | Dropped frames | Canvas memory (MiB) |
+|---|---:|---:|---:|---:|
+| [Chromium 158.0.8127.18](../../examples/prototype/results/lifetimes-review-chromium.md) | 179 → 142 | 1.9 → 9.6 | 0 → 0 | 117.5 → 117.5 |
+| [WebKit 27.2](../../examples/prototype/results/lifetimes-review-webkit.md) | 178 → 165 | 37.1 → 22.4 | 1 → 1 | 117.5 → 117.5 |
+| [Firefox 159.0](../../examples/prototype/results/lifetimes-review-firefox.md) | 222 → 227 | 50.4 → 61.4 | 0 → 0 | 117.5 → 117.5 |
+
+Both builds had a median blank-frame share of zero in every browser.
+The Chromium medians reached one more page after the fixes (four instead
+of three) and committed once more. Individual first paints varied by
+multiple frames. Five runs cover this scroll workload but do not establish
+a timing difference.
 
 ### What it costs
 
