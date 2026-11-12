@@ -45,15 +45,6 @@
       "gzip": 511674,
       "brotli": 421047
     },
-    "pdfjs-next (workers unminified)": {
-      "files": [
-        "pdf.worker-CQUdiPT9.mjs",
-        "pdfjs-next-BMjnSZ5k.js"
-      ],
-      "raw": 532,
-      "gzip": 394,
-      "brotli": 327
-    },
     "pdfium": {
       "files": [
         "pdfium-BJ2Yip8Q.wasm",

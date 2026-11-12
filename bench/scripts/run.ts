@@ -16,7 +16,6 @@
  * serves another build of the harness, so that a run does not replace the
  * build another run is measuring.
  */
-import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { arch, cpus, platform, release, totalmem } from "node:os";
 import { join, resolve } from "node:path";
@@ -31,17 +30,17 @@ import {
   measureInTurn,
   turnTakingSummary,
 } from "./browsers.ts";
+import { hasBuiltPdfjsNext } from "./built-engines.ts";
 import { writeComparison, writeReport } from "./report.ts";
 
 const benchDir = fileURLToPath(new URL("..", import.meta.url));
 const distDir = process.env.DIST ? resolve(process.env.DIST) : join(benchDir, "dist");
 const resultsDir = join(benchDir, "results");
-const pdfjsNextRepo = join(benchDir, "vendor/pdf.js");
 if (!existsSync(join(distDir, "index.html"))) {
   throw new Error("dist/ is missing; run `pnpm bench:build` first.");
 }
 
-const hasPdfjsNext = existsSync(join(pdfjsNextRepo, "build/generic/build/pdf.renderer.mjs"));
+const hasPdfjsNext = hasBuiltPdfjsNext(distDir);
 const defaultEngines = [
   "pdfjs",
   "pdfjs-hwa",
@@ -68,6 +67,7 @@ interface JobResult {
   engine: string;
   file: string;
   run: number;
+  version?: string;
   error?: string;
   pageCount?: number;
   renderedPages?: number;
@@ -184,7 +184,9 @@ const assetNames = readdirSync(assetDir);
 const payloadPatterns: Record<string, RegExp> = {
   pdfjs: /^(pdfjs-[\w-]{8}\.js|pdf\.worker\.min-)/,
   "pdfjs renderer": /^pdf\.renderer\.min-/,
-  "pdfjs-next (workers unminified)": /^(pdfjs-next-|pdf\.worker-|pdf\.renderer-)/,
+  ...(hasPdfjsNext
+    ? { "pdfjs-next (workers unminified)": /^(pdfjs-next-|pdf\.worker-|pdf\.renderer-)/ }
+    : {}),
   pdfium: /^pdfium/,
   hayro: /^hayro/,
 };
@@ -204,19 +206,15 @@ for (const [engine, pattern] of Object.entries(payloadPatterns)) {
   payload[engine] = totals;
 }
 
-const packageVersion = (name: string): string =>
-  JSON.parse(readFileSync(join(benchDir, "node_modules", name, "package.json"), "utf8")).version;
-const hayroVersion =
-  /name = "hayro"\nversion = "([^"]+)"/.exec(
-    readFileSync(join(benchDir, "hayro-wasm/Cargo.lock"), "utf8"),
-  )?.[1] ?? "unknown";
-const pdfjsNextCommit = hasPdfjsNext
-  ? execFileSync("git", ["-C", pdfjsNextRepo, "log", "-1", "--format=%h %cs"], {
-      encoding: "utf8",
-    }).trim()
-  : undefined;
 const firstOk = results.find((result) => !result.error);
 const okResults = results.filter((result) => !result.error);
+// The harness reports the engine it actually loaded. DIST may be built with
+// different dependencies than those available to this process.
+const versions: Record<string, string> = {};
+for (const { version } of okResults) {
+  const match = /^(pdfjs-dist|pdf\.js master|@embedpdf\/pdfium|hayro) (.+)$/.exec(version ?? "");
+  if (match?.[1] && match[2]) versions[match[1]] = match[2].replace(" (wasm32, simd128)", "");
+}
 const environment = {
   runAt: new Date().toISOString(),
   os: `${platform()} ${release()} ${arch()}`,
@@ -235,12 +233,7 @@ const environment = {
     timerLagP95Ms: median(okResults.map((result) => result.idle?.timerLagP95Ms ?? Number.NaN)),
     frameIntervalMs: median(okResults.map((result) => result.idle?.frameIntervalMs ?? Number.NaN)),
   },
-  versions: {
-    "pdfjs-dist": packageVersion("pdfjs-dist"),
-    "pdf.js master": pdfjsNextCommit,
-    "@embedpdf/pdfium": packageVersion("@embedpdf/pdfium"),
-    hayro: hayroVersion,
-  },
+  versions,
   settings: { runs, pages, scale, engines, output },
 };
 
