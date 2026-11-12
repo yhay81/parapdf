@@ -1,7 +1,7 @@
 "use client";
 
 import type * as Pdfjs from "pdfjs-dist";
-import { pageViewport, RenderCancelledError, type Rotation } from "./draw.ts";
+import { pageViewport, RenderCancelledError, type Rotation, setLayerUnit } from "./draw.ts";
 import type { LoadedPdfjs } from "./loader.ts";
 import { type RawDims, StructTreeBuilder } from "./struct-tree.ts";
 
@@ -35,9 +35,11 @@ export async function readPageText(page: Pdfjs.PDFPageProxy): Promise<PageText> 
     items.push(item.str);
     endsLine.push(item.hasEOL);
     const [a = 0, b = 0, c = 0, d = 0, e = 0, f = 0] = item.transform as number[];
-    const [x = 0, baseline = 0] = viewport.convertToViewportPoint(e, f);
+    const [x = 0, y = 0] = viewport.convertToViewportPoint(e, f);
     const height = Math.hypot(c, d) || Math.hypot(a, b) || item.height;
-    boxes.push(x, baseline - height, item.width, height);
+    // Transform the opposite corner too: the page may turn or use units larger than a point.
+    const [right = 0, top = 0] = viewport.convertToViewportPoint(e + item.width, f + height);
+    boxes.push(Math.min(x, right), Math.min(y, top), Math.abs(right - x), Math.abs(top - y));
   }
   return { items, endsLine, boxes: Float32Array.from(boxes) };
 }
@@ -125,6 +127,7 @@ export function buildTextLayer(
   let cancelled = false;
   const promise = page.then(async (page): Promise<TextLayerHandle> => {
     if (cancelled) throw new RenderCancelledError("text layer cancelled before it started");
+    setLayerUnit(container, page);
     const viewport = pageViewport(page, cssScale, rotation);
     const tree = structure
       ? new StructTreeBuilder(page.getStructTree(), viewport.rawDims as RawDims)

@@ -547,7 +547,7 @@ interface PdfPageProps {
   offset: number;
   width: number;
   height: number;
-  /** CSS pixels per PDF point; pdf.js's text layer reads it as `--total-scale-factor`. */
+  /** CSS pixels per PDF point; the DOM layers apply the page's user-space unit to it. */
   scale: number;
   rotation: Rotation;
   overlay: ReactNode;
@@ -631,7 +631,7 @@ const PdfPage = memo(function PdfPage({
           background: "#fff",
           boxShadow: "0 1px 3px rgb(0 0 0 / 0.3)",
           contain: "strict",
-          "--total-scale-factor": scale,
+          "--scale-factor": scale,
           "--scale-round-x": "1px",
           "--scale-round-y": "1px",
         } as CSSProperties

@@ -95,6 +95,7 @@ function fakePage(
 ): Pdfjs.PDFPageProxy {
   return {
     pageNumber: pageIndex + 1,
+    userUnit: 1,
     rotate: 0,
     getViewport: ({ scale = 1, rotation = 0 }: { scale?: number; rotation?: number }) =>
       viewport(size, scale, rotation),

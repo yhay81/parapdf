@@ -236,14 +236,30 @@ async function mixedSizes(): Promise<Uint8Array> {
     { size: [595, 842], label: "A4 portrait" },
     { size: [1191, 842], label: "A3 landscape" },
     { size: [595, 842], label: "A4 portrait" },
-    { size: [595, 842], rotate: 90, label: "A4 shown landscape by /Rotate 90" },
+    { size: [297.5, 421], rotate: 90, label: "A4 shown landscape by /Rotate 90" },
     { size: [612, 792], label: "US Letter portrait" },
     { size: [420, 595], label: "A5 portrait" },
     { size: [595, 842], label: "A4 portrait" },
   ];
   pages.forEach(({ size: [width, height], rotate, label }, index) => {
     const page = doc.addPage([width, height]);
-    if (rotate) page.setRotation(degrees(rotate));
+    if (rotate) {
+      // Still A4 physically, but each of this page's coordinates is two PDF points.
+      page.node.set(PDFName.of("UserUnit"), PDFNumber.of(2));
+      page.setRotation(degrees(rotate));
+      const field = doc.getForm().createTextField("Rotated field");
+      field.addToPage(page, { x: 40, y: 100, width: 60, height: 12, borderWidth: 0 });
+      page.node.addAnnot(
+        doc.context.register(
+          doc.context.obj({
+            Type: "Annot",
+            Subtype: "Link",
+            Rect: [40, 140, 100, 152],
+            A: { S: "URI", URI: PDFString.of("https://example.org/") },
+          }),
+        ),
+      );
+    }
     page.drawRectangle({
       x: 24,
       y: 24,

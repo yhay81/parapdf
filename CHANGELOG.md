@@ -36,6 +36,10 @@ change the API.
 
 - A partial `initialViewState` keeps `defaultPage` when it omits the page.
 
+- Text selection, links, form fields, and annotation editors align with the
+  drawing on pages with a nondefault PDF user-space unit. Search uses the
+  page's unit and intrinsic rotation when locating text.
+
 - A tagged PDF shown in multiple viewers gives each page its own accessible
   text and form controls, including figure descriptions and MathML.
 

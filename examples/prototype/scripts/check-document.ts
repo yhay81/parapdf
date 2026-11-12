@@ -479,6 +479,7 @@ try {
         }),
       JSON.stringify(loaded?.permissions),
     );
+    await page.waitForSelector(".parapdf-text-layer span");
     const free = await page.evaluate(async () => {
       window.print = () => {};
       const span = document.querySelector(".parapdf-text-layer span");

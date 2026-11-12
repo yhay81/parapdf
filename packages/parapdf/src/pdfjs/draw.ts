@@ -87,6 +87,16 @@ export const pageViewport = (
   rotation: Rotation = 0,
 ): Pdfjs.PageViewport => page.getViewport({ scale, rotation: (page.rotate + rotation) % 360 });
 
+/** A DOM layer uses raw PDF units. Its canvas viewport already includes the page's /UserUnit. */
+export function setLayerUnit(container: HTMLElement, page: Pdfjs.PDFPageProxy): void {
+  if (page.userUnit !== 1) {
+    container.style.setProperty(
+      "--total-scale-factor",
+      `calc(var(--scale-factor) * ${page.userUnit})`,
+    );
+  }
+}
+
 /**
  * Form layers by container. With forms shown as HTML, pdf.js draws check
  * boxes and radio buttons into canvases of their own, one per state, which

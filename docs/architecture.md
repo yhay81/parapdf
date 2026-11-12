@@ -174,8 +174,9 @@ that created it, or the `PdfViewer` that made its own.
   A mounted tagged page gives its text and annotation DOM ids unique to its
   structure tree, so its accessibility relationships stay in that viewer.
   Text layers keep the zoom they were laid out at and follow later zooms
-  with CSS. Text layers are built per page, not in the document (decision
-  0020).
+  with CSS. DOM layers scale their raw coordinates by the page's PDF
+  user-space unit, which pdf.js includes in the canvas viewport (decision
+  0030). Text layers are built per page (decision 0020).
 - `selection.ts` keeps text selection drags in text layers across pages
   and gaps, with each browser's fixes; ported from pdf.js's
   `TextLayerBuilder` (`NOTICE.md`).

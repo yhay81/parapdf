@@ -36,6 +36,7 @@ it. A new choice gets a new record, numbered next.
 | [0027](0027-search-from-the-current-page.md) | Search from the current page | adopted |
 | [0028](0028-released-renderer-worker.md) | Ship pdf.js 6.5.438 with opt-in worker drawing | adopted |
 | [0029](0029-webgpu-mesh-shadings.md) | WebGPU drawing of mesh shadings is opt-in | adopted |
+| [0030](0030-page-user-units.md) | DOM layers and search boxes follow the page's PDF user-space unit | adopted |
 | [0031](0031-tagged-page-ownership.md) | Each mounted tagged page owns its accessibility targets | adopted |
 
 ## Template
