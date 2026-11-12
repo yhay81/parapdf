@@ -11,6 +11,7 @@
  * Environment: BROWSER (chromium, webkit, or firefox).
  */
 import { type ChildProcess, spawn } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright";
 import { captureFailure, launchBrowser } from "../../bench/scripts/browsers.ts";
@@ -178,6 +179,37 @@ try {
   check(
     "a drawing alone asks too; accepting discards it and opens the other document",
     dialogs.length === 2 && (await documentTitle(page)) === "Document: 1,000 pages",
+  );
+  const contents = await readFile(join(root, "../bench/corpus/f1040.pdf"));
+  const picker = page.locator('input[type="file"][accept*="pdf"]');
+  // Hold an earlier selection until the newer one is already on screen.
+  await page.evaluate(() => {
+    const original = File.prototype.arrayBuffer;
+    File.prototype.arrayBuffer = async function () {
+      if (this.name === "slow.pdf") {
+        await new Promise<void>((resolve) =>
+          window.addEventListener("release-file", () => resolve(), { once: true }),
+        );
+      }
+      return original.call(this);
+    };
+  });
+  await picker.setInputFiles({ name: "slow.pdf", mimeType: "application/pdf", buffer: contents });
+  await picker.setInputFiles({
+    name: "my-form.pdf",
+    mimeType: "application/pdf",
+    buffer: contents,
+  });
+  await field(page).waitFor();
+  await page.evaluate(() => window.dispatchEvent(new Event("release-file")));
+  const localDownload = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download" }).first().click();
+  const local = await localDownload;
+  check(
+    "a later file selection wins and downloads with its own filename",
+    (await documentTitle(page)) === "Document: my-form.pdf" &&
+      local.suggestedFilename() === "my-form.pdf",
+    local.suggestedFilename(),
   );
   check("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));
 } finally {

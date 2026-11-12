@@ -52,7 +52,7 @@ function EditWatcher({ onEdit }: { onEdit: () => void }) {
   const state = useAnnotations(viewer)?.state;
   const opened = useRef(state);
   useEffect(() => {
-    if (state !== opened.current && state?.canUndo) onEdit();
+    if (state !== opened.current && (state?.canUndo || state?.canRedo)) onEdit();
   }, [state, onEdit]);
   return null;
 }
@@ -79,30 +79,40 @@ export default function DemoApp() {
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const viewer = useViewer();
-  /** Whether the reader changed the document since it opened or was last downloaded. */
-  const unsaved = useRef(false);
+  const pendingFile = useRef<File | undefined>(undefined);
+  /** Each edit gets a new marker. A download can clear only the edits it started with. */
+  const unsaved = useRef<symbol | null>(null);
   const markUnsaved = useCallback(() => {
-    unsaved.current = true;
+    unsaved.current = Symbol();
   }, []);
 
   /** Shows `next` in place of the document shown, unless the reader keeps unsaved changes. */
   const replace = (next: Opened) => {
+    pendingFile.current = undefined;
+    if ("sample" in next && "sample" in opened && next.sample === opened.sample) return;
     if (unsaved.current && !confirm(DISCARD)) return;
-    unsaved.current = false;
+    unsaved.current = null;
     setSession((current) => ({ id: current.id + 1, opened: next, editing: current.editing }));
   };
-  const replaceDropped = useEffectEvent(replace);
-  const open = (next: Opened | null) => {
-    if (next) replace(next);
-  };
-  const save = async () => {
-    // Changes made while the download is written stay unsaved.
-    unsaved.current = false;
+  const openFile = async (file: File | undefined) => {
+    pendingFile.current = file;
     try {
-      await download(viewer);
-    } catch (error) {
-      unsaved.current = true;
-      throw error;
+      const next = await readPdf(file);
+      if (next && pendingFile.current === file) replace(next);
+    } catch {
+      if (pendingFile.current === file) alert("The file could not be read. Try opening it again.");
+    } finally {
+      if (pendingFile.current === file) pendingFile.current = undefined;
+    }
+  };
+  const openDropped = useEffectEvent(openFile);
+  const save = async () => {
+    const edits = unsaved.current;
+    try {
+      await download(viewer, "name" in opened ? { filename: opened.name } : {});
+      if (unsaved.current === edits) unsaved.current = null;
+    } catch {
+      alert("The download failed. Try downloading the document again.");
     }
   };
   const showAnnotationTools = (next: boolean) => {
@@ -155,9 +165,7 @@ export default function DemoApp() {
       if (!hasFiles(event)) return;
       event.preventDefault();
       setDragging(false);
-      void readPdf(event.dataTransfer?.files[0]).then((file) => {
-        if (file) replaceDropped(file);
-      });
+      void openDropped(event.dataTransfer?.files[0]);
     };
     window.addEventListener("dragover", onDragOver);
     window.addEventListener("dragleave", onDragLeave);
@@ -176,7 +184,7 @@ export default function DemoApp() {
           <EditWatcher onEdit={markUnsaved} />
           <Toolbar
             opened={opened}
-            onOpen={open}
+            onOpen={replace}
             onOpenFile={() => fileInput.current?.click()}
             onDownload={() => void save()}
             sidebar={sidebar}
@@ -243,7 +251,7 @@ export default function DemoApp() {
         accept="application/pdf,.pdf"
         hidden
         onChange={(event) => {
-          void readPdf(event.target.files?.[0]).then(open);
+          void openFile(event.target.files?.[0]);
           event.target.value = "";
         }}
       />
