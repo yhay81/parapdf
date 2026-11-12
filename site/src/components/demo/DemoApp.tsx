@@ -16,7 +16,7 @@ import { Toolbar } from "./Toolbar.tsx";
 import { useDemoViewer, ViewerContext } from "./viewer.ts";
 
 /** A sample from the site, or a file the reader opened, which stays in the browser. */
-export type Opened = { sample: Sample } | { name: string; data: Uint8Array };
+export type Opened = { sample: Sample; revision?: number } | { name: string; data: Uint8Array };
 
 /**
  * The document shown, and whether its viewer edits annotations. Options are
@@ -82,9 +82,13 @@ export default function DemoApp() {
   const pendingFile = useRef<File | undefined>(undefined);
   /** Each edit gets a new marker. A download can clear only the edits it started with. */
   const unsaved = useRef<symbol | null>(null);
+  // Reopening a previously edited sample must get a fresh PDF, even during
+  // the registry's grace period for quick remounts of the same source.
+  const revisions = useRef(new Map<Sample, number>());
   const markUnsaved = useCallback(() => {
     unsaved.current = Symbol();
-  }, []);
+    if ("sample" in opened) revisions.current.set(opened.sample, session.id + 1);
+  }, [opened, session.id]);
 
   /** Shows `next` in place of the document shown, unless the reader keeps unsaved changes. */
   const replace = (next: Opened) => {
@@ -92,7 +96,9 @@ export default function DemoApp() {
     if ("sample" in next && "sample" in opened && next.sample === opened.sample) return;
     if (unsaved.current && !confirm(DISCARD)) return;
     unsaved.current = null;
-    setSession((current) => ({ id: current.id + 1, opened: next, editing: current.editing }));
+    const revision = "sample" in next ? revisions.current.get(next.sample) : undefined;
+    const nextOpened = "sample" in next && revision ? { ...next, revision } : next;
+    setSession((current) => ({ id: current.id + 1, opened: nextOpened, editing: current.editing }));
   };
   const openFile = async (file: File | undefined) => {
     pendingFile.current = file;
@@ -120,10 +126,11 @@ export default function DemoApp() {
     if (next) setSession((current) => ({ ...current, editing: true }));
   };
 
-  const source = useMemo<PdfSource>(
-    () => ("sample" in opened ? { url: sampleUrl(opened.sample.file) } : { data: opened.data }),
-    [opened],
-  );
+  const source = useMemo<PdfSource>(() => {
+    if ("data" in opened) return { data: opened.data };
+    const url = sampleUrl(opened.sample.file);
+    return { url: opened.revision ? `${url}?open=${opened.revision}` : url };
+  }, [opened]);
   const title = "sample" in opened ? opened.sample.title : opened.name;
 
   useEffect(() => {
