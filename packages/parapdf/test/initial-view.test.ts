@@ -103,6 +103,14 @@ describe("the opening", () => {
     assert.equal(initialViewOpening({}), undefined);
   });
 
+  it("keeps the application's opening page when a view state omits it", () => {
+    const options = { initialPage: 2, initialViewState: { scale: 1.5 } };
+    assert.deepEqual(openingOf(null, 5, options)?.view, {
+      scale: 1.5,
+      target: { pageIndex: 2, x: null, y: null },
+    });
+  });
+
   it("shows a view state, at the document's destination when it names no page", () => {
     assert.deepEqual(openingOf(asked(), 5, { initialView: "document", initialViewState: {} }), {
       spread: "even",
