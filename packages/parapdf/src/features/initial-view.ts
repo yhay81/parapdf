@@ -215,8 +215,13 @@ export function openingOf(
   if (options.initialViewState || target) {
     // A view wins over the application's page and zoom, as the fragment does.
     const shown = options.initialViewState ? toShownView(options.initialViewState) : {};
-    const at = target ?? opening.destination;
-    if (!shown.target && at) shown.target = at;
+    if (!shown.target) {
+      const at = target ?? opening.destination;
+      if (at) shown.target = at;
+      else if (options.initialPage !== undefined) {
+        shown.target = { pageIndex: options.initialPage, x: null, y: null };
+      }
+    }
     opening.view = shown;
   }
   return Object.keys(opening).length > 0 ? opening : null;

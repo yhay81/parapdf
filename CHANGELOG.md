@@ -18,6 +18,8 @@ change the API.
   Choosing the next or previous match during a search keeps it selected
   as more results arrive.
 
+- A partial `initialViewState` keeps `defaultPage` when it omits the page.
+
 ## 0.8.0 — 2026-10-30
 
 - URL sources with explicit credentials now distinguish omitted headers,
