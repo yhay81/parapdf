@@ -321,13 +321,37 @@ try {
         }
         const state = viewer.store.get();
         const expected = (state.layout?.[positions][9] ?? 0) + inset + 250;
-        results.push({
-          mode: scrollMode,
-          before,
-          after: state.currentPage,
-          position: scroller[axis],
-          expected,
+        const position = scroller[axis];
+        viewer.setTool("hand");
+        const replacementReady = new Promise<void>((resolve) => {
+          const stop = viewer.store.subscribe(() => {
+            const layout = viewer.store.get().layout;
+            if (layout && layout !== state.layout) {
+              stop();
+              resolve();
+            }
+          });
         });
+        const closeReplacement = __showWith(
+          viewer,
+          { url: `/replacement-${scrollMode}.pdf` },
+          async () => pdfjs,
+        );
+        try {
+          await replacementReady;
+          results.push({
+            mode: scrollMode,
+            before,
+            after: state.currentPage,
+            position,
+            expected,
+            openingPage: viewer.store.get().currentPage,
+            openingPosition: scroller[axis],
+            hand: scroller.classList.contains("parapdf-hand"),
+          });
+        } finally {
+          closeReplacement();
+        }
       } finally {
         close();
         detach();
@@ -340,6 +364,11 @@ try {
     check(
       `the size pass keeps the reading position when ${result.mode} content shrinks`,
       result.before === 9 && result.after === 9 && Math.abs(result.position - result.expected) <= 1,
+      JSON.stringify(result),
+    );
+    check(
+      `another document starts at the first page with the select tool in ${result.mode} mode`,
+      result.openingPage === 0 && result.openingPosition === 0 && !result.hand,
       JSON.stringify(result),
     );
   }

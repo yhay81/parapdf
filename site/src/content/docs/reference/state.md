@@ -76,6 +76,9 @@ creates as it renders: its children read it at once.
 | `signal` | Aborted once the `PdfDocument` lets the session go, or the session closes. |
 | `outline()`, `pageLabels()`, `metadata()`, `attachments()`, `comments()`, `layers()`, `initialView()` | Promises of the document's secondary data, each read once and settled with an empty value when the read or the document fails. `useOutline()` and the other data hooks read them with `use()`. |
 
+The metadata’s `author` field lists XMP creators in document order,
+separated by commas.
+
 A `PdfSession` has no method that opens, closes, or releases anything:
 `PdfDocument` holds the document while it is mounted.
 

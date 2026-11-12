@@ -228,19 +228,26 @@ try {
     );
     await page.context().close();
 
-    const given = await open(
-      launched.browser,
-      demo("file=synthetic-encrypted.pdf&password=parapdf"),
-    );
-    check(
-      "a password in the source opens it without asking",
-      (await documentState(given.page))?.status === "ready",
-    );
-    check(
-      "extracts edited encrypted pages with a source password",
-      (await extractEncrypted(given.page)) === 1,
-    );
-    await given.page.context().close();
+    for (const [from, query] of [
+      ["the source", "password=parapdf"],
+      [
+        "documentOptions",
+        new URLSearchParams({
+          documentOptions: JSON.stringify({ password: "parapdf" }),
+        }).toString(),
+      ],
+    ]) {
+      const given = await open(launched.browser, demo(`file=synthetic-encrypted.pdf&${query}`));
+      check(
+        `a password from ${from} opens the document without asking`,
+        (await documentState(given.page))?.status === "ready",
+      );
+      check(
+        `extracts edited encrypted pages with a password from ${from}`,
+        (await extractEncrypted(given.page)) === 1,
+      );
+      await given.page.context().close();
+    }
 
     // Without a prompt, an encrypted document fails as it did before
     // passwords were supported, with or without a wrong password.

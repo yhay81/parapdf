@@ -61,6 +61,13 @@ function withoutPrompt(
 let connect: (session: PdfSession, pdfjs: PdfjsLoader) => () => void;
 /** The loaded document of a session; see `documentOf()`. */
 let loaded: (session: PdfSession) => Promise<DocumentSession>;
+/** Read optional feature data with the provider's cache and failure handling. */
+export let readSessionData: <T>(
+  provider: PdfSession,
+  what: string,
+  read: (document: DocumentSession) => Promise<T>,
+  fallback: T,
+) => Promise<T>;
 /** Shows or hides a session's password requests; see `setPasswordPrompt()`. */
 let prompt: (session: PdfSession, passwordPrompt: boolean) => void;
 /** The fragment of a session's URL; see `fragmentOf()`. */
@@ -78,6 +85,7 @@ export class PdfSession {
   static {
     connect = (session, pdfjs) => session.#connect(pdfjs);
     loaded = (session) => session.#loaded;
+    readSessionData = (provider, what, read, fallback) => provider.#read(what, read, fallback);
     prompt = (session, passwordPrompt) => {
       if (session.#prompt === passwordPrompt) return;
       session.#prompt = passwordPrompt;

@@ -1,43 +1,24 @@
-import { cpSync, existsSync, mkdirSync, readdirSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { defineConfig, type Plugin } from "vite";
+import { defineConfig } from "vite";
 import { crossOriginIsolation } from "./scripts/isolation.ts";
+import { benchmarkFiles } from "./scripts/static-files.ts";
 
 const benchDir = fileURLToPath(new URL(".", import.meta.url));
-const publicDir = join(benchDir, "public");
 // Optional unreleased pdf.js master build (scripts/build-pdfjs-next.sh).
 const pdfjsNextDir = join(benchDir, "vendor/pdf.js/build/generic");
 const hasPdfjsNext = existsSync(join(pdfjsNextDir, "build/pdf.renderer.mjs"));
 
-/** Stage pdf.js binary assets and the corpus as same-origin static files. */
-function stageStaticFiles(): Plugin {
-  const stage = () => {
-    const pdfjsDir = join(benchDir, "node_modules/pdfjs-dist");
-    for (const dir of ["cmaps", "standard_fonts", "wasm", "iccs"]) {
-      cpSync(join(pdfjsDir, dir), join(publicDir, "pdfjs", dir), { recursive: true });
-      if (hasPdfjsNext) {
-        cpSync(join(pdfjsNextDir, "web", dir), join(publicDir, "pdfjs-next", dir), {
-          recursive: true,
-        });
-      }
-    }
-    const corpusOut = join(publicDir, "corpus");
-    mkdirSync(corpusOut, { recursive: true });
-    for (const dir of ["corpus", "corpus/generated"]) {
-      const source = join(benchDir, dir);
-      if (!existsSync(source)) continue;
-      for (const name of readdirSync(source)) {
-        if (name.endsWith(".pdf")) cpSync(join(source, name), join(corpusOut, name));
-      }
-    }
-  };
-  return { name: "parapdf-stage-static-files", config: stage };
-}
-
 export default defineConfig({
   root: benchDir,
-  plugins: [stageStaticFiles(), crossOriginIsolation()],
+  plugins: [
+    benchmarkFiles(benchDir, {
+      pdfjs: { directory: join(benchDir, "node_modules/pdfjs-dist") },
+      "pdfjs-next": hasPdfjsNext ? { directory: join(pdfjsNextDir, "web") } : null,
+    }),
+    crossOriginIsolation(),
+  ],
   resolve: {
     alias: {
       "pdfjs-next": hasPdfjsNext

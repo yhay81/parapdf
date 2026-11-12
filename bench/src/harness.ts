@@ -49,6 +49,8 @@ for (const [type, sink] of [
 }
 
 async function loadEngine(engineId: string): Promise<EngineAdapter> {
+  if (engineId === "pdfium") return (await import("./engines/pdfium.ts")).createPdfiumEngine();
+  if (engineId === "hayro") return (await import("./engines/hayro.ts")).createHayroEngine();
   if (/^pdfjs(-hwa)?-(renderer|webgpu)$/.test(engineId)) {
     return (await import("./engines/pdfjs.ts")).createPdfjsEngine({
       hwa: engineId.startsWith("pdfjs-hwa-"),
@@ -92,10 +94,6 @@ async function loadEngine(engineId: string): Promise<EngineAdapter> {
       return (await import("./engines/pdfjs-next.ts")).createPdfjsNextEngine({ hwa: false, frame });
     case "pdfjs-next-hwa":
       return (await import("./engines/pdfjs-next.ts")).createPdfjsNextEngine({ hwa: true, frame });
-    case "pdfium":
-      return (await import("./engines/pdfium.ts")).createPdfiumEngine();
-    case "hayro":
-      return (await import("./engines/hayro.ts")).createHayroEngine();
     default:
       throw new Error(`unknown engine: ${id}`);
   }
