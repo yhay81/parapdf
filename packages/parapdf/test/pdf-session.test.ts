@@ -11,6 +11,7 @@ import {
 } from "../src/document/pdf-session.ts";
 import { OPENING, type PdfjsLoader } from "../src/document/registry.ts";
 import type { PdfSource } from "../src/document/session.ts";
+import { initialFormFields } from "../src/features/forms/index.ts";
 import {
   askPassword,
   FakeRangeTransport,
@@ -28,9 +29,13 @@ const labelled = () => fakeDocument({ proxy: { getPageLabels: async () => ["i"] 
  * `reads` counts the reads of its page labels.
  */
 const lockedPdfjs = () => {
-  const reads = { labels: 0 };
+  const reads = { labels: 0, fields: 0 };
   const proxy = fakeDocument({
     proxy: {
+      getFieldObjects: async () => {
+        reads.fields++;
+        return null;
+      },
       getPageLabels: async () => {
         reads.labels++;
         return ["i"];
@@ -240,6 +245,22 @@ describe("a PdfSession", () => {
     assert.equal(session.state.get().status, "ready");
     assert.deepEqual(await labels, ["i"], "read while the request showed as such");
     assert.notEqual(await session.initialView(), null, "first read once it opened");
+  });
+
+  it("settles form fields on a password error and reads them once after unlocking", async () => {
+    const { loader, reads } = lockedPdfjs();
+    const session = provide({ url: "/locked.pdf" }, loader, false);
+    const initial = initialFormFields(session);
+    assert.deepEqual(await initial, []);
+    assert.equal(initialFormFields(session), initial);
+    assert.equal(reads.fields, 0);
+    session.submitPassword("secret");
+    await settle();
+    const unlocked = initialFormFields(session);
+    assert.notEqual(unlocked, initial);
+    assert.deepEqual(await unlocked, []);
+    assert.equal(reads.fields, 1);
+    assert.equal(initialFormFields(session), unlocked);
   });
 
   it("reads anew what settled empty while the request showed as an error, once it shows again", async () => {

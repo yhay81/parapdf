@@ -573,6 +573,7 @@ export class DocumentSession {
           ReturnType<Pdfjs.PDFDocumentProxy["getMetadata"]>
         > & { contentDispositionFilename?: string | null; contentLength?: number | null };
       const fields = info as Record<string, unknown>;
+      const creators = metadata?.get("dc:creator");
       const { PDFDateString } = this.pdfjs.pdfjs;
       const date = (value: unknown) =>
         typeof value === "string" ? PDFDateString.toDateObject(value) : null;
@@ -583,7 +584,15 @@ export class DocumentSession {
       return {
         // XMP metadata is newer than the information dictionary when both exist.
         title: text(metadata?.get("dc:title"), fields.Title),
-        author: text(metadata?.get("dc:creator"), fields.Author),
+        author: text(
+          Array.isArray(creators)
+            ? creators
+                .map((name) => text(name))
+                .filter(Boolean)
+                .join(", ")
+            : creators,
+          fields.Author,
+        ),
         subject: text(metadata?.get("dc:description"), fields.Subject),
         keywords: text(fields.Keywords),
         creator: text(fields.Creator),
