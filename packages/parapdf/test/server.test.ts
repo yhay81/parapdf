@@ -31,6 +31,7 @@ describe("server rendering", () => {
     // A prerender waits for every boundary; one suspended on a read that
     // never settles left it pending until Node exited with nothing written.
     it(`renders the fallback of ${name}'s Suspense boundary, which the server cannot read`, async () => {
+      // biome-ignore lint/correctness/noComponentHookFactories: one component per hook under test.
       const Reader = () => {
         hook();
         return createElement("p", null, "read");
