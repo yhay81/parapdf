@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import type * as Pdfjs from "pdfjs-dist";
+import { legacyBuild } from "../src/legacy.ts";
+import { pdfjsRendererUrl } from "../src/pdfjs/files.ts";
 import {
   configurePdfjs,
   documentRequestMode,
@@ -63,6 +65,13 @@ describe("documentRequestMode", () => {
     // A server, which cannot tell the browser, keeps it.
     assert.equal(documentRequestMode({}, undefined), "anonymous");
   });
+});
+
+it("resolves the matching workers in a static copy of the package", () => {
+  const base = "https://example.org/static/pdfjs/";
+  assert.equal(pdfjsRendererUrl(base).href, `${base}pdf.renderer.js`);
+  assert.equal(legacyBuild.workerUrl(base).href, `${base}pdf.worker.legacy.js`);
+  assert.equal(legacyBuild.rendererUrl?.(base).href, `${base}pdf.renderer.legacy.js`);
 });
 
 // pdf.js loads once per page, so these come last and run in order: those

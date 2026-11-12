@@ -23,7 +23,7 @@ configurePdfjs({ documentOptions: { withCredentials: true } });
 | `pdfjs` | Loads another build of the same pdf.js version, with its worker as `workerSrc` and its files as `assetBase`. |
 | `enableHWA` | GPU-backed canvases, `true` by default; `false` asks pdf.js for CPU-backed ones, which in the [engine benchmark](/about/performance/#the-engine) blocked Chromium's main thread for 21 ms instead of 4 while drawing ten pages. |
 | `documentOptions` | More pdf.js `getDocument` parameters for every document, such as `withCredentials`, `httpHeaders`, `disableAutoFetch`, or `maxImageSize`; they override ParaPDF's own. ParaPDF sets the source and the worker. |
-| `rendererSrc` | pdf.js's renderer worker, which draws pages into an OffscreenCanvas on a thread of its own; it is only in unreleased pdf.js builds so far. |
+| `rendererSrc` | Set to `true` to draw pages in the bundled renderer worker, or supply a worker URL. The worker matches the modern or legacy build and is loaded only when enabled. By default pdf.js draws on the main thread. |
 
 ## Loading early
 

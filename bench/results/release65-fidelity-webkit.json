@@ -1,0 +1,32 @@
+{
+  "runAt": "2026-11-12T14:12:23.881Z",
+  "browser": "WebKit 27.2",
+  "pages": 2,
+  "scale": 2.6667,
+  "rows": [
+    {
+      "file": "pdfium-jpx-lzw.pdf",
+      "engine": "pdfjs-hwa",
+      "variant": "pdfjs-hwa-renderer",
+      "pages": 1,
+      "identical": 1,
+      "differing": []
+    },
+    {
+      "file": "patent-us223898.pdf",
+      "engine": "pdfjs-hwa",
+      "variant": "pdfjs-hwa-renderer",
+      "pages": 2,
+      "identical": 2,
+      "differing": []
+    },
+    {
+      "file": "bill-hr815.pdf",
+      "engine": "pdfjs-hwa",
+      "variant": "pdfjs-hwa-renderer",
+      "pages": 2,
+      "identical": 2,
+      "differing": []
+    }
+  ]
+}

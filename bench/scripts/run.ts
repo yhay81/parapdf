@@ -11,6 +11,7 @@
  * and frames-browsers.md) so that a run of other engines leaves the
  * committed results alone. ENGINES also takes the `-frame` variants of the
  * pdf.js engines, which draw into an OffscreenCanvas and show it as a frame,
+ * and the released `-renderer` variants that enable the drawing worker,
  * and their `-record` variants, which record each operation's box. DIST
  * serves another build of the harness, so that a run does not replace the
  * build another run is measuring.
@@ -178,6 +179,7 @@ const assetDir = join(distDir, "assets");
 const assetNames = readdirSync(assetDir);
 const payloadPatterns: Record<string, RegExp> = {
   pdfjs: /^(pdfjs-[\w-]{8}\.js|pdf\.worker\.min-)/,
+  "pdfjs renderer": /^pdf\.renderer\.min-/,
   "pdfjs-next (workers unminified)": /^(pdfjs-next-|pdf\.worker-|pdf\.renderer-)/,
   pdfium: /^pdfium/,
   hayro: /^hayro/,

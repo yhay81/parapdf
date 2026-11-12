@@ -34,6 +34,7 @@ it. A new choice gets a new record, numbered next.
 | [0025](0025-no-base-redrawn-under-whole-page-detail.md) | No base drawn again under a whole-page detail | adopted |
 | [0026](0026-detail-kept-until-replaced.md) | A detail kept while hidden, and until a base replaces it | adopted |
 | [0027](0027-search-from-the-current-page.md) | Search from the current page | adopted |
+| [0028](0028-released-renderer-worker.md) | Ship pdf.js 6.5.438 with opt-in worker drawing | adopted |
 
 ## Template
 

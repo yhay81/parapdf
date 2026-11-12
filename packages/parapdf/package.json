@@ -60,7 +60,7 @@
     "prepare": "node scripts/pdfjs-files.ts"
   },
   "dependencies": {
-    "pdfjs-dist": "6.4.299"
+    "pdfjs-dist": "6.5.438"
   },
   "peerDependencies": {
     "react": ">=19.3.0",

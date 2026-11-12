@@ -23,6 +23,7 @@ import webpack from "webpack";
 import { launchBrowser } from "../../../bench/scripts/browsers.ts";
 import {
   APP_JS,
+  CONFIGURE_BUILD_JS,
   check,
   checkFiles,
   exampleDir,
@@ -237,15 +238,19 @@ export default function RootLayout({ children }) {
     join(dir, "viewer.js"),
     `"use client";
 import { createElement as h, useEffect, useState } from "react";
-import { PdfDocument, PdfViewer, useViewer } from "parapdf";
+import { configurePdfjs, PdfDocument, PdfViewer, useViewer } from "parapdf";
 
-export function Viewer() {
+${CONFIGURE_BUILD_JS}
+
+export function Viewer({ build }) {
   const viewer = useViewer();
   const [params, setParams] = useState(null);
   useEffect(() => {
     window.__viewer = viewer;
-    setParams(new URLSearchParams(location.search));
-  }, [viewer]);
+    const query = new URLSearchParams(location.search);
+    configureBuild(build, query);
+    setParams(query);
+  }, [viewer, build]);
   const file = params?.get("file");
   if (!file) return null;
   const options = params.get("scripts") === "1" ? { forms: true, formScripts: true } : {};
@@ -261,14 +266,11 @@ export function Viewer() {
     join(dir, "legacy-viewer.js"),
     `"use client";
 import { createElement as h } from "react";
-import { configurePdfjs } from "parapdf";
 import { legacyBuild } from "parapdf/legacy";
 import { Viewer } from "./viewer.js";
 
-configurePdfjs({ build: legacyBuild });
-
 export function LegacyViewer() {
-  return h(Viewer);
+  return h(Viewer, { build: legacyBuild });
 }
 `,
   );

@@ -148,6 +148,7 @@ export function writePublicFiles(publicDir: string): void {
     join(corpusDir, "wdl6812-manuscript.pdf"),
     join(publicDir, "wdl6812-manuscript.pdf"),
   );
+  copyFileSync(join(corpusDir, "pdfium-jpx-lzw.pdf"), join(publicDir, "pdfium-jpx-lzw.pdf"));
   copyFileSync(
     join(corpusDir, "generated/synthetic-scripts.pdf"),
     join(publicDir, "synthetic-scripts.pdf"),
@@ -167,10 +168,25 @@ export function writePublicFiles(publicDir: string): void {
   writeFileSync(join(publicDir, "blank.html"), "<!doctype html><title>blank</title>");
 }
 
+/** Both the standalone and Next.js test apps configure the viewer before mounting it. */
+export const CONFIGURE_BUILD_JS = `function configureBuild(build, params) {
+  if (params.has("renderer")) {
+    const policy = document.createElement("meta");
+    policy.httpEquiv = "Content-Security-Policy";
+    policy.content = "worker-src 'self'";
+    document.head.append(policy);
+    configurePdfjs({ build, rendererSrc: true });
+  } else if (build) {
+    configurePdfjs({ build });
+  }
+}`;
+
 /** The viewer as the package's README shows it, without JSX to stay plugin-free. */
 export const APP_JS = `import { createElement as h } from "react";
 import { createRoot } from "react-dom/client";
-import { PdfDocument, PdfViewer, useViewer } from "parapdf";
+import { configurePdfjs, PdfDocument, PdfViewer, useViewer } from "parapdf";
+
+${CONFIGURE_BUILD_JS}
 
 function App({ file, scripts }) {
   const viewer = useViewer();
@@ -183,8 +199,9 @@ function App({ file, scripts }) {
   );
 }
 
-export function start() {
+export function start(build) {
   const params = new URLSearchParams(location.search);
+  configureBuild(build, params);
   const file = params.get("file");
   const scripts = params.get("scripts") === "1";
   createRoot(document.getElementById("root")).render(h(App, { file, scripts }));
@@ -194,12 +211,10 @@ export function start() {
 export const MAIN_JS = `import { start } from "./app.js";\n\nstart();\n`;
 
 /** The same application on pdf.js's legacy build. */
-export const LEGACY_JS = `import { configurePdfjs } from "parapdf";
-import { legacyBuild } from "parapdf/legacy";
+export const LEGACY_JS = `import { legacyBuild } from "parapdf/legacy";
 import { start } from "./app.js";
 
-configurePdfjs({ build: legacyBuild });
-start();
+start(legacyBuild);
 `;
 
 interface Visit {
@@ -253,7 +268,10 @@ async function visit(browser: Browser, url: string, served: Map<string, string>)
     );
   });
   page.on("console", (message) => {
-    if (message.type() === "error" || /fake worker/.test(message.text())) {
+    if (
+      message.type() === "error" ||
+      /fake worker|Renderer worker (?:disabled|failed)/i.test(message.text())
+    ) {
       errors.push(message.text());
     }
   });
@@ -322,7 +340,11 @@ async function visit(browser: Browser, url: string, served: Map<string, string>)
     const script = scripts.get(url);
     if (!script) continue;
     const legacy = script.body.includes("__core-js_shared__");
-    script.entry.file = `transformed ${legacy ? "pdf.worker.legacy.js" : "pdf.worker.js"}`;
+    const kind =
+      script.body.includes("RenderFrame") && !script.body.includes("GetDocRequest")
+        ? "renderer"
+        : "worker";
+    script.entry.file = `transformed pdf.${kind}${legacy ? ".legacy" : ""}.js`;
   }
   await context.close();
   return { responses, errors: reportedErrors, painted, center, scripted };
@@ -378,6 +400,21 @@ export async function checkFiles(
   const jbig2 = await open("wdl6812-manuscript.pdf");
   check(`${mode}: the worker loads the JBIG2 decoder`, loaded(jbig2, /jbig2[^/]*\.wasm$/));
 
+  const jpx = await open("pdfium-jpx-lzw.pdf&renderer=1");
+  check(
+    `${mode}: the bundled drawing worker paints the LZW-wrapped JPX red under a same-origin worker policy`,
+    loaded(
+      jpx,
+      legacy ? /pdf\.renderer\.legacy[^/]*\.js$/ : /pdf\.renderer(?!\.legacy)[^/]*\.js$/,
+    ) &&
+      loaded(jpx, /openjpeg[^/]*\.wasm$/) &&
+      jpx.center.join(",") === "255,0,0",
+    `rgb(${jpx.center.join(" ")}), ${jpx.responses
+      .map(({ file }) => file)
+      .filter(Boolean)
+      .join(" ")}`,
+  );
+
   const symbol = await open("symbol.pdf");
   check(
     `${mode}: the worker loads standard font data`,
@@ -411,6 +448,6 @@ export async function checkFiles(
       .join(" "),
   );
 
-  const errors = [cjk, jbig2, symbol, cmyk, scripts].flatMap((result) => result.errors);
+  const errors = [cjk, jbig2, jpx, symbol, cmyk, scripts].flatMap((result) => result.errors);
   check(`${mode}: no errors`, errors.length === 0, errors.slice(0, 3).join(" | "));
 }

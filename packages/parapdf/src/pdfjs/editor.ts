@@ -518,6 +518,7 @@ export function createPdfjsAnnotationEditor(
     null, // editorUndoBar
     // ParaPDF zooms the document with two fingers, also over an annotation.
     false,
+    false, // keepToolbarInPage: use the editor's ordinary toolbar placement
   ) as unknown as PdfjsUIManager;
 
   // Choosing a tool, or going back to none, changes what pages draw of the
