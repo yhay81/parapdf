@@ -162,12 +162,10 @@ neither.
 ## Off the main thread
 
 pdf.js parses documents in its worker, which ParaPDF starts while React
-renders, beside pdf.js's module. Released pdf.js still draws pages on the
-main thread, into GPU-backed canvases by default (`enableHWA`). pdf.js's
-renderer worker, which draws pages on a thread of its own, is in unreleased
-builds only; `configurePdfjs({ rendererSrc })` uses it where it exists, and
-it replaces drawing on the main thread once a released pdfjs-dist has it and
-it measures better.
+renders, beside pdf.js's module. By default pdf.js draws pages into GPU-backed canvases on the main
+thread. With `configurePdfjs({ rendererSrc: true })`, the package also
+loads pdf.js's drawing worker. It reduces stalls on some text-heavy PDFs.
+Scanned pages can take longer to present in Chromium and WebKit.
 
 ## pdf.js in the package
 

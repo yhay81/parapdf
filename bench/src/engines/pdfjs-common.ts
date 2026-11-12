@@ -114,7 +114,10 @@ export function createPdfjsAdapter(options: PdfjsAdapterOptions): EngineAdapter 
     },
     // Diagnostic only: pdf.js keeps the renderer worker on a private field and
     // silently falls back to main-thread drawing when it cannot start.
-    usesRendererWorker: () =>
-      Boolean((loadingTask as { _rendererWorker?: unknown } | undefined)?._rendererWorker),
+    usesRendererWorker() {
+      const renderer = (loadingTask as { _rendererWorker?: { destroyed: boolean } } | undefined)
+        ?._rendererWorker;
+      return Boolean(renderer && !renderer.destroyed);
+    },
   };
 }

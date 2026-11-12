@@ -66,13 +66,23 @@ const median = (values: number[]): number => {
     : ((sorted[mid - 1] as number) + (sorted[mid] as number)) / 2;
 };
 
+const requestsRenderer = (engine: string) =>
+  engine.startsWith("pdfjs-next") || engine.endsWith("-renderer");
+
 const engineLine = (versions: Record<string, string | undefined>, engines: string[]): string =>
-  `pdfjs-dist ${versions["pdfjs-dist"]} (main-thread drawing)${versions["pdf.js master"] ? `, pdf.js master ${versions["pdf.js master"]} (renderer worker)` : ""}, @embedpdf/pdfium ${versions["@embedpdf/pdfium"]} (worker), hayro ${versions.hayro} (worker, wasm simd128). \`-hwa\` variants set \`enableHWA\` for a GPU-backed canvas.${engines.some((engine) => engine.endsWith("-frame")) ? " `-frame` variants draw into an OffscreenCanvas instead of the displayed canvas and show the finished page as an ImageBitmap through a `bitmaprenderer` context." : ""}`;
+  `pdfjs-dist ${versions["pdfjs-dist"]} (main-thread drawing${engines.some((engine) => engine.endsWith("-renderer")) ? ", -renderer enables the drawing worker" : ""})${versions["pdf.js master"] ? `, pdf.js master ${versions["pdf.js master"]} (renderer worker)` : ""}, @embedpdf/pdfium ${versions["@embedpdf/pdfium"]} (worker), hayro ${versions.hayro} (worker, wasm simd128). \`-hwa\` variants set \`enableHWA\` for a GPU-backed canvas.${engines.some((engine) => engine.endsWith("-frame")) ? " `-frame` variants draw into an OffscreenCanvas instead of the displayed canvas and show the finished page as an ImageBitmap through a `bitmaprenderer` context." : ""}`;
 
 /** The command that measures the same engines, files, and settings again. */
-const reproduceLine = ({ browserName, settings }: BrowserResults["environment"]): string => {
+const reproduceLine = (
+  { browserName, settings }: BrowserResults["environment"],
+  files: string[],
+): string => {
   const variables = [
     `BROWSER=${browserName}`,
+    `FILES=${files.join(",")}`,
+    `PAGES=${settings.pages}`,
+    `RUNS=${settings.runs}`,
+    `SCALE=${settings.scale}`,
     ...(settings.engines ? [`ENGINES=${settings.engines.join(",")}`] : []),
     ...(settings.output ? [`OUTPUT=${settings.output}`] : []),
   ];
@@ -109,8 +119,7 @@ export function renderReport({ environment, payload, summaries }: BrowserResults
   ];
   const errors = summaries.filter((summary) => summary.error);
   const fallbacks = summaries.filter(
-    (summary) =>
-      summary.engine.startsWith("pdfjs-next") && !summary.error && !summary.usesRendererWorker,
+    (summary) => requestsRenderer(summary.engine) && !summary.error && !summary.usesRendererWorker,
   );
 
   return [
@@ -122,7 +131,7 @@ export function renderReport({ environment, payload, summaries }: BrowserResults
     `- Power: ${powerLine(environment)}. Idle baseline: ${idleLine(environment)}.${environment.turnTaking ? ` The run ${environment.turnTaking}.` : ""}`,
     `- Engines: ${engineLine(environment.versions, engines)}`,
     `- Method: scale ${settings.scale} (100% zoom at devicePixelRatio 2), first ${settings.pages} pages rendered one after another, fresh page per job, median of ${settings.runs} runs. "Visible" waits two animation frames after the pixels are committed to the canvas.`,
-    `- Reproduce: ${reproduceLine(environment)}`,
+    `- Reproduce: ${reproduceLine(environment, files)}`,
     "",
     ...(errors.length || fallbacks.length
       ? [
@@ -232,7 +241,7 @@ export function renderComparison(all: BrowserResults[], prefix = ""): string {
     results.summaries
       .filter(
         (summary) =>
-          summary.error || (summary.engine.startsWith("pdfjs-next") && !summary.usesRendererWorker),
+          summary.error || (requestsRenderer(summary.engine) && !summary.usesRendererWorker),
       )
       .map(
         (summary) =>

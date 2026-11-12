@@ -49,6 +49,13 @@ for (const [type, sink] of [
 }
 
 async function loadEngine(engineId: string): Promise<EngineAdapter> {
+  if (engineId === "pdfjs-renderer" || engineId === "pdfjs-hwa-renderer") {
+    return (await import("./engines/pdfjs.ts")).createPdfjsEngine({
+      hwa: engineId === "pdfjs-hwa-renderer",
+      frame: false,
+      renderer: true,
+    });
+  }
   // "-pathtext" variants of released pdf.js draw text as paths
   // (`disableFontFace`) instead of with the fonts it loads as FontFaces.
   const pathText = engineId.endsWith("-pathtext");

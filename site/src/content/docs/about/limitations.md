@@ -21,10 +21,9 @@ description: What ParaPDF does not do yet, and what has not been verified.
 
 ## Drawing on the main thread
 
-Released pdfjs-dist draws pages on the main thread; its worker parses.
-Drawing in a worker needs pdf.js's renderer worker
-(`configurePdfjs({ rendererSrc })`), which is only in unreleased pdf.js
-builds so far.
+pdf.js draws pages on the main thread by default. The optional drawing worker
+can reduce stalls on text-heavy documents and increase them on scanned pages.
+Enable it with `configurePdfjs({ rendererSrc: true })`.
 
 ## Not verified yet
 

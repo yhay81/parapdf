@@ -27,6 +27,7 @@ derived from the PDF.js files beside them and changed for ParaPDF:
 | `render/planner.ts` | `web/pdf_page_detail_view.js` |
 | `view/viewer.ts` | `web/pdf_viewer.js` |
 
-The `parapdf` package also redistributes files of pdfjs-dist in `pdfjs/`:
-the worker, behind ParaPDF's prelude, and the files it loads on demand. They
+The generated editor icons come from pdfjs-dist 6.5.438. The package also
+redistributes that version's parsing and drawing workers and their on-demand
+files in `pdfjs/`. The parsing worker includes ParaPDF's prelude. These files
 keep their licenses, which are copied alongside them.

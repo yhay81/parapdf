@@ -6,6 +6,11 @@ change the API.
 
 ## Unreleased
 
+- Updated pdfjs-dist to 6.5.438. JPEG 2000 images wrapped in LZW now render
+  from the bundled decoder. Set `configurePdfjs({ rendererSrc: true })` to
+  use the packaged drawing worker with either the modern or legacy build.
+  Default rendering still uses GPU-backed canvases on the main thread.
+
 - Search starts on the current page and wraps at the end of the document.
   Choosing the next or previous match during a search keeps it selected
   as more results arrive.

@@ -1,5 +1,5 @@
 import type * as Pdfjs from "pdfjs-dist";
-import { fileUrls, iconUrls, pdfjsWorkerUrl, scriptingUrls } from "./files.ts";
+import { fileUrls, iconUrls, pdfjsRendererUrl, pdfjsWorkerUrl, scriptingUrls } from "./files.ts";
 
 /**
  * pdf.js getDocument parameters that ParaPDF does not set from the source,
@@ -18,6 +18,8 @@ export interface PdfjsBuild {
   readonly name: string;
   readonly pdfjs: () => Promise<typeof Pdfjs>;
   readonly workerUrl: () => URL;
+  /** Selects the build's drawing worker when rendererSrc is true. Defaults to the modern one. */
+  readonly rendererUrl?: (assetBase?: string) => URL;
 }
 
 /**
@@ -56,10 +58,10 @@ export interface PdfjsConfig {
    */
   pdfjs?: () => Promise<typeof Pdfjs>;
   /**
-   * Renderer worker script (pdf.js master and later). When set, pdf.js draws
-   * pages into an OffscreenCanvas on its own thread instead of the main thread.
+   * Opt in to pdf.js's drawing worker. True loads the matching worker shipped
+   * with the package. A string supplies its URL. The default draws on the main thread.
    */
-  rendererSrc?: string;
+  rendererSrc?: true | string;
   /**
    * Draw on GPU-backed canvases, pdf.js's enableHWA (default true); false
    * keeps pdf.js's own default of CPU-backed canvases.
@@ -282,7 +284,12 @@ async function load(options: PdfjsConfig): Promise<LoadedPdfjs> {
   const [pdfjs, port] = await Promise.all([pdfjsLoading, started]);
   pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
   if (options.rendererSrc) {
-    (pdfjs.GlobalWorkerOptions as { rendererSrc?: string }).rendererSrc = options.rendererSrc;
+    pdfjs.GlobalWorkerOptions.rendererSrc =
+      options.rendererSrc === true
+        ? (options.build?.rendererUrl ?? pdfjsRendererUrl)(
+            assetBase === undefined ? undefined : absolute(assetBase),
+          ).href
+        : options.rendererSrc;
   }
   const documentOptions: PdfjsDocumentOptions = {
     ...(shipped ? SHIPPED_FILE_OPTIONS : {}),

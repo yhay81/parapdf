@@ -1,4 +1,4 @@
-import { pdfjsLegacyWorkerUrl } from "./pdfjs/legacy-files.ts";
+import { pdfjsLegacyRendererUrl, pdfjsLegacyWorkerUrl } from "./pdfjs/legacy-files.ts";
 import type { PdfjsBuild } from "./pdfjs/loader.ts";
 
 /**
@@ -11,4 +11,5 @@ export const legacyBuild: PdfjsBuild = {
   name: "legacy",
   pdfjs: () => import("pdfjs-dist/legacy/build/pdf.mjs") as Promise<typeof import("pdfjs-dist")>,
   workerUrl: pdfjsLegacyWorkerUrl,
+  rendererUrl: pdfjsLegacyRendererUrl,
 };

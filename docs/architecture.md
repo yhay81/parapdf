@@ -174,7 +174,9 @@ that created it, or the `PdfViewer` that made its own.
 - `selection.ts` keeps text selection drags in text layers across pages
   and gaps, with each browser's fixes; ported from pdf.js's
   `TextLayerBuilder` (`NOTICE.md`).
-- With released pdfjs-dist, pdf.js draws on the main thread.
+- Drawing uses the main thread by default. `configurePdfjs({ rendererSrc: true })`
+  loads the packaged modern or legacy drawing worker on demand (decision 0027).
+  A string supplies a custom worker URL.
 
 ### features/
 
@@ -242,8 +244,4 @@ the DOM declares `"use client"`.
 
 ## Open questions
 
-- pdf.js's renderer worker: once a released pdfjs-dist has it, does it
-  replace drawing on the main thread? (#20; scanned pages clone image
-  bitmaps on the main thread with it,
-  `bench/upstream/pdfjs-renderer-image-relay-issue.md`.)
 - What 1.0 requires and what 1.x promises: decision 0015, proposed.

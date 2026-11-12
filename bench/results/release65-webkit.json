@@ -1,0 +1,208 @@
+{
+  "environment": {
+    "runAt": "2026-11-12T14:13:13.174Z",
+    "os": "darwin 27.2.0 arm64",
+    "cpu": "Apple M2 Pro (12 logical cores)",
+    "memoryGiB": 32,
+    "browserName": "webkit",
+    "browser": "WebKit 27.2",
+    "headless": true,
+    "power": {
+      "source": "ac",
+      "lowPowerMode": false
+    },
+    "turnTaking": "waited 0 times (0 min in all) for other Playwright browsers and repeated 0 jobs that another browser overlapped",
+    "gpu": "Apple GPU",
+    "crossOriginIsolated": true,
+    "idle": {
+      "timerLagP50Ms": 3.8,
+      "timerLagP95Ms": 4.9,
+      "frameIntervalMs": 13.9
+    },
+    "versions": {
+      "pdfjs-dist": "6.5.438",
+      "@embedpdf/pdfium": "2.15.1",
+      "hayro": "0.8.0"
+    },
+    "settings": {
+      "runs": 3,
+      "pages": 2,
+      "scale": 2.7,
+      "engines": [
+        "pdfjs-hwa",
+        "pdfjs-hwa-renderer"
+      ],
+      "output": "release65-"
+    }
+  },
+  "payload": {
+    "pdfjs": {
+      "files": [
+        "pdf.worker.min-CIqJB0yW.mjs",
+        "pdfjs-BWJMEpTu.js"
+      ],
+      "raw": 1716767,
+      "gzip": 511697,
+      "brotli": 421023
+    },
+    "pdfjs renderer": {
+      "files": [
+        "pdf.renderer.min-BblVeTCm.mjs"
+      ],
+      "raw": 121785,
+      "gzip": 36122,
+      "brotli": 31463
+    },
+    "pdfjs-next (workers unminified)": {
+      "files": [
+        "pdf.worker-CQUdiPT9.mjs",
+        "pdfjs-next-DwQ5rmQS.js"
+      ],
+      "raw": 532,
+      "gzip": 396,
+      "brotli": 346
+    },
+    "pdfium": {
+      "files": [
+        "pdfium-BJ2Yip8Q.wasm",
+        "pdfium-Cq6T_0ZZ.js",
+        "pdfium.worker-B6sCQZf0.js"
+      ],
+      "raw": 4803543,
+      "gzip": 2186865,
+      "brotli": 1684405
+    },
+    "hayro": {
+      "files": [
+        "hayro-CPRxIzm9.js",
+        "hayro.worker-DtVKusZb.js",
+        "hayro_wasm_bench_bg-B6N7ImOe.wasm"
+      ],
+      "raw": 4061725,
+      "gzip": 1748434,
+      "brotli": 1396376
+    }
+  },
+  "summaries": [
+    {
+      "file": "patent-us223898.pdf",
+      "engine": "pdfjs-hwa",
+      "runs": 3,
+      "pageCount": 4,
+      "renderedPages": 2,
+      "usesRendererWorker": false,
+      "initMs": 103.8,
+      "openMs": 4.3,
+      "firstRenderMs": 57.5,
+      "firstPresentMs": 83.6,
+      "pagePresentP50Ms": 83.3,
+      "pagePresentP95Ms": 97.2,
+      "renderPhaseMs": 181.3,
+      "blockedMs": 0.2,
+      "lagP95Ms": 4.9,
+      "lagMaxMs": 5,
+      "longTaskBlockingMs": 0,
+      "wasmMemoryMiB": null
+    },
+    {
+      "file": "patent-us223898.pdf",
+      "engine": "pdfjs-hwa-renderer",
+      "runs": 3,
+      "pageCount": 4,
+      "renderedPages": 2,
+      "usesRendererWorker": true,
+      "initMs": 106.8,
+      "openMs": 5,
+      "firstRenderMs": 85.6,
+      "firstPresentMs": 111.1,
+      "pagePresentP50Ms": 97.2,
+      "pagePresentP95Ms": 138.9,
+      "renderPhaseMs": 221,
+      "blockedMs": 17.8,
+      "lagP95Ms": 12,
+      "lagMaxMs": 16.3,
+      "longTaskBlockingMs": 0,
+      "wasmMemoryMiB": null
+    },
+    {
+      "file": "bill-hr815.pdf",
+      "engine": "pdfjs-hwa",
+      "runs": 3,
+      "pageCount": 110,
+      "renderedPages": 2,
+      "usesRendererWorker": false,
+      "initMs": 110.5,
+      "openMs": 4.6,
+      "firstRenderMs": 35.3,
+      "firstPresentMs": 83.4,
+      "pagePresentP50Ms": 41.8,
+      "pagePresentP95Ms": 97.2,
+      "renderPhaseMs": 142.2,
+      "blockedMs": 0.6,
+      "lagP95Ms": 4.9,
+      "lagMaxMs": 5.5,
+      "longTaskBlockingMs": 0,
+      "wasmMemoryMiB": null
+    },
+    {
+      "file": "bill-hr815.pdf",
+      "engine": "pdfjs-hwa-renderer",
+      "runs": 3,
+      "pageCount": 110,
+      "renderedPages": 2,
+      "usesRendererWorker": true,
+      "initMs": 107.3,
+      "openMs": 5.5,
+      "firstRenderMs": 85.4,
+      "firstPresentMs": 110,
+      "pagePresentP50Ms": 42.6,
+      "pagePresentP95Ms": 111,
+      "renderPhaseMs": 205.8,
+      "blockedMs": 0,
+      "lagP95Ms": 4.8,
+      "lagMaxMs": 5,
+      "longTaskBlockingMs": 0,
+      "wasmMemoryMiB": null
+    },
+    {
+      "file": "pdfium-jpx-lzw.pdf",
+      "engine": "pdfjs-hwa",
+      "runs": 3,
+      "pageCount": 1,
+      "renderedPages": 1,
+      "usesRendererWorker": false,
+      "initMs": 108.6,
+      "openMs": 3.7,
+      "firstRenderMs": 28.3,
+      "firstPresentMs": 55.8,
+      "pagePresentP50Ms": 55.8,
+      "pagePresentP95Ms": 55.8,
+      "renderPhaseMs": 69.5,
+      "blockedMs": 0,
+      "lagP95Ms": 4.5,
+      "lagMaxMs": 4.5,
+      "longTaskBlockingMs": 0,
+      "wasmMemoryMiB": null
+    },
+    {
+      "file": "pdfium-jpx-lzw.pdf",
+      "engine": "pdfjs-hwa-renderer",
+      "runs": 3,
+      "pageCount": 1,
+      "renderedPages": 1,
+      "usesRendererWorker": true,
+      "initMs": 108.6,
+      "openMs": 4.3,
+      "firstRenderMs": 33.9,
+      "firstPresentMs": 55.5,
+      "pagePresentP50Ms": 55.5,
+      "pagePresentP95Ms": 55.7,
+      "renderPhaseMs": 74.4,
+      "blockedMs": 0,
+      "lagP95Ms": 4.7,
+      "lagMaxMs": 4.7,
+      "longTaskBlockingMs": 0,
+      "wasmMemoryMiB": null
+    }
+  ]
+}
