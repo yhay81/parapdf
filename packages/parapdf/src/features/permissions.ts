@@ -16,15 +16,36 @@ export function permitted(permissions: PdfPermissions | null, what: Permission):
   return what === "fillForms" ? permissions.fillForms || permissions.annotate : permissions[what];
 }
 
-/** Viewers that follow what their documents permit. */
-const enforcing = new WeakSet<Viewer>();
+interface Enforcement {
+  holders: number;
+  stopCopyProtection?: () => void;
+  listeners: Set<() => void>;
+}
+
+const policies = new WeakMap<Viewer, Enforcement>();
+
+function policyOf(viewer: Viewer): Enforcement {
+  let policy = policies.get(viewer);
+  if (!policy) {
+    policy = { holders: 0, listeners: new Set() };
+    policies.set(viewer, policy);
+  }
+  return policy;
+}
+
+/** Tell a feature when the application starts or stops enforcing permissions. */
+export function onEnforcementChange(viewer: Viewer, listener: () => void): () => void {
+  const { listeners } = policyOf(viewer);
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
 
 /**
  * Whether `viewer`'s document permits `what`, or the viewer does not follow
  * permissions (`enforcePermissions()`).
  */
 export function permits(viewer: Viewer, what: Permission): boolean {
-  return !enforcing.has(viewer) || permitted(viewer.permissions, what);
+  return !policies.get(viewer)?.holders || permitted(viewer.permissions, what);
 }
 
 /**
@@ -36,7 +57,23 @@ export function permits(viewer: Viewer, what: Permission): boolean {
  * permission to fill forms. Returns the function that stops following them.
  */
 export function enforcePermissions(viewer: Viewer): () => void {
-  enforcing.add(viewer);
+  const policy = policyOf(viewer);
+  if (++policy.holders === 1) {
+    policy.stopCopyProtection = protectCopy(viewer);
+    for (const listener of policy.listeners) listener();
+  }
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    if (--policy.holders !== 0) return;
+    policy.stopCopyProtection?.();
+    delete policy.stopCopyProtection;
+    for (const listener of policy.listeners) listener();
+  };
+}
+
+function protectCopy(viewer: Viewer): () => void {
   let content: HTMLElement | null = null;
   const apply = () => content?.classList.toggle("parapdf-no-copy", !permits(viewer, "copy"));
   const onCopy = (event: ClipboardEvent) => {
@@ -61,7 +98,6 @@ export function enforcePermissions(viewer: Viewer): () => void {
     },
   });
   return () => {
-    enforcing.delete(viewer);
     detachExtension();
     content?.removeEventListener("copy", onCopy);
     content?.removeEventListener("cut", onCopy);

@@ -33,6 +33,9 @@ as in pdf.js. Then:
   `annotationEditing`;
 - with `forms`, fields can be filled in only with `fillForms` or `annotate`.
 
+Changing `enforcePermissions` applies to the open document immediately.
+Existing form values and annotations are kept when editing is restricted.
+
 `permits(viewer, what)` says whether the viewer allows `"print"`, `"copy"`,
 `"annotate"`, or `"fillForms"`, say to disable a print button: true when its
 document permits it, and always when the viewer does not follow permissions.
