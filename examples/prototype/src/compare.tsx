@@ -36,7 +36,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 const params = new URLSearchParams(location.search);
 const settings = {
   windowed: params.get("viewer") === "react-pdf-window",
-  file: params.get("file") ?? "synthetic-text-1000.pdf",
+  file: params.get("file") ?? "usrguide.pdf",
   text: params.get("text") !== "0",
   links: params.get("links") !== "0",
   autoscroll: Number(params.get("autoscroll") ?? "0"),

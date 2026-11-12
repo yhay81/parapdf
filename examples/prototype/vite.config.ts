@@ -51,6 +51,8 @@ export default defineConfig(({ command }) => ({
         : []),
     ],
   },
+  // The comparison page imports a URL to its pdf.js worker. Keep Vite's URL transform in dev.
+  optimizeDeps: { exclude: ["react-pdf-worker?url"] },
   worker: { format: "es" },
   build: {
     target: "es2023",

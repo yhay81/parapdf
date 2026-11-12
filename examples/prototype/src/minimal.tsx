@@ -6,7 +6,7 @@ import { PdfDocument, PdfViewer, useHistory, useViewer, useViewState, type Viewe
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
-const file = new URLSearchParams(location.search).get("file") ?? "synthetic-text-1000.pdf";
+const file = new URLSearchParams(location.search).get("file") ?? "usrguide.pdf";
 
 function Toolbar({ viewer }: { viewer: Viewer }) {
   const { back, canGoBack } = useHistory(viewer);
