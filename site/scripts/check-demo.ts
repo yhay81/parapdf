@@ -10,14 +10,13 @@
  *   pnpm --filter @parapdf/site check:demo
  * Environment: BROWSER (chromium, webkit, or firefox).
  */
-import { type ChildProcess, spawn } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { preview } from "astro";
 import type { Page } from "playwright";
 import { captureFailure, launchBrowser } from "../../bench/scripts/browsers.ts";
 
 const root = join(import.meta.dirname, "..");
-const PORT = 4186;
-const base = `http://127.0.0.1:${PORT}/demo/`;
 let failures = 0;
 
 function check(name: string, ok: boolean, detail = ""): void {
@@ -26,28 +25,6 @@ function check(name: string, ok: boolean, detail = ""): void {
     failures++;
     void captureFailure(name);
   }
-}
-
-/**
- * `astro preview` of the built site, in a process group of its own; beside
- * any other preview, which Astro would otherwise point to instead.
- */
-async function preview(): Promise<ChildProcess> {
-  const astro = join(root, "node_modules", ".bin", "astro");
-  const args = ["preview", "--port", String(PORT), "--host", "127.0.0.1", "--ignore-lock"];
-  const server = spawn(astro, args, {
-    cwd: root,
-    stdio: "ignore",
-    detached: true,
-  });
-  const deadline = Date.now() + 60_000;
-  while (Date.now() < deadline) {
-    try {
-      if ((await fetch(base)).ok) return server;
-    } catch {}
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  throw new Error(`${base} did not answer`);
 }
 
 const field = (page: Page) => page.locator(".parapdf-viewport input[type=text]").first();
@@ -72,10 +49,16 @@ async function draw(page: Page): Promise<void> {
   await page.waitForTimeout(300);
 }
 
-const server = await preview();
-const launched = await launchBrowser();
-console.log(launched.label);
+const server = await preview({
+  root,
+  server: { port: 4186, host: "127.0.0.1" },
+  logLevel: "error",
+});
+const base = `http://127.0.0.1:${server.port}/demo/`;
+let launched: Awaited<ReturnType<typeof launchBrowser>> | undefined;
 try {
+  launched = await launchBrowser();
+  console.log(launched.label);
   const context = await launched.browser.newContext({
     viewport: { width: 1400, height: 900 },
     acceptDownloads: true,
@@ -179,10 +162,53 @@ try {
     "a drawing alone asks too; accepting discards it and opens the other document",
     dialogs.length === 2 && (await documentTitle(page)) === "Document: 1,000 pages",
   );
+  await choose(page, "Form 1040");
+  await field(page).waitFor();
+  await field(page).fill("Discard this value");
+  await page.getByRole("button", { name: /^Document:/ }).click();
+  await page.getByRole("menuitemradio", { name: /LaTeX2e for authors/ }).click();
+  await page.getByRole("button", { name: /^Document:/ }).click();
+  await page.getByRole("menuitemradio", { name: /Form 1040/ }).click();
+  await field(page).waitFor();
+  check(
+    "immediately reopening a discarded sample starts with empty fields",
+    (await field(page).inputValue()) === "",
+  );
+
+  const contents = await readFile(join(root, "../bench/corpus/f1040.pdf"));
+  const picker = page.locator('input[type="file"][accept*="pdf"]');
+  // Hold an earlier selection until the newer one is already on screen.
+  await page.evaluate(() => {
+    const original = File.prototype.arrayBuffer;
+    File.prototype.arrayBuffer = async function () {
+      if (this.name === "slow.pdf") {
+        await new Promise<void>((resolve) =>
+          window.addEventListener("release-file", () => resolve(), { once: true }),
+        );
+      }
+      return original.call(this);
+    };
+  });
+  await picker.setInputFiles({ name: "slow.pdf", mimeType: "application/pdf", buffer: contents });
+  await picker.setInputFiles({
+    name: "my-form.pdf",
+    mimeType: "application/pdf",
+    buffer: contents,
+  });
+  await field(page).waitFor();
+  await page.evaluate(() => window.dispatchEvent(new Event("release-file")));
+  const localDownload = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download" }).first().click();
+  const local = await localDownload;
+  check(
+    "a later file selection wins and downloads with its own filename",
+    (await documentTitle(page)) === "Document: my-form.pdf" &&
+      local.suggestedFilename() === "my-form.pdf",
+    local.suggestedFilename(),
+  );
   check("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));
 } finally {
-  await launched.close();
-  if (server.pid) process.kill(-server.pid, "SIGTERM");
+  await Promise.all([launched?.close(), server.stop()]);
 }
 
 console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) failed.`);
