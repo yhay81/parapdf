@@ -81,3 +81,31 @@ has loaded, so in Safari the preload of a PDF that takes longer to download
 than pdf.js to load is a second download. The preload's mode matches pdf.js's
 request (`cors`, `same-origin` credentials) and the page's cross-origin
 isolation changes nothing: a page without it gives the same counts.
+
+## Retest of annotation event listeners, 2026-11-12
+
+[WebKit bug 329251](https://bugs.webkit.org/show_bug.cgi?id=329251) was
+fixed in [325360@main](https://commits.webkit.org/325360@main). On this
+Apple silicon Mac running macOS 27.2 (26B123), the same
+[standalone test](https://bugs.webkit.org/attachment.cgi?id=482045) gave
+these counts of listeners that still ran after their controller aborted.
+Each round added 500 listeners using unreferenced combined signals and 500
+using signals kept alive the way ParaPDF's editor keeps them.
+
+| Browser or test runner | Unreferenced, rounds 1 through 6 | Kept, every round |
+|---|---|---:|
+| Safari 27.2 (22625.2.8.11.9), safaridriver | 500, 500, 0, 0, 0, 0 | 0 |
+| Playwright 1.64.1 WebKit 27.2 (build 2370) | 500, 500, 500, 0, 500, 0 | 0 |
+| WebKitTestRunner, [326502@main](https://commits.webkit.org/326502@main) | 0, 0, 0, 0, 0, 0 | 0 |
+
+To reproduce, open the standalone page and wait for its six rounds. For
+the WebKit [build archive](https://webkit.org/build-archives/), call
+`testRunner.dumpAsText()` and `testRunner.waitUntilDone()` at the start
+of the script and `testRunner.notifyDone()` when it sets the title to
+`done`. Run the page with that archive's `WebKitTestRunner`, with both
+`DYLD_FRAMEWORK_PATH` and `DYLD_LIBRARY_PATH` set to its `Release/`.
+The [upstream regression test](https://github.com/WebKit/WebKit/blob/5362dee7234f/LayoutTests/fast/dom/gc-abort-signal-any-with-abort-algorithm.html)
+also passed all eight assertions in that build, including forced garbage
+collection. All 500 kept signals reported being aborted in every round on
+all three builds. Safari 27.2 still needs the editor workaround.
+Real iOS and iPadOS verification is tracked in [#1](https://github.com/yhay81/parapdf/issues/1).
