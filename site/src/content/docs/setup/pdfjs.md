@@ -9,6 +9,8 @@ pdf.js has loaded, a different configuration is ignored with a warning, and
 the same one, as hot module replacement passes it again, silently.
 
 ```tsx
+"use client";
+
 import { configurePdfjs } from "parapdf";
 
 configurePdfjs({ documentOptions: { withCredentials: true } });
@@ -47,6 +49,8 @@ download beside pdf.js's module rather than after it.
 For browsers that need pdf.js's legacy build:
 
 ```tsx
+"use client";
+
 import { configurePdfjs } from "parapdf";
 import { legacyBuild } from "parapdf/legacy";
 

@@ -1,3 +1,5 @@
+"use client";
+
 // Derived from PDF.js `web/struct_tree_layer_builder.js` (pdfjs-dist 6.4.299),
 // Copyright Mozilla Foundation, Apache License 2.0, and changed for ParaPDF;
 // see NOTICE.md.
@@ -227,6 +229,7 @@ export class StructTreeBuilder {
   #treePromise: Promise<Element | null> | undefined;
   readonly #treeSource: Promise<StructNode | null>;
   #treeDom: Element | null = null;
+  #textBound = false;
   readonly #annotationIds = new Set<string>();
   readonly #elementAttributes = new Map<string, Map<string, string>>();
   readonly #pendingLinkOwnership = new Map<string, { element: Element; ids: string[] }>();
@@ -291,17 +294,30 @@ export class StructTreeBuilder {
     }
   }
 
-  /** Adds figures' images to the rendered text layer and hides the text MathML replaces. */
-  updateTextLayer(): void {
+  /** A PDF content or annotation id as a DOM id on this mounted page. */
+  domId(id: string): string {
+    return `${this.#structElementIdPrefix}owned_${id}`;
+  }
+
+  /** Bind the marked-content spans from this text layer to its structure tree. */
+  updateTextLayer(markedContent: Iterable<HTMLElement>): void {
+    if (!this.#treeDom || this.#textBound) return;
+    this.#textBound = true;
+    const spans = new Map<string, HTMLElement>();
+    for (const span of markedContent) {
+      const id = span.id;
+      spans.set(id, span);
+      span.id = this.domId(id);
+    }
     if (this.#elementsToAddToTextLayer) {
       for (const [id, img] of this.#elementsToAddToTextLayer) {
-        document.getElementById(id)?.append(img);
+        spans.get(id)?.append(img);
       }
       this.#elementsToAddToTextLayer = null;
     }
     if (this.#elementsToHideInTextLayer) {
       for (const id of this.#elementsToHideInTextLayer) {
-        document.getElementById(id)?.setAttribute("aria-hidden", "true");
+        spans.get(id)?.setAttribute("aria-hidden", "true");
       }
       this.#elementsToHideInTextLayer = null;
     }
@@ -311,7 +327,7 @@ export class StructTreeBuilder {
         const ids = this.#elementsToStealFromTextLayer[i + 1] as string[];
         let textContent = "";
         for (const id of ids) {
-          const owned = document.getElementById(id);
+          const owned = spans.get(id);
           if (owned) {
             textContent += owned.textContent?.trim() || "";
             owned.setAttribute("aria-hidden", "true");
@@ -320,6 +336,22 @@ export class StructTreeBuilder {
         if (textContent) element.textContent = textContent;
       }
       this.#elementsToStealFromTextLayer = null;
+    }
+  }
+
+  /** Keep the tagged annotations in this page's tree, including popup control references. */
+  updateAnnotationLayer(container: HTMLElement): void {
+    if (!this.#annotationIds.size) return;
+    for (const element of container.querySelectorAll<HTMLElement>("[id]")) {
+      if (this.#annotationIds.has(element.id)) element.id = this.domId(element.id);
+    }
+    for (const element of container.querySelectorAll("[aria-controls]")) {
+      // pdf.js separates multiple popup targets with commas. ARIA takes a space-separated list.
+      const ids = (element.getAttribute("aria-controls") ?? "").split(/[\s,]+/);
+      element.setAttribute(
+        "aria-controls",
+        ids.map((id) => (this.#annotationIds.has(id) ? this.domId(id) : id)).join(" "),
+      );
     }
   }
 
@@ -390,7 +422,7 @@ export class StructTreeBuilder {
         );
       }
     }
-    if (id !== undefined) htmlElement.setAttribute("aria-owns", id);
+    if (id !== undefined) htmlElement.setAttribute("aria-owns", this.domId(id));
     if (structId !== undefined && this.#structElements.get(structId) === structElement) {
       const elementId = this.#getStructElementId(structId);
       if (short !== undefined) {
@@ -424,7 +456,7 @@ export class StructTreeBuilder {
     // We cannot add the image directly to the structure tree because the
     // text layer may not be rendered yet: it is added to the text layer
     // once it is.
-    element.setAttribute("aria-owns", id);
+    element.setAttribute("aria-owns", this.domId(id));
     const img = document.createElement("span");
     this.#elementsToAddToTextLayer ??= new Map();
     this.#elementsToAddToTextLayer.set(id, img);
@@ -527,7 +559,7 @@ export class StructTreeBuilder {
       if (annotation?.id) {
         const ids: string[] = [];
         for (const child of element.children) {
-          if (child.getAttribute("aria-owns") === annotation.id) continue;
+          if (child.getAttribute("aria-owns") === this.domId(annotation.id)) continue;
           child.id ||= `${this.#structElementIdPrefix}link_${this.#linkTextId++}`;
           ids.push(child.id);
         }

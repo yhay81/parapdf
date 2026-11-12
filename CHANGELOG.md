@@ -17,9 +17,8 @@ change the API.
   use the packaged drawing worker with either the modern or legacy build.
   Default rendering still uses GPU-backed canvases on the main thread.
 
-- Text selection, links, form fields, and annotation editors align with the
-  drawing on pages with a nondefault PDF user-space unit. Search uses the
-  page's unit and intrinsic rotation when locating text.
+- Browser modules that configure pdf.js, draw and edit pages, or operate on
+  DOM elements now declare their React client boundary explicitly.
 
 - `documentOptions.enableWebGPU` is typed for applications that opt in to
   GPU drawing of mesh shadings. The default is off.
@@ -31,7 +30,18 @@ change the API.
   Choosing the next or previous match during a search keeps it selected
   as more results arrive.
 
+- Changing `enforcePermissions` on an open PDF now updates its form fields
+  and annotation editor. The viewer keeps existing edits when enforcement
+  pauses editing.
+
 - A partial `initialViewState` keeps `defaultPage` when it omits the page.
+
+- Text selection, links, form fields, and annotation editors align with the
+  drawing on pages with a nondefault PDF user-space unit. Search uses the
+  page's unit and intrinsic rotation when locating text.
+
+- A tagged PDF shown in multiple viewers gives each page its own accessible
+  text and form controls, including figure descriptions and MathML.
 
 ## 0.8.0 — 2026-10-30
 

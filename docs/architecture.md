@@ -171,6 +171,8 @@ that created it, or the `PdfViewer` that made its own.
 - `dom-layers.ts` builds DOM layers one at a time, after scrolling
   settles, in idle time, never while a visible page waits for its first
   pixels: text, then links and forms, then the annotations being edited.
+  A mounted tagged page gives its text and annotation DOM ids unique to its
+  structure tree, so its accessibility relationships stay in that viewer.
   Text layers keep the zoom they were laid out at and follow later zooms
   with CSS. DOM layers scale their raw coordinates by the page's PDF
   user-space unit, which pdf.js includes in the canvas viewport (decision

@@ -15,7 +15,7 @@ import type {
 } from "../pdfjs/editor-types.ts";
 import { linked } from "../view/signals.ts";
 import type { Viewer } from "../view/viewer.ts";
-import { permits } from "./permissions.ts";
+import { onEnforcementChange, permits } from "./permissions.ts";
 
 export interface AnnotationEditingOptions {
   /** The accessible names of the editor's controls, by default in English. */
@@ -290,6 +290,10 @@ export function attachAnnotationEditing(
     }
   };
   const unsubscribe = viewer.store.hot.subscribe(followView);
+  const unsubscribePermissions = onEnforcementChange(viewer, () => {
+    if (permits(viewer, "annotate")) start();
+    else stop(true);
+  });
 
   const detachExtension = viewer.extend({
     ready(session, signal) {
@@ -391,6 +395,7 @@ export function attachAnnotationEditing(
     },
     detach() {
       stop(false);
+      unsubscribePermissions();
       unsubscribe();
       detachExtension();
       open = null;

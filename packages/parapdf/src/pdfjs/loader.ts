@@ -1,3 +1,5 @@
+"use client";
+
 import type * as Pdfjs from "pdfjs-dist";
 import { fileUrls, iconUrls, pdfjsRendererUrl, pdfjsWorkerUrl, scriptingUrls } from "./files.ts";
 

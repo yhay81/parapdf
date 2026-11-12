@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
+import { embeddedEngineVersions } from "./scripts/built-engines.ts";
 import { crossOriginIsolation } from "./scripts/isolation.ts";
 import { benchmarkFiles } from "./scripts/static-files.ts";
 
@@ -26,6 +27,7 @@ export default defineConfig({
         : join(benchDir, "src/engines/pdfjs-next-stub"),
     },
   },
+  define: embeddedEngineVersions(benchDir),
   worker: { format: "es" },
   optimizeDeps: { exclude: ["@embedpdf/pdfium"] },
   build: {

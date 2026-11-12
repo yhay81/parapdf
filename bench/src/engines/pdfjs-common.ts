@@ -53,7 +53,7 @@ export function createPdfjsAdapter(options: PdfjsAdapterOptions): EngineAdapter 
 
   return {
     id: options.id,
-    version: `${options.label} ${lib.version}`,
+    version: `${options.label} ${lib.version}${options.label === "pdf.js master" ? ` (${lib.build})` : ""}`,
     canvas,
     async init() {
       lib.GlobalWorkerOptions.workerSrc = options.workerUrl;

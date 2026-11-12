@@ -2,7 +2,7 @@
 
 import type { DocumentSession } from "../../document/session.ts";
 import type { Viewer } from "../../view/viewer.ts";
-import { permits } from "../permissions.ts";
+import { onEnforcementChange, permits } from "../permissions.ts";
 import type { FormChange } from "./fields.ts";
 import { formsOf } from "./index.ts";
 
@@ -111,10 +111,10 @@ export function attachFormLayers(viewer: Viewer, { scripts = false } = {}): Form
     report(open.session, signal, id);
   };
 
+  const applyPermissions = () => viewer.setFormLayers(permits(viewer, "fillForms"));
+  const unsubscribePermissions = onEnforcementChange(viewer, applyPermissions);
   const detachExtension = viewer.extend({
-    prepare() {
-      viewer.setFormLayers(permits(viewer, "fillForms"));
-    },
+    prepare: applyPermissions,
     ready(session, signal) {
       open = { session, signal };
       startScripts();
@@ -146,6 +146,7 @@ export function attachFormLayers(viewer: Viewer, { scripts = false } = {}): Form
       else stopScripts();
     },
     detach() {
+      unsubscribePermissions();
       stopScripts();
       detachExtension();
       listeners.clear();

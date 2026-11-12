@@ -45,6 +45,8 @@ such as `public/pdfjs/`, and tell ParaPDF where it is, before the first
 `PdfDocument` renders:
 
 ```tsx
+"use client";
+
 import { configurePdfjs } from "parapdf";
 
 configurePdfjs({ assetBase: "/pdfjs/" });
