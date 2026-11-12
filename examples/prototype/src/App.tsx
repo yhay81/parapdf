@@ -50,8 +50,8 @@ import { Sidebar, type SidebarView } from "./Sidebar.tsx";
 
 const params = new URLSearchParams(location.search);
 const settings = {
-  file: params.get("file") ?? "synthetic-text-1000.pdf",
-  engine: params.get("engine") ?? "pdfjs-next",
+  file: params.get("file") ?? "usrguide.pdf",
+  engine: params.get("engine") ?? "pdfjs",
   hwa: params.get("hwa") !== "0",
   text: params.get("text") !== "0",
   links: params.get("links") !== "0",

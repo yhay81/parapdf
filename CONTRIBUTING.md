@@ -37,13 +37,11 @@ You need Node 24 or later and pnpm 12, the version `packageManager` in
 
 ```bash
 pnpm install
-pnpm --filter @parapdf/bench exec playwright install chromium webkit firefox
-pnpm --filter @parapdf/bench corpus
 pnpm --filter @parapdf/prototype dev
 ```
 
-The last command runs the demo. Its query parameters, which choose the file,
-scroll mode, zoom, and more, are read in
+The demo opens the bundled LaTeX guide with the pdf.js version ParaPDF ships.
+Its query parameters, which choose the file, scroll mode, zoom, and more, are read in
 [`examples/prototype/src/App.tsx`](examples/prototype/src/App.tsx).
 
 ## Before you open a pull request
@@ -53,6 +51,8 @@ pnpm check
 pnpm --filter parapdf --filter @parapdf/prototype --filter @parapdf/site typecheck
 pnpm test
 pnpm --filter parapdf check:package
+pnpm --filter @parapdf/bench exec playwright install chromium webkit firefox
+pnpm --filter @parapdf/bench corpus
 pnpm --filter @parapdf/prototype build
 ENGINE=pdfjs pnpm --filter @parapdf/prototype check:text
 ```
