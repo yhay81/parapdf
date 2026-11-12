@@ -426,15 +426,19 @@ try {
     await page.context().close();
   }
   {
+    const viewState = encodeURIComponent(JSON.stringify({ scrollMode: "page" }));
     const { page } = await open(
       launched.browser,
-      demo("file=synthetic-navigation.pdf&view=document&page=2&spread=none"),
+      demo(`file=synthetic-navigation.pdf&view=document&page=2&spread=none&viewState=${viewState}`),
     );
     const opened = await state(page);
     check(
-      "the application's page and arrangement win over the document's",
-      opened?.currentPage === 1 && opened.spread === "none" && opened.zoomMode === "fit-width",
-      JSON.stringify({ page: opened?.currentPage, spread: opened?.spread, mode: opened?.zoomMode }),
+      "a partial initialViewState keeps the application's page and arrangement",
+      opened?.currentPage === 1 &&
+        opened.spread === "none" &&
+        opened.zoomMode === "fit-width" &&
+        opened.scrollMode === "page",
+      JSON.stringify(opened),
     );
     await page.context().close();
   }

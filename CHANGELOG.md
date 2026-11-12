@@ -22,6 +22,8 @@ change the API.
   and annotation editor. The viewer keeps existing edits when enforcement
   pauses editing.
 
+- A partial `initialViewState` keeps `defaultPage` when it omits the page.
+
 ## 0.8.0 — 2026-10-30
 
 - URL sources with explicit credentials now distinguish omitted headers,
