@@ -6,6 +6,12 @@ change the API.
 
 ## Unreleased
 
+- Distinct URLs and request options can no longer share the wrong PDF.
+  Form fields settle empty when a provider shows a password error and are
+  read again when the document opens. Metadata lists all authors in the
+  PDF's XMP creator sequence. Extracting edited pages from an encrypted
+  PDF also works when `documentOptions.password` supplied its password.
+
 - Updated pdfjs-dist to 6.5.438. JPEG 2000 images wrapped in LZW now render
   from the bundled decoder. Set `configurePdfjs({ rendererSrc: true })` to
   use the packaged drawing worker with either the modern or legacy build.

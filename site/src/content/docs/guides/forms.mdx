@@ -79,7 +79,8 @@ function FormSync({ viewer, onChange }: { viewer: Viewer; onChange: (name: strin
 - `useFormFields()` gives the fields of the nearest `PdfDocument`'s document
   with their values as first read. It suspends until they are read, so
   render it under a Suspense boundary of your own; `getFormFields()` reads
-  the values again.
+  the values again. If the document fails to open, the hook returns an
+  empty list. It reads the fields again when a password unlocks the document.
 
 ## Form scripts
 
