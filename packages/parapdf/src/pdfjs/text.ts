@@ -1,3 +1,5 @@
+"use client";
+
 import type * as Pdfjs from "pdfjs-dist";
 import { pageViewport, RenderCancelledError, type Rotation } from "./draw.ts";
 import type { LoadedPdfjs } from "./loader.ts";

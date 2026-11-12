@@ -1,3 +1,5 @@
+"use client";
+
 import type * as Pdfjs from "pdfjs-dist";
 import type { Destination } from "./destinations.ts";
 import {
