@@ -41,7 +41,7 @@ class El {
   }
 }
 
-/** The text layer's spans, by id, that `document.getElementById` finds. */
+/** The marked-content spans found in the page's own text layer. */
 const textLayer = new Map<string, El>();
 const span = (id: string, text = "") => {
   const element = new El("span");
@@ -69,7 +69,6 @@ describe("a page's structure tree", () => {
       value: {
         createElement: (name: string) => new El(name),
         createElementNS: (namespace: string, name: string) => new El(name, namespace),
-        getElementById: (id: string) => textLayer.get(id) ?? null,
       },
     });
   });
@@ -84,7 +83,7 @@ describe("a page's structure tree", () => {
     assert.equal(await builder.render(), null);
     assert.deepEqual(await builder.getAnnotationIds(), new Set());
     assert.equal(await builder.getAriaAttributes("1R"), null);
-    builder.updateTextLayer();
+    builder.updateTextLayer(textLayer.values() as unknown as Iterable<HTMLElement>);
   });
 
   it("answers no annotation's attributes when the tree cannot be read", async () => {
@@ -96,7 +95,7 @@ describe("a page's structure tree", () => {
   });
 
   it("gives headings their level and other elements their roles, owning the text's spans", async () => {
-    const { root } = await render({
+    const { root, builder } = await render({
       role: "Root",
       children: [
         { role: "H2", children: [content("mc0")] },
@@ -109,26 +108,34 @@ describe("a page's structure tree", () => {
     assert.equal(root.classList.has("structTree"), true);
     assert.deepEqual(root.attrs, {}, "a role HTML has not");
     const [h2, h, p, figure, none] = root.children as [El, El, El, El, El];
-    assert.deepEqual(h2.attrs, { role: "heading", "aria-level": "2", "aria-owns": "mc0" });
+    assert.deepEqual(h2.attrs, {
+      role: "heading",
+      "aria-level": "2",
+      "aria-owns": builder.domId("mc0"),
+    });
     assert.deepEqual(h2.children, [], "it owns its only span itself");
     assert.deepEqual(h.attrs, { role: "heading" });
     assert.deepEqual(
       h.children.map((child) => child.attrs),
-      [{ "aria-owns": "mc1" }, { "aria-owns": "mc2" }],
+      [{ "aria-owns": builder.domId("mc1") }, { "aria-owns": builder.domId("mc2") }],
     );
     // A paragraph's name is prohibited: its alternative text describes it.
     assert.deepEqual(p.attrs, {
       role: "paragraph",
       "aria-description": "Intro",
-      "aria-owns": "mc3",
+      "aria-owns": builder.domId("mc3"),
     });
-    assert.deepEqual(figure.attrs, { role: "figure", "aria-label": "Chart", "aria-owns": "mc4" });
+    assert.deepEqual(figure.attrs, {
+      role: "figure",
+      "aria-label": "Chart",
+      "aria-owns": builder.domId("mc4"),
+    });
     assert.deepEqual(none.attrs, { role: "none" });
-    assert.deepEqual(none.children[0]?.attrs, { "aria-owns": "mc5" });
+    assert.deepEqual(none.children[0]?.attrs, { "aria-owns": builder.domId("mc5") });
   });
 
   it("describes a table's cells by their headers, through the headers' own", async () => {
-    const { root } = await render({
+    const { root, builder } = await render({
       role: "Table",
       children: [
         {
@@ -178,7 +185,7 @@ describe("a page's structure tree", () => {
     assert.equal(new Set([h1.id, h2.id, h3.id, r1.id]).size, 4);
     assert.deepEqual(cell.attrs, {
       role: "cell",
-      "aria-owns": "mc4",
+      "aria-owns": builder.domId("mc4"),
       "aria-rowspan": "2",
       "aria-colspan": "3",
       "aria-describedby": [h2.id, h1.id, r1.id].join(" "),
@@ -196,10 +203,10 @@ describe("a page's structure tree", () => {
       children: [content("mc0")],
     };
     const { builder, root } = await render(tree, { ...LETTER, pageX: 10, pageY: 20 });
-    assert.deepEqual(root.attrs, { role: "figure", "aria-owns": "mc0" });
+    assert.deepEqual(root.attrs, { role: "figure", "aria-owns": builder.domId("mc0") });
     const text = span("mc0");
     span("mc0-other");
-    builder.updateTextLayer();
+    builder.updateTextLayer(textLayer.values() as unknown as Iterable<HTMLElement>);
     const [img] = text.children as [El];
     assert.deepEqual(img.attrs, { role: "img", "aria-label": "A chart" });
     const calc = (value: number) => `calc(var(--total-scale-factor) *${value}px)`;
@@ -209,8 +216,9 @@ describe("a page's structure tree", () => {
       left: calc(62),
       top: calc(112),
     });
-    builder.updateTextLayer();
+    builder.updateTextLayer(textLayer.values() as unknown as Iterable<HTMLElement>);
     assert.equal(text.children.length, 1, "added once");
+    assert.equal(text.id, root.getAttribute("aria-owns"));
     // Without the page's dimensions, or a box, the figure is labelled itself.
     const { root: labelled } = await render({ ...tree, bbox: undefined }, LETTER);
     assert.equal(labelled.getAttribute("aria-label"), "A chart");
@@ -231,7 +239,7 @@ describe("a page's structure tree", () => {
     assert.deepEqual(await builder.getAnnotationIds(), new Set(["12R", "13R"]));
     const [link, annot] = root.children as [El, El];
     assert.deepEqual(link.attrs, { role: "link" }, "the annotation takes the label");
-    assert.deepEqual(annot.attrs, { role: "note", "aria-owns": "13R" });
+    assert.deepEqual(annot.attrs, { role: "note", "aria-owns": builder.domId("13R") });
     assert.deepEqual(await builder.getAriaAttributes("12R"), new Map([["aria-label", "Docs"]]));
     assert.equal(link.getAttribute("role"), "link", "not without link ownership");
     const owned = link.children.slice(1).map((child) => child.id);
@@ -248,6 +256,15 @@ describe("a page's structure tree", () => {
     assert.equal(link.getAttribute("role"), null, "the annotation is the link now");
     assert.deepEqual(await builder.getAriaAttributes("12R"), attributes);
     assert.equal(await builder.getAriaAttributes("13R"), null);
+    const first = span("12R");
+    const second = span("13R");
+    const popup = new El("section");
+    popup.setAttribute("aria-controls", "12R,13R");
+    builder.updateAnnotationLayer({
+      querySelectorAll: (selector: string) => (selector === "[id]" ? [first, second] : [popup]),
+    } as unknown as HTMLElement);
+    assert.equal(second.id, annot.getAttribute("aria-owns"));
+    assert.equal(popup.getAttribute("aria-controls"), [first.id, second.id].join(" "));
   });
 
   it("writes formulas and MathML elements as MathML, with the text they stand for", async () => {
@@ -269,10 +286,14 @@ describe("a page's structure tree", () => {
     const [formula, msup] = root.children as [El, El];
     assert.equal(formula.localName, "math");
     assert.equal(formula.namespaceURI, MATHML);
-    assert.deepEqual(formula.attrs, { "aria-owns": "mc2" }, "its alternative text goes");
+    assert.deepEqual(
+      formula.attrs,
+      { "aria-owns": builder.domId("mc2") },
+      "its alternative text goes",
+    );
     assert.equal(msup.namespaceURI, MATHML);
     const [mi, mn] = msup.children as [El, El];
-    builder.updateTextLayer();
+    builder.updateTextLayer(textLayer.values() as unknown as Iterable<HTMLElement>);
     assert.deepEqual([mi.textContent, mn.textContent], ["x", "2"]);
     assert.equal(textLayer.get("mc0")?.getAttribute("aria-hidden"), "true");
   });

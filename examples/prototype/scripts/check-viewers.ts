@@ -179,6 +179,37 @@ async function checkViews(url: string) {
   }
 }
 
+/** Both copies of a tagged form own the text and widgets in their own page. */
+async function checkTaggedPages(url: string) {
+  const context = await launched.browser.newContext();
+  try {
+    const page = await context.newPage();
+    await page.goto(`${url}?split=1&forms=1&engine=${engine}&file=f1040.pdf`);
+    for (const index of [0, 1]) {
+      const host = page.locator(`[data-viewer="${index}"] section[data-page="1"]`);
+      await host.locator(".parapdf-annotation-layer input").first().waitFor({ state: "attached" });
+      const ownership = await host.evaluate((host) => {
+        const ids = Array.from(host.querySelectorAll(".parapdf-structure [aria-owns]")).flatMap(
+          (element) => (element.getAttribute("aria-owns") ?? "").split(/\s+/),
+        );
+        const targets = ids.map((id) => host.ownerDocument.getElementById(id));
+        return {
+          outside: ids.filter((_, i) => !host.contains(targets[i] ?? null)),
+          text: targets.some((element) => element?.closest(".parapdf-text-layer")),
+          widgets: targets.some((element) => element?.closest(".parapdf-annotation-layer")),
+        };
+      });
+      assert.deepEqual(ownership, { outside: [], text: true, widgets: true });
+    }
+    console.log("PASS each tagged page owns its own text and form fields");
+  } catch (error) {
+    await captureFailure(error instanceof Error ? error.message : String(error));
+    throw error;
+  } finally {
+    await context.close();
+  }
+}
+
 /** A hidden viewport follows a fragment changed while its provider stayed mounted. */
 async function checkHiddenFragment(url: string) {
   const context = await launched.browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -397,6 +428,7 @@ try {
   });
   try {
     await checkViews(server.resolvedUrls!.local[0]!);
+    await checkTaggedPages(server.resolvedUrls!.local[0]!);
     await checkHiddenFragment(server.resolvedUrls!.local[0]!);
     await checkSharedEditing(server.resolvedUrls!.local[0]!);
     await checkFileAnnotations(server.resolvedUrls!.local[0]!);

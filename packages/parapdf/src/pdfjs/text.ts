@@ -146,7 +146,7 @@ export function buildTextLayer(
       });
       if (cancelled) throw new RenderCancelledError("text layer cancelled");
       if (dom) {
-        tree.updateTextLayer();
+        tree.updateTextLayer(container.querySelectorAll<HTMLElement>(".markedContent[id]"));
         structure.replaceChildren(dom);
       }
     }

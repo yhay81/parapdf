@@ -36,6 +36,9 @@ change the API.
 
 - A partial `initialViewState` keeps `defaultPage` when it omits the page.
 
+- A tagged PDF shown in multiple viewers gives each page its own accessible
+  text and form controls, including figure descriptions and MathML.
+
 ## 0.8.0 — 2026-10-30
 
 - URL sources with explicit credentials now distinguish omitted headers,

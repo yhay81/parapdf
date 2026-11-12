@@ -267,6 +267,8 @@ export function buildAnnotationLayer(
       fieldObjects: fields,
       ...(layers ? { optionalContentConfig: layers } : {}),
     });
+    if (cancelled) throw new RenderCancelledError("annotation layer cancelled");
+    structTree?.updateAnnotationLayer(container);
     if (iconUrls) placeIcons(container, imageResourcesPath, iconUrls);
     nameAnnotations(container, annotations as AnnotationData[]);
     if (form) form.layer = layer;
