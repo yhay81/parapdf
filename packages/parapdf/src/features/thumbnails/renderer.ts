@@ -1,3 +1,5 @@
+"use client";
+
 import type { PageSize } from "../../document/session.ts";
 import type { Rotation } from "../../pdfjs/draw.ts";
 import type { LayerState } from "../../pdfjs/layers.ts";

@@ -1,3 +1,5 @@
+"use client";
+
 import type { Rotation } from "../pdfjs/draw.ts";
 import {
   pageAtPoint,

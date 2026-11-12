@@ -1,3 +1,5 @@
+"use client";
+
 // Derived from PDF.js `web/pdf_print_service.js` and `web/pdf_viewer.css`
 // (pdfjs-dist 6.4.299), Copyright Mozilla Foundation, Apache License 2.0, and
 // changed for ParaPDF; see NOTICE.md.

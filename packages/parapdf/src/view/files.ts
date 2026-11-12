@@ -1,3 +1,5 @@
+"use client";
+
 /** Hands `bytes` to the browser as a download named `filename`. */
 export function downloadBytes(
   bytes: Uint8Array,

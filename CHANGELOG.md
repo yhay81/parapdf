@@ -17,6 +17,9 @@ change the API.
   use the packaged drawing worker with either the modern or legacy build.
   Default rendering still uses GPU-backed canvases on the main thread.
 
+- Browser modules that configure pdf.js, draw and edit pages, or operate on
+  DOM elements now declare their React client boundary explicitly.
+
 - `documentOptions.enableWebGPU` is typed for applications that opt in to
   GPU drawing of mesh shadings. The default is off.
 

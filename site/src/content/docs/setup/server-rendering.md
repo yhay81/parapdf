@@ -3,6 +3,9 @@ title: Server rendering
 description: Use ParaPDF in server-rendered React applications and React Server Components.
 ---
 
+Call `configurePdfjs()` in a client module so it configures the viewer in
+the browser.
+
 ParaPDF's React modules declare `"use client"`. On the server, `PdfViewer`
 renders an empty viewport and `PdfDocument` a preload of a URL source in the
 page's head; pdf.js loads only in the browser, so components that render
