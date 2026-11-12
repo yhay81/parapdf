@@ -1,6 +1,10 @@
 {
-  "runAt": "2026-11-12T14:21:16.440Z",
+  "runAt": "2026-11-12T14:41:19.603Z",
   "browser": "Chromium 156.0.8078.4",
+  "versions": {
+    "pdfjs-hwa": "pdfjs-dist 6.5.438",
+    "pdfjs-hwa-webgpu": "pdfjs-dist 6.5.438"
+  },
   "pages": 1,
   "scale": 2.6667,
   "rows": [

@@ -1,6 +1,10 @@
 {
-  "runAt": "2026-11-12T14:12:23.881Z",
+  "runAt": "2026-11-12T14:41:42.491Z",
   "browser": "WebKit 27.2",
+  "versions": {
+    "pdfjs-hwa": "pdfjs-dist 6.5.438",
+    "pdfjs-hwa-renderer": "pdfjs-dist 6.5.438"
+  },
   "pages": 2,
   "scale": 2.6667,
   "rows": [

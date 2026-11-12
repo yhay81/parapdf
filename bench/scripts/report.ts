@@ -70,7 +70,10 @@ const requestsRenderer = (engine: string) =>
   engine.startsWith("pdfjs-next") || engine.endsWith("-renderer");
 
 const engineLine = (versions: Record<string, string | undefined>, engines: string[]): string =>
-  `pdfjs-dist ${versions["pdfjs-dist"]} (main-thread drawing${engines.some((engine) => engine.endsWith("-renderer")) ? ", -renderer enables the drawing worker" : ""})${versions["pdf.js master"] ? `, pdf.js master ${versions["pdf.js master"]} (renderer worker)` : ""}, @embedpdf/pdfium ${versions["@embedpdf/pdfium"]} (worker), hayro ${versions.hayro} (worker, wasm simd128). \`-hwa\` variants set \`enableHWA\` for a GPU-backed canvas.${engines.some((engine) => engine.endsWith("-frame")) ? " `-frame` variants draw into an OffscreenCanvas instead of the displayed canvas and show the finished page as an ImageBitmap through a `bitmaprenderer` context." : ""}`;
+  `pdfjs-dist ${versions["pdfjs-dist"]} (main-thread drawing${engines.some((engine) => engine.endsWith("-renderer")) ? ", -renderer enables the drawing worker" : ""})${versions["pdf.js master"] ? `, pdf.js master ${versions["pdf.js master"]} (renderer worker)` : ""}, @embedpdf/pdfium ${versions["@embedpdf/pdfium"]} (worker), hayro ${versions.hayro} (worker, wasm simd128). \`-hwa\` variants set \`enableHWA\` for a GPU-backed canvas.${engines.some((engine) => engine.endsWith("-frame")) ? " `-frame` variants draw into an OffscreenCanvas instead of the displayed canvas and show the finished page as an ImageBitmap through a `bitmaprenderer` context." : ""}` +
+  (engines.some((engine) => engine.endsWith("-webgpu"))
+    ? " `-webgpu` requests GPU rasterization of mesh shadings. The fidelity run counts actual GPU draws."
+    : "");
 
 /** The command that measures the same engines, files, and settings again. */
 const reproduceLine = (
@@ -224,8 +227,15 @@ export function renderComparison(all: BrowserResults[], prefix = ""): string {
     });
   const header = `| Engine | ${all.map((results) => results.environment.browser).join(" | ")} |`;
   const rule = `|---|${all.map(() => "---:").join("|")}|`;
+  const measuredFiles = [
+    ...new Set(all.flatMap((result) => result.summaries.map((row) => row.file))),
+  ];
+  const selectedFiles = [
+    ...spotlightFiles.filter((file) => measuredFiles.includes(file)),
+    ...measuredFiles.filter((file) => !spotlightFiles.includes(file)),
+  ].slice(0, spotlightFiles.length);
   const spotlight = (pick: (summary: Summary) => string) =>
-    spotlightFiles.flatMap((file) => [
+    selectedFiles.flatMap((file) => [
       `| **${file}** | ${all.map(() => "").join(" | ")} |`,
       ...engines.map((engine) => {
         const cells = all.map((results) => {
@@ -236,7 +246,6 @@ export function renderComparison(all: BrowserResults[], prefix = ""): string {
         return `| ${engine} | ${cells.join(" | ")} |`;
       }),
     ]);
-  const fileCount = new Set(all.flatMap((results) => results.summaries.map((s) => s.file))).size;
   const failures = all.flatMap((results) =>
     results.summaries
       .filter(
@@ -268,9 +277,9 @@ export function renderComparison(all: BrowserResults[], prefix = ""): string {
       (results) =>
         `- ${results.environment.browser}: power ${powerLine(results.environment)}; ${idleLine(results.environment)}.`,
     ),
-    `- Method: the per-browser method on the same ${fileCount} files; "median across files" takes the median of each file's median. Main thread blocked counts timer lateness beyond 2 ms or the browser's idle 95th percentile, whichever is larger; compare it within a browser, and compare browsers by their longest stalls.`,
+    `- Method: the per-browser method on the same ${measuredFiles.length} files; "median across files" takes the median of each file's median. Main thread blocked counts timer lateness beyond 2 ms or the browser's idle 95th percentile, whichever is larger; compare it within a browser, and compare browsers by their longest stalls.`,
     "",
-    "## Failures and fallbacks",
+    "## Errors and renderer-worker fallbacks",
     "",
     ...(failures.length ? failures : ["None."]),
     "",
@@ -303,7 +312,7 @@ export function renderComparison(all: BrowserResults[], prefix = ""): string {
           "",
         ]
       : []),
-    "## Main thread blocked while rendering 10 pages (ms): median across files",
+    "## Main thread blocked while rendering (ms): median across files",
     "",
     header,
     rule,
@@ -338,14 +347,14 @@ export function writeReport(resultsDir: string, browser: BrowserName, prefix = "
   const results = readResults(resultsDir, browser, prefix);
   if (!results) throw new Error(`${prefix}${browser}.json is missing in ${resultsDir}`);
   const target = join(resultsDir, `${prefix}${browser}.md`);
-  writeFileSync(target, `${renderReport(results)}\n`);
+  writeFileSync(target, renderReport(results));
   return target;
 }
 
 export function writeComparison(resultsDir: string, prefix = ""): string {
   const all = browserNames.flatMap((browser) => readResults(resultsDir, browser, prefix) ?? []);
   const target = join(resultsDir, `${prefix}browsers.md`);
-  writeFileSync(target, `${renderComparison(all, prefix)}\n`);
+  writeFileSync(target, renderComparison(all, prefix));
   return target;
 }
 

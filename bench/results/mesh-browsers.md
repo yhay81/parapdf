@@ -3,14 +3,14 @@
 Each browser's full report: [Chromium 156.0.8078.4](mesh-chromium.md) (2026-11-12T14:22:01.903Z), [WebKit 27.2](mesh-webkit.md) (2026-11-12T14:23:01.215Z), [Firefox 157.0](mesh-firefox.md) (2026-11-12T14:24:55.038Z).
 
 - Machine: darwin 27.2.0 arm64, Apple M2 Pro (12 logical cores)
-- Engines: pdfjs-dist 6.5.438 (main-thread drawing), @embedpdf/pdfium 2.15.1 (worker), hayro 0.8.0 (worker, wasm simd128). `-hwa` variants set `enableHWA` for a GPU-backed canvas.
+- Engines: pdfjs-dist 6.5.438 (main-thread drawing), @embedpdf/pdfium 2.15.1 (worker), hayro 0.8.0 (worker, wasm simd128). `-hwa` variants set `enableHWA` for a GPU-backed canvas. `-webgpu` requests GPU rasterization of mesh shadings. The fidelity run counts actual GPU draws.
 - Browsers are Playwright's builds, headless. WebKit is not Safari and its results do not stand for Safari's.
 - Chromium 156.0.8078.4: power AC; on an idle page a 4 ms timer fires 0.6 ms late (median) / 1.2 ms (p95), and animation frames arrive every 16.7 ms.
 - WebKit 27.2: power AC; on an idle page a 4 ms timer fires 3.8 ms late (median) / 4.9 ms (p95), and animation frames arrive every 13.9 ms.
 - Firefox 157.0: power AC; on an idle page a 4 ms timer fires 1.0 ms late (median) / 1.1 ms (p95), and animation frames arrive every 16.7 ms.
 - Method: the per-browser method on the same 2 files; "median across files" takes the median of each file's median. Main thread blocked counts timer lateness beyond 2 ms or the browser's idle 95th percentile, whichever is larger; compare it within a browser, and compare browsers by their longest stalls.
 
-## Failures and fallbacks
+## Errors and renderer-worker fallbacks
 
 None.
 
@@ -30,7 +30,7 @@ Includes two animation frames after the commit.
 | pdfjs-hwa | 49.8 | 69.3 | 60.5 |
 | pdfjs-hwa-webgpu | 50.0 | 55.5 | 60.8 |
 
-## Main thread blocked while rendering 10 pages (ms): median across files
+## Main thread blocked while rendering (ms): median across files
 
 | Engine | Chromium 156.0.8078.4 | WebKit 27.2 | Firefox 157.0 |
 |---|---:|---:|---:|
@@ -48,16 +48,9 @@ Includes two animation frames after the commit.
 
 | Engine | Chromium 156.0.8078.4 | WebKit 27.2 | Firefox 157.0 |
 |---|---:|---:|---:|
-| **f1040.pdf** |  |  |  |
-| pdfjs-hwa | — | — | — |
-| pdfjs-hwa-webgpu | — | — | — |
-| **bunka-kokugo-series-019-p4.pdf** |  |  |  |
-| pdfjs-hwa | — | — | — |
-| pdfjs-hwa-webgpu | — | — | — |
-| **synthetic-cjk-nonembedded.pdf** |  |  |  |
-| pdfjs-hwa | — | — | — |
-| pdfjs-hwa-webgpu | — | — | — |
-| **synthetic-vector-200k.pdf** |  |  |  |
-| pdfjs-hwa | — | — | — |
-| pdfjs-hwa-webgpu | — | — | — |
-
+| **synthetic-mesh-sparse.pdf** |  |  |  |
+| pdfjs-hwa | 40 / 20 | 35 / 14 | 47 / 28 |
+| pdfjs-hwa-webgpu | 18 / 0 | 23 / 1 | 49 / 32 |
+| **synthetic-mesh-dense.pdf** |  |  |  |
+| pdfjs-hwa | 43 / 23 | 41 / 20 | 55 / 35 |
+| pdfjs-hwa-webgpu | 18 / 0 | 24 / 3 | 53 / 32 |

@@ -1,6 +1,6 @@
 /**
- * Checks that the `-frame` variants of the pdf.js engines draw what the
- * engines they vary draw: each page is read back at full resolution after it
+ * Compares what pairs of benchmark engines draw, including the pdf.js frame
+ * and WebGPU variants. Each page is read back at full resolution after it
  * renders and compared by SHA-256 and, where the digests differ, by a 256 px
  * wide sample. Writes bench/results/<OUTPUT>fidelity-<browser>.{json,md}.
  *
@@ -80,13 +80,14 @@ async function pixelsOf(browser: Browser, baseUrl: string, engine: string, file:
     });
     const result = (await page.evaluate(() => (window as { __result?: unknown }).__result)) as {
       error?: string;
+      version: string;
       pixels?: PagePixels[];
     };
     if (result.error) throw new Error(result.error.split("\n")[0]);
     const meshDraws = await page.evaluate(
       () => (window as Window & { meshDraws?: number }).meshDraws,
     );
-    return { pixels: result.pixels ?? [], meshDraws };
+    return { version: result.version, pixels: result.pixels ?? [], meshDraws };
   } finally {
     await context.close();
   }
@@ -222,6 +223,7 @@ interface Row {
     offBox: number[] | null;
   }[];
 }
+const versions: Record<string, string> = {};
 const rows: Row[] = [];
 try {
   for (const file of files) {
@@ -232,6 +234,8 @@ try {
           await pixelsOf(launched.browser, baseUrl, engine, file),
           await pixelsOf(launched.browser, baseUrl, variant, file),
         ];
+        versions[engine] = baseline.version;
+        versions[variant] = candidate.version;
         const drawn = baseline.pixels;
         const framed = candidate.pixels;
         if (!drawn.length || drawn.length !== framed.length) {
@@ -274,7 +278,7 @@ try {
 const runAt = new Date().toISOString();
 writeFileSync(
   join(resultsDir, `${output}fidelity-${browserName}.json`),
-  `${JSON.stringify({ runAt, browser: launched.label, pages, scale, rows }, null, 2)}\n`,
+  `${JSON.stringify({ runAt, browser: launched.label, versions, pages, scale, rows }, null, 2)}\n`,
 );
 const percent = (share: number) => `${(share * 100).toFixed(share < 0.01 ? 2 : 1)}%`;
 const pairNames = pairs.map(({ engine, variant }) => [engine, variant].join(":")).join(",");
@@ -282,6 +286,9 @@ const report = [
   `# Rendering fidelity: ${launched.label}`,
   "",
   `- Run at: ${runAt}`,
+  `- Engines: ${Object.entries(versions)
+    .map(([name, version]) => `${name} (${version})`)
+    .join(", ")}`,
   `- Method: the first ${pages} pages of each file at scale ${scale}, read back from the displayed canvas through a 2D canvas after each render, in a fresh page per engine. Identical means the same size and the same SHA-256 of every pixel. Pages that differ are compared on 256 px wide samples: the largest channel difference, the share of sample pixels off by more than 16, and the box around them as shares of the page (left top right bottom). bench/results/raw/ keeps each such page's samples and a mask of those pixels.`,
   `- Reproduce: \`pnpm bench:build && BROWSER=${browserName} FILES=${files.join(",")} PAGES=${pages} SCALE=${scale} PAIRS=${pairNames} OUTPUT=${output} node bench/scripts/fidelity.ts\``,
   "",
@@ -304,3 +311,4 @@ const report = [
 const target = join(resultsDir, `${output}fidelity-${browserName}.md`);
 writeFileSync(target, report);
 console.log(`\nWrote ${target}`);
+if (rows.some((row) => row.error)) process.exitCode = 1;

@@ -67,8 +67,8 @@ Release-build defaults in `web/app_options.js`: `enableAutoLinking`,
 `enableSignatureEditor`, `enableSplitMerge`, `enableMerge` development and
 test builds only; `enableComment` development builds only;
 `enableSignatureVerification` Firefox, development, and test builds only.
-Nothing was measured here: what is taken does not change drawing, and what
-would (WebGPU) waits for its measurements.
+The features taken here do not change drawing. Decision 0029 records the
+separate measurements of WebGPU mesh rasterization.
 
 ## Reopen if
 

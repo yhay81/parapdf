@@ -10,7 +10,7 @@ Each browser's full report: [Chromium 156.0.8078.4](release65-chromium.md) (2026
 - Firefox 157.0: power AC; on an idle page a 4 ms timer fires 2.0 ms late (median) / 2.2 ms (p95), and animation frames arrive every 16.7 ms.
 - Method: the per-browser method on the same 3 files; "median across files" takes the median of each file's median. Main thread blocked counts timer lateness beyond 2 ms or the browser's idle 95th percentile, whichever is larger; compare it within a browser, and compare browsers by their longest stalls.
 
-## Failures and fallbacks
+## Errors and renderer-worker fallbacks
 
 None.
 
@@ -30,7 +30,7 @@ Includes two animation frames after the commit.
 | pdfjs-hwa | 66.5 | 55.8 | 54.9 |
 | pdfjs-hwa-renderer | 50.1 | 55.5 | 71.5 |
 
-## Main thread blocked while rendering 10 pages (ms): median across files
+## Main thread blocked while rendering (ms): median across files
 
 | Engine | Chromium 156.0.8078.4 | WebKit 27.2 | Firefox 157.0 |
 |---|---:|---:|---:|
@@ -48,16 +48,12 @@ Includes two animation frames after the commit.
 
 | Engine | Chromium 156.0.8078.4 | WebKit 27.2 | Firefox 157.0 |
 |---|---:|---:|---:|
-| **f1040.pdf** |  |  |  |
-| pdfjs-hwa | — | — | — |
-| pdfjs-hwa-renderer | — | — | — |
-| **bunka-kokugo-series-019-p4.pdf** |  |  |  |
-| pdfjs-hwa | — | — | — |
-| pdfjs-hwa-renderer | — | — | — |
-| **synthetic-cjk-nonembedded.pdf** |  |  |  |
-| pdfjs-hwa | — | — | — |
-| pdfjs-hwa-renderer | — | — | — |
-| **synthetic-vector-200k.pdf** |  |  |  |
-| pdfjs-hwa | — | — | — |
-| pdfjs-hwa-renderer | — | — | — |
-
+| **patent-us223898.pdf** |  |  |  |
+| pdfjs-hwa | 34 / 0 | 58 / 0 | 60 / 14 |
+| pdfjs-hwa-renderer | 63 / 32 | 86 / 18 | 50 / 5 |
+| **bill-hr815.pdf** |  |  |  |
+| pdfjs-hwa | 53 / 15 | 35 / 1 | 73 / 31 |
+| pdfjs-hwa-renderer | 55 / 0 | 85 / 0 | 74 / 4 |
+| **pdfium-jpx-lzw.pdf** |  |  |  |
+| pdfjs-hwa | 34 / 0 | 28 / 0 | 25 / 3 |
+| pdfjs-hwa-renderer | 24 / 0 | 34 / 0 | 24 / 1 |

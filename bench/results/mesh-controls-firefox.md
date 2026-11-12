@@ -4,9 +4,9 @@
 - Machine: darwin 27.2.0 arm64, Apple M2 Pro (12 logical cores), 32 GiB
 - Browser: Firefox 157.0 (Playwright build, headless), WebGL renderer: Apple M1, or similar, crossOriginIsolated: true
 - Power: AC. Idle baseline: on an idle page a 4 ms timer fires 1.0 ms late (median) / 1.1 ms (p95), and animation frames arrive every 16.7 ms. The run waited once (2 min in all) for other Playwright browsers and repeated 1 job that another browser overlapped.
-- Engines: pdfjs-dist 6.5.438 (main-thread drawing), @embedpdf/pdfium 2.15.1 (worker), hayro 0.8.0 (worker, wasm simd128). `-hwa` variants set `enableHWA` for a GPU-backed canvas.
-- Method: scale 2.7 (100% zoom at devicePixelRatio 2), first 2 pages rendered one after another, fresh page per job, median of 5 runs. "Visible" waits two animation frames after the pixels are committed to the canvas.
-- Reproduce: `pnpm bench:build && BROWSER=firefox ENGINES=pdfjs-hwa,pdfjs-hwa-webgpu OUTPUT=mesh-controls- pnpm bench`
+- Engines: pdfjs-dist 6.5.438 (main-thread drawing), @embedpdf/pdfium 2.15.1 (worker), hayro 0.8.0 (worker, wasm simd128). `-hwa` variants set `enableHWA` for a GPU-backed canvas. `-webgpu` requests GPU rasterization of mesh shadings. The fidelity run counts actual GPU draws.
+- Method: scale 2.6667 (100% zoom at devicePixelRatio 2), first 2 pages rendered one after another, fresh page per job, median of 5 runs. "Visible" waits two animation frames after the pixels are committed to the canvas.
+- Reproduce: `pnpm bench:build && BROWSER=firefox FILES=bill-hr815.pdf,patent-us223898.pdf PAGES=2 RUNS=5 SCALE=2.6667 ENGINES=pdfjs-hwa,pdfjs-hwa-webgpu OUTPUT=mesh-controls- pnpm bench`
 
 ## Engine payload
 
@@ -69,4 +69,3 @@ Sum of event-loop lag measured by a 4 ms timer during the whole render phase, co
 |---|---:|---:|
 | bill-hr815.pdf | — | — |
 | patent-us223898.pdf | — | — |
-

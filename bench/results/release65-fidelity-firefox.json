@@ -1,6 +1,10 @@
 {
-  "runAt": "2026-11-12T14:14:45.439Z",
+  "runAt": "2026-11-12T14:41:59.325Z",
   "browser": "Firefox 157.0",
+  "versions": {
+    "pdfjs-hwa": "pdfjs-dist 6.5.438",
+    "pdfjs-hwa-renderer": "pdfjs-dist 6.5.438"
+  },
   "pages": 2,
   "scale": 2.6667,
   "rows": [
