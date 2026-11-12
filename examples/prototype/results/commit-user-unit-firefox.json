@@ -1,0 +1,74 @@
+{
+  "environment": {
+    "runAt": "2026-11-12T15:11:53.180Z",
+    "os": "darwin 27.2.0 arm64",
+    "cpu": "Apple M2 Pro (12 logical cores)",
+    "browser": "Firefox 159.0",
+    "engine": "pdfjs",
+    "build": "this build",
+    "throttle": 1,
+    "power": {
+      "source": "ac",
+      "lowPowerMode": false
+    },
+    "loadAverage": {
+      "start": 10.97,
+      "end": 12.15
+    },
+    "turnTaking": {
+      "waits": 0,
+      "waitedMs": 0,
+      "repeatedJobs": 0
+    },
+    "settings": {
+      "file": "bill-hr815.pdf",
+      "runs": 3,
+      "viewport": {
+        "width": 820,
+        "height": 1000
+      },
+      "deviceScaleFactor": 2,
+      "queries": ["before", ""]
+    }
+  },
+  "summaries": [
+    {
+      "scenario": "scale-up",
+      "query": "before",
+      "description": "setScale() to 1.75 times fit-width",
+      "runs": 3,
+      "errors": [],
+      "scale": [1.11, 1.93],
+      "blankFrames": 0,
+      "blankMs": 0,
+      "baseFrames": 0,
+      "baseMs": 0,
+      "timeToSharpMs": 85.66,
+      "sharpRuns": 3,
+      "baseRenders": 0,
+      "detailRenders": 5,
+      "cancelled": 0,
+      "canvasMiBBefore": 72.51,
+      "peakCanvasMiB": 251.07
+    },
+    {
+      "scenario": "scale-up",
+      "query": "",
+      "description": "setScale() to 1.75 times fit-width",
+      "runs": 3,
+      "errors": [],
+      "scale": [1.11, 1.93],
+      "blankFrames": 0,
+      "blankMs": 0,
+      "baseFrames": 0,
+      "baseMs": 0,
+      "timeToSharpMs": 78.04,
+      "sharpRuns": 3,
+      "baseRenders": 0,
+      "detailRenders": 5,
+      "cancelled": 0,
+      "canvasMiBBefore": 72.51,
+      "peakCanvasMiB": 251.07
+    }
+  ]
+}

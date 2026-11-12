@@ -301,7 +301,7 @@ try {
   // At (48, 349) in raw units, the first run is 18 units tall. Its font
   // height becomes its width when the file turns the page clockwise.
   check(
-    "unmounted text positions use the same rotated PDF coordinates",
+    "search boxes use the same rotated PDF coordinates",
     searchBox[0] === 698 && searchBox[1] === 96 && searchBox[2] === 36 && (searchBox[3] ?? 0) > 400,
     JSON.stringify(searchBox),
   );
