@@ -1,14 +1,14 @@
-import { cpSync, existsSync, mkdirSync, readdirSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
-import { defineConfig, type Plugin } from "vite";
+import { defineConfig } from "vite";
 import { crossOriginIsolation } from "../../bench/scripts/isolation.ts";
+import { benchmarkFiles } from "../../bench/scripts/static-files.ts";
 
 const exampleDir = fileURLToPath(new URL(".", import.meta.url));
 const benchDir = join(exampleDir, "../../bench");
-const publicDir = join(exampleDir, "public");
 // Optional unreleased pdf.js master build (bench/scripts/build-pdfjs-next.sh).
 const pdfjsNextDir = join(benchDir, "vendor/pdf.js/build/generic");
 const hasPdfjsNext = existsSync(join(pdfjsNextDir, "build/pdf.renderer.mjs"));
@@ -20,43 +20,18 @@ const reactPdfPdfjsDir = dirname(
   ),
 );
 
-/**
- * Stage the benchmark corpus, and pdf.js master's binary assets, as
- * same-origin files, and those of the pdf.js react-pdf depends on for
- * compare.html. The released pdf.js's come with ParaPDF.
- */
-function stageStaticFiles(): Plugin {
-  const stage = () => {
-    for (const dir of ["cmaps", "standard_fonts", "wasm", "iccs", "web/images"]) {
-      const reactPdfSource = join(reactPdfPdfjsDir, dir);
-      if (dir !== "web/images" && existsSync(reactPdfSource)) {
-        cpSync(reactPdfSource, join(publicDir, "react-pdf", dir), { recursive: true });
-      }
-      if (hasPdfjsNext) {
-        // The generic build keeps its assets, the annotation icons included, under web/.
-        const source =
-          dir === "web/images" ? join(pdfjsNextDir, dir) : join(pdfjsNextDir, "web", dir);
-        if (existsSync(source)) {
-          cpSync(source, join(publicDir, "pdfjs-next", dir), { recursive: true });
-        }
-      }
-    }
-    const corpusOut = join(publicDir, "corpus");
-    mkdirSync(corpusOut, { recursive: true });
-    for (const dir of ["corpus", "corpus/generated"]) {
-      const source = join(benchDir, dir);
-      if (!existsSync(source)) continue;
-      for (const name of readdirSync(source)) {
-        if (name.endsWith(".pdf")) cpSync(join(source, name), join(corpusOut, name));
-      }
-    }
-  };
-  return { name: "parapdf-stage-static-files", config: stage };
-}
-
 export default defineConfig(({ command }) => ({
   root: exampleDir,
-  plugins: [react(), stageStaticFiles(), crossOriginIsolation()],
+  plugins: [
+    react(),
+    benchmarkFiles(exampleDir, {
+      "react-pdf": { directory: reactPdfPdfjsDir },
+      "pdfjs-next": hasPdfjsNext
+        ? { directory: join(pdfjsNextDir, "web"), annotationIcons: true }
+        : null,
+    }),
+    crossOriginIsolation(),
+  ],
   resolve: {
     alias: [
       {
