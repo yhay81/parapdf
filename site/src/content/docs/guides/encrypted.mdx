@@ -40,7 +40,9 @@ document waits for the same answer.
 A source can carry the password too (see [Sources](/reference/sources/)); the
 document asks only when it is wrong. Changing `source.password` tries the new
 value on the shared document still loading, even before its password request
-arrives. This also works with `passwordPrompt={false}`.
+arrives. This also works with `passwordPrompt={false}`. Saving selected pages
+uses the password that opened the document, including one supplied through
+`configurePdfjs({ documentOptions: { password } })`.
 
 An application without such a prompt passes `passwordPrompt={false}` to
 `PdfDocument`: an encrypted document then fails at once with `status` `"error"`

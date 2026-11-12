@@ -337,7 +337,7 @@ export class DocumentSession {
     const loaded = await loader();
     signal.throwIfAborted();
     const { pdfjs } = loaded;
-    let password = source.password;
+    let password = source.password ?? loaded.documentParameters.password;
     const loadingTask = pdfjs.getDocument({
       ...loaded.documentParameters,
       // pdf.js transfers the bytes to its worker, which detaches the
@@ -354,7 +354,7 @@ export class DocumentSession {
         : "data" in source
           ? { data: source.data.slice(0) }
           : { range: bridgeTransport(pdfjs, source.range) }),
-      ...(source.password !== undefined ? { password: source.password } : {}),
+      ...(password !== undefined ? { password } : {}),
       worker: loaded.worker,
     });
     if (onProgress) {
