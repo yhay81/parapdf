@@ -1,4 +1,4 @@
-# 0027. Ship pdf.js 6.5.438 with opt-in worker drawing
+# 0028. Ship pdf.js 6.5.438 with opt-in worker drawing
 
 - Status: adopted
 - Date: 2026-11-12

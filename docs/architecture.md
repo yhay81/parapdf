@@ -175,7 +175,7 @@ that created it, or the `PdfViewer` that made its own.
   and gaps, with each browser's fixes; ported from pdf.js's
   `TextLayerBuilder` (`NOTICE.md`).
 - Drawing uses the main thread by default. `configurePdfjs({ rendererSrc: true })`
-  loads the packaged modern or legacy drawing worker on demand (decision 0027).
+  loads the packaged modern or legacy drawing worker on demand (decision 0028).
   A string supplies a custom worker URL.
 
 ### features/

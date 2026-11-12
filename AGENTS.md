@@ -198,7 +198,7 @@ that matters for performance or direction gets a decision record.
   `ENGINES`, `FILES`, `RUNS`, `PAGES`, `SCALE`; `OUTPUT`, a prefix that
   keeps an experiment's result files apart from the committed ones; `DIST`).
   `ENGINES` also takes the pdf.js engines' `-frame` and `-record` variants
-  (decisions 0005 and 0006), its released `-renderer` variants (decision 0027), and its `-pathtext` ones
+  (decisions 0005 and 0006), its released `-renderer` variants (decision 0028), and its `-pathtext` ones
   (decision 0013); `bench/scripts/fidelity.ts` compares what the variants
   draw, and `bench/scripts/frame-ops.ts` times the canvas
   and bitmap operations behind them; `bench/scripts/trace-main-thread.ts`

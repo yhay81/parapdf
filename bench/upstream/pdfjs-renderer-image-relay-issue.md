@@ -5,7 +5,7 @@ in Chromium and WebKit with pdf.js master's renderer worker, when released
 pdf.js, drawing on the main thread, hardly blocks it. The draft report for
 pdf.js is at the end; it has not been filed.
 
-ParaPDF shipped 6.4.299 at the time of this investigation. Decision 0027
+ParaPDF shipped 6.4.299 at the time of this investigation. Decision 0028
 records the same comparison on released 6.5.438 and keeps worker drawing
 opt-in.
 
