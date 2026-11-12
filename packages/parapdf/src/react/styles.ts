@@ -23,6 +23,9 @@
  * whole pixels, is larger than its text layer, which pdf.js rounds down.
  */
 export const VIEWER_CSS = `
+.parapdf-pages > section, .parapdf-text-layer {
+  --total-scale-factor: var(--scale-factor);
+}
 .parapdf-text-layer {
   color-scheme: only light;
   position: absolute;

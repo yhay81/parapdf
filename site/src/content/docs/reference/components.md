@@ -77,7 +77,8 @@ link labelled with the page, as `PdfThumbnails` does.
 Positions its children over the page of the overlay it is rendered in,
 inside `renderOverlay`. Coordinates become percentages of the page box, so
 zooming resizes the overlay through layout alone and never renders it
-again. Rendered anywhere else, it throws.
+again. A point is 1/72 inch, including on pages that set a different PDF
+user-space unit (`/UserUnit`). Rendered anywhere else, it throws.
 
 | Prop | |
 |---|---|

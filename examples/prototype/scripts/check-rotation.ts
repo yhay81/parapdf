@@ -70,7 +70,7 @@ const baseUrl = server.resolvedUrls?.local[0] ?? "http://127.0.0.1:4181/";
 const launched = await launchBrowser();
 console.log(`${launched.label}, engine ${engine}`);
 const errors: string[] = [];
-const newPage = async (file: string): Promise<Page> => {
+const newPage = async (file: string, query = ""): Promise<Page> => {
   const context = await launched.browser.newContext({
     viewport: { width: 1280, height: 900 },
     deviceScaleFactor: 2,
@@ -78,7 +78,7 @@ const newPage = async (file: string): Promise<Page> => {
   const page = await context.newPage();
   await restoreScaleFactor(page, `${baseUrl}calibrate.html`);
   page.on("pageerror", (error) => errors.push(error.message));
-  await page.goto(`${baseUrl}?engine=${engine}&file=${file}`);
+  await page.goto(`${baseUrl}?engine=${engine}&file=${file}${query}`);
   await page.waitForSelector('section[data-page="1"] .parapdf-text-layer span', {
     timeout: 30_000,
   });
@@ -257,6 +257,55 @@ try {
     JSON.stringify(native),
   );
   await page.context().close();
+
+  // Page five is A4 in /UserUnit 2 with an intrinsic quarter turn. Check
+  // the layers at their layout zoom and again while CSS follows a new zoom.
+  const mixed = await newPage("synthetic-mixed-sizes.pdf", "&scale=1&forms=1&annotations=1");
+  await mixed.evaluate(() => window.__viewer?.goToPage(4));
+  const fifth = mixed.locator('section[data-page="5"]');
+  await fifth.locator(".textWidgetAnnotation input").waitFor({ state: "attached" });
+  await fifth.locator(".parapdf-editor-layer[data-main-rotation]").waitFor({ state: "attached" });
+  await mixed.evaluate(() => window.__annotations?.setTool("ink"));
+  for (const zoom of [1, 1.5]) {
+    await mixed.evaluate((scale) => window.__viewer?.setScale(scale), zoom);
+    const bounds = await fifth.evaluate((host) => {
+      const origin = host.getBoundingClientRect();
+      const box = (selector: string) => {
+        const rect = host.querySelector(selector)?.getBoundingClientRect();
+        return rect && [rect.left - origin.left, rect.top - origin.top, rect.width, rect.height];
+      };
+      const text = box(".parapdf-text-layer span");
+      return {
+        text,
+        link: box(".linkAnnotation"),
+        field: box(".textWidgetAnnotation"),
+        editor: box(".parapdf-editor-layer"),
+      };
+    });
+    const at = (actual: number[] | undefined, expected: number[]) =>
+      actual?.every((n, i) => Math.abs(n - (expected[i] ?? 0) * zoom) < 2) ?? false;
+    check(
+      `rotated text and controls follow the page's units at scale ${zoom}`,
+      !!bounds.text &&
+        Math.abs((bounds.text[1] ?? 0) - 96 * zoom) < 2 &&
+        at(bounds.link, [280, 80, 24, 120]) &&
+        at(bounds.field, [200, 80, 24, 120]) &&
+        at(bounds.editor, [0, 0, 842, 595]),
+      JSON.stringify(bounds),
+    );
+  }
+  const searchBox = await mixed.evaluate(async () => {
+    const text = await window.__viewer?.session?.text(4);
+    return Array.from(text?.boxes.slice(0, 4) ?? []);
+  });
+  // At (48, 349) in raw units, the first run is 18 units tall. Its font
+  // height becomes its width when the file turns the page clockwise.
+  check(
+    "unmounted text positions use the same rotated PDF coordinates",
+    searchBox[0] === 698 && searchBox[1] === 96 && searchBox[2] === 36 && (searchBox[3] ?? 0) > 400,
+    JSON.stringify(searchBox),
+  );
+  await mixed.context().close();
 
   // A link followed in a turned view lands on its target.
   const guide = await newPage("usrguide.pdf");

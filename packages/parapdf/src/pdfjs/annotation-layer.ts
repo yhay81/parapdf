@@ -6,6 +6,7 @@ import {
   pageViewport,
   RenderCancelledError,
   type Rotation,
+  setLayerUnit,
 } from "./draw.ts";
 import type { LoadedPdfjs } from "./loader.ts";
 import type { StructTreeBuilder } from "./struct-tree.ts";
@@ -229,6 +230,7 @@ export function buildAnnotationLayer(
       fieldObjects,
     ]);
     if (cancelled) throw new RenderCancelledError("annotation layer cancelled");
+    setLayerUnit(container, page);
     const viewport = pageViewport(page, cssScale, rotation);
     const linkService = createLinkService(links, doc, editor?.eventBus, forms ? scripting : null);
     // Without forms, form fields stay in the drawing (pdf.js's default

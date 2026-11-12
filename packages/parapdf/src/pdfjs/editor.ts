@@ -5,7 +5,7 @@
 
 import type * as Pdfjs from "pdfjs-dist";
 import type { AnnotationLayerEditing } from "./annotation-layer.ts";
-import { RenderCancelledError, type Rotation } from "./draw.ts";
+import { RenderCancelledError, type Rotation, setLayerUnit } from "./draw.ts";
 import { l10n, labelElements } from "./editor-labels.ts";
 import type {
   AnnotationAltText,
@@ -1043,6 +1043,7 @@ export function createPdfjsAnnotationEditor(
         layers.get(pageIndex)?.destroy();
         // pdf.js finds the text a selection highlights through its class.
         textLayer?.classList.add("textLayer");
+        setLayerUnit(container, page);
         container.dir = getComputedStyle(options.container).direction;
         const drawLayer = new pdfjs.DrawLayer({ pageIndex });
         drawLayer.setParent(drawings);

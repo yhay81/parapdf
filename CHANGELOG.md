@@ -6,6 +6,10 @@ change the API.
 
 ## Unreleased
 
+- Text selection, links, form fields, and annotation editors align with the
+  drawing on pages with a nondefault PDF user-space unit. Search uses the
+  page's unit and intrinsic rotation when locating text.
+
 - Updated pdfjs-dist to 6.5.438. JPEG 2000 images wrapped in LZW now render
   from the bundled decoder. Set `configurePdfjs({ rendererSrc: true })` to
   use the packaged drawing worker with either the modern or legacy build.

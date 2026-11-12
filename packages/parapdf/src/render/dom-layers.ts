@@ -33,7 +33,7 @@ import type { TextSelectionTracker } from "./selection.ts";
  * annotation layer.
  *
  * A text layer keeps the zoom it was laid out for: it carries its own
- * `--total-scale-factor`, and later zooms scale the laid-out layer with CSS.
+ * `--scale-factor`, and later zooms scale the laid-out layer with CSS.
  * Laying out every mounted page's text runs again at each zoom step was most
  * of the main thread's work while zooming. A visible page is laid out again,
  * one per idle period, only once the zoom goes in past TEXT_RELAYOUT_ZOOM
@@ -122,8 +122,8 @@ const TEXT_RELAYOUT_ZOOM = 2;
  * point, whatever its page shows; null hands it back to the page's zoom.
  */
 function pinTextLayer(container: HTMLElement, scale: number | null): void {
-  if (scale === null) container.style.removeProperty("--total-scale-factor");
-  else container.style.setProperty("--total-scale-factor", String(scale));
+  if (scale === null) container.style.removeProperty("--scale-factor");
+  else container.style.setProperty("--scale-factor", String(scale));
   container.style.scale = "";
 }
 
