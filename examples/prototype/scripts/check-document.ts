@@ -509,7 +509,8 @@ try {
       launched.browser,
       demo("file=synthetic-restricted.pdf&forms=1&annotations=1&permissions=1"),
     );
-    await page.waitForSelector(".parapdf-text-layer span");
+    // The form layer is built after the text layer, in a separate idle turn.
+    await page.waitForSelector('.parapdf-annotation-layer input[name="comment"]');
     const enforced = await page.evaluate(async () => {
       const span = document.querySelector(".parapdf-text-layer span");
       window.print = () => {};
