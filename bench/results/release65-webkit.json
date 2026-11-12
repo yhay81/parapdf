@@ -27,7 +27,7 @@
     "settings": {
       "runs": 3,
       "pages": 2,
-      "scale": 2.7,
+      "scale": 2.6667,
       "engines": [
         "pdfjs-hwa",
         "pdfjs-hwa-renderer"

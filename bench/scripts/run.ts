@@ -280,8 +280,10 @@ writeFileSync(
   JSON.stringify({ environment, results }, null, 1),
 );
 // Timer resolution is far coarser than float noise, so keep one decimal.
-const roundMetrics = (_key: string, value: unknown) =>
-  typeof value === "number" && !Number.isInteger(value) ? Math.round(value * 10) / 10 : value;
+const roundMetrics = (key: string, value: unknown) =>
+  key !== "scale" && typeof value === "number" && !Number.isInteger(value)
+    ? Math.round(value * 10) / 10
+    : value;
 writeFileSync(
   join(resultsDir, `${output}${browserName}.json`),
   `${JSON.stringify({ environment, payload, summaries }, roundMetrics, 2)}\n`,

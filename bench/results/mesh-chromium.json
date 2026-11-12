@@ -1,0 +1,160 @@
+{
+  "environment": {
+    "runAt": "2026-11-12T14:22:01.903Z",
+    "os": "darwin 27.2.0 arm64",
+    "cpu": "Apple M2 Pro (12 logical cores)",
+    "memoryGiB": 32,
+    "browserName": "chromium",
+    "browser": "Chromium 156.0.8078.4",
+    "headless": true,
+    "power": {
+      "source": "ac",
+      "lowPowerMode": false
+    },
+    "turnTaking": "waited 0 times (0 min in all) for other Playwright browsers and repeated 0 jobs that another browser overlapped",
+    "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M2 Pro, Unspecified Version)",
+    "crossOriginIsolated": true,
+    "idle": {
+      "timerLagP50Ms": 0.6,
+      "timerLagP95Ms": 1.2,
+      "frameIntervalMs": 16.7
+    },
+    "versions": {
+      "pdfjs-dist": "6.5.438",
+      "@embedpdf/pdfium": "2.15.1",
+      "hayro": "0.8.0"
+    },
+    "settings": {
+      "runs": 5,
+      "pages": 1,
+      "scale": 2.6667,
+      "engines": [
+        "pdfjs-hwa",
+        "pdfjs-hwa-webgpu"
+      ],
+      "output": "mesh-"
+    }
+  },
+  "payload": {
+    "pdfjs": {
+      "files": [
+        "pdf.worker.min-CIqJB0yW.mjs",
+        "pdfjs-BRItUrKq.js"
+      ],
+      "raw": 1716705,
+      "gzip": 511674,
+      "brotli": 421047
+    },
+    "pdfjs-next (workers unminified)": {
+      "files": [
+        "pdf.worker-CQUdiPT9.mjs",
+        "pdfjs-next-BMjnSZ5k.js"
+      ],
+      "raw": 532,
+      "gzip": 394,
+      "brotli": 327
+    },
+    "pdfium": {
+      "files": [
+        "pdfium-BJ2Yip8Q.wasm",
+        "pdfium-Cq6T_0ZZ.js",
+        "pdfium.worker-B6sCQZf0.js"
+      ],
+      "raw": 4803543,
+      "gzip": 2186865,
+      "brotli": 1684405
+    },
+    "hayro": {
+      "files": [
+        "hayro-CPRxIzm9.js",
+        "hayro.worker-DtVKusZb.js",
+        "hayro_wasm_bench_bg-B6N7ImOe.wasm"
+      ],
+      "raw": 4061725,
+      "gzip": 1748434,
+      "brotli": 1396376
+    }
+  },
+  "summaries": [
+    {
+      "file": "synthetic-mesh-sparse.pdf",
+      "engine": "pdfjs-hwa",
+      "runs": 5,
+      "pageCount": 1,
+      "renderedPages": 1,
+      "usesRendererWorker": false,
+      "initMs": 106.8,
+      "openMs": 3.1,
+      "firstRenderMs": 40.2,
+      "firstPresentMs": 49.8,
+      "pagePresentP50Ms": 49.8,
+      "pagePresentP95Ms": 50,
+      "renderPhaseMs": 93.7,
+      "blockedMs": 20.3,
+      "lagP95Ms": 22.3,
+      "lagMaxMs": 22.3,
+      "longTaskBlockingMs": 0,
+      "wasmMemoryMiB": null
+    },
+    {
+      "file": "synthetic-mesh-sparse.pdf",
+      "engine": "pdfjs-hwa-webgpu",
+      "runs": 5,
+      "pageCount": 1,
+      "renderedPages": 1,
+      "usesRendererWorker": false,
+      "initMs": 105.2,
+      "openMs": 4,
+      "firstRenderMs": 17.9,
+      "firstPresentMs": 50,
+      "pagePresentP50Ms": 50,
+      "pagePresentP95Ms": 50.2,
+      "renderPhaseMs": 66.7,
+      "blockedMs": 0,
+      "lagP95Ms": 1.2,
+      "lagMaxMs": 1.2,
+      "longTaskBlockingMs": 0,
+      "wasmMemoryMiB": null
+    },
+    {
+      "file": "synthetic-mesh-dense.pdf",
+      "engine": "pdfjs-hwa",
+      "runs": 5,
+      "pageCount": 1,
+      "renderedPages": 1,
+      "usesRendererWorker": false,
+      "initMs": 103.6,
+      "openMs": 3,
+      "firstRenderMs": 42.5,
+      "firstPresentMs": 49.7,
+      "pagePresentP50Ms": 49.7,
+      "pagePresentP95Ms": 50.1,
+      "renderPhaseMs": 97.9,
+      "blockedMs": 22.5,
+      "lagP95Ms": 24.5,
+      "lagMaxMs": 24.5,
+      "longTaskBlockingMs": 0,
+      "wasmMemoryMiB": null
+    },
+    {
+      "file": "synthetic-mesh-dense.pdf",
+      "engine": "pdfjs-hwa-webgpu",
+      "runs": 5,
+      "pageCount": 1,
+      "renderedPages": 1,
+      "usesRendererWorker": false,
+      "initMs": 105.3,
+      "openMs": 4.1,
+      "firstRenderMs": 18.1,
+      "firstPresentMs": 50.1,
+      "pagePresentP50Ms": 50.1,
+      "pagePresentP95Ms": 50.6,
+      "renderPhaseMs": 67.3,
+      "blockedMs": 0,
+      "lagP95Ms": 1,
+      "lagMaxMs": 1,
+      "longTaskBlockingMs": 0,
+      "wasmMemoryMiB": null
+    }
+  ]
+}

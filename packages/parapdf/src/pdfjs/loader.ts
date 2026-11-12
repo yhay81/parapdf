@@ -11,7 +11,10 @@ export type PdfjsDocumentOptions = Omit<
     string | URL | ArrayBuffer | ArrayBufferView | undefined
   >,
   "url" | "data" | "range" | "worker"
->;
+> & {
+  /** pdf.js 6.5 reads this option but omits it from its declarations. Defaults to false. */
+  enableWebGPU?: boolean;
+};
 
 /** A build of the pdf.js version the package ships, with its worker from the package. */
 export interface PdfjsBuild {

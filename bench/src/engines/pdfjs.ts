@@ -14,20 +14,23 @@ export function createPdfjsEngine({
   record = false,
   pathText = false,
   renderer = false,
+  webGPU = false,
 }: {
   hwa: boolean;
   frame: boolean;
   record?: boolean;
   pathText?: boolean;
   renderer?: boolean;
+  webGPU?: boolean;
 }): EngineAdapter {
   return createPdfjsAdapter({
-    id: `pdfjs${hwa ? "-hwa" : ""}${frame ? "-frame" : ""}${record ? "-record" : ""}${pathText ? "-pathtext" : ""}${renderer ? "-renderer" : ""}`,
+    id: `pdfjs${hwa ? "-hwa" : ""}${frame ? "-frame" : ""}${record ? "-record" : ""}${pathText ? "-pathtext" : ""}${renderer ? "-renderer" : ""}${webGPU ? "-webgpu" : ""}`,
     lib: pdfjs,
     label: "pdfjs-dist",
     workerUrl,
     rendererUrl: renderer ? rendererUrl : undefined,
     assetBase: "/pdfjs/",
+    webGPU,
     hwa,
     frame,
     record,

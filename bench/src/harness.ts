@@ -49,11 +49,12 @@ for (const [type, sink] of [
 }
 
 async function loadEngine(engineId: string): Promise<EngineAdapter> {
-  if (engineId === "pdfjs-renderer" || engineId === "pdfjs-hwa-renderer") {
+  if (/^pdfjs(-hwa)?-(renderer|webgpu)$/.test(engineId)) {
     return (await import("./engines/pdfjs.ts")).createPdfjsEngine({
-      hwa: engineId === "pdfjs-hwa-renderer",
+      hwa: engineId.startsWith("pdfjs-hwa-"),
       frame: false,
-      renderer: true,
+      renderer: engineId.endsWith("-renderer"),
+      webGPU: engineId.endsWith("-webgpu"),
     });
   }
   // "-pathtext" variants of released pdf.js draw text as paths

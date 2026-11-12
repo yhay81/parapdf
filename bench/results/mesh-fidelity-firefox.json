@@ -1,0 +1,30 @@
+{
+  "runAt": "2026-11-12T14:41:49.391Z",
+  "browser": "Firefox 157.0",
+  "versions": {
+    "pdfjs-hwa": "pdfjs-dist 6.5.438",
+    "pdfjs-hwa-webgpu": "pdfjs-dist 6.5.438"
+  },
+  "pages": 1,
+  "scale": 2.6667,
+  "rows": [
+    {
+      "file": "synthetic-mesh-sparse.pdf",
+      "engine": "pdfjs-hwa",
+      "variant": "pdfjs-hwa-webgpu",
+      "pages": 1,
+      "identical": 1,
+      "differing": [],
+      "meshDraws": 0
+    },
+    {
+      "file": "synthetic-mesh-dense.pdf",
+      "engine": "pdfjs-hwa",
+      "variant": "pdfjs-hwa-webgpu",
+      "pages": 1,
+      "identical": 1,
+      "differing": [],
+      "meshDraws": 0
+    }
+  ]
+}

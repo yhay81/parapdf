@@ -11,6 +11,9 @@ change the API.
   use the packaged drawing worker with either the modern or legacy build.
   Default rendering still uses GPU-backed canvases on the main thread.
 
+- `documentOptions.enableWebGPU` is typed for applications that opt in to
+  GPU drawing of mesh shadings. The default is off.
+
 - Search starts on the current page and wraps at the end of the document.
   Choosing the next or previous match during a search keeps it selected
   as more results arrive.
