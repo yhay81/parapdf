@@ -407,7 +407,7 @@ async function measure(
     const { samples, start, arrived } = run;
     const moving = samples.filter((sample) => sample.t >= start && sample.t <= arrived);
     const stat = (key: string) => (run.statsAfter[key] ?? 0) - (run.statsBefore[key] ?? 0);
-    const MiB = (pixels: number) => (pixels * 4) / 2 ** 20;
+    const toMiB = (pixels: number) => (pixels * 4) / 2 ** 20;
     const flipTimes = run.flips.map((at, index) => {
       // Each flip's samples end where the next flip starts.
       const until = run.flips[index + 1] ?? Number.POSITIVE_INFINITY;
@@ -435,8 +435,8 @@ async function measure(
       lagMaxMs: run.lagMaxMs,
       droppedFrames: run.droppedFrames,
       frames: run.frames,
-      peakCanvasMiB: MiB(Math.max(0, ...samples.map((sample) => sample.canvasPixels))),
-      peakCacheMiB: MiB(Math.max(0, ...samples.map((sample) => sample.cachePixels))),
+      peakCanvasMiB: toMiB(Math.max(0, ...samples.map((sample) => sample.canvasPixels))),
+      peakCacheMiB: toMiB(Math.max(0, ...samples.map((sample) => sample.cachePixels))),
     });
   } catch (error) {
     result.error = error instanceof Error ? error.message.split("\n")[0] : String(error);

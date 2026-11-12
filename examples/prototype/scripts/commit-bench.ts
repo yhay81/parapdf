@@ -540,15 +540,15 @@ async function measure(
     }
     const diff = (key: string) =>
       (result.statsAtEnd?.[key] ?? 0) - (result.statsAtCommit?.[key] ?? 0);
-    const MiB = (pixels: number) => (pixels * 4) / 2 ** 20;
+    const toMiB = (pixels: number) => (pixels * 4) / 2 ** 20;
     return {
       scale,
       timeToSharpMs: sharpFrom === null ? null : sharpFrom - commitAt,
       baseRenders: diff("base"),
       detailRenders: diff("detail"),
       cancelled: diff("cancelled"),
-      canvasMiBBefore: MiB(before[0]?.canvasPixels ?? 0),
-      peakCanvasMiB: MiB(Math.max(...after.map((frame) => frame.canvasPixels))),
+      canvasMiBBefore: toMiB(before[0]?.canvasPixels ?? 0),
+      peakCanvasMiB: toMiB(Math.max(...after.map((frame) => frame.canvasPixels))),
     };
   } finally {
     await context.close();
