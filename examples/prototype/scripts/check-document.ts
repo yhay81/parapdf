@@ -92,6 +92,7 @@ interface Parapdf {
 /** What the demo exposes on `window` for these checks. */
 interface Demo {
   __setViewerProps(props: Record<string, unknown>): void;
+  __setFeatures(props: Record<string, unknown>): void;
   __viewer?: Viewer;
   __session?: {
     state: { get(): { status: string; permissions: Record<string, boolean> | null } };
@@ -550,13 +551,13 @@ try {
     );
     check("with permission to fill forms, fields can be filled in", enforced.field);
     await page.evaluate(() =>
-      (window as unknown as Demo).__setViewerProps({ enforcePermissions: false }),
+      (window as unknown as Demo).__setFeatures({ enforcePermissions: false }),
     );
     await page.waitForFunction(
       () => (window as unknown as Demo).__annotations?.store.get().state != null,
     );
     await page.evaluate(() =>
-      (window as unknown as Demo).__setViewerProps({ enforcePermissions: true }),
+      (window as unknown as Demo).__setFeatures({ enforcePermissions: true }),
     );
     await page.waitForFunction(
       () => (window as unknown as Demo).__annotations?.store.get().state === null,
@@ -1001,7 +1002,7 @@ try {
     const { page, errors } = await open(launched.browser, demo("file=synthetic-scripts.pdf"));
     await page.waitForFunction(() => (window as unknown as Demo).__viewer?.hasPixels(0));
     await page.evaluate(() =>
-      (window as unknown as Demo).__setViewerProps({ forms: true, formScripts: true }),
+      (window as unknown as Demo).__setFeatures({ forms: true, formScripts: true }),
     );
     const opened = page.locator('.parapdf-annotation-layer input[name="opened"]');
     await opened.waitFor();

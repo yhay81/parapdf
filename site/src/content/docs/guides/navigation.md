@@ -90,15 +90,17 @@ document keep working.
 ## Addresses in the text
 
 Documents made from text often show URLs and e-mail addresses that the
-file does not link. `autoLinks` on `PdfViewer` turns them into links, as
-pdf.js's viewer does: once a page's text and annotation layers are built,
-the `https://`, `www.`, and e-mail addresses in its text become links of
-its annotation layer, except where a link of the file already covers them.
+file does not link. `<PdfAutoLinks />` inside `<PdfViewer>` turns them into
+links, as pdf.js's viewer does: once a page's text and annotation layers are
+built, the `https://`, `www.`, and e-mail addresses in its text become links
+of its annotation layer, except where a link of the file already covers them.
 
 ```tsx
-<PdfViewer autoLinks />
+<PdfViewer>
+  <PdfAutoLinks />
+</PdfViewer>
 ```
 
 They need `textLayer` and `annotationLayer`, which are on by default, and
-follow `externalLinks`. The option is off by default, and its code loads
-only when it is set.
+follow `externalLinks`. Its code is in your bundle only when you import
+`PdfAutoLinks`.

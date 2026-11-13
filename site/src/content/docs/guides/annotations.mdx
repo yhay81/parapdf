@@ -5,11 +5,11 @@ description: Let the reader create highlights, text, drawings, images, and signa
 
 import { AnnotationsExample } from "../../../components/examples.tsx";
 
-With `<PdfViewer annotationEditing />`, the reader can create highlights,
-text, drawings, images, and signatures, with pdf.js's editors.
-`useAnnotations(viewer?)` gives the editing state, the current tool and each
-tool's style, with the methods below; it is null until the editor's code
-loads, and without the option.
+With `<PdfAnnotationEditor />` mounted inside `<PdfViewer>`, the reader can
+create highlights, text, drawings, images, and signatures, with pdf.js's
+editors. `useAnnotations(viewer?)` gives the editing state, the current tool,
+and each tool's style, with the methods below, tracking which fields the
+component reads; `state` and `styles` are null until editing starts.
 
 <AnnotationsExample client:visible />
 
@@ -31,16 +31,17 @@ color and a delete button. Ctrl or ⌘ with Z undoes, and the arrow keys move
 what is selected.
 
 ```tsx
-import { useAnnotations } from "parapdf";
+import { PdfAnnotationEditor, PdfDocument, PdfViewer, useAnnotations } from "parapdf";
 
 function AnnotationTools() {
   const annotations = useAnnotations();
-  if (!annotations) return null;
+  const ready = annotations.state !== null;
   const ink = annotations.styles?.ink;
   return (
     <div role="toolbar" aria-label="Annotations">
       <button
         type="button"
+        disabled={!ready}
         aria-pressed={annotations.tool === "ink"}
         onClick={() => annotations.setTool("ink")}
       >
@@ -49,6 +50,7 @@ function AnnotationTools() {
       <input
         type="color"
         aria-label="Line color"
+        disabled={!ready}
         value={ink?.color.toLowerCase() ?? "#000000"}
         onChange={(event) => annotations.setStyle("ink", { color: event.target.value })}
       />
@@ -58,7 +60,21 @@ function AnnotationTools() {
     </div>
   );
 }
+
+export function AnnotatedReader() {
+  return (
+    <PdfDocument source="/manual.pdf">
+      <AnnotationTools />
+      <PdfViewer style={{ height: "80vh" }}>
+        <PdfAnnotationEditor />
+      </PdfViewer>
+    </PdfDocument>
+  );
+}
 ```
+
+`<PdfAnnotationEditor>` also accepts `tool`, `defaultTool`, and `onToolChange`
+when the application controls or observes the active tool directly.
 
 ## Styles, undo, and selection
 
@@ -95,8 +111,8 @@ annotation's popup note and the alternative text in its structure;
 ```tsx
 function SelectedAnnotation() {
   const annotations = useAnnotations();
-  const selected = annotations?.state?.selected;
-  if (!annotations || !selected || selected.type === "freetext") return null;
+  const selected = annotations.state?.selected;
+  if (!selected || selected.type === "freetext") return null;
   return (
     <form
       // Starts again when another annotation is selected, or undo changes it.
@@ -200,7 +216,8 @@ changed.
 Annotations belong to the viewer that created them: they stay while its
 `PdfViewer` unmounts and mounts again, and are gone once its owner
 (`PdfDocument`, `PdfView`, or the component that called `useCreateViewer()`)
-unmounts or `annotationEditing` turns off, so export or save them before. They stay too while React hides the viewer or its
+unmounts or `<PdfAnnotationEditor>` unmounts from an attached `PdfViewer`, so
+export or save them before. They stay too while React hides the viewer or its
 `PdfDocument` and keeps their state (`<Activity>`), and come back with the
 same document and revision, including deletions of annotations originally
 in the file. Saving and printing wait for images and other edits to finish
@@ -220,14 +237,18 @@ viewer goes.
 
 ## Costs and limits
 
-The editor's code and styles load only once `annotationEditing` is set, so
-applications that do not edit annotations do not download them;
-`useAnnotations()` is null until then. The option is live: setting it needs
-no remount. `useAnnotationEditing(viewer?)` gives the feature itself, whose
-`store` reads its state as it is, without waiting for React to render. Thumbnails show
-pages without the annotations created, as pdf.js's do.
+The editor's code and styles are in your bundle only when you import
+`PdfAnnotationEditor` (wrap it in `React.lazy()` if only some sessions edit
+annotations). Mounting or unmounting `<PdfAnnotationEditor>` needs no remount
+of `<PdfViewer>`. `useAnnotations(viewer?)` always returns an
+`AnnotationControls` object (`state` and `styles` are null until editing
+starts) and tracks read fields so components that read only methods (such as
+`const { setTool } = useAnnotations()`) never re-render on annotation changes.
+`useAnnotationEditing(viewer?)` gives the underlying feature handle, whose
+`store` reads its state directly. Thumbnails show pages without the
+annotations created, as pdf.js's do.
 
 Label the editor's controls in the application's language with
-`annotationLabels`; the defaults are pdf.js's English names. New labels
-apply without losing the annotations created.
+`PdfAnnotationEditor`'s `labels`; the defaults are pdf.js's English names. New
+labels apply without losing the annotations created.
 

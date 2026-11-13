@@ -23,17 +23,25 @@ Documents that are not encrypted permit everything.
 
 ## Following them
 
-The viewer only reports permissions unless `<PdfViewer enforcePermissions />`,
-as in pdf.js. Then:
+The viewer only reports permissions unless `<PdfPermissions />` is mounted for
+it (typically inside `<PdfViewer>`), as in pdf.js:
+
+```tsx
+<PdfViewer>
+  <PdfPermissions />
+</PdfViewer>
+```
+
+Then:
 
 - without `copy`, the text cannot be selected or copied, though assistive
   technology and `getText()` still read it;
 - without `print`, `print()` fails;
 - without `annotate`, annotations cannot be created, even with
-  `annotationEditing`;
-- with `forms`, fields can be filled in only with `fillForms` or `annotate`.
+  `<PdfAnnotationEditor />`;
+- with `<PdfForms />`, fields can be filled in only with `fillForms` or `annotate`.
 
-Changing `enforcePermissions` applies to the open document immediately.
+Mounting or unmounting `<PdfPermissions />` applies to the open document immediately.
 Existing form values and annotations are kept when editing is restricted.
 
 `permits(viewer, what)` says whether the viewer allows `"print"`, `"copy"`,

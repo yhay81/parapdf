@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { DocumentSession } from "../src/document/session.ts";
 import { ExtensionSet, type ViewerExtension } from "../src/view/extensions.ts";
-import { settle } from "./fake-pdfjs.ts";
 
 const session = {} as DocumentSession;
 const scroller = {} as HTMLElement;
@@ -144,33 +143,5 @@ describe("ExtensionSet", () => {
     const late = listening();
     set.add(late.extension, null);
     assert.deepEqual(late.heard, []);
-  });
-
-  it("waits for the features loading now, and goes on when one fails to load", async (context) => {
-    const errors = context.mock.method(console, "error", () => {});
-    const set = new ExtensionSet();
-    let load = () => {};
-    set.defer(new Promise<void>((resolve) => (load = resolve)));
-    set.defer(Promise.reject(new Error("no module")));
-    let loaded = false;
-    void set.loaded().then(() => (loaded = true));
-    // A feature that starts loading later does not hold up the wait before it.
-    set.defer(new Promise<void>(() => {}));
-    await settle();
-    assert.equal(loaded, false);
-    assert.equal(errors.mock.callCount(), 1);
-    load();
-    await settle();
-    assert.equal(loaded, true);
-  });
-
-  it("is loaded at once with no feature loading", async () => {
-    const set = new ExtensionSet();
-    set.defer(Promise.resolve());
-    await settle();
-    let loaded = false;
-    void set.loaded().then(() => (loaded = true));
-    await Promise.resolve();
-    assert.equal(loaded, true);
   });
 });

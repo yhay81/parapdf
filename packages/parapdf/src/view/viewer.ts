@@ -5,7 +5,7 @@
 // NOTICE.md.
 
 import { documentOf, type PdfSession } from "../document/pdf-session.ts";
-import type { DocumentSession, PageSize, PdfPermissions } from "../document/session.ts";
+import type { DocumentPermissions, DocumentSession, PageSize } from "../document/session.ts";
 import type {
   AnnotationLayerHandle,
   AnnotationLayerScripting,
@@ -99,7 +99,7 @@ interface Showing {
   /** The document, once it has loaded. */
   session: DocumentSession | null;
   /** What the document permits, once it has loaded. */
-  permissions: PdfPermissions | null;
+  permissions: DocumentPermissions | null;
   /** Which of the document's layers show, in every viewer of it. */
   layers: LayerState | null;
   /** The renderer of its pages, while the viewport shows them. */
@@ -357,7 +357,7 @@ export class Viewer {
    * null until it has loaded. Read before its first layout, for features
    * that follow it.
    */
-  get permissions(): PdfPermissions | null {
+  get permissions(): DocumentPermissions | null {
     return this.#shown?.permissions ?? null;
   }
 
@@ -429,14 +429,6 @@ export class Viewer {
       extension,
       scroller && content ? { scroller, content, signal: this.#viewportControl.signal } : null,
     );
-  }
-
-  /**
-   * Make the next document's first layout wait for `loading`, a feature
-   * loading for this viewer that changes how pages are drawn.
-   */
-  defer(loading: Promise<unknown>): void {
-    this.#extensions.defer(loading);
   }
 
   /**
@@ -634,7 +626,6 @@ export class Viewer {
             return null;
           })
         : null,
-      this.#extensions.loaded(),
     ]);
     signal.throwIfAborted();
     shown.session = session;

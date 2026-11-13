@@ -49,9 +49,7 @@ const SIZES: Record<keyof AnnotationStyles, { label: string; min: number; max: n
  */
 export function AnnotationBar({ onDone }: { onDone: () => void }) {
   const annotations = useAnnotations();
-  const tool = annotations?.tool ?? "none";
-  const editing = annotations?.state ?? null;
-  const styles = annotations?.styles ?? null;
+  const { tool, state: editing, styles } = annotations;
   const imageInput = useRef<HTMLInputElement>(null);
   const styled = tool === "highlight" || tool === "freetext" || tool === "ink" ? tool : null;
   return (
@@ -64,7 +62,7 @@ export function AnnotationBar({ onDone }: { onDone: () => void }) {
             label={label}
             aria-pressed={tool === value}
             disabled={!editing}
-            onClick={() => void annotations?.setTool(value)}
+            onClick={() => void annotations.setTool(value)}
           />
         ))}
         <IconButton
@@ -77,7 +75,7 @@ export function AnnotationBar({ onDone }: { onDone: () => void }) {
         <Signature
           disabled={!editing}
           pressed={tool === "signature"}
-          onSign={(text) => void annotations?.addSignature({ text }, { description: text })}
+          onSign={(text) => void annotations.addSignature({ text }, { description: text })}
         />
         <input
           ref={imageInput}
@@ -87,11 +85,11 @@ export function AnnotationBar({ onDone }: { onDone: () => void }) {
           onChange={(event) => {
             const image = event.target.files?.[0];
             event.target.value = "";
-            if (image) void annotations?.addImage(image, { altText: image.name });
+            if (image) void annotations.addImage(image, { altText: image.name });
           }}
         />
       </div>
-      {styled && styles && annotations ? (
+      {styled && styles ? (
         <Style tool={styled} styles={styles} setStyle={annotations.setStyle} />
       ) : null}
       <span className="demo-divider" />
@@ -101,21 +99,21 @@ export function AnnotationBar({ onDone }: { onDone: () => void }) {
           label="Undo"
           shortcut={`${modifier}Z`}
           disabled={!editing?.canUndo}
-          onClick={() => annotations?.undo()}
+          onClick={() => annotations.undo()}
         />
         <IconButton
           icon="redo"
           label="Redo"
           shortcut={modifier === "⌘" ? "⌘⇧Z" : "Ctrl+Y"}
           disabled={!editing?.canRedo}
-          onClick={() => annotations?.redo()}
+          onClick={() => annotations.redo()}
         />
         <IconButton
           icon="trash"
           label="Delete the selected annotations"
           shortcut="Delete"
           disabled={!editing?.hasSelection}
-          onClick={() => annotations?.deleteSelected()}
+          onClick={() => annotations.deleteSelected()}
         />
       </div>
       <span className="demo-divider" />
@@ -123,7 +121,7 @@ export function AnnotationBar({ onDone }: { onDone: () => void }) {
         type="button"
         className="demo-done"
         onClick={() => {
-          void annotations?.setTool("none");
+          void annotations.setTool("none");
           onDone();
         }}
       >

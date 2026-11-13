@@ -26,7 +26,7 @@ description: How ParaPDF exposes documents to assistive technology.
   technology.
 - `pageColors` draws pages in two colors, for example `Canvas` and
   `CanvasText` in forced-colors mode.
-- With `enforcePermissions` and a document that forbids copying, assistive
+- With `<PdfPermissions />` and a document that forbids copying, assistive
   technology still reads the text.
 - Only mounted pages have text layers, so assistive technology reaches the
   pages near the viewport, not the whole document at once (see
@@ -67,4 +67,4 @@ remaining unverified interactions.
 Applications own the rest of the interface: label your toolbar, announce
 search results with an `aria-live` region as [the search
 guide](/guides/search/) does, and label the annotation editor's controls with
-`annotationLabels`.
+`PdfAnnotationEditor`'s `labels`.

@@ -2,11 +2,9 @@
 
 import {
   type CSSProperties,
-  lazy,
   memo,
   type ReactNode,
   type Ref,
-  Suspense,
   useEffect,
   useImperativeHandle,
   useLayoutEffect,
@@ -24,7 +22,6 @@ import {
   openingFragment,
 } from "../features/initial-view.ts";
 import type { PageColors, Rotation } from "../pdfjs/draw.ts";
-import type { AnnotationLabels } from "../pdfjs/editor-types.ts";
 import type { Direction, ScrollMode, SpreadMode } from "../view/layout.ts";
 import type { ViewerOptions } from "../view/options.ts";
 import type { FitMode, PointerTool, ViewerState } from "../view/state.ts";
@@ -42,7 +39,6 @@ import {
   useSession,
   ViewerContext,
 } from "./context.ts";
-import { setFeatureOptions } from "./features.ts";
 import { VIEWER_CSS } from "./styles.ts";
 
 /** A zoom: CSS pixels per PDF point, or a fit that keeps fitting as the viewport resizes. */
@@ -108,50 +104,9 @@ export interface PdfViewerProps extends InitialViewOptions {
   textLayer?: boolean;
   /**
    * Build annotation layers (default true): focusable links, comment popups,
-   * and, with `forms`, form fields.
+   * and, with `<PdfForms>`, form fields.
    */
   annotationLayer?: boolean;
-  /**
-   * Turn the URLs and e-mail addresses in the pages' text into links
-   * (default false), as pdf.js's viewer does, leaving out those the file
-   * already links. Needs `textLayer` and `annotationLayer`, and follows
-   * `externalLinks`. Its code loads only when set.
-   */
-  autoLinks?: boolean;
-  /**
-   * Show form fields as HTML that the reader can fill in (default false: the
-   * drawing shows them as they are). Typed values belong to the document,
-   * which `save()` writes them into. Needs `annotationLayer`.
-   * `useFormChange()` hears what the reader enters. Its code loads only
-   * when set.
-   */
-  forms?: boolean;
-  /**
-   * Run the document's scripts in its form fields (default false), with
-   * `forms`: calculations, validation, formatting, and the actions of
-   * buttons, as in pdf.js. They run in pdf.js's sandbox, QuickJS compiled
-   * to WebAssembly, which loads, with its 0.5 MB, only for a document that
-   * has scripts. What they change reaches `useFormChange()`.
-   */
-  formScripts?: boolean;
-  /**
-   * Let the reader create highlights, text, drawings, images, and
-   * signatures on the pages (default false); see `useAnnotations()`.
-   * `save()` writes them into the document, with those other viewers of it
-   * create. Its code loads only when set.
-   */
-  annotationEditing?: boolean;
-  /** The accessible names of the annotation editor's controls, by default in English. */
-  annotationLabels?: Partial<AnnotationLabels>;
-  /**
-   * Follow what the document permits (default false, as in pdf.js): without
-   * permission to copy, its text cannot be selected or copied, though it
-   * stays readable by assistive technology and `getText()`; without
-   * permission to print, `print()` fails; without permission to annotate,
-   * annotations cannot be created, and form fields can be filled in only
-   * with permission to fill forms. `useDocumentState()` tells the application.
-   */
-  enforcePermissions?: boolean;
   /**
    * Whether links and the outline take the zoom their destination asks for
    * (default true), as in pdf.js. With false, they keep the zoom and only scroll.
@@ -230,19 +185,13 @@ export interface PdfViewerProps extends InitialViewOptions {
    * the page above its drawing and text; position it with `<PdfPageRect>`.
    */
   renderOverlay?: (pageIndex: number) => ReactNode;
+  /**
+   * Feature components (`<PdfForms>`, `<PdfAnnotationEditor>`,
+   * `<PdfAutoLinks>`, `<PdfPermissions>`) and overlays mounted for this
+   * viewer.
+   */
+  children?: ReactNode;
 }
-
-/** The annotation editor's styles, loaded only by viewers that edit annotations. */
-const EditorStyles = lazy(async () => {
-  const { EDITOR_CSS } = await import("./editor-styles.ts");
-  return {
-    default: () => (
-      <style href="parapdf-editor" precedence="parapdf">
-        {EDITOR_CSS}
-      </style>
-    ),
-  };
-});
 
 const defaultPageLabel = (pageNumber: number, pageCount: number) =>
   `Page ${pageNumber} of ${pageCount}`;
@@ -309,12 +258,6 @@ function ViewerViewport({
   onPageChange,
   initialView,
   initialViewState,
-  autoLinks = false,
-  forms = false,
-  formScripts = false,
-  annotationEditing = false,
-  annotationLabels,
-  enforcePermissions = false,
   textLayer,
   annotationLayer,
   destinationZoom,
@@ -337,6 +280,7 @@ function ViewerViewport({
   label = "PDF document",
   pageLabel = defaultPageLabel,
   renderOverlay,
+  children,
 }: PdfViewerProps & { viewer: Viewer }) {
   const session = useSession();
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -407,19 +351,9 @@ function ViewerViewport({
   // returns the viewer to the controlled value.
   const [, reconcile] = useReducer((count: number) => count + 1, 0);
 
-  // Options are live: the viewer compares them with those it has. Features
-  // the options ask for attach before a document opens, which waits for
-  // those that change how pages are drawn.
+  // Options are live: the viewer compares them with those it has.
   useLayoutEffect(() => {
     setViewerOptions(viewer, options);
-    setFeatureOptions(viewer, {
-      autoLinks,
-      forms,
-      formScripts,
-      annotationEditing,
-      annotationLabels,
-      enforcePermissions,
-    });
     latest.current = { controlled, callbacks };
     reported.current = { ...(reported.current ?? viewOf(viewer.store.get())), ...controlled };
     applyControlled(viewer, controlled);
@@ -522,11 +456,7 @@ function ViewerViewport({
       <style href="parapdf-viewer" precedence="parapdf">
         {VIEWER_CSS}
       </style>
-      {annotationEditing ? (
-        <Suspense fallback={null}>
-          <EditorStyles />
-        </Suspense>
-      ) : null}
+      {children}
       {/* The viewer sizes this element imperatively so zoom can restore the scroll position first. */}
       <div ref={contentRef} className="parapdf-pages" style={{ position: "relative" }}>
         {pages}

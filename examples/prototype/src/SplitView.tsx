@@ -14,6 +14,7 @@ import {
   type Viewer,
 } from "parapdf";
 import { useRef, useState } from "react";
+import { type DemoFeatures, ViewerFeatures } from "./ViewerFeatures.tsx";
 
 declare global {
   interface Window {
@@ -35,10 +36,12 @@ export default function SplitView({
   source,
   passwordPrompt,
   viewerProps,
+  features,
 }: {
   source: PdfSource;
   passwordPrompt: boolean;
   viewerProps: PdfViewerProps;
+  features: DemoFeatures;
 }) {
   const [open, setOpen] = useState(true);
   const [mounted, setMounted] = useState([true, true]);
@@ -72,7 +75,7 @@ export default function SplitView({
                     }}
                   >
                     <ColdBadge />
-                    <Pane index={index} viewerProps={viewerProps} />
+                    <Pane index={index} viewerProps={viewerProps} features={features} />
                   </PdfView>
                 ) : null}
               </div>
@@ -84,7 +87,15 @@ export default function SplitView({
   );
 }
 
-function Pane({ index, viewerProps }: { index: number; viewerProps: PdfViewerProps }) {
+function Pane({
+  index,
+  viewerProps,
+  features,
+}: {
+  index: number;
+  viewerProps: PdfViewerProps;
+  features: DemoFeatures;
+}) {
   const viewer = useViewer();
   const { currentPage: page, scale, layout } = useViewState();
   const shown = layout !== null;
@@ -125,7 +136,9 @@ function Pane({ index, viewerProps }: { index: number; viewerProps: PdfViewerPro
           {...viewerProps}
           label={index === 0 ? "Left PDF" : "Right PDF"}
           style={{ flex: 1, minHeight: 0 }}
-        />
+        >
+          <ViewerFeatures features={features} />
+        </PdfViewer>
       ) : null}
     </>
   );

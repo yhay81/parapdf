@@ -141,14 +141,20 @@ try {
     join(project, "consumer.tsx"),
     `import { useRef } from "react";
 import {
+  type AnnotationTool,
   configurePdfjs,
+  PdfAnnotationEditor,
+  PdfAutoLinks,
   PdfDocument,
+  PdfForms,
   PdfPageRect,
+  PdfPermissions,
   PdfThumbnails,
   PdfView,
   PdfViewer,
   type PdfViewerProps,
   preloadPdfjs,
+  useAnnotations,
   useCreateViewer,
   useDocumentState,
   useFormChange,
@@ -177,7 +183,16 @@ export function Reader() {
         renderOverlay={(pageIndex) =>
           pageIndex === 0 ? <PdfPageRect x={72} y={72} width={100} height={20} /> : null
         }
-      />
+      >
+        <PdfForms scripts onChange={(change) => void change.name} />
+        <PdfAnnotationEditor
+          defaultTool="none"
+          labels={{ highlight: "Marker" }}
+          onToolChange={(tool: AnnotationTool) => void tool}
+        />
+        <PdfAutoLinks />
+        <PdfPermissions />
+      </PdfViewer>
     </PdfDocument>
   );
 }
@@ -200,6 +215,7 @@ export function SplitReader() {
 function Toolbar() {
   const viewer = useViewer();
   const search = useSearch();
+  const annotations = useAnnotations();
   const { currentPage, pageCount } = useViewState();
   const slice = useViewState((state) => ({ page: state.currentPage, scale: state.scale }));
   const { status } = useDocumentState();
@@ -207,8 +223,15 @@ function Toolbar() {
   useFormChange(() => {});
   const proxy = useSession().proxy;
   return (
-    <button type="button" onClick={() => { viewer.setScale("fit-width"); search.search("pdf"); }}>
-      {currentPage + 1} / {pageCount} ({slice.scale}, {status}, {pages}) {proxy?.numPages}
+    <button
+      type="button"
+      onClick={() => {
+        viewer.setScale("fit-width");
+        search.search("pdf");
+        void annotations.setTool("highlight");
+      }}
+    >
+      {currentPage + 1} / {pageCount} ({slice.scale}, {status}, {pages}, {annotations.tool}) {proxy?.numPages}
     </button>
   );
 }
@@ -267,13 +290,27 @@ export const misuse = <PdfViewer pageLabel={5} />;
     join(project, "ssr.js"),
     `import { createElement } from "react";
 import { renderToString } from "react-dom/server";
-import { PdfDocument, PdfThumbnails, PdfView, PdfViewer, useDocumentState, useViewer, useViewState } from "parapdf";
+import {
+  PdfAnnotationEditor,
+  PdfAutoLinks,
+  PdfDocument,
+  PdfForms,
+  PdfPermissions,
+  PdfThumbnails,
+  PdfView,
+  PdfViewer,
+  useAnnotations,
+  useDocumentState,
+  useViewer,
+  useViewState,
+} from "parapdf";
 
 function Toolbar() {
   useViewer();
+  const { tool } = useAnnotations();
   const { currentPage, pageCount } = useViewState();
   const { status } = useDocumentState();
-  return createElement("output", null, \`\${status}:\${currentPage}/\${pageCount}\`);
+  return createElement("output", null, \`\${status}:\${currentPage}/\${pageCount}:\${tool}\`);
 }
 
 process.stdout.write(
@@ -283,7 +320,14 @@ process.stdout.write(
       { source: "/manual.pdf" },
       createElement(Toolbar),
       createElement(PdfThumbnails),
-      createElement(PdfViewer, { label: "Manual" }),
+      createElement(
+        PdfViewer,
+        { label: "Manual" },
+        createElement(PdfForms, { scripts: true }),
+        createElement(PdfAnnotationEditor, { defaultTool: "highlight" }),
+        createElement(PdfAutoLinks),
+        createElement(PdfPermissions),
+      ),
       createElement(PdfView, null, createElement(Toolbar), createElement(PdfViewer, { label: "Secondary" })),
     ),
   ),
@@ -300,7 +344,8 @@ process.stdout.write(
     html.includes('role="document"') &&
     html.includes('aria-label="Manual"') &&
     html.includes('aria-label="Secondary"') &&
-    html.includes("<output>loading:0/0</output>");
+    html.includes('data-precedence="parapdf"') &&
+    html.includes("<output>loading:0/0:none</output>");
   check("the components render on the server", rendered, rendered ? "" : html.slice(0, 200));
   check(
     "the server's page starts downloading the PDF",

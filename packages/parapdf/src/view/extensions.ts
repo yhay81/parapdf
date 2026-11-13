@@ -61,8 +61,6 @@ export interface ViewerExtension {
  */
 export class ExtensionSet {
   readonly #extensions = new Set<ViewerExtension>();
-  /** Features still loading, which the first layout of a document waits for. */
-  readonly #deferred = new Set<Promise<unknown>>();
   /** The document whose `ready` hooks ran and the signal they got, which `add()` replays. */
   #ready: { session: DocumentSession; signal: AbortSignal } | null = null;
   /** The document whose `prepare` hooks run now, which `add()` replays too. */
@@ -91,19 +89,6 @@ export class ExtensionSet {
     return () => {
       this.#extensions.delete(extension);
     };
-  }
-
-  /** Make the next document's first layout wait for `loading` (see `loaded()`). */
-  defer(loading: Promise<unknown>): void {
-    const waiting = loading
-      .catch((error: unknown) => console.error("loading a feature failed", error))
-      .finally(() => this.#deferred.delete(waiting));
-    this.#deferred.add(waiting);
-  }
-
-  /** Settles once the features loading now have loaded. */
-  loaded(): Promise<unknown> {
-    return Promise.all([...this.#deferred]);
   }
 
   /** Tell each extension registered now, but one removed meanwhile, through `hear`. */

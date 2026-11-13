@@ -3,7 +3,9 @@ import {
   download,
   getFormFields,
   getText,
+  PdfAnnotationEditor,
   PdfDocument,
+  PdfForms,
   PdfPageRect,
   type PdfRect,
   PdfThumbnails,
@@ -33,6 +35,7 @@ import {
 function Example({
   file,
   viewerProps,
+  viewerChildren,
   toolbar,
   side,
   note,
@@ -40,6 +43,7 @@ function Example({
 }: {
   file: string;
   viewerProps?: PdfViewerProps;
+  viewerChildren?: ReactNode;
   toolbar?: ReactNode;
   side?: ReactNode;
   note?: ReactNode;
@@ -58,7 +62,9 @@ function Example({
         ) : null}
         <div className="example-body">
           {side}
-          <PdfViewer {...viewerProps} className="example-viewport" renderOverlay={overlay} />
+          <PdfViewer {...viewerProps} className="example-viewport" renderOverlay={overlay}>
+            {viewerChildren}
+          </PdfViewer>
         </div>
       </PdfDocument>
       <p className="example-note">
@@ -314,7 +320,7 @@ export function FormsExample() {
   return (
     <Example
       file="f1040.pdf"
-      viewerProps={{ forms: true }}
+      viewerChildren={<PdfForms />}
       toolbar={<FormTools />}
       note="What you type stays in this page: the download is made in your browser."
     />
@@ -331,9 +337,8 @@ const TOOLS: readonly [AnnotationTool, string][] = [
 function AnnotationTools() {
   const viewer = useViewer();
   const annotations = useAnnotations();
-  const tool = annotations?.tool ?? "none";
-  const editing = annotations?.state ?? null;
-  const ink = annotations?.styles?.ink;
+  const { tool, state: editing, styles } = annotations;
+  const ink = styles?.ink;
   return (
     <>
       {TOOLS.map(([value, label]) => (
@@ -342,7 +347,7 @@ function AnnotationTools() {
           type="button"
           aria-pressed={tool === value}
           disabled={!editing}
-          onClick={() => void annotations?.setTool(value)}
+          onClick={() => void annotations.setTool(value)}
         >
           {label}
         </button>
@@ -352,12 +357,12 @@ function AnnotationTools() {
         aria-label="Drawing color"
         disabled={!editing}
         value={ink?.color.toLowerCase() ?? "#000000"}
-        onChange={(event) => annotations?.setStyle("ink", { color: event.target.value })}
+        onChange={(event) => annotations.setStyle("ink", { color: event.target.value })}
       />
-      <button type="button" disabled={!editing?.canUndo} onClick={() => annotations?.undo()}>
+      <button type="button" disabled={!editing?.canUndo} onClick={() => annotations.undo()}>
         Undo
       </button>
-      <button type="button" disabled={!editing?.canRedo} onClick={() => annotations?.redo()}>
+      <button type="button" disabled={!editing?.canRedo} onClick={() => annotations.redo()}>
         Redo
       </button>
       <button type="button" onClick={() => void download(viewer, { filename: "annotated.pdf" })}>
@@ -372,7 +377,7 @@ export function AnnotationsExample() {
   return (
     <Example
       file="usrguide.pdf"
-      viewerProps={{ annotationEditing: true }}
+      viewerChildren={<PdfAnnotationEditor />}
       toolbar={<AnnotationTools />}
       note="Select text with Highlight, click with Text, drag with Draw; the download includes them."
     />

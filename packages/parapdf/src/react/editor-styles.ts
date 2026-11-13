@@ -6,7 +6,7 @@ import { DELETE_ICON, MENU_ARROW_ICON } from "./editor-icons.ts";
 
 /**
  * Styles of the annotation editor, injected next to the viewer's when
- * `annotationEditing` is on.
+ * `<PdfAnnotationEditor>` is rendered.
  *
  * Derived from the `.annotationEditorLayer`, `.canvasWrapper svg`,
  * `.editToolbar`, `.colorPicker`, and `.textLayer.highlighting` rules in

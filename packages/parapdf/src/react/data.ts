@@ -41,7 +41,7 @@ export function useAttachments(): readonly PdfAttachment[] {
 /**
  * The file's comments, in page order: its markup annotations that carry one
  * (a note's text, another markup's popup note); empty when it has none.
- * Those the viewers' editors add are `useAnnotationEditing()`'s. Suspends
+ * Those the viewers' editors add are `useAnnotations()`'s. Suspends
  * as `useOutline()` does.
  */
 export function useComments(): readonly PdfComment[] {

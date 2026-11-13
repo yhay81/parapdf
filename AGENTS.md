@@ -88,8 +88,9 @@ that matters for performance or direction gets a decision record.
   the text selection tracker the viewer keeps drags in text layers with
   (`src/render/`); the features, each attaching to a
   viewer or a session and imported by nothing in the core (`src/features/`);
-  React bindings: `PdfDocument`, `PdfView`, `PdfViewer`, which sets its
-  viewer's live options and loads the features they ask for,
+  React bindings: `PdfDocument`, `PdfView`, `PdfViewer` (which sets its
+  viewer's live options), declarative feature components (`PdfForms`,
+  `PdfAnnotationEditor`, `PdfAutoLinks`, `PdfPermissions`),
   `PdfThumbnails`, `useViewer()`, `useCreateViewer()`, and the hooks
   (`src/react/`, `"use client"`); unit tests in Node, which stand in for pdf.js with
   `test/fake-pdfjs.ts` and for the elements of a page the renderer builds
@@ -107,7 +108,8 @@ that matters for performance or direction gets a decision record.
   which exposes the viewer, its session, and its features to the checks
   (`window.__viewer`, `__session`, `__parapdf`, `__search`, `__history`,
   `__annotations`), lets them change `PdfViewer`'s props
-  (`__setViewerProps`) and the fragment of its source's URL (`?fragment=`,
+  (`__setViewerProps`), its declarative feature components (`__setFeatures`),
+  and the fragment of its source's URL (`?fragment=`,
   `__setFragment`), and, through `src/internals.ts`, show a document a
   pdf.js of their own opens (`__showWith`). `minimal.html` is the demo
   without search, forms, annotation editing, and print. `compare.html` shows

@@ -1,5 +1,5 @@
 /**
- * Functional checks for annotation editing (`annotationEditing`): drawing,
+ * Functional checks for annotation editing (`<PdfAnnotationEditor>`): drawing,
  * text, highlights of selected text, images, and typed signatures created on
  * usrguide.pdf; their styles, undo and redo; the annotations staying where
  * they were, without taking focus or adding undo steps, as their pages
@@ -90,6 +90,7 @@ type Demo = {
   __viewer?: Viewer;
   __annotations?: Editing | null;
   __parapdf?: { save(viewer: Viewer | undefined): Promise<Uint8Array | null> };
+  __setFeatures?: (patch: Record<string, unknown>) => void;
 };
 
 interface ImageResult {
@@ -1385,6 +1386,44 @@ try {
       [...errors, ...again.errors].slice(0, 3).join(" | "),
     );
     await again.page.context().close();
+  }
+  // --- Declarative <PdfAnnotationEditor>: controlled tool and live unmount ---
+  {
+    const { page, errors } = await open(launched.browser, demo("file=usrguide.pdf"));
+    await editorLayer(page, 1);
+    const controlled = await page.evaluate(async () => {
+      const demo = window as unknown as Demo & { __toolChanges?: string[] };
+      demo.__toolChanges = [];
+      demo.__setFeatures?.({
+        annotationTool: "highlight",
+        onAnnotationToolChange: (next: string) => demo.__toolChanges?.push(next),
+      });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const applied = demo.__annotations?.store.get().tool;
+      await demo.__annotations?.setTool("ink");
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const reverted = demo.__annotations?.store.get().tool;
+      const changes = [...(demo.__toolChanges ?? [])];
+      demo.__setFeatures?.({ annotations: false });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const detached = demo.__annotations === null;
+      const layersLeft = document.querySelectorAll(".parapdf-annotation-editor-layer").length;
+      return { applied, reverted, changes, detached, layersLeft };
+    });
+    check(
+      "<PdfAnnotationEditor> controls tool, reports internal changes through onToolChange, and reverts uncontrolled changes",
+      controlled.applied === "highlight" &&
+        controlled.reverted === "highlight" &&
+        controlled.changes.join(",") === "ink",
+      JSON.stringify(controlled),
+    );
+    check(
+      "unmounting <PdfAnnotationEditor> from a live viewer detaches editing and removes editor layers",
+      controlled.detached && controlled.layersLeft === 0,
+      JSON.stringify(controlled),
+    );
+    check("no errors controlling or unmounting <PdfAnnotationEditor>", errors.length === 0);
+    await page.context().close();
   }
 } finally {
   await launched.close();

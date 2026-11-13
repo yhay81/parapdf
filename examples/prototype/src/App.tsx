@@ -1,18 +1,32 @@
-import * as parapdf from "parapdf";
 import {
+  type AnnotationEditing,
   download,
+  type FormChange,
+  getAttachmentContent,
+  getFormFields,
+  getSelection,
+  getText,
+  getViewState,
+  type History,
   historyOf,
+  openAttachment,
   PdfDocument,
   type PdfjsDocumentOptions,
   type PdfPageMode,
   PdfPageRect,
+  type PdfSession,
   type PdfSource,
   PdfViewer,
   type PdfViewerProps,
   print,
   type ScrollMode,
+  type Search,
   type SpreadMode,
+  save,
   searchOf,
+  setFormValues,
+  setLayerVisible,
+  setViewState,
   useAnnotationEditing,
   useAttachments,
   useDocumentState,
@@ -26,6 +40,7 @@ import {
   useSession,
   useViewer,
   useViewState,
+  type Viewer as ViewerHandle,
 } from "parapdf";
 import type { PDFDataRangeTransport } from "pdfjs-dist";
 import {
@@ -46,6 +61,7 @@ import { PasswordPrompt } from "./PasswordPrompt.tsx";
 import { PresentationControls, usePresentation } from "./Presentation.tsx";
 import { SearchBox } from "./SearchBox.tsx";
 import { Sidebar, type SidebarView } from "./Sidebar.tsx";
+import { type DemoFeatures, ViewerFeatures } from "./ViewerFeatures.tsx";
 
 const params = new URLSearchParams(location.search);
 const settings = {
@@ -239,10 +255,6 @@ const viewerProps: PdfViewerProps = {
   textLayer: settings.text,
   annotationLayer: settings.links,
   externalLinks: settings.externalLinks,
-  autoLinks: settings.autoLinks,
-  forms: settings.forms,
-  formScripts: settings.formScripts,
-  annotationEditing: settings.annotations,
   // With the document's initial view, only the arrangement asked for wins over it.
   ...(settings.initialView === "options" || params.has("spread")
     ? { defaultSpread: settings.spread }
@@ -253,12 +265,18 @@ const viewerProps: PdfViewerProps = {
   initialView: settings.initialView,
   destinationZoom: settings.destinationZoom,
   ...(settings.direction ? { direction: settings.direction } : {}),
-  enforcePermissions: settings.enforcePermissions,
   ...(settings.viewState ? { initialViewState: settings.viewState } : {}),
   ...(settings.initialPage > 0 ? { defaultPage: settings.initialPage } : {}),
   ...(settings.initialScale !== undefined ? { defaultZoom: settings.initialScale } : {}),
   ...(settings.maxScale ? { maxScale: settings.maxScale } : {}),
   ...settings.canvasLimits,
+};
+const initialFeatures: DemoFeatures = {
+  autoLinks: settings.autoLinks,
+  forms: settings.forms,
+  formScripts: settings.formScripts,
+  annotations: settings.annotations,
+  enforcePermissions: settings.enforcePermissions,
 };
 const commits = { count: 0 };
 const countCommit: ProfilerOnRenderCallback = () => {
@@ -319,6 +337,7 @@ export function App() {
           source={{ url: fragment ? `${url}#${fragment}` : url }}
           passwordPrompt={settings.passwordPrompt}
           viewerProps={viewerProps}
+          features={initialFeatures}
         />
       ) : lifetime ? (
         <Lifetimes
@@ -326,6 +345,7 @@ export function App() {
           owner={params.get("owner") === "outside" ? "outside" : "inside"}
           file={settings.file}
           viewerProps={viewerProps}
+          features={initialFeatures}
         />
       ) : mounted ? (
         <Viewer key={generation} renders={renders} fragment={fragment} />
@@ -360,21 +380,24 @@ function Viewer({ fragment }: { renders: number; fragment: string }) {
 function DocumentShell() {
   const presentation = usePresentation();
   const [sidebar, setSidebar] = useState<SidebarView | null>(null);
-  // Props a check sets on the viewer while it shows the document.
+  // Props and feature components a check sets on the viewer while it shows the document.
   const [changed, setChanged] = useState<Partial<PdfViewerProps>>({});
+  const [features, setFeatures] = useState<DemoFeatures>(initialFeatures);
   useEffect(() => {
     window.__setViewerProps = (props) => setChanged((previous) => ({ ...previous, ...props }));
+    window.__setFeatures = (patch) => setFeatures((previous) => ({ ...previous, ...patch }));
   }, []);
   return (
     <>
       <Toolbar
         sidebar={sidebar}
+        enforcePermissions={features.enforcePermissions}
         onToggleSidebar={(view) => setSidebar((open) => (open === view ? null : view))}
         onOpenSidebar={setSidebar}
         onPresent={presentation.present}
       />
       <Probes />
-      {settings.annotations ? <AnnotationToolbar file={settings.file} /> : null}
+      {features.annotations ? <AnnotationToolbar file={settings.file} /> : null}
       <PasswordPrompt />
       {sidebar ? <Sidebar view={sidebar} id="sidebar" /> : null}
       {/* Takes no box of its own until it presents (index.html). */}
@@ -385,13 +408,15 @@ function DocumentShell() {
           className={[
             "viewport",
             sidebar ? "with-sidebar" : "",
-            settings.annotations ? "with-annotations" : "",
+            features.annotations ? "with-annotations" : "",
           ]
             .filter(Boolean)
             .join(" ")}
           {...(japanese ? { label: "PDF 文書", pageLabel } : {})}
           renderOverlay={renderOverlay}
-        />
+        >
+          <ViewerFeatures features={features} />
+        </PdfViewer>
         {presentation.presenting ? <PresentationControls /> : null}
       </div>
       {settings.autoscroll > 0 ? (
@@ -407,34 +432,51 @@ function DocumentShell() {
   );
 }
 
+const demoApi = {
+  download,
+  getAttachmentContent,
+  getFormFields,
+  getSelection,
+  getText,
+  getViewState,
+  openAttachment,
+  print,
+  save,
+  setFormValues,
+  setLayerVisible,
+  setViewState,
+};
+
 declare global {
   interface Window {
     /** The viewer and its features, for the Playwright checks; not part of the library surface. */
-    __viewer?: parapdf.Viewer;
+    __viewer?: ViewerHandle;
     /** The session of the viewer's document, whose state the checks read. */
-    __session?: parapdf.PdfSession;
+    __session?: PdfSession;
     /** The package's functions, which take the viewer. */
-    __parapdf?: typeof parapdf;
-    __search?: parapdf.Search;
-    __history?: parapdf.History;
-    __annotations?: parapdf.AnnotationEditing | null;
+    __parapdf?: typeof demoApi;
+    __search?: Search;
+    __history?: History;
+    __annotations?: AnnotationEditing | null;
     /** The escape hatch: pdf.js's own PDFDocumentProxy, for check-rotation.ts. */
     __pdfDocument?: unknown;
     /** Hears what the reader enters into form fields (`useFormChange()`), for check-document.ts. */
-    __onFormChange?: (change: parapdf.FormChange) => void;
+    __onFormChange?: (change: FormChange) => void;
     /** Shows a document opened with a pdf.js of the check's own, for check-options.ts. */
     __showWith?: typeof showWith;
     /** Binds a viewer to elements of the check's own, for check-options.ts. */
     __attachViewport?: typeof attachViewport;
     /** Changes props of the viewer's `<PdfViewer>`, which are live, for check-options.ts. */
     __setViewerProps?: (props: Partial<PdfViewerProps>) => void;
+    /** Mounts or updates the viewer's declarative feature components (`<PdfForms>`, `<PdfAnnotationEditor>`, `<PdfAutoLinks>`, `<PdfPermissions>`). */
+    __setFeatures?: (patch: Partial<DemoFeatures>) => void;
     /** Changes the fragment of the source's URL, for check-document.ts. */
     __setFragment?: (fragment: string) => void;
   }
 }
 
 // The package's functions, for the checks, in the split view too.
-window.__parapdf = parapdf;
+window.__parapdf = demoApi;
 window.__showWith = showWith;
 window.__attachViewport = attachViewport;
 
@@ -465,11 +507,13 @@ const PAGE_MODE_PANELS: Partial<Record<PdfPageMode, SidebarView>> = {
 
 function Toolbar({
   sidebar,
+  enforcePermissions,
   onToggleSidebar,
   onOpenSidebar,
   onPresent,
 }: {
   sidebar: SidebarView | null;
+  enforcePermissions: boolean;
   onToggleSidebar: (view: SidebarView) => void;
   onOpenSidebar: (view: SidebarView) => void;
   onPresent: () => void;
@@ -604,7 +648,7 @@ function Toolbar({
           icon="print"
           label="Print"
           onClick={() => void print(viewer)}
-          disabled={status !== "ready" || (settings.enforcePermissions && !canPrint)}
+          disabled={status !== "ready" || (enforcePermissions && !canPrint)}
         />
         <IconButton
           icon="download"

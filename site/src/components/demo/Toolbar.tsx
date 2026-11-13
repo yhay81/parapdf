@@ -2,7 +2,7 @@ import {
   print,
   type ScrollMode,
   type SpreadMode,
-  useAnnotationEditing,
+  useAnnotations,
   useDocumentState,
   useHistory,
   usePageLabels,
@@ -55,9 +55,9 @@ export interface ToolbarProps {
 
 /** Shows or hides the annotation tools; hiding them puts the pointer back to its default. */
 function useAnnotatingToggle({ annotating, onAnnotatingChange }: ToolbarProps) {
-  const editing = useAnnotationEditing();
+  const { setTool } = useAnnotations();
   return () => {
-    if (annotating) void editing?.setTool("none");
+    if (annotating) void setTool("none");
     onAnnotatingChange(!annotating);
   };
 }

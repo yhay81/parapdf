@@ -1,6 +1,6 @@
 "use client";
 
-import type { PdfPermissions } from "../document/session.ts";
+import type { DocumentPermissions } from "../document/session.ts";
 import type { Viewer } from "../view/viewer.ts";
 
 /** What a viewer that follows permissions asks the document for. */
@@ -11,7 +11,7 @@ export type Permission = "print" | "copy" | "annotate" | "fillForms";
  * Form fields can also be filled in with permission to annotate (PDF
  * 32000-1, Table 22).
  */
-export function permitted(permissions: PdfPermissions | null, what: Permission): boolean {
+export function permitted(permissions: DocumentPermissions | null, what: Permission): boolean {
   if (!permissions) return true;
   return what === "fillForms" ? permissions.fillForms || permissions.annotate : permissions[what];
 }

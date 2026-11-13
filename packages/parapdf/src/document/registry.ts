@@ -1,9 +1,9 @@
 import type { LoadedPdfjs } from "../pdfjs/loader.ts";
 import {
   closeSession,
+  type DocumentPermissions,
   DocumentSession,
   type PasswordReason,
-  type PdfPermissions,
   type PdfSource,
 } from "./session.ts";
 import { type ReadableStore, Store } from "./store.ts";
@@ -63,7 +63,7 @@ export interface DocumentState {
    * What the document permits, everything when it is not encrypted; null
    * until it is ready, and when reading them failed.
    */
-  permissions: PdfPermissions | null;
+  permissions: DocumentPermissions | null;
 }
 
 /** A session's state as it starts to open. */
