@@ -397,6 +397,47 @@ const pinchPoint = (page: Page): Promise<Point> =>
     };
   });
 
+/** Place both fingers through Chromium's native touch input path. */
+const cdpTouchPair = (
+  cdp: CDPSession,
+  type: "touchStart" | "touchMove",
+  center: Point,
+  half: number,
+) =>
+  cdp.send("Input.dispatchTouchEvent", {
+    type,
+    touchPoints: [
+      { x: center.x - half, y: center.y, id: 0 },
+      { x: center.x + half, y: center.y, id: 1 },
+    ],
+  });
+
+/**
+ * The first change in finger distance past the pinch slop sets the zoom's
+ * baseline. Give the viewer a frame to read that distance before moving
+ * again. Chromium's time-based synthesizePinchGesture could deliver only
+ * one move before lift on a slow frame, leaving the zoom at its baseline.
+ */
+async function cdpPinch(
+  page: Page,
+  cdp: CDPSession,
+  center: Point,
+  factor: 0.5 | 2,
+): Promise<void> {
+  // Moving both fingers by 10 CSS pixels crosses the 16-pixel slop at a span of 200.
+  await cdpTouchPair(cdp, "touchStart", center, factor === 2 ? 90 : 110);
+  await cdpTouchPair(cdp, "touchMove", center, 100);
+  // The viewer may read the move after our first animation callback.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  await cdpTouchPair(cdp, "touchMove", center, 100 * factor);
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+}
+
 /**
  * Two touches from `from` ± `half` to `to` ± `toHalf` horizontally, in
  * `steps` moves, through the DevTools protocol.
@@ -409,21 +450,11 @@ async function cdpTwoFingers(
   toHalf: number,
   steps: number,
 ): Promise<void> {
-  const points = (center: Point, spread: number) => [
-    { x: center.x - spread, y: center.y, id: 0 },
-    { x: center.x + spread, y: center.y, id: 1 },
-  ];
-  await cdp.send("Input.dispatchTouchEvent", {
-    type: "touchStart",
-    touchPoints: points(from, half),
-  });
+  await cdpTouchPair(cdp, "touchStart", from, half);
   for (let step = 1; step <= steps; step++) {
     const t = step / steps;
     const center = { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t };
-    await cdp.send("Input.dispatchTouchEvent", {
-      type: "touchMove",
-      touchPoints: points(center, half + (toHalf - half) * t),
-    });
+    await cdpTouchPair(cdp, "touchMove", center, half + (toHalf - half) * t);
   }
   await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
 }
@@ -763,18 +794,15 @@ try {
     // A pinch out zooms the document, not the page, around the point between the fingers.
     before = await viewState(page);
     spot = await spotAt(page, point);
-    await cdp.send("Input.synthesizePinchGesture", {
-      x: point.x,
-      y: point.y,
-      scaleFactor: 2,
-      gestureSourceType: "touch",
-    });
+    await cdpPinch(page, cdp, point, 2);
     await committed(page);
     after = await viewState(page);
     offset = await drift(page, spot, point);
     check(
       "a touch pinch out zooms the document instead of the page",
-      after.pageZoom === 1 && after.scale > before.scale * 1.5 && after.zoomMode === "custom",
+      after.pageZoom === 1 &&
+        Math.abs(after.scale / before.scale - 2) < 1e-3 &&
+        after.zoomMode === "custom",
       JSON.stringify({ ratio: after.scale / before.scale, pageZoom: after.pageZoom }),
     );
     check(
@@ -786,18 +814,15 @@ try {
     // A pinch in zooms out; the page may then be centered, so only its height share holds.
     before = after;
     spot = await spotAt(page, point);
-    await cdp.send("Input.synthesizePinchGesture", {
-      x: point.x,
-      y: point.y,
-      scaleFactor: 0.5,
-      gestureSourceType: "touch",
-    });
+    await cdpPinch(page, cdp, point, 0.5);
     await committed(page);
     after = await viewState(page);
     offset = await drift(page, spot, point);
     check(
       "a touch pinch in zooms out around the fingers",
-      after.pageZoom === 1 && after.scale < before.scale * 0.8 && within(offset?.y),
+      after.pageZoom === 1 &&
+        Math.abs(after.scale / before.scale - 0.5) < 1e-3 &&
+        within(offset?.y),
       JSON.stringify({ ratio: after.scale / before.scale, pageZoom: after.pageZoom, offset }),
     );
 
