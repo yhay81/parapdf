@@ -6,6 +6,25 @@ change the API.
 
 ## Unreleased
 
+- Window-virtualized `<PdfThumbnails>` with automatic PDF page labels and
+  `<PdfOutline>` for accessible document bookmark trees:
+  - `<PdfThumbnails>` now window-virtualizes its `<ol>` over exact prefix-sum
+    page heights (mounting only the visible range plus overscan on 1,000-page
+    documents while preserving `aria-setsize` / `aria-posinset`), reads the
+    PDF's `pageLabels` automatically without suspending (`pageLabel` now
+    receives `(pageNumber, pageCount, label)` and defaults to `"Page iv"` when
+    the PDF defines custom labels or `"Page 3 of 12"` otherwise), scrolls the
+    active `currentPage` into view (`block: "nearest"`), and accepts `id` and
+    custom `children?: (item: ThumbnailItem) => ReactNode`.
+  - Added `<PdfOutline>` (`PdfOutlineProps`, `OutlineItemHelpers`), rendering
+    `<nav><ol>…</ol></nav>` from `useOutline()` with PDF `bold` and `italic`
+    styles, internal jumps via `viewer.goToDestination()`, live
+    `viewer.externalLinks` enforcement (`"new-tab"` vs inert
+    `aria-disabled="true"` when `"disabled"`), `defaultExpanded`, `onNavigate`,
+    and `renderItem`.
+  - Added `viewer.externalLinks` (`"new-tab" | "disabled"`), reflecting
+    `PdfViewer`'s live `externalLinks` option.
+
 - Declarative page overlays (`<PdfPageOverlay>`, `<PdfPageOverlays>`),
   unclipped selection popovers (`<PdfSelectionPopover>`, `selection.anchor`),
   PDF-coordinate pointer queries (`viewer.pointAt()`, `onPageClick`), and

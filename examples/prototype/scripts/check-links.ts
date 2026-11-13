@@ -59,13 +59,16 @@ const SECTION = "2 Creating document commands and environments";
 /** Four blank pages with the PDF's own rotation, independent of view rotation. */
 function rotatedPages(): string {
   const objects = [
-    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Catalog /Pages 2 0 R /Outlines 8 0 R >>",
     "<< /Type /Pages /Count 4 /Kids [3 0 R 4 0 R 5 0 R 6 0 R] >>",
     ...[0, 90, 180, 270].map(
       (rotation) =>
         `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Rotate ${rotation} /Resources << >> ${rotation === 0 ? "/Annots [7 0 R]" : ""} >>`,
     ),
     "<< /Type /Annot /Subtype /Link /Rect [72 700 172 740] /Border [0 0 0] /A << /S /Named /N /NextPage >> >>",
+    "<< /Type /Outlines /First 9 0 R /Last 10 0 R /Count 2 >>",
+    "<< /Title (Go to page 3) /Parent 8 0 R /Next 10 0 R /Dest [5 0 R /Fit] /F 2 >>",
+    "<< /Title (External spec) /Parent 8 0 R /Prev 9 0 R /A << /S /URI /URI (https://example.org/spec) >> >>",
   ];
   let pdf = "%PDF-1.7\n";
   const offsets = [0];
@@ -245,6 +248,52 @@ try {
   check(
     "following a named page action moves the focus to its page",
     (await focusedPage(rotated)) === 2,
+  );
+  await rotated.getByRole("button", { name: "Outline" }).click();
+  const rotatedOutline = rotated.getByRole("navigation", { name: "Document outline" });
+  await rotatedOutline.waitFor({ state: "visible", timeout: 10_000 });
+  const outlineBeforeDisable = await rotated.evaluate(() => {
+    const ext = [...document.querySelectorAll(".parapdf-outline a")].find((el) =>
+      el.textContent?.includes("External spec"),
+    );
+    const boldBtn = [...document.querySelectorAll<HTMLElement>(".parapdf-outline button")].find(
+      (el) => el.textContent === "Go to page 3",
+    );
+    return {
+      href: ext?.getAttribute("href") ?? null,
+      target: ext?.getAttribute("target") ?? null,
+      fontWeight: boldBtn?.style.fontWeight ?? "",
+    };
+  });
+  await rotated.evaluate(() => {
+    (
+      window as unknown as {
+        __setViewerProps?: (props: { externalLinks?: "new-tab" | "disabled" }) => void;
+      }
+    ).__setViewerProps?.({ externalLinks: "disabled" });
+  });
+  await rotated.waitForTimeout(50);
+  await rotatedOutline.getByRole("button", { name: "Go to page 3", exact: true }).click();
+  await rotated.waitForFunction(() => window.__viewer?.store.get().currentPage === 2);
+  const outlineAfterDisable = await rotated.evaluate(() => {
+    const ext = [...document.querySelectorAll(".parapdf-outline a")].find((el) =>
+      el.textContent?.includes("External spec"),
+    );
+    return {
+      href: ext?.getAttribute("href") ?? null,
+      ariaDisabled: ext?.getAttribute("aria-disabled") ?? null,
+      currentPage: window.__viewer?.store.get().currentPage ?? -1,
+    };
+  });
+  check(
+    "PdfOutline styles bold entries, honors live externalLinks=disabled, and keeps internal jumps working",
+    outlineBeforeDisable.href === "https://example.org/spec" &&
+      outlineBeforeDisable.target === "_blank" &&
+      outlineBeforeDisable.fontWeight === "600" &&
+      outlineAfterDisable.href === null &&
+      outlineAfterDisable.ariaDisabled === "true" &&
+      outlineAfterDisable.currentPage === 2,
+    JSON.stringify({ outlineBeforeDisable, outlineAfterDisable }),
   );
   const destinations = await rotated.evaluate(async () => {
     // The loaded session, which resolves destinations for the viewer.

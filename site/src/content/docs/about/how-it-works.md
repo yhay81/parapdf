@@ -28,8 +28,8 @@ Dependencies point down only:
 - **Features**: search, history, forms, annotation editing, printing,
   thumbnails, and the rest, each attaching to a viewer or a session. The
   core imports none of them.
-- **React**: `PdfDocument`, `PdfView`, `PdfViewer`, `PdfThumbnails`, and the
-  hooks. React is used only here.
+- **React**: `PdfDocument`, `PdfView`, `PdfViewer`, `PdfThumbnails`,
+  `PdfOutline`, and the hooks. React is used only here.
 
 ## Documents are sessions
 

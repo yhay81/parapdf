@@ -5,9 +5,11 @@ description: Show every page as a small picture that costs little.
 
 import { ThumbnailsExample } from "../../../components/examples.tsx";
 
-`PdfThumbnails` lists the pages of a viewer's document as buttons, each with
-a thumbnail and the page's number, marks the current page, and goes to a
-page when the reader chooses it:
+`PdfThumbnails` lists the pages of a viewer's document as a window-virtualized
+navigation list of buttons, each with a thumbnail and the page's label (from the
+PDF's `pageLabels` once read, without suspending, or its one-based number),
+marks and scrolls the current page into view, and goes to a page when the reader
+chooses it:
 
 ```tsx
 import { PdfDocument, PdfThumbnails, PdfViewer } from "parapdf";
@@ -22,11 +24,14 @@ function Reader() {
 }
 ```
 
-`onSelect(pageIndex)` replaces going to the page; `label` names the list
-and `pageLabel(pageNumber, pageCount)` each button, in the application's
-language. Thumbnails follow the viewer's rotation and draw with its drawing
-slots: by default they read the nearest `PdfView` or `PdfDocument`'s viewer,
-or take an explicit `viewer` prop.
+`onSelect(pageIndex)` replaces going to the page; `label` names the list and
+`pageLabel(pageNumber, pageCount, label)` each button, in the application's
+language (`"Page iv"` when the PDF defines custom page labels, or
+`"Page 3 of 12"` otherwise). Pass `children` (`(item: ThumbnailItem) => ReactNode`)
+to customize each mounted `<li>`'s contents while keeping window virtualization,
+automatic page labels, and current-page auto-scrolling. Thumbnails follow the
+viewer's rotation and draw with its drawing slots: by default they read the
+nearest `PdfView` or `PdfDocument`'s viewer, or take an explicit `viewer` prop.
 
 For a list of your own, `PdfThumbnail` (`pageIndex`, `width`, optional
 `viewer`) draws one page `width` CSS pixels wide; its height follows the
@@ -37,9 +42,10 @@ or a link labelled with the page.
 
 ## What it costs
 
-- Only thumbnails near the visible part of their scroll container hold
-  pixels, so a list of every page stays cheap: one `IntersectionObserver`
-  per container draws those that come near and clears the others.
+- Only items near the visible part of their scroll container mount in the DOM
+  and hold pixels, so a 1,000-page document mounts ~20 `<li>` elements instead
+  of 1,000 while keeping exact scroll height and `aria-setsize` /
+  `aria-posinset` semantics.
 - Thumbnails draw at a lower priority than the pages in view, and always
   leave a render slot for the next page that scrolls in.
 - A thumbnail copies the page's drawing when the viewer already has one at

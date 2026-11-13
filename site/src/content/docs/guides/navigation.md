@@ -7,25 +7,8 @@ Links inside the document and its outline jump through the viewer, and its
 history remembers where each jump started:
 
 ```tsx
-import { type OutlineNode, useHistory, useOutline, useViewer } from "parapdf";
-
-function Outline() {
-  const viewer = useViewer();
-  const outline = useOutline();
-  const list = (items: readonly OutlineNode[]) => (
-    <ul>
-      {items.map((item, index) => (
-        <li key={index}>
-          <button type="button" onClick={() => viewer.goToDestination(item.dest)}>
-            {item.title}
-          </button>
-          {item.items.length > 0 ? list(item.items) : null}
-        </li>
-      ))}
-    </ul>
-  );
-  return outline.length > 0 ? <nav aria-label="Outline">{list(outline)}</nav> : null;
-}
+import { PdfOutline, useHistory } from "parapdf";
+import { Suspense } from "react";
 
 function BackForward() {
   const history = useHistory();
@@ -37,11 +20,21 @@ function BackForward() {
   );
 }
 
-// useOutline() suspends until the outline is read: keep it apart from the viewer.
+// PdfOutline reads useOutline(), which suspends until read: keep it apart from the viewer.
 <Suspense fallback={null}>
-  <Outline />
+  <PdfOutline />
 </Suspense>;
 ```
+
+`PdfOutline` renders `<nav><ol>…</ol></nav>` with nested bookmark entries,
+applies the PDF's `bold` and `italic` flags, jumps internal destinations through
+`viewer.goToDestination(item.dest)`, follows `viewer.externalLinks` (`"new-tab"`
+with `rel="noopener noreferrer nofollow"`, or inert `aria-disabled="true"` when
+`"disabled"`), and returns `null` when the document has no outline. Pass
+`defaultExpanded={false}` to start nested sections collapsed, `renderItem`
+(`(item, helpers: OutlineItemHelpers) => ReactNode`) to add custom disclosure
+toggles around `helpers.link` and `helpers.children`, or call `useOutline()`
+directly to build a tree of your own.
 
 [The demo](/demo/?file=usrguide.pdf) shows the outline of the LaTeX guide in
 its sidebar, and the guide's links jump within it.

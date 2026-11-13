@@ -6,6 +6,7 @@
 
 import { documentOf, openAttachmentHandlerOf, type PdfSession } from "../document/pdf-session.ts";
 import type { DocumentPermissions, DocumentSession, PageSize } from "../document/session.ts";
+import { type ReadableStore, Store } from "../document/store.ts";
 import type {
   AnnotationLayerHandle,
   AnnotationLayerScripting,
@@ -123,6 +124,10 @@ let bindViewport: (viewer: Viewer, scroller: HTMLElement, content: HTMLElement) 
 let bindPage: (viewer: Viewer, index: number, host: HTMLElement) => () => void;
 /** Whether a feature claimed pointer drags on `viewer`; see `isPointerClaimed()`. */
 let readPointerClaimed: (viewer: Viewer) => boolean;
+/** Store of `viewer`'s `externalLinks` policy; see `externalLinksStoreOf()`. */
+let readExternalLinksStore: (
+  viewer: Viewer,
+) => ReadableStore<{ externalLinks: "new-tab" | "disabled" }>;
 
 /**
  * One viewport onto a shared document session: layout, gestures,
@@ -143,6 +148,7 @@ export class Viewer {
     bindViewport = (viewer, scroller, content) => viewer.#attachViewport(scroller, content);
     bindPage = (viewer, index, host) => viewer.#attachPage(index, host);
     readPointerClaimed = (viewer) => viewer.#pointerClaimed;
+    readExternalLinksStore = (viewer) => viewer.#externalLinks;
   }
 
   readonly store = new ViewerStore({
@@ -161,6 +167,9 @@ export class Viewer {
   });
   /** The options as set, which the renderer and the next opening read. */
   #options: ViewerOptions = {};
+  readonly #externalLinks = new Store<{ externalLinks: "new-tab" | "disabled" }>({
+    externalLinks: "new-tab",
+  });
   #gap = 12;
   #overscan = 2;
   #destinationZoom = true;
@@ -210,6 +219,11 @@ export class Viewer {
   /** Aborted while no viewport is attached. */
   get signal(): AbortSignal {
     return this.#viewportControl.signal;
+  }
+
+  /** How external links open in this viewer (`"new-tab"` or `"disabled"`). */
+  get externalLinks(): "new-tab" | "disabled" {
+    return this.#externalLinks.get().externalLinks;
   }
   #sizes: PageSize[] = [];
   /** The hosts of the mounted pages, by page. */
@@ -274,7 +288,9 @@ export class Viewer {
   #configure(options: ViewerOptions): void {
     const previous = this.#options;
     this.#options = options;
-    this.#links.externalLinks = options.externalLinks ?? "new-tab";
+    const externalLinks = options.externalLinks ?? "new-tab";
+    this.#links.externalLinks = externalLinks;
+    this.#externalLinks.set({ externalLinks });
     this.#destinationZoom = options.destinationZoom ?? true;
     const minScale = options.minScale ?? 0.25;
     const maxScale = options.maxScale ?? 10;
@@ -1768,4 +1784,11 @@ export function attachPage(viewer: Viewer, index: number, host: HTMLElement): ()
 /** Whether a feature (such as an active annotation drawing tool) claimed pointer drags. */
 export function isPointerClaimed(viewer: Viewer): boolean {
   return readPointerClaimed(viewer);
+}
+
+/** Reactive store of `viewer`'s `externalLinks` policy, for `<PdfOutline>`. */
+export function externalLinksStoreOf(
+  viewer: Viewer,
+): ReadableStore<{ externalLinks: "new-tab" | "disabled" }> {
+  return readExternalLinksStore(viewer);
 }

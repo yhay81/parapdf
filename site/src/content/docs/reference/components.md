@@ -109,19 +109,23 @@ and filling form fields (see [Permissions](/guides/permissions/)).
 
 ### `PdfThumbnails`
 
-The pages of a viewer's document as a navigation list of buttons, each with
-a thumbnail and the page's number, its current page marked with
-`aria-current="page"`. Thumbnails draw only near the visible part of the
-list's scroll container, at a lower priority than the viewer's pages, and
-follow the viewer's rotation (see [Thumbnails](/guides/thumbnails/)).
+The pages of a viewer's document as a window-virtualized navigation list of
+buttons, each with a thumbnail and the page's label (from the PDF's `pageLabels`
+once read, without suspending, or its one-based number), its current page marked
+with `aria-current="page"` and scrolled into view. Only items near the visible
+part of the list's scroll container mount in the DOM and hold pixels, drawing at
+a lower priority than the viewer's pages and following the viewer's rotation
+(see [Thumbnails](/guides/thumbnails/)).
 
 | Prop | |
 |---|---|
+| `id` | Optional DOM id on the `<nav>` landmark (for `aria-controls`). |
 | `viewer` | The viewer whose document the thumbnails show and whose current page they mark; by default, the viewer of the nearest `PdfView` or `PdfDocument`. |
 | `width` | Each thumbnail's width in CSS pixels, 120 by default. |
 | `onSelect` | `(pageIndex) => void`, called with the page chosen; by default the viewer goes to it. |
 | `label` | The list's accessible name, "Page thumbnails" by default. |
-| `pageLabel` | Each button's accessible name, `(pageNumber, pageCount) => string`, "Page 3 of 12" by default. |
+| `pageLabel` | Each button's accessible name, `(pageNumber, pageCount, label) => string`; `"Page iv"` when the PDF defines page labels, or `"Page 3 of 12"` when it does not. |
+| `children` | `(item: ThumbnailItem) => ReactNode`, rendering custom contents inside each mounted `<li>` while keeping virtualization, page labels, and current-page auto-scroll. |
 | `className`, `style` | For the list's `<nav>` element. |
 
 ### `PdfThumbnail`
@@ -137,6 +141,25 @@ link labelled with the page, as `PdfThumbnails` does.
 | `pageIndex` | The zero-based page. |
 | `width` | Width in CSS pixels; the height follows the page's shape as the view turns it. |
 | `className`, `style` | For the canvas. |
+
+### `PdfOutline`
+
+The document's outline (bookmarks) as a nested `<nav><ol>…</ol></nav>`, reading
+`useOutline()` (render it under a `<Suspense>` boundary apart from `PdfViewer`),
+jumping internal destinations through `viewer.goToDestination(item.dest)`,
+applying the PDF's `bold` and `italic` flags, following `viewer.externalLinks`
+(`"new-tab"` or `"disabled"`), and returning `null` when the document has no
+outline (see [Links, outline, and navigation](/guides/navigation/)).
+
+| Prop | |
+|---|---|
+| `id` | Optional DOM id on the `<nav>` landmark (for `aria-controls`). |
+| `viewer` | The viewer that internal outline entries jump through and whose `externalLinks` policy external URLs follow; by default, `useViewer()`. |
+| `label` | The `<nav>` landmark's accessible name, `"Document outline"` by default. |
+| `defaultExpanded` | Whether entries with nested children start expanded, `true` by default. |
+| `onNavigate` | `(item: OutlineNode) => boolean \| Promise<boolean>`, overriding internal destination jumps. |
+| `renderItem` | `(item: OutlineNode, helpers: OutlineItemHelpers) => ReactNode`, rendering custom `<li>` contents around `helpers.link`, `helpers.children`, and `helpers.toggle()`. |
+| `className`, `style` | For the `<nav>` element. |
 
 ### `PdfPageOverlay`
 

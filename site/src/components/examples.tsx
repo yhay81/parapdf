@@ -16,7 +16,6 @@ import {
   type SpreadMode,
   useAnnotations,
   useFormChange,
-  usePageLabels,
   usePrint,
   useSave,
   useSelection,
@@ -24,7 +23,7 @@ import {
   useViewer,
   useViewState,
 } from "parapdf";
-import { type ReactNode, Suspense, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { corpusReadme, samples, sampleUrl } from "../samples.ts";
 import {
   DocumentStatus,
@@ -176,34 +175,13 @@ export function SearchExample() {
   );
 }
 
-/** The pages as thumbnails, named by their labels once those are read. */
-function ThumbnailList() {
-  return (
-    <Suspense fallback={<PdfThumbnails width={110} label="Pages" className="example-side" />}>
-      <LabelledThumbnails />
-    </Suspense>
-  );
-}
-
-function LabelledThumbnails() {
-  const labels = usePageLabels();
-  return (
-    <PdfThumbnails
-      width={110}
-      label="Pages"
-      className="example-side"
-      pageLabel={(pageNumber) => `Page ${labels?.[pageNumber - 1] ?? pageNumber}`}
-    />
-  );
-}
-
 /** Thumbnails of every page beside the viewer. */
 export function ThumbnailsExample() {
   return (
     <Example
       file="usrguide.pdf"
-      side={<ThumbnailList />}
-      note="Only thumbnails near the visible part of the list hold pixels."
+      side={<PdfThumbnails width={110} label="Pages" className="example-side" />}
+      note="Only items near view mount in the DOM and hold pixels; PDF page labels show automatically once read."
     />
   );
 }

@@ -1,46 +1,41 @@
 import {
   openAttachment,
   type PdfLayer,
+  PdfOutline,
   type PdfSession,
   PdfThumbnails,
   setLayerVisible,
   useAttachments,
   useLayers,
-  usePageLabels,
   useSession,
 } from "parapdf";
 import { Suspense } from "react";
-import { OutlinePanel } from "./OutlinePanel.tsx";
 
 export type SidebarView = "outline" | "thumbnails" | "layers" | "attachments";
 
 /** The panel beside the pages: the outline, page thumbnails, layers, or attachments. */
 export function Sidebar({ view, id }: { view: SidebarView; id: string }) {
-  // The document's data loads apart from the pages, which never wait for it.
+  // Thumbnails mount immediately without suspending; the document's secondary
+  // data loads under Suspense apart from the pages.
+  if (view === "thumbnails") {
+    return (
+      <div id={id} className="sidebar thumbnails">
+        <PdfThumbnails />
+      </div>
+    );
+  }
   return <Suspense fallback={null}>{panel(view, id)}</Suspense>;
 }
 
-function panel(view: SidebarView, id: string) {
+function panel(view: Exclude<SidebarView, "thumbnails">, id: string) {
   switch (view) {
     case "outline":
-      return <OutlinePanel id={id} />;
-    case "thumbnails":
-      return <ThumbnailsPanel id={id} />;
+      return <PdfOutline id={id} className="sidebar outline" />;
     case "layers":
       return <LayersPanel id={id} />;
     case "attachments":
       return <AttachmentsPanel id={id} />;
   }
-}
-
-/** Every page as a thumbnail, named by its label; each is drawn only near the panel's visible part. */
-function ThumbnailsPanel({ id }: { id: string }) {
-  const labels = usePageLabels();
-  return (
-    <div id={id} className="sidebar thumbnails">
-      <PdfThumbnails pageLabel={(pageNumber) => `Page ${labels?.[pageNumber - 1] ?? pageNumber}`} />
-    </div>
-  );
 }
 
 /** The document's layers as check boxes, nested as the document orders them. */
