@@ -21,12 +21,12 @@ import { useSearch } from "../src/react/search.ts";
 import { useSelection } from "../src/react/selection.ts";
 import { useCreateViewer, useViewer } from "../src/react/viewer.ts";
 import { computeLayout } from "../src/view/layout.ts";
-import { Viewer } from "../src/view/viewer.ts";
+import { controllerOf, type Viewer, ViewerController } from "../src/view/viewer.ts";
 import { LETTER } from "./fake-pdfjs.ts";
 
 describe("ViewerStore pageCount", () => {
   it("starts at 0 and publishes on cold only when the document's page count changes", () => {
-    const viewer = new Viewer();
+    const viewer = new ViewerController();
     assert.equal(viewer.store.get().pageCount, 0);
     assert.equal(viewer.store.cold.get().pageCount, 0);
 
@@ -201,8 +201,9 @@ function BareViewerConsumer() {
 
 describe("ViewerContext, useCreateViewer, and optional viewer hooks", () => {
   it("reads ViewerContext across all viewer hooks without explicit viewer arguments", () => {
-    const defaultViewer = new Viewer();
+    const defaultViewer = new ViewerController();
     defaultViewer.setTool("hand");
+    assert.equal(defaultViewer.state.tool, "hand");
     const seen: Viewer[] = [];
 
     const html = renderToString(
@@ -226,7 +227,10 @@ describe("ViewerContext, useCreateViewer, and optional viewer hooks", () => {
       renderToString(createElement(StandaloneViewerApp, { created })),
       "<span>select:1</span>",
     );
-    assert.ok(created[0] instanceof Viewer);
+    const first = created[0];
+    assert.ok(first instanceof ViewerController);
+    assert.equal(controllerOf(first), first);
+    assert.throws(() => controllerOf({} as Viewer), TypeError);
 
     assert.throws(
       () => renderToString(createElement(BareViewerConsumer)),

@@ -13,7 +13,7 @@ import {
 import { sourceKey, splitFragment } from "../document/registry.ts";
 import type { PdfSource } from "../document/session.ts";
 import { preloadPdfjs } from "../pdfjs/loader.ts";
-import { holdViewer, Viewer } from "../view/viewer.ts";
+import { controllerOf, type Viewer, ViewerController } from "../view/viewer.ts";
 import { SessionContext, ViewerContext } from "./context.ts";
 import { preloadSourceFetch } from "./preload.ts";
 
@@ -96,12 +96,12 @@ export function PdfDocument({
     setHeld(current);
   }
   const { session } = current;
-  const [ownViewer, setOwnViewer] = useState<Viewer | null>(() =>
-    externalViewer ? null : new Viewer(),
+  const [ownViewer, setOwnViewer] = useState<ViewerController | null>(() =>
+    externalViewer ? null : new ViewerController(),
   );
-  let activeViewer = externalViewer ?? ownViewer;
+  let activeViewer = externalViewer ? controllerOf(externalViewer) : ownViewer;
   if (!activeViewer) {
-    activeViewer = new Viewer();
+    activeViewer = new ViewerController();
     setOwnViewer(activeViewer);
   }
   // The document starts to open as the provider renders, not once React
@@ -116,7 +116,7 @@ export function PdfDocument({
   // mounted leaves its document to close (document/registry.ts).
   useEffect(() => connectSession(session), [session]);
   useEffect(
-    () => (externalViewer || !ownViewer ? undefined : holdViewer(ownViewer)),
+    () => (externalViewer || !ownViewer ? undefined : ownViewer.hold()),
     [externalViewer, ownViewer],
   );
   // The prompt changes what the session shows, not the document.

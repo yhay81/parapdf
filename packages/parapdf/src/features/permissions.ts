@@ -1,7 +1,7 @@
 "use client";
 
 import type { DocumentPermissions } from "../document/session.ts";
-import type { Viewer } from "../view/viewer.ts";
+import { controllerOf, type Viewer, type ViewerController } from "../view/viewer.ts";
 
 /** What a viewer that follows permissions asks the document for. */
 export type Permission = "print" | "copy" | "annotate" | "fillForms";
@@ -22,9 +22,9 @@ interface Enforcement {
   listeners: Set<() => void>;
 }
 
-const policies = new WeakMap<Viewer, Enforcement>();
+const policies = new WeakMap<ViewerController, Enforcement>();
 
-function policyOf(viewer: Viewer): Enforcement {
+function policyOf(viewer: ViewerController): Enforcement {
   let policy = policies.get(viewer);
   if (!policy) {
     policy = { holders: 0, listeners: new Set() };
@@ -34,7 +34,7 @@ function policyOf(viewer: Viewer): Enforcement {
 }
 
 /** Tell a feature when the application starts or stops enforcing permissions. */
-export function onEnforcementChange(viewer: Viewer, listener: () => void): () => void {
+export function onEnforcementChange(viewer: ViewerController, listener: () => void): () => void {
   const { listeners } = policyOf(viewer);
   listeners.add(listener);
   return () => listeners.delete(listener);
@@ -42,10 +42,11 @@ export function onEnforcementChange(viewer: Viewer, listener: () => void): () =>
 
 /**
  * Whether `viewer`'s document permits `what`, or the viewer does not follow
- * permissions (`enforcePermissions()`).
+ * permissions (`<PdfPermissions>`).
  */
 export function permits(viewer: Viewer, what: Permission): boolean {
-  return !policies.get(viewer)?.holders || permitted(viewer.permissions, what);
+  const controller = controllerOf(viewer);
+  return !policies.get(controller)?.holders || permitted(controller.permissions, what);
 }
 
 /**
@@ -56,7 +57,7 @@ export function permits(viewer: Viewer, what: Permission): boolean {
  * annotations cannot be created, and form fields can be filled in only with
  * permission to fill forms. Returns the function that stops following them.
  */
-export function enforcePermissions(viewer: Viewer): () => void {
+export function enforcePermissions(viewer: ViewerController): () => void {
   const policy = policyOf(viewer);
   if (++policy.holders === 1) {
     policy.stopCopyProtection = protectCopy(viewer);
@@ -73,7 +74,7 @@ export function enforcePermissions(viewer: Viewer): () => void {
   };
 }
 
-function protectCopy(viewer: Viewer): () => void {
+function protectCopy(viewer: ViewerController): () => void {
   let content: HTMLElement | null = null;
   const apply = () => content?.classList.toggle("parapdf-no-copy", !permits(viewer, "copy"));
   const onCopy = (event: ClipboardEvent) => {

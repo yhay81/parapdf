@@ -69,8 +69,14 @@ import {
   viewportOf,
 } from "./scrolling.ts";
 import { linked } from "./signals.ts";
-import { type FitMode, type PointerTool, ViewerStore, type ZoomMode } from "./state.ts";
-import { toShownView, type ViewState, viewStateAt } from "./view-state.ts";
+import {
+  type FitMode,
+  type PointerTool,
+  type ViewerState,
+  ViewerStore,
+  type ZoomMode,
+} from "./state.ts";
+import { sameViewState, toShownView, type ViewState, viewStateAt } from "./view-state.ts";
 import { destinationScale, fitScale, refits, requestedZoom } from "./zoom.ts";
 
 /** Whether a visible area is all of its page. */
@@ -112,45 +118,74 @@ interface Showing {
   direction: Direction | null;
 }
 
-/** Opens a session in a viewer; the React bindings' to call (`openViewer()`). */
-let open: (viewer: Viewer, session: PdfSession) => void;
-/** Holds a viewer for its owner; see `holdViewer()`. */
-let hold: (viewer: Viewer) => () => void;
-/** Sets a viewer's options; see `setViewerOptions()`. */
-let configure: (viewer: Viewer, options: ViewerOptions) => void;
-/** Binds a viewport; see `attachViewport()`. */
-let bindViewport: (viewer: Viewer, scroller: HTMLElement, content: HTMLElement) => () => void;
-/** Registers a page's host; see `attachPage()`. */
-let bindPage: (viewer: Viewer, index: number, host: HTMLElement) => () => void;
-/** Whether a feature claimed pointer drags on `viewer`; see `isPointerClaimed()`. */
-let readPointerClaimed: (viewer: Viewer) => boolean;
-/** Store of `viewer`'s `externalLinks` policy; see `externalLinksStoreOf()`. */
-let readExternalLinksStore: (
-  viewer: Viewer,
-) => ReadableStore<{ externalLinks: "new-tab" | "disabled" }>;
+/**
+ * Imperative controller and read-only diagnostics of one `<PdfViewer>`
+ * viewport (`useViewer()`, `useCreateViewer()`, `<PdfViewer ref={...}>`).
+ * Reactive view state is read in React through `useViewState()`, and view
+ * persistence goes through `<PdfViewer onViewStateChange>`.
+ */
+export interface Viewer {
+  /** The viewer's current `ViewerState` snapshot; subscribe in React with `useViewState()`. */
+  readonly state: ViewerState;
+  /** The scroll container while a viewport is attached; null otherwise. */
+  readonly scroller: HTMLElement | null;
+  /** The element that holds the pages while a viewport is attached; null otherwise. */
+  readonly content: HTMLElement | null;
+  /** How external links open in this viewer (`"new-tab"` or `"disabled"`). */
+  readonly externalLinks: "new-tab" | "disabled";
+
+  /** Render counters for the current document. */
+  readonly stats: RenderStats | null;
+  /** Pixels of the canvases kept from pages that left the mounted window (`maxKeptPixels`). */
+  readonly keptPixels: number;
+  /** `performance.now()` when the first page first showed pixels, or null. */
+  readonly firstPaintAt: number | null;
+  hasPixels(index: number): boolean;
+  /** Fraction of the viewport covered by pages that show no pixels yet. */
+  blankFraction(): number;
+  /** Resolution of visible pages' pixels as a share of full device resolution (0 to 1). */
+  sharpness(): number;
+
+  goToPage(index: number): void;
+  nextPage(): void;
+  previousPage(): void;
+  zoomBy(factor: number): void;
+  setScale(requested: number | FitMode, anchor?: { x: number; y: number }): void;
+  resetScale(): void;
+  rotate(degrees?: number): void;
+  setRotation(rotation: Rotation): void;
+  setSpread(spread: SpreadMode): void;
+  setScrollMode(scrollMode: ScrollMode): void;
+  setTool(tool: PointerTool): void;
+  goToDestination(dest: Destination | null, signal?: AbortSignal): Promise<boolean>;
+  show(view: ShownView): void;
+  viewState(): ViewState | null;
+  setViewState(view: Partial<ViewState>): void;
+  revealRect(
+    pageIndex: number,
+    rect: { x: number; y: number; width: number; height: number },
+  ): void;
+  pointAt(point: { clientX: number; clientY: number }): PdfPagePoint | null;
+  position(): ViewerPosition | null;
+  restorePosition(entry: ViewerPosition): void;
+}
+
+const controllers = new WeakSet<ViewerController>();
+
+/** Resolve a public `Viewer` handle to its internal `ViewerController`. */
+export function controllerOf(viewer: Viewer): ViewerController {
+  if (!controllers.has(viewer as ViewerController)) {
+    throw new TypeError("Expected a Viewer created by ParaPDF");
+  }
+  return viewer as ViewerController;
+}
 
 /**
  * One viewport onto a shared document session: layout, gestures,
  * navigation, and the viewport's lifetime. Features (search, history,
  * forms, annotation editing, and the rest) attach through `extend()`.
  */
-export class Viewer {
-  static {
-    open = (viewer, session) => viewer.#open(session);
-    hold = (viewer) => {
-      // What its owner let go, it shows again.
-      if (viewer.#shown) viewer.#connect(viewer.#shown);
-      return () => {
-        if (viewer.#shown) viewer.#stop(viewer.#shown, true);
-      };
-    };
-    configure = (viewer, options) => viewer.#configure(options);
-    bindViewport = (viewer, scroller, content) => viewer.#attachViewport(scroller, content);
-    bindPage = (viewer, index, host) => viewer.#attachPage(index, host);
-    readPointerClaimed = (viewer) => viewer.#pointerClaimed;
-    readExternalLinksStore = (viewer) => viewer.#externalLinks;
-  }
-
+export class ViewerController implements Viewer {
   readonly store = new ViewerStore({
     layout: null,
     pageCount: 0,
@@ -221,10 +256,29 @@ export class Viewer {
     return this.#viewportControl.signal;
   }
 
+  /** The viewer's current `ViewerState` snapshot. */
+  get state(): ViewerState {
+    return this.store.get();
+  }
+
   /** How external links open in this viewer (`"new-tab"` or `"disabled"`). */
   get externalLinks(): "new-tab" | "disabled" {
     return this.#externalLinks.get().externalLinks;
   }
+
+  /** Reactive store of `externalLinks` for `<PdfOutline>`. */
+  get externalLinksStore(): ReadableStore<{ externalLinks: "new-tab" | "disabled" }> {
+    return this.#externalLinks;
+  }
+
+  /** Whether a feature (such as an active annotation drawing tool) claimed pointer drags. */
+  get pointerClaimed(): boolean {
+    return this.#pointerClaimed;
+  }
+  readonly #viewStateListeners = new Set<(view: ViewState) => void>();
+  #lastViewState: ViewState | null = null;
+  #batchingView = 0;
+  #viewDirty = false;
   #sizes: PageSize[] = [];
   /** The hosts of the mounted pages, by page. */
   #pageHosts = new Map<number, HTMLElement>();
@@ -275,8 +329,59 @@ export class Viewer {
   });
 
   constructor(options: ViewerOptions = {}) {
-    this.#configure(options);
+    controllers.add(this);
+    this.configure(options);
     this.#resetView();
+  }
+
+  /**
+   * Subscribe to changes in `viewState()`, fired once synchronous view
+   * commands finish, once scrolling settles (never per frame), and on
+   * `flushViewState()`. Opening a document seeds the baseline without
+   * echoing its initial view.
+   */
+  onViewStateChange(listener: (view: ViewState) => void): () => void {
+    if (this.#viewStateListeners.size === 0) {
+      this.#lastViewState = this.viewState();
+    }
+    this.#viewStateListeners.add(listener);
+    return () => {
+      this.#viewStateListeners.delete(listener);
+    };
+  }
+
+  /** Flush any unreported `viewState()` change (for `pagehide` or viewport unmount). */
+  flushViewState(): void {
+    this.#notifyViewState();
+  }
+
+  /** Run a compound view update and emit at most one `onViewStateChange` when it finishes. */
+  batchView<T>(fn: () => T): T {
+    this.#batchingView++;
+    try {
+      return fn();
+    } finally {
+      if (--this.#batchingView === 0 && this.#viewDirty) {
+        this.#viewDirty = false;
+        this.#notifyViewState();
+      }
+    }
+  }
+
+  #changeView<T>(fn: () => T): T {
+    this.#viewDirty = true;
+    return this.batchView(fn);
+  }
+
+  #notifyViewState(): void {
+    if (this.#batchingView > 0 || this.#viewStateListeners.size === 0) return;
+    if (this.#gestures.zooming()) return;
+    const scroller = this.#scroller;
+    if (!scroller || (scroller.clientWidth === 0 && scroller.clientHeight === 0)) return;
+    const next = this.viewState();
+    if (!next || sameViewState(this.#lastViewState, next)) return;
+    this.#lastViewState = next;
+    for (const listener of [...this.#viewStateListeners]) listener(next);
   }
 
   /**
@@ -285,7 +390,7 @@ export class Viewer {
    * the position and the edits; the initial ones and the opening apply as
    * the next document opens; the others apply at once.
    */
-  #configure(options: ViewerOptions): void {
+  configure(options: ViewerOptions): void {
     const previous = this.#options;
     this.#options = options;
     const externalLinks = options.externalLinks ?? "new-tab";
@@ -313,21 +418,27 @@ export class Viewer {
       this.store.set({ direction });
       arranged = true;
     }
-    if (arranged) {
-      this.#gestures.finish();
-      this.#arrange(this.store.get().currentPage);
-    }
-    if (limited && this.store.get().zoomMode !== "custom") {
-      // A zoom that fits fits again within the new limits, as on a resize.
-      this.#gestures.finish();
-      this.#fit();
-    }
-    const { scale } = this.store.get();
-    // Clamped in the zoom mode it has: a zoom that fits goes on fitting.
-    if (scale < this.#minScale || scale > this.#maxScale) {
-      this.#gestures.finish();
-      this.#zoomTo(scale);
-    }
+    const { scale, zoomMode } = this.store.get();
+    const needsFit = limited && zoomMode !== "custom";
+    const needsClamp = scale < this.#minScale || scale > this.#maxScale;
+    if (!arranged && !needsFit && !needsClamp) return;
+    this.#changeView(() => {
+      if (arranged) {
+        this.#gestures.finish();
+        this.#arrange(this.store.get().currentPage);
+      }
+      if (limited && this.store.get().zoomMode !== "custom") {
+        // A zoom that fits fits again within the new limits, as on a resize.
+        this.#gestures.finish();
+        this.#fit();
+      }
+      const current = this.store.get().scale;
+      // Clamped in the zoom mode it has: a zoom that fits goes on fitting.
+      if (current < this.#minScale || current > this.#maxScale) {
+        this.#gestures.finish();
+        this.#zoomTo(current);
+      }
+    });
   }
 
   /** The view a document opens with, before its opening applies. */
@@ -503,16 +614,29 @@ export class Viewer {
   }
 
   /**
+   * Hold this viewer for its owner (`<PdfDocument>`, `<PdfView>`, or
+   * `useCreateViewer()`) until the returned release. Released, the viewer lets
+   * go of its document while keeping its view, and a later hold shows the
+   * session again where the viewer showed it.
+   */
+  hold(): () => void {
+    if (this.#shown) this.#connect(this.#shown);
+    return () => {
+      if (this.#shown) this.#stop(this.#shown, true);
+    };
+  }
+
+  /**
    * Show `pdf` until another session opens; a viewer shows one session at
    * a time, and opening the one it shows changes nothing. It shows the
    * session's document while the session's provider and its own owner hold
-   * them (`holdViewer()`): React lets both go when it hides them, and
+   * them (`hold()`): React lets both go when it hides them, and
    * nothing then says whether it shows them again. So the viewer lets go of
    * the document, which stops the work it started for it, and keeps its
    * view of it; opened again with the same session, it shows the document
    * where it showed it, in the pdf.js document the session then has.
    */
-  #open(pdf: PdfSession): void {
+  open(pdf: PdfSession): void {
     const showing = this.#shown;
     if (showing?.pdf.deref() === pdf) {
       this.#connect(showing);
@@ -533,6 +657,7 @@ export class Viewer {
     };
     this.#shown = shown;
     this.#firstPaintAt = null;
+    this.#lastViewState = null;
     this.#resetView();
     this.#connect(shown);
   }
@@ -573,7 +698,10 @@ export class Viewer {
     this.#extensions.closed(kept);
     shown.work?.abort();
     shown.work = null;
-    if (!kept) this.#shown = null;
+    if (!kept) {
+      this.#shown = null;
+      this.#lastViewState = null;
+    }
     shown.session = null;
     shown.permissions = null;
     shown.layers = null;
@@ -628,6 +756,7 @@ export class Viewer {
       shown.direction = null;
       this.#scroller?.scrollTo(0, 0);
       this.#firstPaintAt = null;
+      this.#lastViewState = null;
       this.#resetView();
     }
     shown.fingerprints = ids;
@@ -691,30 +820,35 @@ export class Viewer {
     // Pages unmounting while no viewport shows them keep nothing.
     if (!this.#scroller) renderer.setKeeping(false);
     for (const [index, host] of this.#pageHosts) renderer.attach(index, host);
-    if (view?.spread) this.store.set({ spread: view.spread });
-    if (view?.scrollMode) this.store.set({ scrollMode: view.scrollMode });
-    this.store.set({ direction: this.#direction() });
-    // Where a viewport showed the document, it shows it again at once.
-    const saved = shown.savedPosition;
-    shown.savedPosition = null;
-    const scale = clamp(
-      saved
-        ? saved.zoomMode === "custom" || !this.#scroller?.clientWidth
-          ? saved.scale
-          : (this.#fitScale(saved.current, saved.zoomMode) ?? saved.scale)
-        : this.#resolveInitialScale(),
-      this.#minScale,
-      this.#maxScale,
-    );
-    this.#applyLayout(scale);
-    this.store.set({ scale });
-    if (saved) this.restorePosition(saved);
-    else if (view?.view) this.show(view.view);
-    else if (this.#initialPage > 0) this.goToPage(this.#initialPage);
-    else if (view?.destination) this.#jump(view.destination, this.#destinationZoom);
-    // A row of pages read from the right starts at its right end.
-    else if (this.store.get().direction === "rtl") this.goToPage(0);
-    this.#update();
+    this.batchView(() => {
+      if (view?.spread) this.store.set({ spread: view.spread });
+      if (view?.scrollMode) this.store.set({ scrollMode: view.scrollMode });
+      this.store.set({ direction: this.#direction() });
+      // Where a viewport showed the document, it shows it again at once.
+      const saved = shown.savedPosition;
+      shown.savedPosition = null;
+      const scale = clamp(
+        saved
+          ? saved.zoomMode === "custom" || !this.#scroller?.clientWidth
+            ? saved.scale
+            : (this.#fitScale(saved.current, saved.zoomMode) ?? saved.scale)
+          : this.#resolveInitialScale(),
+        this.#minScale,
+        this.#maxScale,
+      );
+      this.#applyLayout(scale);
+      this.store.set({ scale });
+      if (saved) this.restorePosition(saved);
+      else if (view?.view) this.show(view.view);
+      else if (this.#initialPage > 0) this.goToPage(this.#initialPage);
+      else if (view?.destination) this.#jump(view.destination, this.#destinationZoom);
+      // A row of pages read from the right starts at its right end.
+      else if (this.store.get().direction === "rtl") this.goToPage(0);
+      this.#update();
+      if (!saved) this.#lastViewState = this.viewState();
+      else this.#lastViewState ??= this.viewState();
+      this.#viewDirty = false;
+    });
     this.#extensions.ready(session, signal);
     this.#background(this.#measurePages(session, signal), "measuring page sizes", signal);
     // Until the session's layers arrive, the viewer draws the document's
@@ -758,7 +892,7 @@ export class Viewer {
   }
 
   /** Bind the scroll container and its sized content element. */
-  #attachViewport(scroller: HTMLElement, content: HTMLElement): () => void {
+  attachViewport(scroller: HTMLElement, content: HTMLElement): () => void {
     if (this.#scroller) {
       throw new Error(
         "A Viewer owns one viewport; wrap a second <PdfViewer> in <PdfView>, or pass another Viewer from useCreateViewer()",
@@ -777,7 +911,10 @@ export class Viewer {
     }
     this.#shown?.renderer?.setKeeping(true);
     const layout = this.store.get().layout;
-    if (layout) this.#sizeContent(layout);
+    if (layout) {
+      this.#sizeContent(layout);
+      this.#lastViewState ??= this.viewState();
+    }
     scroller.addEventListener("scroll", this.#onScroll, { passive: true });
     const detachGestures = this.#gestures.attach(scroller);
     const detachInput = this.#input.attach(scroller);
@@ -792,6 +929,8 @@ export class Viewer {
     return () => {
       if (detached) return;
       detached = true;
+      // Flush any unsettled scroll position before detaching the viewport.
+      this.flushViewState();
       // A provider may keep the session while its viewport is hidden (Activity).
       // Only viewport work ends; its view and edits return on the next attach.
       // One that shows no pages yet keeps the position it is about to show,
@@ -831,7 +970,7 @@ export class Viewer {
    * page's canvases and layers at the start of the host, before what React
    * renders there.
    */
-  #attachPage(index: number, host: HTMLElement): () => void {
+  attachPage(index: number, host: HTMLElement): () => void {
     this.#shown?.renderer?.attach(index, host);
     this.#pageHosts.set(index, host);
     if (index === this.#pendingFocus?.index) this.#focusPage(index, this.#pendingFocus.source);
@@ -971,19 +1110,21 @@ export class Viewer {
     if (!layout || !scroller) return false;
     const target = flipTarget(layout, spread, currentPage, direction);
     if (target === null) return false;
-    const { scrollLeft, scrollTop } = scroller;
-    this.goToPage(target);
-    // The browser clamps the far edge to the scrollable range.
-    if (axis === "y") {
-      scroller.scrollLeft = scrollLeft;
-      scroller.scrollTop = direction > 0 ? 0 : scroller.scrollHeight;
-    } else if (axis === "x") {
-      scroller.scrollTop = scrollTop;
-      // Flipping to the page on the right shows it from its left edge.
-      const rightward = direction > 0 !== (layout.direction === "rtl");
-      scroller.scrollLeft = rightward ? 0 : scroller.scrollWidth;
-    }
-    return true;
+    return this.#changeView(() => {
+      const { scrollLeft, scrollTop } = scroller;
+      this.goToPage(target);
+      // The browser clamps the far edge to the scrollable range.
+      if (axis === "y") {
+        scroller.scrollLeft = scrollLeft;
+        scroller.scrollTop = direction > 0 ? 0 : scroller.scrollHeight;
+      } else if (axis === "x") {
+        scroller.scrollTop = scrollTop;
+        // Flipping to the page on the right shows it from its left edge.
+        const rightward = direction > 0 !== (layout.direction === "rtl");
+        scroller.scrollLeft = rightward ? 0 : scroller.scrollWidth;
+      }
+      return true;
+    });
   }
 
   /**
@@ -1001,16 +1142,18 @@ export class Viewer {
     at: (layout: Layout) => ScrollTarget,
     current = index,
   ): void {
-    const next = showPage(layout, index);
-    if (next !== layout) {
-      this.#sizeContent(next);
-      this.store.set({ layout: next });
-    }
-    const target = at(next);
-    scroller.scrollTop = target.top;
-    if (target.left !== null) scroller.scrollLeft = target.left;
-    this.store.set({ currentPage: current });
-    this.#update();
+    this.#changeView(() => {
+      const next = showPage(layout, index);
+      if (next !== layout) {
+        this.#sizeContent(next);
+        this.store.set({ layout: next });
+      }
+      const target = at(next);
+      scroller.scrollTop = target.top;
+      if (target.left !== null) scroller.scrollLeft = target.left;
+      this.store.set({ currentPage: current });
+      this.#update();
+    });
   }
 
   /**
@@ -1040,35 +1183,37 @@ export class Viewer {
    * only when it is out of view, unless `exact`.
    */
   #jump(target: ResolvedDestination, zoom: boolean, exact = false): void {
-    this.#gestures.finish();
-    let current = this.store.get().layout;
-    const scroller = this.#scroller;
-    if (!current || !scroller) return;
-    const { pageIndex } = target;
-    const fitted = zoom
-      ? destinationScale(
-          this.#sizes,
-          this.store.get(),
-          target,
-          scroller,
-          this.#gap,
-          this.#minScale,
-          this.#maxScale,
-        )
-      : null;
-    if (fitted) {
-      this.store.set({ zoomMode: fitted.mode, currentPage: pageIndex });
-      if (fitted.mode !== "custom") {
-        this.#markFitted(scroller);
+    this.#changeView(() => {
+      this.#gestures.finish();
+      let current = this.store.get().layout;
+      const scroller = this.#scroller;
+      if (!current || !scroller) return;
+      const { pageIndex } = target;
+      const fitted = zoom
+        ? destinationScale(
+            this.#sizes,
+            this.store.get(),
+            target,
+            scroller,
+            this.#gap,
+            this.#minScale,
+            this.#maxScale,
+          )
+        : null;
+      if (fitted) {
+        this.store.set({ zoomMode: fitted.mode, currentPage: pageIndex });
+        if (fitted.mode !== "custom") {
+          this.#markFitted(scroller);
+        }
+        if (Math.abs(fitted.scale - current.scale) > 1e-4) {
+          current = this.#applyLayout(fitted.scale, pageIndex);
+          this.store.set({ scale: fitted.scale });
+        }
       }
-      if (Math.abs(fitted.scale - current.scale) > 1e-4) {
-        current = this.#applyLayout(fitted.scale, pageIndex);
-        this.store.set({ scale: fitted.scale });
-      }
-    }
-    this.#goTo(current, scroller, pageIndex, (layout) =>
-      destinationTarget(layout, target, scroller, exact),
-    );
+      this.#goTo(current, scroller, pageIndex, (layout) =>
+        destinationTarget(layout, target, scroller, exact),
+      );
+    });
   }
 
   /**
@@ -1078,33 +1223,37 @@ export class Viewer {
    * scale beyond `minScale` and `maxScale` are clamped.
    */
   show(view: ShownView): void {
-    this.#gestures.finish();
-    const before = this.store.get();
-    const scroller = this.#scroller;
-    if (!before.layout || !scroller || before.layout.tops.length === 0) return;
-    const count = before.layout.tops.length;
-    // A rotation not finite, and a page that is NaN, keep the viewer's.
-    const rotation = Number.isFinite(view.rotation) ? (view.rotation as Rotation) : before.rotation;
-    const spread = view.spread ?? before.spread;
-    const scrollMode = view.scrollMode ?? before.scrollMode;
-    const target: ResolvedDestination =
-      view.target && !Number.isNaN(view.target.pageIndex)
-        ? { ...view.target, pageIndex: clamp(Math.trunc(view.target.pageIndex), 0, count - 1) }
-        : { pageIndex: before.currentPage, x: null, y: null };
-    const page = target.pageIndex;
-    this.store.set({ rotation, spread, scrollMode, currentPage: page });
-    const zoom = requestedZoom(view.scale, before, this.#minScale, this.#maxScale);
-    let scale = zoom.scale;
-    if (zoom.mode !== "custom") {
-      scale = this.#fitScale(page, zoom.mode) ?? scale;
-      this.#markFitted(scroller);
-    }
-    this.store.set({ zoomMode: zoom.mode, scale });
-    this.#applyLayout(scale, page);
-    if (rotation !== before.rotation) this.#shown?.renderer?.rotate(rotation);
-    // The destination's zoom applies only when the view leaves the zoom unsaid.
-    if (target.x === null && target.y === null && !target.view) this.goToPage(page);
-    else this.#jump(target, view.scale === undefined && this.#destinationZoom, true);
+    this.#changeView(() => {
+      this.#gestures.finish();
+      const before = this.store.get();
+      const scroller = this.#scroller;
+      if (!before.layout || !scroller || before.layout.tops.length === 0) return;
+      const count = before.layout.tops.length;
+      // A rotation not finite, and a page that is NaN, keep the viewer's.
+      const rotation = Number.isFinite(view.rotation)
+        ? (view.rotation as Rotation)
+        : before.rotation;
+      const spread = view.spread ?? before.spread;
+      const scrollMode = view.scrollMode ?? before.scrollMode;
+      const target: ResolvedDestination =
+        view.target && !Number.isNaN(view.target.pageIndex)
+          ? { ...view.target, pageIndex: clamp(Math.trunc(view.target.pageIndex), 0, count - 1) }
+          : { pageIndex: before.currentPage, x: null, y: null };
+      const page = target.pageIndex;
+      this.store.set({ rotation, spread, scrollMode, currentPage: page });
+      const zoom = requestedZoom(view.scale, before, this.#minScale, this.#maxScale);
+      let scale = zoom.scale;
+      if (zoom.mode !== "custom") {
+        scale = this.#fitScale(page, zoom.mode) ?? scale;
+        this.#markFitted(scroller);
+      }
+      this.store.set({ zoomMode: zoom.mode, scale });
+      this.#applyLayout(scale, page);
+      if (rotation !== before.rotation) this.#shown?.renderer?.rotate(rotation);
+      // The destination's zoom applies only when the view leaves the zoom unsaid.
+      if (target.x === null && target.y === null && !target.view) this.goToPage(page);
+      else this.#jump(target, view.scale === undefined && this.#destinationZoom, true);
+    });
   }
 
   /**
@@ -1251,34 +1400,36 @@ export class Viewer {
 
   /** Show a `position()` again, with its zoom; a fitted zoom fits the viewport as it is now. */
   restorePosition(entry: ViewerPosition): void {
-    this.#gestures.finish();
-    let current = this.store.get().layout;
-    const scroller = this.#scroller;
-    if (!current || !scroller) return;
-    const { pageIndex, zoomMode } = entry;
-    // A viewport without a width, hidden, has nothing to fit.
-    const scale = clamp(
-      zoomMode === "custom" || scroller.clientWidth === 0
-        ? entry.scale
-        : (this.#fitScale(entry.current, zoomMode) ?? entry.scale),
-      this.#minScale,
-      this.#maxScale,
-    );
-    this.store.set({ zoomMode, currentPage: entry.current });
-    if (Math.abs(scale - current.scale) > 1e-4) {
-      if (zoomMode !== "custom") {
-        this.#markFitted(scroller);
+    this.#changeView(() => {
+      this.#gestures.finish();
+      let current = this.store.get().layout;
+      const scroller = this.#scroller;
+      if (!current || !scroller) return;
+      const { pageIndex, zoomMode } = entry;
+      // A viewport without a width, hidden, has nothing to fit.
+      const scale = clamp(
+        zoomMode === "custom" || scroller.clientWidth === 0
+          ? entry.scale
+          : (this.#fitScale(entry.current, zoomMode) ?? entry.scale),
+        this.#minScale,
+        this.#maxScale,
+      );
+      this.store.set({ zoomMode, currentPage: entry.current });
+      if (Math.abs(scale - current.scale) > 1e-4) {
+        if (zoomMode !== "custom") {
+          this.#markFitted(scroller);
+        }
+        current = this.#applyLayout(scale, pageIndex);
+        this.store.set({ scale });
       }
-      current = this.#applyLayout(scale, pageIndex);
-      this.store.set({ scale });
-    }
-    this.#goTo(
-      current,
-      scroller,
-      pageIndex,
-      (layout) => positionTarget(layout, entry, scroller),
-      entry.current,
-    );
+      this.#goTo(
+        current,
+        scroller,
+        pageIndex,
+        (layout) => positionTarget(layout, entry, scroller),
+        entry.current,
+      );
+    });
   }
 
   /** A link, outline entry, or named action is about to jump: history keeps the position. */
@@ -1324,18 +1475,20 @@ export class Viewer {
     if (!Number.isFinite(rotation)) return;
     const turned = toRotation(rotation);
     if (turned === this.store.get().rotation) return;
-    this.#gestures.finish();
-    const state = this.store.get();
-    const layout = state.layout;
-    const scroller = this.#scroller;
-    this.store.set({ rotation: turned });
-    if (!layout || !scroller) return;
-    // Keep the point at the viewport's center at the same share of its page.
-    this.#relayout(layout, scroller, layout.scale);
-    this.#shown?.renderer?.rotate(turned);
-    this.#update();
-    // A turned page has another width to fit.
-    this.#fit();
+    this.#changeView(() => {
+      this.#gestures.finish();
+      const state = this.store.get();
+      const layout = state.layout;
+      const scroller = this.#scroller;
+      this.store.set({ rotation: turned });
+      if (!layout || !scroller) return;
+      // Keep the point at the viewport's center at the same share of its page.
+      this.#relayout(layout, scroller, layout.scale);
+      this.#shown?.renderer?.rotate(turned);
+      this.#update();
+      // A turned page has another width to fit.
+      this.#fit();
+    });
   }
 
   /**
@@ -1345,11 +1498,13 @@ export class Viewer {
    */
   setSpread(spread: SpreadMode): void {
     if (spread === this.store.get().spread) return;
-    this.#gestures.finish();
-    const page = this.store.get().currentPage;
-    this.store.set({ spread });
-    // A pair is wider than a page, a page alone narrower than a pair.
-    this.#arrange(page);
+    this.#changeView(() => {
+      this.#gestures.finish();
+      const page = this.store.get().currentPage;
+      this.store.set({ spread });
+      // A pair is wider than a page, a page alone narrower than a pair.
+      this.#arrange(page);
+    });
   }
 
   /**
@@ -1360,10 +1515,12 @@ export class Viewer {
    */
   setScrollMode(scrollMode: ScrollMode): void {
     if (scrollMode === this.store.get().scrollMode) return;
-    this.#gestures.finish();
-    const page = this.store.get().currentPage;
-    this.store.set({ scrollMode });
-    this.#arrange(page);
+    this.#changeView(() => {
+      this.#gestures.finish();
+      const page = this.store.get().currentPage;
+      this.store.set({ scrollMode });
+      this.#arrange(page);
+    });
   }
 
   /**
@@ -1371,21 +1528,23 @@ export class Viewer {
    * a fitting zoom mode, and go to page `page`.
    */
   #arrange(page: number): void {
-    const state = this.store.get();
-    const layout = state.layout;
-    const scroller = this.#scroller;
-    if (!layout || !scroller) return;
-    let scale = layout.scale;
-    if (state.zoomMode !== "custom" && scroller.clientWidth > 0) {
-      const fitted = this.#fitScale(page, state.zoomMode);
-      if (fitted !== null) {
-        scale = fitted;
-        this.#markFitted(scroller);
+    this.#changeView(() => {
+      const state = this.store.get();
+      const layout = state.layout;
+      const scroller = this.#scroller;
+      if (!layout || !scroller) return;
+      let scale = layout.scale;
+      if (state.zoomMode !== "custom" && scroller.clientWidth > 0) {
+        const fitted = this.#fitScale(page, state.zoomMode);
+        if (fitted !== null) {
+          scale = fitted;
+          this.#markFitted(scroller);
+        }
       }
-    }
-    this.#applyLayout(scale, page);
-    this.store.set({ scale });
-    this.goToPage(page);
+      this.#applyLayout(scale, page);
+      this.store.set({ scale });
+      this.goToPage(page);
+    });
   }
 
   /**
@@ -1398,14 +1557,16 @@ export class Viewer {
    */
   setScale(requested: number | FitMode, anchor?: { x: number; y: number }): void {
     if (Number.isNaN(requested)) return;
-    this.#gestures.finish();
-    if (typeof requested === "string") {
-      this.store.set({ zoomMode: requested });
-      this.#fit();
-      return;
-    }
-    this.store.set({ zoomMode: "custom" });
-    this.#zoomTo(requested, anchor);
+    this.#changeView(() => {
+      this.#gestures.finish();
+      if (typeof requested === "string") {
+        this.store.set({ zoomMode: requested });
+        this.#fit();
+        return;
+      }
+      this.store.set({ zoomMode: "custom" });
+      this.#zoomTo(requested, anchor);
+    });
   }
 
   /** Back to the zoom the viewer opened with (`initialScale`), as Ctrl or ⌘ with 0 does. */
@@ -1464,18 +1625,20 @@ export class Viewer {
     anchor?: { x: number; y: number },
     point?: { x: number; y: number },
   ): void {
-    const state = this.store.get();
-    const scale = clamp(requested, this.#minScale, this.#maxScale);
-    const layout = state.layout;
-    const scroller = this.#scroller;
-    if (!layout || !scroller) {
+    this.#changeView(() => {
+      const state = this.store.get();
+      const scale = clamp(requested, this.#minScale, this.#maxScale);
+      const layout = state.layout;
+      const scroller = this.#scroller;
+      if (!layout || !scroller) {
+        this.store.set({ scale });
+        return;
+      }
+      if (Math.abs(scale - state.scale) < 1e-4) return;
+      this.#relayout(layout, scroller, scale, anchor, point);
       this.store.set({ scale });
-      return;
-    }
-    if (Math.abs(scale - state.scale) < 1e-4) return;
-    this.#relayout(layout, scroller, scale, anchor, point);
-    this.store.set({ scale });
-    this.#update();
+      this.#update();
+    });
   }
 
   /**
@@ -1583,17 +1746,19 @@ export class Viewer {
       return !current || current.width !== size.width || current.height !== size.height;
     });
     if (!changed) return;
-    this.#gestures.finish();
-    const scroller = this.#scroller;
-    const layout = this.store.get().layout;
-    const scale = this.store.get().scale;
-    this.#sizes = [...sizes];
-    // Keep the point at the viewport's top-left corner where it is.
-    if (scroller && layout) this.#relayout(layout, scroller, scale, { x: 0, y: 0 });
-    else this.#applyLayout(scale);
-    this.#update();
-    // The page at the center may turn out wider or narrower than the first.
-    this.#fit();
+    this.#changeView(() => {
+      this.#gestures.finish();
+      const scroller = this.#scroller;
+      const layout = this.store.get().layout;
+      const scale = this.store.get().scale;
+      this.#sizes = [...sizes];
+      // Keep the point at the viewport's top-left corner where it is.
+      if (scroller && layout) this.#relayout(layout, scroller, scale, { x: 0, y: 0 });
+      else this.#applyLayout(scale);
+      this.#update();
+      // The page at the center may turn out wider or narrower than the first.
+      this.#fit();
+    });
   }
 
   #onResize = (): void => {
@@ -1624,10 +1789,12 @@ export class Viewer {
     const scroller = this.#scroller;
     if (!layout || !scroller || layout.scrollMode !== "wrapped") return;
     if (sameRows(layout, computeLayout(this.#sizes, layout.scale, this.#layoutOptions()))) return;
-    this.#gestures.finish();
-    const current = this.store.get().layout ?? layout;
-    this.#relayout(current, scroller, current.scale);
-    this.#update();
+    this.#changeView(() => {
+      this.#gestures.finish();
+      const current = this.store.get().layout ?? layout;
+      this.#relayout(current, scroller, current.scale);
+      this.#update();
+    });
   }
 
   #onScroll = (): void => {
@@ -1721,74 +1888,13 @@ export class Viewer {
       devicePixelRatio: window.devicePixelRatio || 1,
       settled,
     });
-    if (!quiet && !this.#settleTimer) {
+    if (quiet && !this.#gestures.zooming()) {
+      this.#notifyViewState();
+    } else if (!quiet && !this.#settleTimer) {
       this.#settleTimer = window.setTimeout(() => {
         this.#settleTimer = 0;
         this.#requestUpdate();
       }, SETTLE_DELAY);
     }
   };
-}
-
-/**
- * Show `session` in `viewer` until another session opens there, its
- * document while the session's provider and the viewer's owner hold them:
- * what `<PdfViewer>` does with the session of its `<PdfDocument>`. A viewer
- * that let go of the document of `session` shows it again where it showed it.
- */
-export function openViewer(viewer: Viewer, session: PdfSession): void {
-  open(viewer, session);
-}
-
-/**
- * Hold `viewer` for its owner until the returned release: what
- * `<PdfDocument>`, `<PdfView>`, and `useCreateViewer()` do while mounted.
- * Released, the viewer
- * lets go of its document, which stops what it started for it and leaves
- * nothing of the viewer behind in the session; it keeps its view, and a
- * later hold shows the session again where the viewer showed it. React
- * runs neither again for a component it removed while hidden, so the
- * release is all a viewer that is never shown again gets.
- */
-export function holdViewer(viewer: Viewer): () => void {
-  return hold(viewer);
-}
-
-/** Take `options` from now on: `<PdfViewer>`'s props. */
-export function setViewerOptions(viewer: Viewer, options: ViewerOptions): void {
-  configure(viewer, options);
-}
-
-/**
- * Bind `viewer` to its scroll container and the sized element that holds
- * its pages; returns the function that detaches them: what `<PdfViewer>`
- * does with the elements it renders.
- */
-export function attachViewport(
-  viewer: Viewer,
-  scroller: HTMLElement,
-  content: HTMLElement,
-): () => void {
-  return bindViewport(viewer, scroller, content);
-}
-
-/**
- * Register the host React places for page `index` of `viewer`; returns the
- * function that releases it. The renderer builds the page's canvases and
- * layers at the start of the host.
- */
-export function attachPage(viewer: Viewer, index: number, host: HTMLElement): () => void {
-  return bindPage(viewer, index, host);
-}
-
-/** Whether a feature (such as an active annotation drawing tool) claimed pointer drags. */
-export function isPointerClaimed(viewer: Viewer): boolean {
-  return readPointerClaimed(viewer);
-}
-
-/** Reactive store of `viewer`'s `externalLinks` policy, for `<PdfOutline>`. */
-export function externalLinksStoreOf(
-  viewer: Viewer,
-): ReadableStore<{ externalLinks: "new-tab" | "disabled" }> {
-  return readExternalLinksStore(viewer);
 }

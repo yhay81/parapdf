@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { Viewer } from "../src/view/viewer.ts";
+import { ViewerController } from "../src/view/viewer.ts";
 
 describe("view state publication", () => {
   it("keeps hot, cold, and feature notifications separate", () => {
-    const { store } = new Viewer();
+    const { store } = new ViewerController();
     const initialHot = store.hot.get();
     const initialCold = store.cold.get();
     let hot = 0;
@@ -27,7 +27,7 @@ describe("view state publication", () => {
   });
 
   it("installs all snapshots before any subscriber reads a mixed hot/cold update", () => {
-    const { store } = new Viewer();
+    const { store } = new ViewerController();
     const check = () => {
       assert.equal(store.get().scale, 2);
       assert.equal(store.hot.get().scale, 2);
@@ -41,8 +41,8 @@ describe("view state publication", () => {
   });
 
   it("does not share view state or lifetime between viewers", () => {
-    const left = new Viewer();
-    const right = new Viewer();
+    const left = new ViewerController();
+    const right = new ViewerController();
     const before = right.store.get();
     left.store.set({ scale: 3, rotation: 90, currentPage: 8 });
     assert.equal(right.store.get(), before);

@@ -6,7 +6,7 @@ import { buildPageIndex } from "../src/features/search/text-search.ts";
 import type { AnnotationLayerHandle } from "../src/pdfjs/annotation-layer.ts";
 import type { PageText, TextLayerHandle } from "../src/pdfjs/text.ts";
 import type { ViewerExtension } from "../src/view/extensions.ts";
-import type { Viewer } from "../src/view/viewer.ts";
+import type { ViewerController } from "../src/view/viewer.ts";
 import { settle } from "./fake-pdfjs.ts";
 
 /** A page of `lines`, an item each, each ending a line. */
@@ -238,7 +238,7 @@ describe("attachAutoLinks", () => {
         extensions.push(extension);
         return () => {};
       },
-    } as unknown as Viewer;
+    } as unknown as ViewerController;
     const stop = attachAutoLinks(viewer);
     const [hooks] = extensions;
     assert.ok(hooks);

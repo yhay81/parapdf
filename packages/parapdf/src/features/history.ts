@@ -1,6 +1,6 @@
 import { type ReadableStore, Store } from "../document/store.ts";
 import type { ViewerPosition } from "../view/navigation.ts";
-import type { Viewer } from "../view/viewer.ts";
+import type { ViewerController } from "../view/viewer.ts";
 
 export interface HistoryState {
   /** Whether `back()` can return to a position before a link or outline jump. */
@@ -67,7 +67,7 @@ export class Positions<T> {
 }
 
 /** Keep where `viewer`'s links, outline, and named actions jumped from; `detach()` undoes it. */
-export function attachHistory(viewer: Viewer): History {
+export function attachHistory(viewer: ViewerController): History {
   const positions = new Positions<ViewerPosition>();
   const store = new Store<HistoryState>({ canGoBack: false, canGoForward: false });
   const publish = () =>
@@ -117,13 +117,13 @@ export function attachHistory(viewer: Viewer): History {
 }
 
 /** Each viewer's own history, which `useHistory()` shows. */
-const shared = new WeakMap<Viewer, History>();
+const shared = new WeakMap<ViewerController, History>();
 
 /**
  * `viewer`'s own history, which `useHistory()` shows: attached at the
  * first call, and kept until its `detach()`.
  */
-export function historyOf(viewer: Viewer): History {
+export function historyOf(viewer: ViewerController): History {
   let history = shared.get(viewer);
   if (!history) {
     const attached = attachHistory(viewer);

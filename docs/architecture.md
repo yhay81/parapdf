@@ -134,9 +134,12 @@ changed out of every viewer's drawings.
 
 ### view/
 
-A `Viewer` (`viewer.ts`) is one viewport onto a session, with its own
-position, zoom, rotation, spreads, scroll mode, direction, and tool;
-several may show one session.
+`ViewerController` (`viewer.ts`) is one viewport onto a session, with its own
+position, zoom, rotation, spreads, scroll mode, direction, and tool; several
+may show one session. Applications see the narrow `Viewer` interface (`state`
+snapshot, `scroller`, `content`, `externalLinks`, navigation/view methods, and
+diagnostic metrics), while `react/` and `features/` resolve the backing
+`ViewerController` through `controllerOf(viewer)` (decision 0038).
 
 - `layout.ts`: pure and immutable per zoom (typed arrays, rows, spreads,
   scroll modes, direction). `zoom.ts` and `navigation.ts` hold the pure
@@ -153,9 +156,11 @@ several may show one session.
 - `options.ts`: the viewer's options. Those the renderer is built with
   (layers, colors, budgets, concurrency) rebuild it as a detach and
   reattach would, keeping position and edits; the others apply at once.
-- `view-state.ts`: plain serializable `ViewState` snapshots (`viewer.viewState()`
-  and `viewer.setViewState()`), shared with `initialViewState`.
-- `extensions.ts`: `viewer.extend()`, the hooks features attach with.
+- `view-state.ts`: plain serializable `ViewState` snapshots (`viewer.viewState()`,
+  `viewer.setViewState()`, and `sameViewState()`), shared with
+  `initialViewState` and `<PdfViewer onViewStateChange>`.
+- `extensions.ts`: `viewer.extend()` on `ViewerController`, the hooks internal
+  features attach with.
   `metrics.ts`: what the checks and benchmarks read. `files.ts`: bytes
   handed to the browser as a download. `signals.ts`: linked abort signals.
 - Focus follows the page being read (decision 0021): pages are focusable
@@ -171,7 +176,7 @@ view and edits for reattachment; it lives as long as the `PdfDocument`,
 `PdfView`, or `useCreateViewer()` that created it.
 
 A viewer shows a session while the session's provider holds the document
-and the viewer's owner holds the viewer (`holdViewer()`). When either lets
+and the viewer's owner holds the viewer (`viewer.hold()`). When either lets
 go, the viewer lets go of the document: it stops its work, releases what
 it drew, and tells its extensions (`closed(true)`). It keeps a weak reference
 to the provider, the view position, history, finished search and annotation
@@ -222,9 +227,9 @@ the garbage collector takes with it (decision 0032).
 
 ### features/
 
-A feature attaches to a viewer or a session through `viewer.extend()` and
-the viewer's methods, keeps any state in a store of its own, and detaching
-it undoes what it added. The core imports no feature.
+A feature attaches to a `ViewerController` or a session through
+`viewer.extend()` and `ViewerController`'s methods, keeps any state in a store
+of its own, and detaching it undoes what it added. The core imports no feature.
 
 - Forms (with `scripts`), annotation editing, auto-linked addresses,
   permission enforcement, search, print, and the other features are imported
@@ -289,13 +294,16 @@ the DOM declares `"use client"`.
   the pending request once the provider takes its lease.
 - `PdfViewer` is one viewport. View state (`zoom`, `rotation`, `spread`,
   `scrollMode`, `tool`) is controlled or uncontrolled; the current page is
-  reported (`onPageChange`) and set with `viewer.goToPage()`. Every other
+  reported (`onPageChange`) and set with `viewer.goToPage()`; settled
+  `ViewState` snapshots are reported (`onViewStateChange`) without initial echo
+  or per-frame scroll emissions, flushing pending scrolls on `pagehide` and
+  viewport detach (decision 0038). Every other
   prop is a live option: changing it needs no remount, and an option set to
   its default is the option left out. `children` renders inside the viewport
   container so declarative feature components (`PdfForms`,
   `PdfAnnotationEditor`, `PdfAutoLinks`, `PdfPermissions`) mount synchronously
   with `useLayoutEffect` before the browser paints, without async layout
-  deferrals (`viewer.defer()`). `PdfAnnotationEditor` renders its `<style
+  deferrals. `PdfAnnotationEditor` renders its `<style
   precedence="parapdf">` directly, controls or initializes the active tool
   (`tool`, `defaultTool`, `onToolChange`), and preserves kept snapshots when
   hidden with its viewport (`<Activity>` or unmounting `PdfViewer`) while

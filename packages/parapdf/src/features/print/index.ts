@@ -1,7 +1,7 @@
 "use client";
 
 import { linked } from "../../view/signals.ts";
-import type { Viewer } from "../../view/viewer.ts";
+import { controllerOf, type Viewer } from "../../view/viewer.ts";
 import { permits } from "../permissions.ts";
 import { type PrintOptions, printDocument } from "./print.ts";
 
@@ -18,11 +18,12 @@ export type { PrintOptions } from "./print.ts";
  * document closes first.
  */
 export async function print(viewer: Viewer, options?: PrintOptions): Promise<void> {
-  const session = viewer.session;
-  if (session && !permits(viewer, "print")) {
+  const controller = controllerOf(viewer);
+  const session = controller.session;
+  if (session && !permits(controller, "print")) {
     throw new Error("The document does not permit printing");
   }
-  const work = viewer.workSignal;
+  const work = controller.workSignal;
   if (!session || !work) return;
   // Closing the document stops printing it, as the application's signal does.
   const control = linked(work, options?.signal);
@@ -39,7 +40,7 @@ export async function print(viewer: Viewer, options?: PrintOptions): Promise<voi
     await printDocument(session, {
       ...options,
       signal: control.signal,
-      layers: viewer.layers,
+      layers: controller.layers,
       onEnd: end,
     });
   } catch (error) {

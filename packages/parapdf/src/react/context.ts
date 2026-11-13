@@ -6,29 +6,31 @@ import { type PdfSession, readsOf } from "../document/pdf-session.ts";
 import { type DocumentState, OPENING } from "../document/registry.ts";
 import type { ReadableStore } from "../document/store.ts";
 import type { ViewerState } from "../view/state.ts";
-import type { Viewer } from "../view/viewer.ts";
+import { controllerOf, type Viewer, type ViewerController } from "../view/viewer.ts";
 
 export const SessionContext = createContext<PdfSession | null>(null);
 
 /** The viewer of the nearest `<PdfView>` or `<PdfDocument>`. */
-export const ViewerContext = createContext<Viewer | null>(null);
+export const ViewerContext = createContext<ViewerController | null>(null);
 
 /** The viewer of the `<PdfViewer>` and the page an overlay is rendered in. */
-export const PageContext = createContext<{ viewer: Viewer; pageIndex: number } | null>(null);
+export const PageContext = createContext<{ viewer: ViewerController; pageIndex: number } | null>(
+  null,
+);
 
 /**
  * `viewer` when given, otherwise the viewer of the nearest `<PdfView>` or
  * `<PdfDocument>`.
  */
-export function useOptionalViewer(viewer?: Viewer): Viewer {
+export function useOptionalViewer(viewer?: Viewer): ViewerController {
   const contextViewer = useContext(ViewerContext);
-  const resolved = viewer ?? contextViewer;
-  if (!resolved) {
+  if (viewer) return controllerOf(viewer);
+  if (!contextViewer) {
     throw new Error(
       "useViewer must be used inside <PdfDocument> or <PdfView>, or pass a Viewer from useCreateViewer()",
     );
   }
-  return resolved;
+  return contextViewer;
 }
 
 /** One slice of a store; the component renders again only when it changes. */

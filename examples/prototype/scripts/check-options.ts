@@ -21,7 +21,8 @@ import {
   restoreScaleFactor,
 } from "../../../bench/scripts/browsers.ts";
 import type { LoadedPdfjs } from "../../../packages/parapdf/src/pdfjs/loader.ts";
-import type { Viewer } from "../../../packages/parapdf/src/view/viewer.ts";
+import type { ViewState } from "../../../packages/parapdf/src/view/view-state.ts";
+import type { ViewerController } from "../../../packages/parapdf/src/view/viewer.ts";
 
 const exampleDir = fileURLToPath(new URL("..", import.meta.url));
 const engine = process.env.ENGINE ?? "pdfjs-next";
@@ -224,15 +225,19 @@ try {
   // document. The real browser must clamp the scroll when its size shrinks.
   const refined = await mixed.evaluate(async () => {
     const { __viewer, __showWith, __attachViewport } = window as unknown as {
-      __viewer: Viewer;
-      __attachViewport: (viewer: Viewer, scroller: HTMLElement, content: HTMLElement) => () => void;
+      __viewer: ViewerController;
+      __attachViewport: (
+        viewer: ViewerController,
+        scroller: HTMLElement,
+        content: HTMLElement,
+      ) => () => void;
       __showWith: (
-        viewer: Viewer,
+        viewer: ViewerController,
         source: { url: string },
         pdfjs: () => Promise<unknown>,
       ) => () => void;
     };
-    const Runtime = __viewer.constructor as new (options: object) => Viewer;
+    const Runtime = __viewer.constructor as new (options: object) => ViewerController;
     const results = [];
     for (const scrollMode of ["vertical", "horizontal"] as const) {
       let finishSizes = () => {};
@@ -826,10 +831,11 @@ try {
   // PdfViewer's props are live, and its view state controlled or not.
   const live = await newPage("file=bill-hr815.pdf&count=1");
   type Demo = {
-    __viewer: Viewer;
+    __viewer: ViewerController;
     __setViewerProps(props: Record<string, unknown>): void;
-    __lifecycle: { stats: { opens: number } };
+    __lifecycle: { stats: { opens: number }; unmount(): void };
     __reported?: { pages: number[]; rotations: number[] };
+    __viewStates?: ViewState[];
   };
   const frames = (page: Page) =>
     page.evaluate(
@@ -955,7 +961,7 @@ try {
     const win = window as unknown as {
       __overlayEvaluations?: number[];
       __setOverlayTest?: (patch: { dynamicBadge?: string | null }) => void;
-      __viewer: Viewer;
+      __viewer: ViewerController;
     };
     win.__viewer.goToPage(4);
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
@@ -992,6 +998,83 @@ try {
     JSON.stringify(dynamicOverlays),
   );
   await live.context().close();
+
+  // PdfViewer onViewStateChange stays silent on initial open, coalesces compound
+  // changes, waits for scrolls to settle without per-frame emissions, and flushes
+  // pending scrolls on pagehide and unmount.
+  const persistedInitial: ViewState = {
+    page: 3,
+    x: 0,
+    y: 40,
+    scale: "fit-width",
+    rotation: 0,
+    scrollMode: "vertical",
+    spread: "none",
+  };
+  const persisted = await newPage(
+    `file=bill-hr815.pdf&viewState=${encodeURIComponent(JSON.stringify(persistedInitial))}`,
+  );
+  await settle(persisted, { quiet: true });
+  await persisted.waitForTimeout(250);
+  const viewStateEvents = await persisted.evaluate(async () => {
+    const win = window as unknown as Demo;
+    const scroller = document.querySelector(".parapdf-viewport") as HTMLElement;
+    const nextFrame = () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      );
+    const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+    const afterOpen = [...(win.__viewStates ?? [])];
+
+    win.__viewer.goToPage(6);
+    const afterJump = [...(win.__viewStates ?? [])];
+
+    const beforeScroll = win.__viewStates?.length ?? 0;
+    scroller.scrollTop += 60;
+    await nextFrame();
+    const duringScroll = (win.__viewStates?.length ?? 0) - beforeScroll;
+    await wait(300);
+    const afterSettle = [...(win.__viewStates ?? [])];
+
+    const beforePagehide = win.__viewStates?.length ?? 0;
+    scroller.scrollTop += 45;
+    await nextFrame();
+    window.dispatchEvent(new PageTransitionEvent("pagehide"));
+    const afterPagehide = (win.__viewStates?.length ?? 0) - beforePagehide;
+
+    const beforeUnmount = win.__viewStates?.length ?? 0;
+    scroller.scrollTop += 45;
+    await nextFrame();
+    win.__lifecycle.unmount();
+    await nextFrame();
+    const afterUnmount = (win.__viewStates?.length ?? 0) - beforeUnmount;
+    const finalState = win.__viewStates?.at(-1) ?? null;
+
+    return {
+      afterOpen,
+      afterJump,
+      duringScroll,
+      settledCount: afterSettle.length - afterJump.length,
+      afterPagehide,
+      afterUnmount,
+      finalState,
+    };
+  });
+  check(
+    "onViewStateChange skips initial open, coalesces scrolls until settled, and flushes on pagehide and unmount",
+    viewStateEvents.afterOpen.length === 0 &&
+      viewStateEvents.afterJump.length === 1 &&
+      viewStateEvents.afterJump[0]?.page === 6 &&
+      viewStateEvents.duringScroll === 0 &&
+      viewStateEvents.settledCount === 1 &&
+      viewStateEvents.afterPagehide === 1 &&
+      viewStateEvents.afterUnmount === 1 &&
+      viewStateEvents.finalState !== null &&
+      viewStateEvents.finalState.page === 6 &&
+      viewStateEvents.finalState.y > 60,
+    JSON.stringify(viewStateEvents),
+  );
+  await persisted.context().close();
 
   check("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));
 } finally {

@@ -163,12 +163,12 @@ Highlight API, without touching the text layer.
 ## Features load when used
 
 A feature attaches to a viewer, a session, or both, and detaching it undoes
-what it added; the viewer reaches it only through the hooks a feature
-registers with `viewer.extend()`. Forms and annotation editing, which change
-how pages are drawn, are options of `PdfViewer`, which imports their code
-when one is set. Search, print, and the other features are included by
-importing their hooks or functions, and absent from builds that import
-neither.
+what it added; the viewer's controller reaches it only through internal
+extension hooks, and the core imports none of them. Forms, annotation editing,
+addresses linked in the text, and permission enforcement are declarative
+components (`PdfForms`, `PdfAnnotationEditor`, `PdfAutoLinks`,
+`PdfPermissions`), while search, print, saving, and the other features are
+hooks or standalone functions — absent from builds that import none of them.
 
 ## Off the main thread
 

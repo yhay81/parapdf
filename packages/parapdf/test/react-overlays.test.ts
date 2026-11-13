@@ -11,7 +11,7 @@ import { overlayStoreOf, PdfPageOverlay, PdfPageOverlays } from "../src/react/ov
 import { preloadDocument, preloadDocumentWith } from "../src/react/preload.ts";
 import { computePopoverPosition, sameSelection } from "../src/react/selection.ts";
 import { computeLayout, turnBox, unturnPoint } from "../src/view/layout.ts";
-import { attachPage, attachViewport, isPointerClaimed, Viewer } from "../src/view/viewer.ts";
+import { ViewerController } from "../src/view/viewer.ts";
 import { FakeDocument } from "./fake-dom.ts";
 import { fakeDocument, fakePdfjs, LETTER, settle } from "./fake-pdfjs.ts";
 
@@ -123,11 +123,11 @@ describe("unturnPoint and viewer.pointAt", () => {
 
   it("maps client points to unturned PDF coordinates via live host boxes and layout fallback", () =>
     withBrowserGlobals(() => {
-      const viewer = new Viewer();
+      const viewer = new ViewerController();
       assert.equal(viewer.pointAt({ clientX: 100, clientY: 100 }), null);
 
       const { scroller, content } = fakeScrollerAndContent(900, 900, 20, 40);
-      const detachViewport = attachViewport(viewer, scroller, content);
+      const detachViewport = viewer.attachViewport(scroller, content);
 
       // Headless layout fallback (no mounted page host boxes yet):
       for (const rotation of [0, 90, 180, 270] as Rotation[]) {
@@ -184,7 +184,7 @@ describe("unturnPoint and viewer.pointAt", () => {
           width: 792 * 1.1,
           height: 612 * 1.1,
         }) as DOMRect;
-      const detachPage = attachPage(viewer, 0, host);
+      const detachPage = viewer.attachPage(0, host);
 
       const turnedTarget = turnBox({ x: 100, y: 200, width: 0, height: 0 }, LETTER, 90);
       const previewHit = viewer.pointAt({
@@ -214,7 +214,7 @@ describe("unturnPoint and viewer.pointAt", () => {
       const hiddenHost = document.createElement("section");
       hiddenHost.getBoundingClientRect = () =>
         ({ left: 50, top: 60, right: 662, bottom: 852, width: 612, height: 792 }) as DOMRect;
-      const detachHidden = attachPage(viewer, 1, hiddenHost);
+      const detachHidden = viewer.attachPage(1, hiddenHost);
       // Page 1 is hidden in "page" mode when page 0 is shown, so it never steals hits.
       const pageModeHit = viewer.pointAt({ clientX: 200, clientY: 200 });
       assert.equal(pageModeHit?.pageIndex, 0);
@@ -223,20 +223,20 @@ describe("unturnPoint and viewer.pointAt", () => {
       detachViewport();
     }));
 
-  it("exposes pointer claim state accurately via isPointerClaimed", () => {
-    const viewer = new Viewer();
-    assert.equal(isPointerClaimed(viewer), false);
+  it("exposes pointer claim state accurately via viewer.pointerClaimed", () => {
+    const viewer = new ViewerController();
+    assert.equal(viewer.pointerClaimed, false);
     viewer.claimPointer(true);
-    assert.equal(isPointerClaimed(viewer), true);
+    assert.equal(viewer.pointerClaimed, true);
     viewer.claimPointer(false);
-    assert.equal(isPointerClaimed(viewer), false);
+    assert.equal(viewer.pointerClaimed, false);
   });
 });
 
 describe("OverlayStore, PdfPageOverlay, PdfPageOverlays, and PdfPageRect", () => {
   it("keeps two overlay renderers when one moves into the other's viewer", () => {
-    const first = overlayStoreOf(new Viewer());
-    const second = overlayStoreOf(new Viewer());
+    const first = overlayStoreOf(new ViewerController());
+    const second = overlayStoreOf(new ViewerController());
     const firstId = first.nextRendererId();
     const secondId = second.nextRendererId();
     const renderFirst = () => "first";
@@ -255,7 +255,7 @@ describe("OverlayStore, PdfPageOverlay, PdfPageOverlays, and PdfPageRect", () =>
 
   it("allocates .parapdf-overlay-layer lazily and coordinates multiple portal claims across window shifts", () =>
     withBrowserGlobals(() => {
-      const viewer = new Viewer();
+      const viewer = new ViewerController();
       const store = overlayStoreOf(viewer);
       const host0 = document.createElement("section");
 
@@ -316,7 +316,7 @@ describe("OverlayStore, PdfPageOverlay, PdfPageOverlays, and PdfPageRect", () =>
     }));
 
   it("keeps getRenderers reference stable when render function identity does not change", () => {
-    const viewer = new Viewer();
+    const viewer = new ViewerController();
     const store = overlayStoreOf(viewer);
     let updates = 0;
     const unsub = store.subscribeRenderers(() => updates++);
@@ -339,7 +339,7 @@ describe("OverlayStore, PdfPageOverlay, PdfPageOverlays, and PdfPageRect", () =>
   });
 
   it("renders PdfPageOverlay and PdfPageOverlays cleanly on SSR without touching DOM", () => {
-    const viewer = new Viewer();
+    const viewer = new ViewerController();
     const ssrHtml = renderToString(
       createElement(
         SessionContext,
@@ -362,9 +362,9 @@ describe("OverlayStore, PdfPageOverlay, PdfPageOverlays, and PdfPageRect", () =>
 describe("SelectionAnchor, sameSelection, and computePopoverPosition", () => {
   it("tracks scroll, scale, and rotation live in selection.anchor.getBoundingClientRect()", () =>
     withBrowserGlobals(() => {
-      const viewer = new Viewer();
+      const viewer = new ViewerController();
       const { scroller, content, sections } = fakeScrollerAndContent(800, 600, 20, 40);
-      const detach = attachViewport(viewer, scroller, content);
+      const detach = viewer.attachViewport(scroller, content);
 
       const layout = computeLayout([LETTER, LETTER], 1, {
         gap: 12,

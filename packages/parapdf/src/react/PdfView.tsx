@@ -1,7 +1,7 @@
 "use client";
 
 import { type ReactNode, type Ref, useEffect, useImperativeHandle, useState } from "react";
-import { holdViewer, Viewer } from "../view/viewer.ts";
+import { controllerOf, type Viewer, ViewerController } from "../view/viewer.ts";
 import { ViewerContext } from "./context.ts";
 
 export interface PdfViewProps {
@@ -21,16 +21,16 @@ export interface PdfViewProps {
  * apart from sibling views of the same document.
  */
 export function PdfView({ viewer: externalViewer, ref, children }: PdfViewProps) {
-  const [ownViewer, setOwnViewer] = useState<Viewer | null>(() =>
-    externalViewer ? null : new Viewer(),
+  const [ownViewer, setOwnViewer] = useState<ViewerController | null>(() =>
+    externalViewer ? null : new ViewerController(),
   );
-  let activeViewer = externalViewer ?? ownViewer;
+  let activeViewer = externalViewer ? controllerOf(externalViewer) : ownViewer;
   if (!activeViewer) {
-    activeViewer = new Viewer();
+    activeViewer = new ViewerController();
     setOwnViewer(activeViewer);
   }
   useEffect(
-    () => (externalViewer || !ownViewer ? undefined : holdViewer(ownViewer)),
+    () => (externalViewer || !ownViewer ? undefined : ownViewer.hold()),
     [externalViewer, ownViewer],
   );
   useImperativeHandle(ref, () => activeViewer, [activeViewer]);

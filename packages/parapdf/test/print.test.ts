@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it, type TestContext } from "node:test";
 import { print } from "../src/features/print/index.ts";
 import { printDocument } from "../src/features/print/print.ts";
-import { Viewer } from "../src/view/viewer.ts";
+import { ViewerController } from "../src/view/viewer.ts";
 import { fakeDocument, fakePdfjs, LETTER, openSession, settle, show } from "./fake-pdfjs.ts";
 
 /** Only the element operations printDocument uses; rendering is controlled separately. */
@@ -105,7 +105,7 @@ describe("print job replacement", () => {
   it("waits for pending edits before WillPrint and sends DidPrint when the dialog closes", async (t) => {
     const env = environment(t);
     const document = fakeDocument();
-    const viewer = new Viewer();
+    const viewer = new ViewerController();
     const { close } = show(viewer, { url: "/a.pdf" }, fakePdfjs(async () => document.proxy).loader);
     t.after(close);
     await settle();
@@ -211,7 +211,7 @@ describe("print job replacement", () => {
       else Reflect.deleteProperty(globalThis, "cancelAnimationFrame");
     });
     const document = fakeDocument();
-    const viewer = new Viewer();
+    const viewer = new ViewerController();
     const { close: closeDocument } = show(
       viewer,
       { url: "/a.pdf" },

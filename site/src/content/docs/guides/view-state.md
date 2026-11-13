@@ -19,47 +19,42 @@ ready:
 The point keeps its place on the page whatever the zoom or the viewport's
 size, so the view moves between a phone and a desktop.
 
-`viewer.setViewState(view)` shows such a view again, and `PdfViewer`'s
-`initialViewState` opens the document with it, before anything is drawn
-elsewhere. It wins over `defaultPage`, the zoom, the spread, the scroll
-mode, and `initialView`, and the fields it leaves out still follow them.
+`viewer.setViewState(view)` shows such a view again, `PdfViewer`'s
+`initialViewState` opens the document with it before anything is drawn
+elsewhere, and `PdfViewer`'s `onViewStateChange` hears settled `ViewState`
+snapshots as the reader moves through the document. `initialViewState` wins
+over `defaultPage`, the zoom, the spread, the scroll mode, and `initialView`,
+and the fields it leaves out still follow them.
 For example, `defaultPage={2}` with `initialViewState={{ scale: 1.5 }}`
 opens the third page at that scale.
 Neither adds a back entry, and values out of range are clamped or ignored,
 so a view read from a URL needs no checking:
 
 ```tsx
-import { PdfDocument, PdfViewer, useCreateViewer } from "parapdf";
-import { useEffect, useState } from "react";
+import { PdfDocument, PdfViewer } from "parapdf";
+import { useState } from "react";
 
 function Reader({ url }: { url: string }) {
-  const viewer = useCreateViewer();
   // Read once: the opening view applies only as the document opens.
   const [saved] = useState(() => localStorage.getItem(`view:${url}`));
-  useEffect(() => {
-    const save = () => {
-      const view = viewer.viewState();
-      if (view) localStorage.setItem(`view:${url}`, JSON.stringify(view));
-    };
-    // As the reader moves through the document, and when the page is left.
-    const unsubscribe = viewer.store.subscribe(save);
-    window.addEventListener("pagehide", save);
-    return () => {
-      unsubscribe();
-      window.removeEventListener("pagehide", save);
-    };
-  }, [viewer, url]);
   return (
-    <PdfDocument source={url} viewer={viewer}>
-      <PdfViewer initialViewState={saved ? JSON.parse(saved) : undefined} />
+    <PdfDocument source={url}>
+      <PdfViewer
+        initialViewState={saved ? JSON.parse(saved) : undefined}
+        onViewStateChange={(view) => {
+          localStorage.setItem(`view:${url}`, JSON.stringify(view));
+        }}
+      />
     </PdfDocument>
   );
 }
 ```
 
-The viewer's store publishes as the current page and the zoom change, not
-at every scrolled frame, so saving there costs little. A viewer whose
-`PdfViewer` unmounts and mounts again returns to where it was on its own.
+`onViewStateChange` stays silent when the document opens, coalesces scrolls
+until they settle (including intra-page scrolls) rather than firing per frame,
+and flushes any unsettled scroll on `pagehide` and when `PdfViewer` unmounts.
+A viewer whose `PdfViewer` unmounts and mounts again returns to where it was on
+its own.
 
 ## The document's initial view
 

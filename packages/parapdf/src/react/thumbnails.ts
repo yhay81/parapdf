@@ -6,7 +6,7 @@ import type { PageSize } from "../document/session.ts";
 import type { ReadableStore } from "../document/store.ts";
 import type { Rotation } from "../pdfjs/draw.ts";
 import { clamp, turnedSize } from "../view/layout.ts";
-import type { Viewer } from "../view/viewer.ts";
+import type { ViewerController } from "../view/viewer.ts";
 import { SessionContext } from "./context.ts";
 
 /** A US Letter page's height over its width, until the page's own size is known. */
@@ -218,7 +218,7 @@ export function findThumbnailScroller(nav: HTMLElement): HTMLElement | null {
  * while opening, on the server, or when the PDF defines no page labels.
  */
 export function createPageLabelsStore(
-  viewer: Viewer,
+  viewer: ViewerController,
   pdfSession: PdfSession | null,
 ): ReadableStore<readonly string[] | null> {
   let labels: readonly string[] | null = null;
@@ -301,7 +301,7 @@ export function createPageLabelsStore(
 const getNullSnapshot = (): null => null;
 
 /** Non-suspending hook returning the PDF's `pageLabels` once resolved, or `null`. */
-export function useOptionalPageLabels(viewer: Viewer): readonly string[] | null {
+export function useOptionalPageLabels(viewer: ViewerController): readonly string[] | null {
   const pdfSession = useContext(SessionContext);
   const store = useMemo(() => createPageLabelsStore(viewer, pdfSession), [viewer, pdfSession]);
   return useSyncExternalStore(store.subscribe, store.get, getNullSnapshot);

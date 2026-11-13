@@ -17,7 +17,7 @@ export function usePresentation() {
       const now = document.fullscreenElement === stage.current;
       setPresenting(now);
       if (now && !before) {
-        const { scrollMode, zoomMode, scale } = viewer.store.get();
+        const { scrollMode, zoomMode, scale } = viewer.state;
         before = { scrollMode, zoom: zoomMode === "custom" ? scale : zoomMode };
         viewer.setScrollMode("page");
         viewer.setScale("fit-page");

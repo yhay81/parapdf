@@ -8,7 +8,7 @@ import type * as Pdfjs from "pdfjs-dist";
 import type { DocumentSession } from "../document/session.ts";
 import type { AnnotationLayerHandle } from "../pdfjs/annotation-layer.ts";
 import type { TextLayerHandle } from "../pdfjs/text.ts";
-import type { Viewer } from "../view/viewer.ts";
+import type { ViewerController } from "../view/viewer.ts";
 import { rangeForMatch } from "./search/highlights.ts";
 import { buildPageIndex, type PageIndex, type SearchMatch } from "./search/text-search.ts";
 
@@ -228,7 +228,7 @@ function pageLinks(session: DocumentSession, pageIndex: number): Promise<FoundLi
  * leaving out those a link of the file already covers. Returns the
  * function that stops it and removes the links it added.
  */
-export function attachAutoLinks(viewer: Viewer): () => void {
+export function attachAutoLinks(viewer: ViewerController): () => void {
   let session: DocumentSession | null = null;
   const texts = new Map<number, TextLayerHandle>();
   const annotations = new Map<number, AnnotationLayerHandle>();

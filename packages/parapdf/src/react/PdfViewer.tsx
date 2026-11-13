@@ -25,14 +25,8 @@ import type { PageColors, Rotation } from "../pdfjs/draw.ts";
 import type { Direction, PdfPagePoint, ScrollMode, SpreadMode } from "../view/layout.ts";
 import type { ViewerOptions } from "../view/options.ts";
 import type { FitMode, PointerTool, ViewerState } from "../view/state.ts";
-import {
-  attachPage,
-  attachViewport,
-  isPointerClaimed,
-  openViewer,
-  setViewerOptions,
-  type Viewer,
-} from "../view/viewer.ts";
+import type { ViewState } from "../view/view-state.ts";
+import type { Viewer, ViewerController } from "../view/viewer.ts";
 import { useOptionalViewer, useSelected, useSession, ViewerContext } from "./context.ts";
 import { usePageOverlays } from "./overlays.ts";
 import { VIEWER_CSS } from "./styles.ts";
@@ -95,6 +89,14 @@ export interface PdfViewerProps extends InitialViewOptions {
    * or `goToPage()` shows another; it is never set but by `goToPage()`.
    */
   onPageChange?: (pageIndex: number) => void;
+  /**
+   * Hears the serializable `ViewState` change for bookmarking or restoring
+   * the view (`initialViewState`): once after scrolling settles (never per
+   * frame), synchronously on compound navigation, zoom, rotation, spread, or
+   * scroll-mode changes, and on `pagehide` or viewport unmount when a scroll
+   * has not yet settled. Never echoes the initial view on open.
+   */
+  onViewStateChange?: (viewState: ViewState) => void;
 
   /** Build selectable, searchable text layers (default true). */
   textLayer?: boolean;
@@ -207,7 +209,7 @@ const viewOf = (state: ViewerState): ViewValues => ({
 const VIEW_KEYS = ["zoom", "rotation", "spread", "scrollMode", "tool"] as const;
 
 /** Show each controlled value the viewer does not show. */
-function applyControlled(viewer: Viewer, controlled: Partial<ViewValues>): void {
+function applyControlled(viewer: ViewerController, controlled: Partial<ViewValues>): void {
   const state = viewer.store.get();
   const shown = viewOf(state);
   const { zoom, rotation, spread, scrollMode, tool } = controlled;
@@ -253,6 +255,7 @@ function ViewerViewport({
   onToolChange,
   defaultPage,
   onPageChange,
+  onViewStateChange,
   initialView,
   initialViewState,
   textLayer,
@@ -277,7 +280,7 @@ function ViewerViewport({
   pageLabel = defaultPageLabel,
   onPageClick,
   children,
-}: PdfViewerProps & { viewer: Viewer }) {
+}: PdfViewerProps & { viewer: ViewerController }) {
   const session = useSession();
   const scrollerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -338,6 +341,7 @@ function ViewerViewport({
     scrollMode: onScrollModeChange,
     tool: onToolChange,
     page: onPageChange,
+    viewState: onViewStateChange,
   };
   const latest = useRef({ controlled, callbacks });
   /** The view as last reported, or as the application set it: it hears no echo of its own values. */
@@ -348,10 +352,12 @@ function ViewerViewport({
 
   // Options are live: the viewer compares them with those it has.
   useLayoutEffect(() => {
-    setViewerOptions(viewer, options);
     latest.current = { controlled, callbacks };
     reported.current = { ...(reported.current ?? viewOf(viewer.store.get())), ...controlled };
-    applyControlled(viewer, controlled);
+    viewer.batchView(() => {
+      viewer.configure(options);
+      applyControlled(viewer, controlled);
+    });
   });
 
   // The viewer's own changes are reported from its store, not React state.
@@ -385,11 +391,25 @@ function ViewerViewport({
     const scroller = scrollerRef.current;
     const content = contentRef.current;
     if (!scroller || !content) return;
-    return attachViewport(viewer, scroller, content);
+    return viewer.attachViewport(scroller, content);
+  }, [viewer]);
+
+  // Registered after attachViewport so viewport detach flushes unsettled
+  // scroll positions before unsubscribing.
+  useLayoutEffect(() => {
+    const unsubscribe = viewer.onViewStateChange((view) => {
+      latest.current.callbacks.viewState?.(view);
+    });
+    const onPageHide = () => viewer.flushViewState();
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      window.removeEventListener("pagehide", onPageHide);
+      unsubscribe();
+    };
   }, [viewer]);
 
   // The viewer shows the session until it closes, also while this unmounts.
-  useEffect(() => openViewer(viewer, session), [viewer, session]);
+  useEffect(() => viewer.open(session), [viewer, session]);
 
   // A new fragment of the source's URL moves the viewer where it points.
   useEffect(() => {
@@ -406,7 +426,7 @@ function ViewerViewport({
     ? (event: ReactMouseEvent<HTMLDivElement>) => {
         const down = pointerDownRef.current;
         pointerDownRef.current = null;
-        if (event.defaultPrevented || event.button !== 0 || isPointerClaimed(viewer)) return;
+        if (event.defaultPrevented || event.button !== 0 || viewer.pointerClaimed) return;
         if (down && Math.hypot(event.clientX - down.x, event.clientY - down.y) > 4) return;
         const target = event.target instanceof Element ? event.target : null;
         if (target?.closest(INTERACTIVE_CLICK_TARGETS)) return;
@@ -492,7 +512,7 @@ function ViewerViewport({
 }
 
 interface PdfPageProps {
-  viewer: Viewer;
+  viewer: ViewerController;
   index: number;
   /** Accessible name of the page. */
   label: string;
@@ -536,7 +556,7 @@ const PdfPage = memo(function PdfPage({
   useLayoutEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    return attachPage(viewer, index, host);
+    return viewer.attachPage(index, host);
   }, [viewer, index]);
 
   const overlayPortal = usePageOverlays(viewer, index, hostRef, page, rotation, width, height);

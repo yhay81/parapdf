@@ -177,6 +177,7 @@ import {
   useViewState,
   setLayerVisible,
   type Viewer,
+  type ViewState,
 } from "parapdf";
 
 configurePdfjs({ enableHWA: true, documentOptions: { withCredentials: true } });
@@ -217,6 +218,9 @@ export function Reader() {
         onPageClick={(point: PdfPagePoint, event) => {
           void point.pageIndex;
           void viewerRef.current?.pointAt(event);
+        }}
+        onViewStateChange={(view: ViewState) => {
+          void view.page;
         }}
       >
         <PdfPageOverlay page={0}>
@@ -278,6 +282,15 @@ function Toolbar() {
     const selection = useSelection();
     void selection?.anchor;
   const proxy = session.proxy;
+  const snapshotPage: number = viewer.state.currentPage;
+  // @ts-expect-error Viewer hides internal store
+  void viewer.store;
+  // @ts-expect-error Viewer hides internal extend
+  void viewer.extend;
+  // @ts-expect-error Viewer hides internal renderer
+  void viewer.renderer;
+  // @ts-expect-error Viewer hides internal session
+  void viewer.session;
   return (
     <button
       type="button"
@@ -294,7 +307,7 @@ function Toolbar() {
         void annotations.setTool("highlight");
       }}
     >
-      {currentPage + 1} / {pageCount} ({slice.scale}, {status}, {pages}, {annotations.tool}, {String(saving)}, {progress?.done ?? 0}) {proxy?.numPages}
+      {currentPage + 1} / {pageCount} ({snapshotPage}, {slice.scale}, {status}, {pages}, {annotations.tool}, {String(saving)}, {progress?.done ?? 0}) {proxy?.numPages}
     </button>
   );
 }
@@ -391,6 +404,9 @@ for (const removed of [
   "getSelection",
   "getViewState",
   "setViewState",
+  "Viewer",
+  "ViewerExtension",
+  "Opening",
 ]) {
   if (removed in parapdfExports) throw new Error(\`\${removed} is still exported\`);
 }

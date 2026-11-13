@@ -3,7 +3,7 @@ import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { OutlineTree } from "../../../packages/parapdf/src/react/outline.ts";
 import { computeLayout } from "../../../packages/parapdf/src/view/layout.ts";
-import { Viewer } from "../../../packages/parapdf/src/view/viewer.ts";
+import { ViewerController } from "../../../packages/parapdf/src/view/viewer.ts";
 
 /** Check navigation controls with real layout and React, without drawing PDF pixels. */
 export async function checkNavigationControls() {
@@ -11,7 +11,7 @@ export async function checkNavigationControls() {
   element.id = "navigation-controls-fixture";
   document.body.append(element);
   const root = createRoot(element);
-  const viewer = new Viewer();
+  const viewer = new ViewerController();
   const sizes = Array.from({ length: 1000 }, () => ({ width: 612, height: 792 }));
   const layout = computeLayout(sizes, 1, {
     gap: 12,

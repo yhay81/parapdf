@@ -1,11 +1,12 @@
-import { PdfDocument, PdfViewer, usePrint, useSave, type Viewer } from "parapdf";
+import { PdfDocument, PdfViewer, usePrint, useSave } from "parapdf";
 import { Activity, useEffect, useState } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { configureEngine } from "../src/engines.ts";
+import { controllerOf, type ViewerController } from "../src/internals.ts";
 
 interface ActionProbe {
-  viewer: Viewer | null;
+  viewer: ViewerController | null;
   controls: { save: ReturnType<typeof useSave>; print: ReturnType<typeof usePrint> } | null;
   show(visible: boolean): void;
 }
@@ -25,7 +26,7 @@ function ActionReader({ probe }: { probe: ActionProbe }) {
     <PdfDocument source="/corpus/usrguide.pdf">
       <PdfViewer
         ref={(next) => {
-          probe.viewer = next;
+          probe.viewer = next ? controllerOf(next) : null;
         }}
         style={{ height: 400 }}
       />

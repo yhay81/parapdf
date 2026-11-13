@@ -12,7 +12,7 @@ import {
 import type { Destination } from "../src/pdfjs/destinations.ts";
 import type { ViewerExtension } from "../src/view/extensions.ts";
 import { toShownView } from "../src/view/view-state.ts";
-import { Viewer } from "../src/view/viewer.ts";
+import { ViewerController } from "../src/view/viewer.ts";
 import { fakeDocument, fakePdfjs, LETTER, settle, show } from "./fake-pdfjs.ts";
 
 const destination = { pageIndex: 2, x: 0, y: 300, view: { fit: "zoom" as const, zoom: 2 } };
@@ -152,7 +152,7 @@ describe("a viewer's opening", () => {
       proxy: { getPageLayout: async () => "TwoColumnRight" },
     });
     const opening = initialViewOpening({ initialView: "document" });
-    const viewer = new Viewer({ opening });
+    const viewer = new ViewerController({ opening });
     close.push(show(viewer, { url: "/a.pdf" }, fakePdfjs(async () => document.proxy).loader).close);
     await settle();
     const state = viewer.store.get();
@@ -271,7 +271,7 @@ describe("following URL fragments", () => {
         moves.push({ destination, signal });
         return !signal.aborted;
       },
-    } as unknown as Viewer;
+    } as unknown as ViewerController;
     const ready = () => {
       const control = new AbortController();
       (extension as ViewerExtension | null)?.ready?.({} as DocumentSession, control.signal);

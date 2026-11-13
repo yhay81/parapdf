@@ -3,7 +3,7 @@
 import type { PageSize } from "../document/session.ts";
 import type { Rotation } from "../pdfjs/draw.ts";
 import { pageLeft, pageTop, turnBox, turnedSize } from "../view/layout.ts";
-import type { Viewer } from "../view/viewer.ts";
+import type { ViewerController } from "../view/viewer.ts";
 import type { TextPoint } from "./text/document-text.ts";
 
 /** A rectangle in PDF points from the top-left corner of a page, unturned by the view. */
@@ -60,7 +60,7 @@ const toDomRect = (x: number, y: number, width: number, height: number): DOMRect
       } as DOMRect);
 
 export function createSelectionAnchor(
-  viewer: Viewer,
+  viewer: ViewerController,
   pages: readonly { pageIndex: number; rects: readonly PdfRect[] }[],
 ): SelectionAnchor {
   return {
@@ -224,7 +224,7 @@ function textPointOf(
 }
 
 /** Where a range boundary in a mounted page's text layer of `viewer` lies in the document's text. */
-function textPointAt(viewer: Viewer, node: Node, offset: number): TextPoint | null {
+function textPointAt(viewer: ViewerController, node: Node, offset: number): TextPoint | null {
   const element = node instanceof Element ? node : node.parentElement;
   const layer = element?.closest<HTMLElement>(".parapdf-text-layer");
   const section = layer?.closest<HTMLElement>("section[data-page]");
@@ -240,7 +240,7 @@ function textPointAt(viewer: Viewer, node: Node, offset: number): TextPoint | nu
  * popovers; null when nothing is selected there. Only mounted pages have text
  * to select.
  */
-export function getSelection(viewer: Viewer): PdfSelection | null {
+export function getSelection(viewer: ViewerController): PdfSelection | null {
   const content = viewer.content;
   const layout = viewer.store.get().layout;
   const selection = document.getSelection();

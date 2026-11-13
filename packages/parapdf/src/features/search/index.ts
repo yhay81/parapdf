@@ -3,7 +3,7 @@
 import type { DocumentSession } from "../../document/session.ts";
 import { type ReadableStore, Store } from "../../document/store.ts";
 import { linked } from "../../view/signals.ts";
-import type { Viewer } from "../../view/viewer.ts";
+import type { ViewerController } from "../../view/viewer.ts";
 import { SearchHighlights } from "./highlights.ts";
 import {
   buildPageIndex,
@@ -99,7 +99,7 @@ export function pageIndex(
 }
 
 /** Search `viewer`'s document; `detach()` undoes it. */
-export function attachSearch(viewer: Viewer): Search {
+export function attachSearch(viewer: ViewerController): Search {
   const store = new Store<SearchState>(IDLE_SEARCH);
   const highlights = new SearchHighlights();
   /** Stops the search in progress. */
@@ -274,13 +274,13 @@ export function attachSearch(viewer: Viewer): Search {
 }
 
 /** Each viewer's own search, which `useSearch()` shows. */
-const shared = new WeakMap<Viewer, Search>();
+const shared = new WeakMap<ViewerController, Search>();
 
 /**
  * `viewer`'s own search, which `useSearch()` shows: attached at the
  * first call, and kept until its `detach()`.
  */
-export function searchOf(viewer: Viewer): Search {
+export function searchOf(viewer: ViewerController): Search {
   let search = shared.get(viewer);
   if (!search) {
     const attached = attachSearch(viewer);

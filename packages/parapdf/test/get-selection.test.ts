@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import { getSelection } from "../src/features/selection.ts";
-import type { Viewer } from "../src/view/viewer.ts";
+import type { ViewerController } from "../src/view/viewer.ts";
 
 /** A node of a small DOM tree. */
 class FakeNode {
@@ -194,12 +194,12 @@ describe("getSelection", () => {
       content: new FakeElement([], section),
       store: { get: () => ({ layout: { sizes: [{ width: 612, height: 792 }], rotation: 0 } }) },
       textLayers: new Map([[0, { elements: [hello, empty, world] }]]),
-    } as unknown as Viewer;
+    } as unknown as ViewerController;
     return { viewer, layer, hello, world, end };
   }
 
   /** The ends of a selection from `start` to `end`, as items and offsets. */
-  function ends(viewer: Viewer, start: Point, end: Point) {
+  function ends(viewer: ViewerController, start: Point, end: Point) {
     range = new FakeRange();
     range.setStart(...start);
     range.setEnd(...end);

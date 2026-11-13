@@ -14,13 +14,7 @@ import {
   scrollOffsetForThumbnail,
   thumbnailCanvasHeight,
 } from "../src/react/thumbnails.ts";
-import {
-  externalLinksStoreOf,
-  holdViewer,
-  openViewer,
-  setViewerOptions,
-  Viewer,
-} from "../src/view/viewer.ts";
+import { ViewerController } from "../src/view/viewer.ts";
 import { fakeDocument, fakePdfjs, LETTER, settle } from "./fake-pdfjs.ts";
 
 describe("thumbnailCanvasHeight", () => {
@@ -140,10 +134,10 @@ describe("createPageLabelsStore", () => {
     });
     const { loader: pdfjs } = fakePdfjs(async () => doc.proxy);
     const session = new PdfSession({ url: "https://example.test/broken-labels.pdf" }, { pdfjs });
-    const viewer = new Viewer();
+    const viewer = new ViewerController();
     const releaseSession = connectSession(session);
-    const releaseViewer = holdViewer(viewer);
-    openViewer(viewer, session);
+    const releaseViewer = viewer.hold();
+    viewer.open(session);
     const store = createPageLabelsStore(viewer, null);
     const unsubscribe = store.subscribe(() => {});
     try {
@@ -166,10 +160,10 @@ describe("createPageLabelsStore", () => {
     });
     const { loader: pdfjs } = fakePdfjs(async () => doc.proxy);
     const session = new PdfSession({ url: "https://example.test/labels.pdf" }, { pdfjs });
-    const viewer = new Viewer();
+    const viewer = new ViewerController();
     const releaseSession = connectSession(session);
-    const releaseViewer = holdViewer(viewer);
-    openViewer(viewer, session);
+    const releaseViewer = viewer.hold();
+    viewer.open(session);
 
     const store = createPageLabelsStore(viewer, session);
     const seen: (readonly string[] | null)[] = [];
@@ -190,18 +184,18 @@ describe("createPageLabelsStore", () => {
 
 describe("viewer.externalLinks and PdfOutline", () => {
   it("tracks live externalLinks option updates on Viewer", () => {
-    const viewer = new Viewer();
-    const store = externalLinksStoreOf(viewer);
+    const viewer = new ViewerController();
+    const store = viewer.externalLinksStore;
     let notifications = 0;
     const unsub = store.subscribe(() => notifications++);
     assert.equal(viewer.externalLinks, "new-tab");
 
-    setViewerOptions(viewer, { externalLinks: "disabled" });
+    viewer.configure({ externalLinks: "disabled" });
     assert.equal(viewer.externalLinks, "disabled");
     assert.equal(store.get().externalLinks, "disabled");
     assert.equal(notifications, 1);
 
-    setViewerOptions(viewer, { externalLinks: "disabled" });
+    viewer.configure({ externalLinks: "disabled" });
     assert.equal(notifications, 1);
     unsub();
   });
@@ -225,7 +219,7 @@ describe("viewer.externalLinks and PdfOutline", () => {
         { value: new PdfSession({ url: "https://example.test/outline.pdf" }) },
         createElement(
           ViewerContext,
-          { value: new Viewer() },
+          { value: new ViewerController() },
           createElement(
             Suspense,
             { fallback: createElement("span", null, "Loading outline") },
@@ -271,7 +265,7 @@ describe("viewer.externalLinks and PdfOutline", () => {
         items: [],
       },
     ];
-    const viewer = new Viewer();
+    const viewer = new ViewerController();
     const htmlNewTab = renderToString(
       createElement(
         ViewerContext,
@@ -289,7 +283,7 @@ describe("viewer.externalLinks and PdfOutline", () => {
     assert.ok(htmlNewTab.includes('rel="noopener noreferrer nofollow"'));
 
     // With externalLinks="disabled", external URLs render inert without href
-    setViewerOptions(viewer, { externalLinks: "disabled" });
+    viewer.configure({ externalLinks: "disabled" });
     const htmlDisabled = renderToString(
       createElement(ViewerContext, { value: viewer }, createElement(OutlineTree, { items })),
     );
@@ -351,7 +345,7 @@ describe("viewer.externalLinks and PdfOutline", () => {
     const html = renderToString(
       createElement(
         ViewerContext,
-        { value: new Viewer() },
+        { value: new ViewerController() },
         createElement(OutlineTree, { items: [] }),
       ),
     );

@@ -4,12 +4,13 @@ description: The methods and properties of the Viewer that useViewer returns.
 ---
 
 `useViewer()` returns the `Viewer` of the nearest `PdfView` or
-`PdfDocument`: one viewport's controller and state. To hold a viewer from
-above `PdfDocument` or across several `PdfView`s, pass a `ref` to
+`PdfDocument`: one viewport's imperative handle and snapshot. To hold a viewer
+from above `PdfDocument` or across several `PdfView`s, pass a `ref` to
 `PdfViewer` or `PdfView`, or create one with `useCreateViewer()` and pass it
 as `viewer` to `PdfDocument`, `PdfView`, `PdfViewer`, and the hooks that
-take an optional `viewer`. Its view state is in `viewer.store` and
-[`useViewState()`](/reference/state/#view-state).
+take an optional `viewer`. Components subscribe to its view state with
+[`useViewState()`](/reference/state/#view-state), and event handlers read its
+current snapshot from `viewer.state`.
 
 A viewer keeps its view and annotations while its `PdfViewer` unmounts, as
 when a tab hides it, and shows the document again where it was when a
@@ -20,9 +21,9 @@ when a tab hides it, and shows the document again where it was when a
 
 While React hides the `PdfDocument` or the viewer's owner and keeps their
 state (`<Activity>`), the viewer lets go of the document and shows nothing:
-`session`, `pdfSession`, and the layout are null. It keeps the view, the
-history, a finished search, and the annotations, and shows them again with
-the document once React shows both.
+`viewer.state.layout` is null. It keeps the view, the history, a finished
+search, and the annotations, and shows them again with the document once React
+shows both.
 
 The methods below act on a document laid out in an attached viewport;
 before that, they do nothing. The view a document opens with is
@@ -64,19 +65,13 @@ Back and forward are the history's: [`useHistory()`](/guides/navigation/).
 Search, printing, saving, text, and the rest are hooks and functions (see
 [Components and hooks](/reference/components/)).
 
-## State and the document
+## State and DOM
 
 | Property | |
 |---|---|
-| `store` | The view state: `get()`, `subscribe(listener)`, and `store.hot` and `store.cold`, the parts that change while the reader scrolls or zooms and those that do not, published apart (see [State](/reference/state/#view-state)). |
-| `pdfSession` | The `PdfSession` of the `<PdfDocument>` the viewer is attached to, or null while none is attached. |
-| `session` | The open document's session, once it has loaded, else null: pdf.js's `proxy`, `pageCount`, the pages, and what features read from the document. |
-| `permissions` | What the open document permits, everything when it is not encrypted; null until it has loaded. |
-| `layers` | Which of the open document's layers show, once known. |
+| `state` | The current `ViewerState` snapshot, for synchronous reads in event handlers and effects (use [`useViewState()`](/reference/state/#view-state) to re-render when it changes). |
 | `scroller`, `content` | The scroll container and the element that holds the pages, while a viewport is attached. |
-| `signal` | Aborted while no viewport is attached. |
-| `workSignal` | What the viewer does for its open document stops with it: aborts when the document closes or the viewport detaches; null while no document is open. |
-| `textLayer`, `annotationLayer`, `pageColors`, `externalLinks` | The options as `PdfViewer` set them (`externalLinks` stays live across `PdfOutline`, `PdfAutoLinks`, and annotation layers). |
+| `externalLinks` | `"new-tab"` or `"disabled"`, as `PdfViewer` set it (live across `PdfOutline`, `PdfAutoLinks`, and annotation layers). |
 
 ## Measuring
 
@@ -88,21 +83,3 @@ Search, printing, saving, text, and the rest are hooks and functions (see
 | `hasPixels(index)` | Whether a page shows pixels. |
 | `blankFraction()` | The share of the viewport covered by pages that show no pixels yet. |
 | `sharpness()` | The resolution of the visible pages' pixels as a share of full device resolution, weighted by visible area: 1 is sharp everywhere, 0 blank. |
-
-## Extending the viewer
-
-Features are built on the same surface as ParaPDF's own: search, history,
-forms, and annotation editing attach to a viewer through these, and the
-viewer knows none of them by name.
-
-| Member | |
-|---|---|
-| `extend(extension)` | Registers a `ViewerExtension` and returns the function that removes it. Its optional hooks hear the document about to be laid out (`prepare`) or ready (`ready`, with a signal that aborts when the viewer lets go of the document or the viewport detaches), a viewport attaching (`viewport`) or detaching (`detaching`), the viewer letting go of the document (`closed(kept)`: `kept` is true when it may show the session again, as after React hid it, and what a feature keeps for the reader stays; false when it forgets the session, which may follow), a page's text layer built or removed (`textLayer`), a page's annotation layer built or removed (`annotationLayer`), a link or outline jump about to happen (`jumping`), a named action the viewer does not handle (`namedAction`), and layers shown or hidden (`layersChanged`). Hooks for what already happened are called at once. |
-| `defer(loading)` | Makes the next document's first layout wait for `loading`, a feature loading that changes how pages are drawn. |
-| `renderer` | The renderer of the open document's pages, once it has loaded. Its per-page resolution diagnostic is `pageSharpness(index, area, needed)`, where `area` is in PDF points and `needed` is device pixels per PDF point. |
-| `textLayers` | The text layers of the mounted pages that have one, by page. |
-| `annotationLayers` | The annotation layers of the mounted pages that have one, by page. |
-| `setFormLayers(enabled)` | Shows form fields as HTML in the annotation layers instead of drawing them; pages already drawn are drawn again. |
-| `setAnnotationEditor(editor)` | Gives the pages an annotation editor's layers, or, with null, takes them down. |
-| `claimPointer(claimed)` | While claimed, a mouse drag is a feature's, such as an annotation tool's, not the hand tool's. |
-| `invalidateContent()` | What the pages show changed, such as form values: every page is drawn again. |

@@ -8,21 +8,22 @@ import {
   useSession,
   useViewer,
   useViewState,
-  type Viewer,
 } from "parapdf";
 import { useRef, useState } from "react";
 import {
   type AnnotationEditing,
+  controllerOf,
   type Search,
   searchOf,
   useAnnotationEditing,
+  type ViewerController,
 } from "./internals.ts";
 import { type DemoFeatures, ViewerFeatures } from "./ViewerFeatures.tsx";
 
 declare global {
   interface Window {
     __split?: {
-      viewers: (Viewer | null)[];
+      viewers: (ViewerController | null)[];
       searches: (Search | null)[];
       annotations: (AnnotationEditing | null)[];
     };
@@ -75,7 +76,7 @@ export default function SplitView({
                 {show ? (
                   <PdfView
                     ref={(viewer) => {
-                      if (viewer) probes().viewers[index] = viewer;
+                      if (viewer) probes().viewers[index] = controllerOf(viewer);
                     }}
                   >
                     <ColdBadge />
@@ -112,7 +113,7 @@ function Pane({
   const [visible, setVisible] = useState(true);
   const annotations = useAnnotationEditing();
   // For the checks; a closed pane's viewer stays for the lifecycle probe.
-  probes().searches[index] = searchOf(viewer);
+  probes().searches[index] = searchOf(controllerOf(viewer));
   probes().annotations[index] = annotations;
   return (
     <>

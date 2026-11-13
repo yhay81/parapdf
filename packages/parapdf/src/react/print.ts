@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { permits } from "../features/permissions.ts";
 import { type PrintOptions, print as printViewer } from "../features/print/index.ts";
-import type { Viewer } from "../view/viewer.ts";
+import type { Viewer, ViewerController } from "../view/viewer.ts";
 import { useOptionalViewer } from "./context.ts";
 
 export interface PrintProgress {
@@ -44,7 +44,7 @@ export interface PrintController {
 }
 
 export function createPrintController(
-  viewer: Viewer,
+  viewer: ViewerController,
   onChange: (state: PrintState) => void,
 ): PrintController {
   let activeJob: PrintJob | null = null;

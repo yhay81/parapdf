@@ -1,7 +1,7 @@
 "use client";
 
 import type { DocumentSession } from "../../document/session.ts";
-import type { Viewer } from "../../view/viewer.ts";
+import type { ViewerController } from "../../view/viewer.ts";
 import { onEnforcementChange, permits } from "../permissions.ts";
 import type { FormChange } from "./fields.ts";
 import { formsOf } from "./index.ts";
@@ -29,7 +29,7 @@ export interface FormLayers {
  * `scripts`, run the document's scripts in them; `detach()` draws them
  * again.
  */
-export function attachFormLayers(viewer: Viewer, { scripts = false } = {}): FormLayers {
+export function attachFormLayers(viewer: ViewerController, { scripts = false } = {}): FormLayers {
   const listeners = new Set<(change: FormChange) => void>();
   let open: { session: DocumentSession; signal: AbortSignal } | null = null;
   /** The session whose scripts the fields run, and how to stop, once they do. */

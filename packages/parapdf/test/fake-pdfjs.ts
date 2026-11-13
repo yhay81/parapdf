@@ -9,7 +9,7 @@ import { connectSession, PdfSession } from "../src/document/pdf-session.ts";
 import type { PdfjsLoader } from "../src/document/registry.ts";
 import { DocumentSession, type PageSize, type PdfSource } from "../src/document/session.ts";
 import type { LoadedPdfjs } from "../src/pdfjs/loader.ts";
-import { openViewer, type Viewer } from "../src/view/viewer.ts";
+import type { ViewerController } from "../src/view/viewer.ts";
 
 /** A US Letter page. */
 export const LETTER: PageSize = { width: 612, height: 792 };
@@ -434,13 +434,13 @@ export async function openSession(options: FakeDocumentOptions = {}) {
  * `close`, which lets it go as the provider unmounting does.
  */
 export function show(
-  viewer: Viewer,
+  viewer: ViewerController,
   source: PdfSource,
   loader: PdfjsLoader,
   options: { passwordPrompt?: boolean } = {},
 ): { session: PdfSession; close: () => void } {
   const session = new PdfSession(source, { ...options, pdfjs: loader });
   const close = connectSession(session);
-  openViewer(viewer, session);
+  viewer.open(session);
   return { session, close };
 }

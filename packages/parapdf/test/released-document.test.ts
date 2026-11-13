@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { it } from "node:test";
 import { attachFormLayers } from "../src/features/forms/layers.ts";
-import { Viewer } from "../src/view/viewer.ts";
+import { ViewerController } from "../src/view/viewer.ts";
 import { fakePdfjs, settle, show } from "./fake-pdfjs.ts";
 
 it("collects the provider, document and input bytes after unmount with a surviving viewer", async () => {
   assert.ok(globalThis.gc, "run the package tests with --expose-gc");
-  const viewer = new Viewer();
+  const viewer = new ViewerController();
   attachFormLayers(viewer);
   async function mountAndRemove() {
     const data = new Uint8Array(1024);
