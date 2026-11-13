@@ -214,8 +214,9 @@ that matters for performance or direction gets a decision record.
   attributes the main thread's long tasks during a benchmark job in a
   Chromium trace.
 - `pnpm --filter @parapdf/site dev`, `build`, and `preview` for the site;
-  after `build`, `check:demo` (with `BROWSER`) checks what the demo keeps of
-  the reader's changes across the annotation tools and other documents.
+  after `build`, `check:demo` and `check:showcases` (with `BROWSER`) check what
+  the demo keeps of the reader's changes across the annotation tools and other
+  documents, and the interactive showcases on `/` and `/why-react/`.
 
 After building the site, `node --test .claude/launch.test.mjs` starts each
 local preview configuration, checks that it serves the checkout, and checks

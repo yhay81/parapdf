@@ -10,7 +10,7 @@ no engine boundary between them and the rest. It does not use the viewer
 components in `pdfjs-dist/web/`, and it neither forks nor patches pdf.js.
 pdf.js won the [engine benchmark](/about/performance/#the-engine) on size
 and vector drawing; the rest is ParaPDF's own runtime, designed
-around React.
+around React rather than an `<iframe>` ([Why React, not an iframe](/why-react/)).
 
 ## Layers of the runtime
 
