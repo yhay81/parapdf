@@ -6,10 +6,10 @@ description: Find text in every page of the document, as pdf.js's viewer does.
 import { SearchExample } from "../../../components/examples.tsx";
 
 ```tsx
-import { useSearch, type Viewer } from "parapdf";
+import { useSearch } from "parapdf";
 
-function Find({ viewer }: { viewer: Viewer }) {
-  const search = useSearch(viewer);
+function Find() {
+  const search = useSearch();
   return (
     <search>
       <input
@@ -30,7 +30,7 @@ function Find({ viewer }: { viewer: Viewer }) {
 
 <SearchExample client:visible />
 
-`useSearch(viewer)` gives the viewer's own search, shared by every component
+`useSearch(viewer?)` gives the viewer's own search, shared by every component
 that asks for it: its state (`query`, `status`, `matches`, `current`,
 `pagesSearched`) with `search()`, `next()`, `previous()`, and `clear()`.
 Search's code is part of an application only when it imports the hook, or

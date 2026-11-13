@@ -238,26 +238,30 @@ export default function RootLayout({ children }) {
     join(dir, "viewer.js"),
     `"use client";
 import { createElement as h, useEffect, useState } from "react";
-import { configurePdfjs, PdfDocument, PdfViewer, useViewer } from "parapdf";
+import { configurePdfjs, PdfDocument, PdfViewer } from "parapdf";
 
 ${CONFIGURE_BUILD_JS}
 
 export function Viewer({ build }) {
-  const viewer = useViewer();
   const [params, setParams] = useState(null);
   useEffect(() => {
-    window.__viewer = viewer;
     const query = new URLSearchParams(location.search);
     configureBuild(build, query);
     setParams(query);
-  }, [viewer, build]);
+  }, [build]);
   const file = params?.get("file");
   if (!file) return null;
   const options = params.get("scripts") === "1" ? { forms: true, formScripts: true } : {};
   return h(
     PdfDocument,
     { source: "/" + file },
-    h(PdfViewer, { viewer, style: { height: "100vh" }, ...options }),
+    h(PdfViewer, {
+      ref: (viewer) => {
+        if (viewer) window.__viewer = viewer;
+      },
+      style: { height: "100vh" },
+      ...options,
+    }),
   );
 }
 `,

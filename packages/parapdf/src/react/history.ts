@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { historyOf } from "../features/history.ts";
 import type { Viewer } from "../view/viewer.ts";
-import { useStore } from "./context.ts";
+import { useOptionalViewer, useStore } from "./context.ts";
 
 export interface HistoryControls {
   canGoBack: boolean;
@@ -13,11 +13,13 @@ export interface HistoryControls {
 }
 
 /**
- * Back and forward stacks for `viewer`'s link and outline jumps: its own
- * history (`historyOf()`), kept from the first use.
+ * Back and forward stacks for link and outline jumps in `viewer`, or in the
+ * viewer of the nearest `<PdfView>` or `<PdfDocument>`: its own history
+ * (`historyOf()`), kept from the first use.
  */
-export function useHistory(viewer: Viewer): HistoryControls {
-  const history = historyOf(viewer);
+export function useHistory(viewer?: Viewer): HistoryControls {
+  const resolved = useOptionalViewer(viewer);
+  const history = historyOf(resolved);
   const { canGoBack, canGoForward } = useStore(history.store);
   return useMemo(
     () => ({

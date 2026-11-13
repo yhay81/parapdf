@@ -17,7 +17,7 @@ import { useState } from "react";
 
 function PasswordPrompt() {
   const session = useSession();
-  const reason = useDocumentState((state) => state.passwordReason);
+  const { passwordReason: reason } = useDocumentState();
   const [password, setPassword] = useState("");
   if (!reason) return null;
   return (

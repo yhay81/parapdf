@@ -90,10 +90,11 @@ does:
 ```tsx
 "use client";
 
-import { PdfDocument, PdfViewer, type ScrollMode, useViewer, type Viewer, type Zoom } from "parapdf";
+import { PdfDocument, PdfViewer, type ScrollMode, useViewer, type Zoom } from "parapdf";
 import { useEffect, useRef, useState } from "react";
 
-function usePresentation(viewer: Viewer) {
+function Stage() {
+  const viewer = useViewer();
   const stage = useRef<HTMLDivElement>(null);
   const [presenting, setPresenting] = useState(false);
   useEffect(() => {
@@ -117,18 +118,13 @@ function usePresentation(viewer: Viewer) {
     document.addEventListener("fullscreenchange", onChange);
     return () => document.removeEventListener("fullscreenchange", onChange);
   }, [viewer]);
-  const present = () => void stage.current?.requestFullscreen();
-  return { stage, presenting, present };
-}
-
-export function App() {
-  const viewer = useViewer();
-  const { stage, presenting, present } = usePresentation(viewer);
   return (
-    <PdfDocument source="/slides.pdf">
-      <button type="button" onClick={present}>Present</button>
+    <>
+      <button type="button" onClick={() => void stage.current?.requestFullscreen()}>
+        Present
+      </button>
       <div ref={stage} className="stage">
-        <PdfViewer viewer={viewer} style={{ height: "100%" }} />
+        <PdfViewer style={{ height: "100%" }} />
         {presenting ? (
           // A click leaves the focus in the viewport, whose keys turn the pages.
           <div
@@ -143,6 +139,14 @@ export function App() {
           </div>
         ) : null}
       </div>
+    </>
+  );
+}
+
+export function App() {
+  return (
+    <PdfDocument source="/slides.pdf">
+      <Stage />
     </PdfDocument>
   );
 }

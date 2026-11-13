@@ -39,6 +39,7 @@ it. A new choice gets a new record, numbered next.
 | [0030](0030-page-user-units.md) | DOM layers and search boxes follow the page's PDF user-space unit | adopted |
 | [0031](0031-tagged-page-ownership.md) | Each mounted tagged page owns its accessibility targets | adopted |
 | [0032](0032-react-lifetimes.md) | Documents open in render, and viewers keep their view while hidden | adopted |
+| [0033](0033-viewer-context-and-state.md) | Viewer context, React 19 refs, and tracked state hooks | adopted |
 
 ## Template
 

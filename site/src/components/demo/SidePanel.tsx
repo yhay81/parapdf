@@ -10,13 +10,13 @@ import {
   useMetadata,
   useOutline,
   usePageLabels,
+  useViewer,
   useViewState,
 } from "parapdf";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { corpusReadme } from "../../samples.ts";
 import type { Opened } from "./DemoApp.tsx";
 import { Icon, IconButton, type IconName } from "./icons.tsx";
-import { useDemoViewer } from "./viewer.ts";
 
 export type Panel = "thumbnails" | "outline" | "layers" | "attachments" | "info";
 
@@ -39,7 +39,7 @@ export function SidePanel({
   opened: Opened;
 }) {
   const outline = useOutline();
-  const pageCount = useDocumentState((state) => state.pageCount);
+  const { pageCount } = useDocumentState();
   const hasLayers = useLayers().length > 0;
   const attachments = useAttachments().length;
   const tabs: [Panel, string, IconName, boolean][] = [
@@ -120,9 +120,8 @@ export function SidePanel({
  * visible part, and the current page's scrolls into view, as in pdf.js.
  */
 function Thumbnails() {
-  const viewer = useDemoViewer();
-  const pageCount = useDocumentState((state) => state.pageCount);
-  const currentPage = useViewState(viewer, (state) => state.currentPage);
+  const viewer = useViewer();
+  const { currentPage, pageCount } = useViewState();
   const labels = usePageLabels();
   const list = useRef<HTMLOListElement>(null);
   useEffect(() => {
@@ -141,7 +140,7 @@ function Thumbnails() {
               aria-current={pageIndex === currentPage ? "page" : undefined}
               onClick={() => viewer.goToPage(pageIndex)}
             >
-              <PdfThumbnail viewer={viewer} pageIndex={pageIndex} width={THUMBNAIL_WIDTH} />
+              <PdfThumbnail pageIndex={pageIndex} width={THUMBNAIL_WIDTH} />
               <span aria-hidden="true">{label}</span>
             </button>
           </li>
@@ -164,7 +163,7 @@ function OutlineList({ items, depth }: { items: readonly OutlineNode[]; depth: n
 }
 
 function OutlineEntry({ item, depth }: { item: OutlineNode; depth: number }) {
-  const viewer = useDemoViewer();
+  const viewer = useViewer();
   const [open, setOpen] = useState(false);
   const style = {
     paddingLeft: `${depth * 0.875}rem`,
@@ -211,7 +210,7 @@ function Layers() {
 }
 
 function LayerList({ layers }: { layers: readonly PdfLayer[] }) {
-  const viewer = useDemoViewer();
+  const viewer = useViewer();
   return (
     <ul className="demo-layers">
       {layers.map((layer, index) => (
@@ -238,7 +237,7 @@ function LayerList({ layers }: { layers: readonly PdfLayer[] }) {
 }
 
 function Attachments() {
-  const viewer = useDemoViewer();
+  const viewer = useViewer();
   const attachments = useAttachments();
   return (
     <ul className="demo-files">
@@ -262,8 +261,8 @@ function Attachments() {
 /** What the document says about itself, and where a sample comes from. */
 function Info({ opened }: { opened: Opened }) {
   const metadata = useMetadata();
-  const pageCount = useDocumentState((state) => state.pageCount);
-  const restricted = useDocumentState((state) => state.permissions?.restricted ?? false);
+  const { pageCount, permissions } = useDocumentState();
+  const restricted = permissions?.restricted ?? false;
   const rows: [string, string | null | undefined][] = [
     ["Title", metadata?.title],
     ["Author", metadata?.author],

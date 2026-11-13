@@ -28,8 +28,8 @@ Dependencies point down only:
 - **Features**: search, history, forms, annotation editing, printing,
   thumbnails, and the rest, each attaching to a viewer or a session. The
   core imports none of them.
-- **React**: `PdfDocument`, `PdfViewer`, `PdfThumbnails`, and the hooks.
-  React is used only here.
+- **React**: `PdfDocument`, `PdfView`, `PdfViewer`, `PdfThumbnails`, and the
+  hooks. React is used only here.
 
 ## Documents are sessions
 
@@ -81,13 +81,13 @@ into view mount and draw before the fingers lift.
 
 Each viewer publishes its view state in two parts: the hot part, which
 changes while the reader scrolls or zooms (layout, mounted window, current
-page, scale, zoom mode), apart from the cold part (rotation, spread, scroll
-mode, tool). While the reader scrolls or pinches, the viewer computes every
-frame but publishes only changes, and `PdfViewer` selects only the mounted
-window and the layout: a scroll across several pages commits React a few
-times, not once a frame. `PdfViewer`'s change callbacks are called from the
-viewer's own store subscription, so they cost React nothing unless the
-application sets state in them.
+page, scale, zoom mode), apart from the cold part (page count, rotation,
+spread, scroll mode, direction, tool). While the reader scrolls or pinches,
+the viewer computes every frame but publishes only changes, and `PdfViewer`
+selects only the mounted window and the layout: a scroll across several pages
+commits React a few times, not once a frame. `PdfViewer`'s change callbacks
+are called from the viewer's own store subscription, so they cost React
+nothing unless the application sets state in them.
 
 Pixels never go through React. React renders each mounted page's host, a
 `<section>`, and the application's overlay, through a portal into a layer

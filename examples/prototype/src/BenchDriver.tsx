@@ -1,4 +1,4 @@
-import { useViewState, type Viewer } from "parapdf";
+import { useViewer, useViewState } from "parapdf";
 import { useEffect } from "react";
 import {
   blockedThreshold,
@@ -17,7 +17,6 @@ declare global {
 }
 
 export interface BenchDriverProps {
-  viewer: Viewer;
   /** CSS pixels scrolled per second, independent of the browser's frame rate. */
   speed: number;
   durationMs: number;
@@ -35,8 +34,9 @@ export interface BenchDriverProps {
  * React-commit, store, and render counts on `window.__result` for the
  * Playwright runner.
  */
-export function BenchDriver({ viewer, speed, durationMs, idle, commits, label }: BenchDriverProps) {
-  const ready = useViewState(viewer, (state) => state.layout !== null);
+export function BenchDriver({ speed, durationMs, idle, commits, label }: BenchDriverProps) {
+  const viewer = useViewer();
+  const ready = useViewState((state) => state.layout !== null);
 
   useEffect(() => {
     if (!ready) return;

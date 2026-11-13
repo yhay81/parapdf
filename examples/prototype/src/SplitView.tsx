@@ -2,6 +2,7 @@ import {
   type AnnotationEditing,
   PdfDocument,
   type PdfSource,
+  PdfView,
   PdfViewer,
   type PdfViewerProps,
   type Search,
@@ -12,7 +13,7 @@ import {
   useViewState,
   type Viewer,
 } from "parapdf";
-import { useEffect, useState } from "react";
+import { useRef, useState } from "react";
 
 declare global {
   interface Window {
@@ -64,7 +65,16 @@ export default function SplitView({
                 >
                   {show ? "Close viewer" : "Open viewer"}
                 </button>
-                {show ? <Pane index={index} viewerProps={viewerProps} /> : null}
+                {show ? (
+                  <PdfView
+                    ref={(viewer) => {
+                      if (viewer) probes().viewers[index] = viewer;
+                    }}
+                  >
+                    <ColdBadge />
+                    <Pane index={index} viewerProps={viewerProps} />
+                  </PdfView>
+                ) : null}
               </div>
             ))}
           </div>
@@ -76,18 +86,14 @@ export default function SplitView({
 
 function Pane({ index, viewerProps }: { index: number; viewerProps: PdfViewerProps }) {
   const viewer = useViewer();
-  const page = useViewState(viewer, (state) => state.currentPage);
-  const scale = useViewState(viewer, (state) => state.scale);
-  const shown = useViewState(viewer, (state) => state.layout !== null);
-  const status = useDocumentState((state) => state.status);
+  const { currentPage: page, scale, layout } = useViewState();
+  const shown = layout !== null;
+  const { status } = useDocumentState();
   const [visible, setVisible] = useState(true);
-  const annotations = useAnnotationEditing(viewer);
+  const annotations = useAnnotationEditing();
   // For the checks; a closed pane's viewer stays for the lifecycle probe.
   probes().searches[index] = searchOf(viewer);
   probes().annotations[index] = annotations;
-  useEffect(() => {
-    probes().viewers[index] = viewer;
-  }, [index, viewer]);
   return (
     <>
       <div className="split-bar">
@@ -117,11 +123,22 @@ function Pane({ index, viewerProps }: { index: number; viewerProps: PdfViewerPro
       {visible ? (
         <PdfViewer
           {...viewerProps}
-          viewer={viewer}
           label={index === 0 ? "Left PDF" : "Right PDF"}
           style={{ flex: 1, minHeight: 0 }}
         />
       ) : null}
     </>
+  );
+}
+
+/** Reads only cold fields (`pageCount` and `rotation`) through getter-tracked `useViewState()`. */
+function ColdBadge() {
+  const renders = useRef(0);
+  renders.current++;
+  const { pageCount, rotation } = useViewState();
+  return (
+    <span data-cold-renders={renders.current} hidden>
+      {pageCount}:{rotation}
+    </span>
   );
 }

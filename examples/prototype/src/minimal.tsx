@@ -2,16 +2,16 @@
  * The demo without search, forms, annotation editing, and print, whose
  * build scripts/check-modules.ts checks for those features' code.
  */
-import { PdfDocument, PdfViewer, useHistory, useViewer, useViewState, type Viewer } from "parapdf";
+import { PdfDocument, PdfViewer, useHistory, useViewer, useViewState } from "parapdf";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 const file = new URLSearchParams(location.search).get("file") ?? "usrguide.pdf";
 
-function Toolbar({ viewer }: { viewer: Viewer }) {
-  const { back, canGoBack } = useHistory(viewer);
-  const page = useViewState(viewer, (state) => state.currentPage);
-  const pageCount = useViewState(viewer, (state) => state.layout?.sizes.length ?? 0);
+function Toolbar() {
+  const viewer = useViewer();
+  const { back, canGoBack } = useHistory();
+  const { currentPage: page, pageCount } = useViewState();
   return (
     <header className="toolbar">
       <button type="button" onClick={back} disabled={!canGoBack}>
@@ -31,11 +31,10 @@ function Toolbar({ viewer }: { viewer: Viewer }) {
 }
 
 function Minimal() {
-  const viewer = useViewer();
   return (
     <PdfDocument source={`/corpus/${file}`}>
-      <Toolbar viewer={viewer} />
-      <PdfViewer viewer={viewer} className="viewport" />
+      <Toolbar />
+      <PdfViewer className="viewport" />
     </PdfDocument>
   );
 }

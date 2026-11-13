@@ -70,39 +70,39 @@ with the PDF's bytes: see [Sources](/reference/sources/).
 
 ## Add controls
 
-A toolbar acts through a viewer: create one with `useViewer()` and give it
-to the `PdfViewer` and to the hooks and functions you use.
+`PdfDocument` provides a viewer to everything inside it. Read it with
+`useViewer()` and its state with `useViewState()`:
 
 ```tsx
-import { PdfDocument, PdfViewer, useViewer, useViewState, type Viewer } from "parapdf";
+import { PdfDocument, PdfViewer, useViewer, useViewState } from "parapdf";
 
-function PageNumber({ viewer }: { viewer: Viewer }) {
-  const page = useViewState(viewer, (state) => state.currentPage);
-  const count = useViewState(viewer, (state) => state.layout?.sizes.length ?? 0);
+function PageNumber() {
+  const viewer = useViewer();
+  const { currentPage, pageCount } = useViewState();
   return (
     <span>
       <button type="button" onClick={() => viewer.previousPage()}>Previous</button>
-      {page + 1} / {count}
+      {currentPage + 1} / {pageCount}
       <button type="button" onClick={() => viewer.nextPage()}>Next</button>
     </span>
   );
 }
 
 export function App() {
-  const viewer = useViewer();
   return (
     <PdfDocument source="/manual.pdf">
-      <PageNumber viewer={viewer} />
-      <PdfViewer viewer={viewer} style={{ height: "90vh" }} />
+      <PageNumber />
+      <PdfViewer style={{ height: "90vh" }} />
     </PdfDocument>
   );
 }
 ```
 
-`useViewState()` renders its component again only when the selected value
-changes: scrolling through a page renders `PageNumber` once, when the
-current page changes. The document's own state, loading, errors, and
-password requests, is `useDocumentState()`'s: see [State](/reference/state/).
+`useViewState()` tracks the fields read during rendering and renders its
+component again only when one of them changes: scrolling through a page
+renders `PageNumber` once, when `currentPage` changes. The document's own
+state, loading, errors, and password requests, is `useDocumentState()`'s:
+see [State](/reference/state/).
 
 ## Next
 

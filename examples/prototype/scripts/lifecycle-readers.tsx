@@ -13,7 +13,7 @@ export function Reader() {
 }
 
 function DocumentStatus() {
-  const status = useDocumentState((state) => state.status);
+  const { status } = useDocumentState();
   const session = useSession();
   return (
     <output>{status === "ready" ? (session.proxy?.numPages ?? "missing proxy") : status}</output>

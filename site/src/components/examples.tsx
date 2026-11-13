@@ -18,7 +18,6 @@ import {
   useSelection,
   useViewer,
   useViewState,
-  type Viewer,
 } from "parapdf";
 import { type ReactNode, Suspense, useState } from "react";
 import { corpusReadme, samples, sampleUrl } from "../samples.ts";
@@ -41,31 +40,25 @@ function Example({
 }: {
   file: string;
   viewerProps?: PdfViewerProps;
-  toolbar?: (viewer: Viewer) => ReactNode;
-  side?: (viewer: Viewer) => ReactNode;
+  toolbar?: ReactNode;
+  side?: ReactNode;
   note?: ReactNode;
   overlay?: (pageIndex: number) => ReactNode;
 }) {
   const sample = samples.find((candidate) => candidate.file === file);
-  const viewer = useViewer();
   return (
     <div className="example not-content">
       <PdfDocument source={sampleUrl(file)}>
         {toolbar ? (
           <div className="example-toolbar" role="toolbar" aria-label="Viewer controls">
-            {toolbar(viewer)}
+            {toolbar}
             <span className="spacer" />
             <DocumentStatus className="example-status" />
           </div>
         ) : null}
         <div className="example-body">
-          {side?.(viewer)}
-          <PdfViewer
-            {...viewerProps}
-            viewer={viewer}
-            className="example-viewport"
-            renderOverlay={overlay}
-          />
+          {side}
+          <PdfViewer {...viewerProps} className="example-viewport" renderOverlay={overlay} />
         </div>
       </PdfDocument>
       <p className="example-note">
@@ -87,7 +80,8 @@ export function QuickStartExample() {
   return <Example file="usrguide.pdf" />;
 }
 
-function RotateButton({ viewer }: { viewer: Viewer }) {
+function RotateButton() {
+  const viewer = useViewer();
   return (
     <button type="button" onClick={() => viewer.rotate(90)}>
       Rotate
@@ -100,13 +94,13 @@ export function ControlsExample() {
   return (
     <Example
       file="bill-hr815.pdf"
-      toolbar={(viewer) => (
+      toolbar={
         <>
-          <PageControls viewer={viewer} />
-          <ZoomControls viewer={viewer} />
-          <RotateButton viewer={viewer} />
+          <PageControls />
+          <ZoomControls />
+          <RotateButton />
         </>
-      )}
+      }
       note="Click the pages, then try the arrow keys, Page Down, and Ctrl or ⌘ with + and -."
     />
   );
@@ -115,9 +109,9 @@ export function ControlsExample() {
 const SCROLL_MODES: readonly ScrollMode[] = ["vertical", "horizontal", "wrapped", "page"];
 const SPREADS: readonly SpreadMode[] = ["none", "odd", "even"];
 
-function LayoutControls({ viewer }: { viewer: Viewer }) {
-  const scrollMode = useViewState(viewer, (state) => state.scrollMode);
-  const spread = useViewState(viewer, (state) => state.spread);
+function LayoutControls() {
+  const viewer = useViewer();
+  const { scrollMode, spread } = useViewState();
   return (
     <>
       <label>
@@ -152,13 +146,13 @@ export function LayoutExample() {
     <Example
       file="synthetic-mixed-sizes.pdf"
       viewerProps={{ defaultZoom: "fit-page" }}
-      toolbar={(viewer) => (
+      toolbar={
         <>
-          <LayoutControls viewer={viewer} />
-          <PageControls viewer={viewer} />
-          <ZoomControls viewer={viewer} />
+          <LayoutControls />
+          <PageControls />
+          <ZoomControls />
         </>
-      )}
+      }
       note="In page mode, the arrow keys at an edge and one-finger swipes turn pages."
     />
   );
@@ -169,30 +163,25 @@ export function SearchExample() {
   return (
     <Example
       file="bill-hr815.pdf"
-      toolbar={(viewer) => <SearchField viewer={viewer} withOptions />}
+      toolbar={<SearchField withOptions />}
       note="Try “appropriations” or “Ukraine”: matches stream in page by page, mounted or not."
     />
   );
 }
 
 /** The pages as thumbnails, named by their labels once those are read. */
-function ThumbnailList({ viewer }: { viewer: Viewer }) {
+function ThumbnailList() {
   return (
-    <Suspense
-      fallback={
-        <PdfThumbnails viewer={viewer} width={110} label="Pages" className="example-side" />
-      }
-    >
-      <LabelledThumbnails viewer={viewer} />
+    <Suspense fallback={<PdfThumbnails width={110} label="Pages" className="example-side" />}>
+      <LabelledThumbnails />
     </Suspense>
   );
 }
 
-function LabelledThumbnails({ viewer }: { viewer: Viewer }) {
+function LabelledThumbnails() {
   const labels = usePageLabels();
   return (
     <PdfThumbnails
-      viewer={viewer}
       width={110}
       label="Pages"
       className="example-side"
@@ -206,22 +195,21 @@ export function ThumbnailsExample() {
   return (
     <Example
       file="usrguide.pdf"
-      side={(viewer) => <ThumbnailList viewer={viewer} />}
+      side={<ThumbnailList />}
       note="Only thumbnails near the visible part of the list hold pixels."
     />
   );
 }
 
 function SelectionTools({
-  viewer,
   onKeep,
   onClear,
 }: {
-  viewer: Viewer;
   onKeep: (rects: readonly { pageIndex: number; rect: PdfRect }[]) => void;
   onClear: () => void;
 }) {
-  const selection = useSelection(viewer);
+  const viewer = useViewer();
+  const selection = useSelection();
   const [read, setRead] = useState("");
   return (
     <>
@@ -265,13 +253,12 @@ export function TextExample() {
   return (
     <Example
       file="usrguide.pdf"
-      toolbar={(viewer) => (
+      toolbar={
         <SelectionTools
-          viewer={viewer}
           onKeep={(rects) => setKept((previous) => [...previous, ...rects])}
           onClear={() => setKept([])}
         />
-      )}
+      }
       overlay={(pageIndex) =>
         kept
           .filter((entry) => entry.pageIndex === pageIndex)
@@ -299,10 +286,11 @@ export function TextExample() {
   );
 }
 
-function FormTools({ viewer }: { viewer: Viewer }) {
+function FormTools() {
+  const viewer = useViewer();
   const [last, setLast] = useState("Type in a field");
   const [fields, setFields] = useState<number | null>(null);
-  useFormChange(viewer, ({ name, value }) => setLast(`${name} = ${JSON.stringify(value)}`));
+  useFormChange(({ name, value }) => setLast(`${name} = ${JSON.stringify(value)}`));
   return (
     <>
       <button type="button" onClick={async () => setFields((await getFormFields(viewer)).length)}>
@@ -327,7 +315,7 @@ export function FormsExample() {
     <Example
       file="f1040.pdf"
       viewerProps={{ forms: true }}
-      toolbar={(viewer) => <FormTools viewer={viewer} />}
+      toolbar={<FormTools />}
       note="What you type stays in this page: the download is made in your browser."
     />
   );
@@ -340,8 +328,9 @@ const TOOLS: readonly [AnnotationTool, string][] = [
   ["ink", "Draw"],
 ];
 
-function AnnotationTools({ viewer }: { viewer: Viewer }) {
-  const annotations = useAnnotations(viewer);
+function AnnotationTools() {
+  const viewer = useViewer();
+  const annotations = useAnnotations();
   const tool = annotations?.tool ?? "none";
   const editing = annotations?.state ?? null;
   const ink = annotations?.styles?.ink;
@@ -384,7 +373,7 @@ export function AnnotationsExample() {
     <Example
       file="usrguide.pdf"
       viewerProps={{ annotationEditing: true }}
-      toolbar={(viewer) => <AnnotationTools viewer={viewer} />}
+      toolbar={<AnnotationTools />}
       note="Select text with Highlight, click with Text, drag with Draw; the download includes them."
     />
   );
@@ -392,17 +381,16 @@ export function AnnotationsExample() {
 
 /** An encrypted document and the prompt that answers it. */
 export function PasswordExample() {
-  const viewer = useViewer();
   return (
     <div className="example not-content">
       <PdfDocument source={sampleUrl("synthetic-encrypted.pdf")}>
         <PasswordPrompt className="example-password" hint="parapdf" />
         <div className="example-toolbar" role="toolbar" aria-label="Viewer controls">
-          <PageControls viewer={viewer} />
+          <PageControls />
           <span className="spacer" />
           <DocumentStatus className="example-status" />
         </div>
-        <PdfViewer viewer={viewer} className="example-viewport" />
+        <PdfViewer className="example-viewport" />
       </PdfDocument>
       <p className="example-note">
         The password is <code>parapdf</code>. Cancel fails the document instead.
@@ -423,7 +411,6 @@ const HERO_SAMPLES = [
 export function HeroViewer() {
   const [file, setFile] = useState("usrguide.pdf");
   const sample = samples.find((candidate) => candidate.file === file);
-  const viewer = useViewer();
   return (
     <div className="example example-hero not-content">
       <PdfDocument source={sampleUrl(file)}>
@@ -440,12 +427,12 @@ export function HeroViewer() {
                 ))}
             </select>
           </label>
-          <PageControls viewer={viewer} />
+          <PageControls />
           <span className="spacer" />
           <DocumentStatus className="example-status" />
-          <ZoomControls viewer={viewer} fit={false} />
+          <ZoomControls fit={false} />
         </div>
-        <PdfViewer viewer={viewer} className="example-viewport" label={sample?.title} />
+        <PdfViewer className="example-viewport" label={sample?.title} />
       </PdfDocument>
       <p className="example-note">
         {sample?.about}.{" "}

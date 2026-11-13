@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { type SearchState, searchOf } from "../features/search/index.ts";
 import type { SearchOptions } from "../features/search/text-search.ts";
 import type { Viewer } from "../view/viewer.ts";
-import { useStore } from "./context.ts";
+import { useOptionalViewer, useStore } from "./context.ts";
 
 export interface SearchControls extends SearchState {
   search(query: string, options?: SearchOptions): void;
@@ -14,12 +14,14 @@ export interface SearchControls extends SearchState {
 }
 
 /**
- * Whole-document search in `viewer` with progressive results and match
+ * Whole-document search in `viewer`, or in the viewer of the nearest
+ * `<PdfView>` or `<PdfDocument>`, with progressive results and match
  * navigation: the viewer's own search (`searchOf()`), shared by the
  * components that use it.
  */
-export function useSearch(viewer: Viewer): SearchControls {
-  const search = searchOf(viewer);
+export function useSearch(viewer?: Viewer): SearchControls {
+  const resolved = useOptionalViewer(viewer);
+  const search = searchOf(resolved);
   const state = useStore(search.store);
   return useMemo(
     () => ({

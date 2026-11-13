@@ -48,11 +48,12 @@ await download(viewer, { filename: "excerpt.pdf", pages: [{ excludePages: [3] }]
 ## Reading and filling the form
 
 ```tsx
-import { getFormFields, setFormValues, useFormChange, type Viewer } from "parapdf";
+import { getFormFields, setFormValues, useFormChange, useViewer } from "parapdf";
 
-function FormSync({ viewer, onChange }: { viewer: Viewer; onChange: (name: string, value: unknown) => void }) {
+function FormSync({ onChange }: { onChange: (name: string, value: unknown) => void }) {
+  const viewer = useViewer();
   // Each value the reader enters, as they type.
-  useFormChange(viewer, ({ name, value }) => onChange(name, value));
+  useFormChange(({ name, value }) => onChange(name, value));
   const fill = async () => {
     const fields = await getFormFields(viewer);
     console.log(fields.map(({ name, type, value }) => [name, type, value]));
@@ -74,7 +75,7 @@ function FormSync({ viewer, onChange }: { viewer: Viewer; onChange: (name: strin
   checking the first box or none, and resolves to the names it set. The
   fields shown show the values, and `save()` and `print()` include them; it
   is not heard as the reader's input.
-- `useFormChange(viewer, listener)` hears `{ name, value }` for each value
+- `useFormChange(listener, viewer?)` hears `{ name, value }` for each value
   the reader enters, with `forms` on.
 - `useFormFields()` gives the fields of the nearest `PdfDocument`'s document
   with their values as first read. It suspends until they are read, so

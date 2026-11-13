@@ -5,22 +5,22 @@ description: Read the viewer's state and change the view from your own component
 
 import { ControlsExample } from "../../../components/examples.tsx";
 
-`useViewer()` creates a viewer, one viewport's controller and state. Give it
-to the `<PdfViewer>` that shows it and to your own components, which read
-its state with hooks and change the view with its methods:
+`PdfDocument` provides a `Viewer`, one viewport's controller and state, to
+`<PdfViewer>` and to your own components inside it. Read the viewer with
+`useViewer()`, read its state with `useViewState()`, and change the view with
+its methods:
 
 ```tsx
-import { PdfDocument, PdfViewer, useDocumentState, useViewer, useViewState, type Viewer } from "parapdf";
+import { PdfDocument, PdfViewer, useViewer, useViewState } from "parapdf";
 
-function Toolbar({ viewer }: { viewer: Viewer }) {
-  const page = useViewState(viewer, (state) => state.currentPage);
-  const pageCount = useDocumentState((state) => state.pageCount);
+function Toolbar() {
+  const viewer = useViewer();
   // CSS pixels per PDF point; 96 / 72 shows a page at its printed size.
-  const scale = useViewState(viewer, (state) => state.scale);
+  const { currentPage, pageCount, scale } = useViewState();
   return (
     <div role="toolbar" aria-label="PDF controls">
       <button type="button" onClick={() => viewer.previousPage()}>Previous</button>
-      <span>{page + 1} / {pageCount}</span>
+      <span>{currentPage + 1} / {pageCount}</span>
       <button type="button" onClick={() => viewer.nextPage()}>Next</button>
       <button type="button" onClick={() => viewer.zoomBy(1 / 1.25)}>Zoom out</button>
       <span>{Math.round((scale * 72 * 100) / 96)}%</span>
@@ -32,11 +32,10 @@ function Toolbar({ viewer }: { viewer: Viewer }) {
 }
 
 export function App() {
-  const viewer = useViewer();
   return (
     <PdfDocument source="/manual.pdf">
-      <Toolbar viewer={viewer} />
-      <PdfViewer viewer={viewer} style={{ height: "80vh" }} />
+      <Toolbar />
+      <PdfViewer style={{ height: "80vh" }} />
     </PdfDocument>
   );
 }
@@ -46,18 +45,23 @@ export function App() {
 
 ## Reading state
 
-Two hooks read state, and re-render their component only when the selected
-value changes:
+Two hooks read state, and re-render their component only when what it reads
+changes:
 
-- `useViewState(viewer, selector)` reads the viewer's view: its layout, the
+- `useViewState()` reads the viewer's view: its layout, `pageCount`, the
   mounted pages, `currentPage`, `scale`, `zoomMode`, `rotation`, `spread`,
-  `scrollMode`, and `tool`.
-- `useDocumentState(selector)` reads the nearest `PdfDocument`'s document,
+  `scrollMode`, `direction`, and `tool`.
+- `useDocumentState()` reads the nearest `PdfDocument`'s document,
   shared by its viewers: `status`, `error`, `passwordReason`, `progress`,
   `pageCount`, and `permissions`.
 
-Return a primitive or an object the state already holds, not a new object
-or array: select each value with a selector of its own instead.
+Called with no arguments, both hooks track the fields read during rendering
+and ignore updates to unread fields: a component that reads only `rotation`
+and `tool` never renders again while `currentPage` or `scale` changes. Both
+also take a selector, `useViewState((state) => …)` and
+`useDocumentState((state) => …)`, whose result is compared shallowly so
+returning `{ page: state.currentPage, scale: state.scale }` or a tuple keeps
+its snapshot while its fields stay equal.
 
 The viewer's store publishes when the mounted pages, the current page, or
 the zoom change, not at every scrolled frame, so a toolbar costs nothing
@@ -91,7 +95,7 @@ viewer opens a document, or controlled, by their value and change callback:
 
 ```tsx
 const [zoom, setZoom] = useState<Zoom>("fit-width");
-<PdfViewer viewer={viewer} zoom={zoom} onZoomChange={setZoom} />;
+<PdfViewer zoom={zoom} onZoomChange={setZoom} />;
 ```
 
 A controlled value is what the viewer shows. The viewer reports each change
@@ -118,36 +122,50 @@ zoom, rotation, spread, scroll mode, tool, search, history, and pixel
 budgets. The document is opened once for all of them: its text, outline,
 layers' visibility, and form values are shared.
 
+Wrap each pane in `<PdfView>` to give it a viewer of its own. Controls,
+thumbnails, and `<PdfViewer>` inside `<PdfView>` read that pane's viewer
+without changing props:
+
 ```tsx
+import { PdfDocument, PdfView, PdfViewer } from "parapdf";
+
 function SplitView() {
-  const left = useViewer();
-  const right = useViewer();
   return (
     <PdfDocument source="/manual.pdf">
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", height: "100vh" }}>
-        <PdfViewer viewer={left} />
-        <PdfViewer viewer={right} defaultPage={10} />
+        <PdfView>
+          <Toolbar />
+          <PdfViewer />
+        </PdfView>
+        <PdfView>
+          <Toolbar />
+          <PdfViewer defaultPage={10} />
+        </PdfView>
       </div>
     </PdfDocument>
   );
 }
 ```
 
-A viewer lives as long as the component that called `useViewer()`. While
-its `PdfViewer` is unmounted it stops drawing and searching but keeps its
-view and annotations, and a `PdfViewer` given it again returns to where it
-was. A `PdfViewer` without a `viewer` prop has one of its own, which goes
-with it.
+To reach a viewer from above `<PdfDocument>` or across panes, pass a `ref` to
+`<PdfViewer>` or `<PdfView>`, or create a viewer with `useCreateViewer()` and
+pass it as `viewer` to `<PdfDocument>`, `<PdfView>`, `<PdfViewer>`, and the
+hooks that take an optional `viewer`.
+
+A viewer lives as long as the `PdfDocument`, `PdfView`, or
+`useCreateViewer()` that created it. While its `PdfViewer` is unmounted it
+stops drawing and searching but keeps its view and annotations, and a
+`PdfViewer` in the same scope returns to where it was.
 
 React may hide a tree and keep its state, as `<Activity>` does. A viewer
-keeps the reader's place through that too, wherever `useViewer()` is
-called: hidden, the `PdfDocument` lets go of the document, which closes a
-second later unless another `PdfDocument` shows it, and the viewer of
-everything it drew. Shown again, they open the document if it closed, and
-the viewer returns to the page, zoom, rotation, and tool the reader left,
-with the search they ran and the annotations they made. If the server
-returns a different PDF or revision at the same URL, the viewer opens it
-with a fresh view, search and annotations. What the reader
+keeps the reader's place through that too, whether `<PdfDocument>`,
+`<PdfView>`, or `useCreateViewer()` owns it: hidden, the `PdfDocument` lets
+go of the document, which closes a second later unless another `PdfDocument`
+shows it, and the viewer of everything it drew. Shown again, they open the
+document if it closed, and the viewer returns to the page, zoom, rotation,
+and tool the reader left, with the search they ran and the annotations they
+made. If the server returns a different PDF or revision at the same URL, the
+viewer opens it with a fresh view, search and annotations. What the reader
 typed into form fields belongs to the document and goes when it closes: a
 `PdfDocument` outside what hides keeps the document open, and those values
 with it.

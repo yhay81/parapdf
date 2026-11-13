@@ -5,7 +5,7 @@ import {
   PdfViewer,
   useAnnotations,
   useFormChange,
-  useViewer,
+  type Viewer,
 } from "parapdf";
 import { Suspense, useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { type Sample, samples, sampleUrl } from "../../samples.ts";
@@ -13,7 +13,6 @@ import { AnnotationBar } from "./AnnotationBar.tsx";
 import { DropHint, ErrorNotice, LoadingBar, PasswordDialog } from "./Overlays.tsx";
 import { type Panel, SidePanel } from "./SidePanel.tsx";
 import { Toolbar } from "./Toolbar.tsx";
-import { useDemoViewer, ViewerContext } from "./viewer.ts";
 
 /** A sample from the site, or a file the reader opened, which stays in the browser. */
 export type Opened = { sample: Sample; revision?: number } | { name: string; data: Uint8Array };
@@ -45,14 +44,10 @@ async function readPdf(file: File | undefined): Promise<Opened | null> {
 
 /** Calls `onEdit` once the reader fills in a form field or creates, changes, or deletes an annotation. */
 function EditWatcher({ onEdit }: { onEdit: () => void }) {
-  const viewer = useDemoViewer();
-  useFormChange(viewer, onEdit);
-  // The viewer outlives the document: its editing state as this document
-  // opens may still be the last one's, so only later states count.
-  const state = useAnnotations(viewer)?.state;
-  const opened = useRef(state);
+  useFormChange(onEdit);
+  const state = useAnnotations()?.state;
   useEffect(() => {
-    if (state !== opened.current && (state?.canUndo || state?.canRedo)) onEdit();
+    if (state?.canUndo || state?.canRedo) onEdit();
   }, [state, onEdit]);
   return null;
 }
@@ -78,7 +73,7 @@ export default function DemoApp() {
   const [finding, setFinding] = useState(false);
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
-  const viewer = useViewer();
+  const viewerRef = useRef<Viewer>(null);
   const pendingFile = useRef<File | undefined>(undefined);
   /** Each edit gets a new marker. A download can clear only the edits it started with. */
   const unsaved = useRef<symbol | null>(null);
@@ -113,6 +108,8 @@ export default function DemoApp() {
   };
   const openDropped = useEffectEvent(openFile);
   const save = async () => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
     const edits = unsaved.current;
     try {
       await download(viewer, "name" in opened ? { filename: opened.name } : {});
@@ -186,72 +183,70 @@ export default function DemoApp() {
 
   return (
     <div className="demo">
-      <ViewerContext value={viewer}>
-        <PdfDocument key={session.id} source={source}>
-          <EditWatcher onEdit={markUnsaved} />
-          <Toolbar
-            opened={opened}
-            onOpen={replace}
-            onOpenFile={() => fileInput.current?.click()}
-            onDownload={() => void save()}
-            sidebar={sidebar}
-            onSidebarChange={setSidebar}
-            onShowInfo={() => {
-              setPanel("info");
-              setSidebar(true);
-            }}
-            finding={finding}
-            onFindingChange={setFinding}
-            annotating={annotating}
-            onAnnotatingChange={showAnnotationTools}
-          />
-          <div className="demo-main">
-            {sidebar ? (
-              <>
-                {/* The document's lists load apart from the pages, which never wait for them. */}
-                <Suspense fallback={null}>
-                  <SidePanel
-                    panel={panel}
-                    onPanelChange={setPanel}
-                    onClose={() => setSidebar(false)}
-                    opened={opened}
-                  />
-                </Suspense>
-                {/* Phones show the sidebar over the pages; a tap beside it closes it. */}
-                <button
-                  type="button"
-                  className="demo-scrim"
-                  aria-label="Close the sidebar"
-                  tabIndex={-1}
-                  onClick={() => setSidebar(false)}
+      <PdfDocument key={session.id} source={source}>
+        <EditWatcher onEdit={markUnsaved} />
+        <Toolbar
+          opened={opened}
+          onOpen={replace}
+          onOpenFile={() => fileInput.current?.click()}
+          onDownload={() => void save()}
+          sidebar={sidebar}
+          onSidebarChange={setSidebar}
+          onShowInfo={() => {
+            setPanel("info");
+            setSidebar(true);
+          }}
+          finding={finding}
+          onFindingChange={setFinding}
+          annotating={annotating}
+          onAnnotatingChange={showAnnotationTools}
+        />
+        <div className="demo-main">
+          {sidebar ? (
+            <>
+              {/* The document's lists load apart from the pages, which never wait for them. */}
+              <Suspense fallback={null}>
+                <SidePanel
+                  panel={panel}
+                  onPanelChange={setPanel}
+                  onClose={() => setSidebar(false)}
+                  opened={opened}
                 />
-              </>
-            ) : null}
-            <div className="demo-stage">
-              <PdfViewer
-                viewer={viewer}
-                className="demo-viewport"
-                label={title}
-                forms
-                annotationEditing={session.editing}
+              </Suspense>
+              {/* Phones show the sidebar over the pages; a tap beside it closes it. */}
+              <button
+                type="button"
+                className="demo-scrim"
+                aria-label="Close the sidebar"
+                tabIndex={-1}
+                onClick={() => setSidebar(false)}
               />
-              <LoadingBar />
-              <ErrorNotice
-                onRetry={() => setSession((current) => ({ ...current, id: current.id + 1 }))}
-              />
-              <PasswordDialog
-                title={title}
-                hint={
-                  "sample" in opened && opened.sample.file === "synthetic-encrypted.pdf"
-                    ? "parapdf"
-                    : undefined
-                }
-              />
-              {annotating ? <AnnotationBar onDone={() => showAnnotationTools(false)} /> : null}
-            </div>
+            </>
+          ) : null}
+          <div className="demo-stage">
+            <PdfViewer
+              ref={viewerRef}
+              className="demo-viewport"
+              label={title}
+              forms
+              annotationEditing={session.editing}
+            />
+            <LoadingBar />
+            <ErrorNotice
+              onRetry={() => setSession((current) => ({ ...current, id: current.id + 1 }))}
+            />
+            <PasswordDialog
+              title={title}
+              hint={
+                "sample" in opened && opened.sample.file === "synthetic-encrypted.pdf"
+                  ? "parapdf"
+                  : undefined
+              }
+            />
+            {annotating ? <AnnotationBar onDone={() => showAnnotationTools(false)} /> : null}
           </div>
-        </PdfDocument>
-      </ViewerContext>
+        </div>
+      </PdfDocument>
       <input
         ref={fileInput}
         type="file"

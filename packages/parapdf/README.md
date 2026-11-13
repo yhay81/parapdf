@@ -49,27 +49,35 @@ export function App() {
 }
 ```
 
-`PdfDocument` opens the document for everything inside it; `PdfViewer` is a
-scroll container that shows it. Give the viewer a definite height: it does
-not grow with the document. Nothing suspends, and the viewer shows no
-loading state or error of its own; read them with `useDocumentState()`.
+`PdfDocument` opens the document and provides a viewer for everything inside
+it; `PdfViewer` is a scroll container that shows it. Give the viewer a
+definite height: it does not grow with the document. Nothing suspends, and
+the viewer shows no loading state or error of its own; read them with
+`useDocumentState()`.
 
-To control a viewer, create it with `useViewer()` and give it to the
-`PdfViewer` and to your controls:
+Controls inside `PdfDocument` read the viewer and its state directly:
 
 ```tsx
 import { PdfDocument, PdfViewer, useViewer, useViewState } from "parapdf";
 
-export function Reader() {
+function Toolbar() {
   const viewer = useViewer();
-  const page = useViewState(viewer, (state) => state.currentPage);
+  const { currentPage, pageCount } = useViewState();
   return (
-    <PdfDocument source="/manual.pdf">
+    <div>
       <button type="button" onClick={() => viewer.previousPage()}>Previous</button>
-      <span>{page + 1}</span>
+      <span>{currentPage + 1} / {pageCount}</span>
       <button type="button" onClick={() => viewer.nextPage()}>Next</button>
       <button type="button" onClick={() => viewer.zoomBy(1.25)}>Zoom in</button>
-      <PdfViewer viewer={viewer} style={{ height: "80vh" }} />
+    </div>
+  );
+}
+
+export function Reader() {
+  return (
+    <PdfDocument source="/manual.pdf">
+      <Toolbar />
+      <PdfViewer style={{ height: "80vh" }} />
     </PdfDocument>
   );
 }

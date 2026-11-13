@@ -3,15 +3,15 @@ import {
   useDocumentState,
   useSearch,
   useSession,
+  useViewer,
   useViewState,
-  type Viewer,
 } from "parapdf";
 import { useEffect, useState } from "react";
 
 /** Previous and next page, and the page being read. */
-export function PageControls({ viewer }: { viewer: Viewer }) {
-  const page = useViewState(viewer, (state) => state.currentPage);
-  const pageCount = useDocumentState((state) => state.pageCount);
+export function PageControls() {
+  const viewer = useViewer();
+  const { currentPage: page, pageCount } = useViewState();
   return (
     <>
       <button
@@ -36,9 +36,9 @@ export function PageControls({ viewer }: { viewer: Viewer }) {
 }
 
 /** Zoom out and in, the zoom as a share of the printed size, and fitting. */
-export function ZoomControls({ viewer, fit = true }: { viewer: Viewer; fit?: boolean }) {
-  const scale = useViewState(viewer, (state) => state.scale);
-  const zoomMode = useViewState(viewer, (state) => state.zoomMode);
+export function ZoomControls({ fit = true }: { fit?: boolean }) {
+  const viewer = useViewer();
+  const { scale, zoomMode } = useViewState();
   return (
     <>
       <button type="button" aria-label="Zoom out" onClick={() => viewer.zoomBy(1 / 1.25)}>
@@ -75,17 +75,9 @@ export function ZoomControls({ viewer, fit = true }: { viewer: Viewer; fit?: boo
  * Find in the document: typing searches after a pause, Enter and Shift+Enter
  * move between matches, and Escape clears.
  */
-export function SearchField({
-  viewer,
-  id,
-  withOptions = false,
-}: {
-  viewer: Viewer;
-  id?: string;
-  withOptions?: boolean;
-}) {
-  const search = useSearch(viewer);
-  const pageCount = useDocumentState((state) => state.pageCount);
+export function SearchField({ id, withOptions = false }: { id?: string; withOptions?: boolean }) {
+  const search = useSearch();
+  const { pageCount } = useDocumentState();
   const [value, setValue] = useState("");
   const [options, setOptions] = useState<SearchOptions>({});
   const { search: run, query } = search;
@@ -174,7 +166,7 @@ export function SearchField({
 /** Asks for the password of an encrypted document while its session waits for one. */
 export function PasswordPrompt({ className, hint }: { className?: string; hint?: string }) {
   const session = useSession();
-  const reason = useDocumentState((state) => state.passwordReason);
+  const { passwordReason: reason } = useDocumentState();
   const [password, setPassword] = useState("");
   if (reason === null) return null;
   return (
@@ -206,20 +198,18 @@ export function PasswordPrompt({ className, hint }: { className?: string; hint?:
 
 /** Loading and errors, which the viewport itself does not show. */
 export function DocumentStatus({ className }: { className?: string }) {
-  const status = useDocumentState((state) => state.status);
-  const error = useDocumentState((state) => state.error);
-  const progress = useDocumentState((state) => state.progress);
-  if (status === "error") {
+  const state = useDocumentState();
+  if (state.status === "error") {
     return (
       <span className={className} role="alert" data-error="">
-        {error ?? "The document could not be opened."}
+        {state.error ?? "The document could not be opened."}
       </span>
     );
   }
-  if (status !== "loading") return null;
+  if (state.status !== "loading") return null;
   const percent =
-    progress?.total && progress.total > 0
-      ? ` ${Math.round((progress.loaded / progress.total) * 100)}%`
+    state.progress?.total && state.progress.total > 0
+      ? ` ${Math.round((state.progress.loaded / state.progress.total) * 100)}%`
       : "";
   return (
     <span className={className} role="status">

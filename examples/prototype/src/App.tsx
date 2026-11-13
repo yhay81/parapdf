@@ -8,7 +8,6 @@ import {
   PdfPageRect,
   type PdfSource,
   PdfViewer,
-  type Viewer as PdfViewerController,
   type PdfViewerProps,
   print,
   type ScrollMode,
@@ -341,14 +340,6 @@ function Viewer({ fragment }: { renders: number; fragment: string }) {
   // PdfDocument's render, which starts loading pdf.js and the PDF.
   const data = settings.source === "data" ? use(bytesPromise) : null;
   const range = settings.source === "range" ? use(rangePromise) : null;
-  const viewer = useViewer();
-  const presentation = usePresentation(viewer);
-  const [sidebar, setSidebar] = useState<SidebarView | null>(null);
-  // Props a check sets on the viewer while it shows the document.
-  const [changed, setChanged] = useState<Partial<PdfViewerProps>>({});
-  useEffect(() => {
-    window.__setViewerProps = (props) => setChanged((previous) => ({ ...previous, ...props }));
-  }, []);
   // A new object at every render: the document stays open while its URL or
   // its bytes stay the same.
   const password = settings.password !== null ? { password: settings.password } : {};
@@ -360,47 +351,59 @@ function Viewer({ fragment }: { renders: number; fragment: string }) {
   return (
     <Profiler id="viewer" onRender={countCommit}>
       <PdfDocument source={source} passwordPrompt={settings.passwordPrompt}>
-        <Toolbar
-          viewer={viewer}
-          sidebar={sidebar}
-          onToggleSidebar={(view) => setSidebar((open) => (open === view ? null : view))}
-          onOpenSidebar={setSidebar}
-          onPresent={presentation.present}
-        />
-        <Probes viewer={viewer} />
-        {settings.annotations ? <AnnotationToolbar viewer={viewer} file={settings.file} /> : null}
-        <PasswordPrompt />
-        {sidebar ? <Sidebar viewer={viewer} view={sidebar} id="sidebar" /> : null}
-        {/* Takes no box of its own until it presents (index.html). */}
-        <div ref={presentation.stage} className="stage">
-          <PdfViewer
-            {...viewerProps}
-            {...changed}
-            viewer={viewer}
-            className={[
-              "viewport",
-              sidebar ? "with-sidebar" : "",
-              settings.annotations ? "with-annotations" : "",
-            ]
-              .filter(Boolean)
-              .join(" ")}
-            {...(japanese ? { label: "PDF 文書", pageLabel } : {})}
-            renderOverlay={renderOverlay}
-          />
-          {presentation.presenting ? <PresentationControls viewer={viewer} /> : null}
-        </div>
-        {settings.autoscroll > 0 ? (
-          <BenchDriver
-            viewer={viewer}
-            speed={settings.autoscroll}
-            durationMs={settings.durationMs}
-            idle={settings.idle}
-            commits={commits}
-            label={benchLabel}
-          />
-        ) : null}
+        <DocumentShell />
       </PdfDocument>
     </Profiler>
+  );
+}
+
+function DocumentShell() {
+  const presentation = usePresentation();
+  const [sidebar, setSidebar] = useState<SidebarView | null>(null);
+  // Props a check sets on the viewer while it shows the document.
+  const [changed, setChanged] = useState<Partial<PdfViewerProps>>({});
+  useEffect(() => {
+    window.__setViewerProps = (props) => setChanged((previous) => ({ ...previous, ...props }));
+  }, []);
+  return (
+    <>
+      <Toolbar
+        sidebar={sidebar}
+        onToggleSidebar={(view) => setSidebar((open) => (open === view ? null : view))}
+        onOpenSidebar={setSidebar}
+        onPresent={presentation.present}
+      />
+      <Probes />
+      {settings.annotations ? <AnnotationToolbar file={settings.file} /> : null}
+      <PasswordPrompt />
+      {sidebar ? <Sidebar view={sidebar} id="sidebar" /> : null}
+      {/* Takes no box of its own until it presents (index.html). */}
+      <div ref={presentation.stage} className="stage">
+        <PdfViewer
+          {...viewerProps}
+          {...changed}
+          className={[
+            "viewport",
+            sidebar ? "with-sidebar" : "",
+            settings.annotations ? "with-annotations" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          {...(japanese ? { label: "PDF 文書", pageLabel } : {})}
+          renderOverlay={renderOverlay}
+        />
+        {presentation.presenting ? <PresentationControls /> : null}
+      </div>
+      {settings.autoscroll > 0 ? (
+        <BenchDriver
+          speed={settings.autoscroll}
+          durationMs={settings.durationMs}
+          idle={settings.idle}
+          commits={commits}
+          label={benchLabel}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -436,18 +439,19 @@ window.__showWith = showWith;
 window.__attachViewport = attachViewport;
 
 /** Exposes the viewer and its features to the checks: the same the toolbars use. */
-function Probes({ viewer }: { viewer: PdfViewerController }) {
+function Probes() {
+  const viewer = useViewer();
   const session = useSession();
   window.__viewer = viewer;
   window.__session = session;
   window.__search = searchOf(viewer);
   window.__history = historyOf(viewer);
-  window.__annotations = useAnnotationEditing(viewer);
+  window.__annotations = useAnnotationEditing();
   // pdf.js's document once ready.
   window.__pdfDocument = useDocumentState((state) => state.status === "ready" && session.proxy)
     ? (session.proxy ?? undefined)
     : undefined;
-  useFormChange(viewer, (change) => window.__onFormChange?.(change));
+  useFormChange((change) => window.__onFormChange?.(change));
   return null;
 }
 
@@ -460,19 +464,18 @@ const PAGE_MODE_PANELS: Partial<Record<PdfPageMode, SidebarView>> = {
 };
 
 function Toolbar({
-  viewer,
   sidebar,
   onToggleSidebar,
   onOpenSidebar,
   onPresent,
 }: {
-  viewer: PdfViewerController;
   sidebar: SidebarView | null;
   onToggleSidebar: (view: SidebarView) => void;
   onOpenSidebar: (view: SidebarView) => void;
   onPresent: () => void;
 }) {
-  const navigation = useHistory(viewer);
+  const viewer = useViewer();
+  const navigation = useHistory();
   const { back, forward } = navigation;
 
   // Alt+Left returns from a link jump and Alt+Right goes forward again, as
@@ -488,20 +491,15 @@ function Toolbar({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [back, forward]);
-  const status = useDocumentState((state) => state.status);
-  const error = useDocumentState((state) => state.error);
   // Progress only while it loads: pdf.js may fetch the rest in the background after.
-  const progress = useDocumentState((state) =>
-    state.status === "loading" ? state.progress : null,
-  );
-  const pageCount = useDocumentState((state) => state.pageCount);
-  const canPrint = useDocumentState((state) => state.permissions?.print ?? true);
-  const page = useViewState(viewer, (state) => state.currentPage);
-  const scale = useViewState(viewer, (state) => state.scale);
-  const zoomMode = useViewState(viewer, (state) => state.zoomMode);
-  const spread = useViewState(viewer, (state) => state.spread);
-  const scrollMode = useViewState(viewer, (state) => state.scrollMode);
-  const tool = useViewState(viewer, (state) => state.tool);
+  const { status, error, progress, pageCount, canPrint } = useDocumentState((state) => ({
+    status: state.status,
+    error: state.error,
+    progress: state.status === "loading" ? state.progress : null,
+    pageCount: state.pageCount,
+    canPrint: state.permissions?.print ?? true,
+  }));
+  const { currentPage: page, scale, zoomMode, spread, scrollMode, tool } = useViewState();
   const pageNumbers = `${page + 1} / ${pageCount}`;
   const pageText =
     status === "ready"
@@ -620,7 +618,7 @@ function Toolbar({
           </button>
         ) : null}
       </div>
-      {settings.text ? <SearchBox viewer={viewer} /> : null}
+      {settings.text ? <SearchBox /> : null}
     </header>
   );
 }

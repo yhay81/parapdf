@@ -35,7 +35,7 @@ Dependencies point down only. The core (`pdfjs/` to `render/`) imports no
 feature, and React is used only in `react/`.
 
 ```
-react/      PdfDocument, PdfViewer, PdfThumbnails, hooks; overlays through portals
+react/      PdfDocument, PdfView, PdfViewer, PdfThumbnails, hooks; overlays through portals
 features/   search, history, view state, initial view, permissions, forms,
             annotations, autoLinks, print, download, thumbnails, layers,
             attachments, selection, text
@@ -142,8 +142,8 @@ several may show one session.
   hand tool.
 - `state.ts`: the viewer's store, view state only. Hot state changes while
   the reader scrolls or zooms (layout, mounted window, current page, scale,
-  zoom mode); cold state does not (rotation, spreads, scroll mode, tool,
-  direction). They are subscribed to apart.
+  zoom mode); cold state does not (page count, rotation, spreads, scroll
+  mode, tool, direction). They are subscribed to apart.
 - `options.ts`: the viewer's options. Those the renderer is built with
   (layers, colors, budgets, concurrency) rebuild it as a detach and
   reattach would, keeping position and edits; the others apply at once.
@@ -159,8 +159,8 @@ several may show one session.
 
 A viewer has an `AbortController` of its own. Its viewport detaching
 aborts its work (drawing, searches, printing, publishing) but keeps the
-view and edits for reattachment; it lives as long as the `useViewer()`
-that created it, or the `PdfViewer` that made its own.
+view and edits for reattachment; it lives as long as the `PdfDocument`,
+`PdfView`, or `useCreateViewer()` that created it.
 
 A viewer shows a session while the session's provider holds the document
 and the viewer's owner holds the viewer (`holdViewer()`). When either lets
@@ -245,16 +245,24 @@ it undoes what it added. The core imports no feature.
 the DOM declares `"use client"`.
 
 - `PdfDocument` opens or joins a session as it renders, holds it in an
-  effect, and renders its children at once; nothing suspends before the
-  first page draws. A source with another URL, headers, bytes, transport,
-  or password opens another; a new fragment moves its viewers as a link
-  would.
+  effect, provides a default `Viewer` through `ViewerContext` (or provides
+  the `viewer` prop given to it), and renders its children at once; nothing
+  suspends before the first page draws. A source with another URL, headers,
+  bytes, transport, or password opens another; a new fragment moves its
+  viewers as a link would.
+- `PdfView` provides an independent `Viewer` scope inside a `PdfDocument`
+  so split panes compose the same controls, thumbnails, and `PdfViewer`
+  without prop plumbing. `useViewer()` reads the nearest `ViewerContext`;
+  `useCreateViewer()` creates a standalone `Viewer` for callers above
+  `PdfDocument` or across panes, and `PdfViewer` and `PdfView` forward a
+  React 19 `ref` to their `Viewer` (decision 0033).
 - The lifetimes are React's (decision 0032). A render may never mount, as
   under a Suspense boundary that waits or in a transition React abandons,
   so what a render needs of the document starts in the render and is kept
   in the registry, not in the component's state, which React drops with
   the render. Everything held is held by an effect and let go by its
-  cleanup: the provider's lease, the viewer's hold (`useViewer()`), and the
+  cleanup: the provider's lease, the viewer's hold (`PdfDocument`,
+  `PdfView`, or `useCreateViewer()`), and the
   viewport. What the reader gets back after React hid a tree lives in the
   viewer, which the component's state keeps. During hydration,
   `useDocumentState()` uses the server's opening snapshot before reading
@@ -268,9 +276,15 @@ the DOM declares `"use client"`.
   portal into the page's host; React renders nothing else there.
 - `PdfThumbnails` and `PdfThumbnail` draw the viewer's document at a lower
   priority; `PdfPageRect` places content in PDF points.
-- Hooks read stores with `useSyncExternalStore` selectors, so React commits
-  only when a selected value changes; the document's data is read with
-  `use()` under the application's Suspense boundaries.
+- `useViewState()` and `useDocumentState()` read stores through
+  `useSyncExternalStore`: called without a selector, they track the fields
+  read during rendering (dropping fields no longer read in inactive
+  branches, while keeping a pre-render fallback set until the next render
+  reads the proxy) so unread updates cause no re-render; called with a
+  selector, they compare the selected value shallowly (`Object.is`, array
+  elements, or own properties of plain objects) (decision 0033). The
+  document's data is read with `use()` under the application's Suspense
+  boundaries.
 - On the server the viewer renders an empty viewport, a URL source's
   preload goes into the head, and the data hooks throw through
   `use(browser())` so the nearest Suspense boundary renders its fallback

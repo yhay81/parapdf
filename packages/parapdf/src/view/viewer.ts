@@ -141,6 +141,7 @@ export class Viewer {
 
   readonly store = new ViewerStore({
     layout: null,
+    pageCount: 0,
     first: 0,
     last: -1,
     currentPage: 0,
@@ -748,8 +749,11 @@ export class Viewer {
 
   /** Bind the scroll container and its sized content element. */
   #attachViewport(scroller: HTMLElement, content: HTMLElement): () => void {
-    if (this.#scroller)
-      throw new Error("A Viewer owns one viewport; create another Viewer for a second viewport");
+    if (this.#scroller) {
+      throw new Error(
+        "A Viewer owns one viewport; wrap a second <PdfViewer> in <PdfView>, or pass another Viewer from useCreateViewer()",
+      );
+    }
     const resuming = this.#viewportControl.signal.aborted;
     if (resuming) this.#viewportControl = new AbortController();
     const control = this.#viewportControl;
@@ -1615,7 +1619,8 @@ export function openViewer(viewer: Viewer, session: PdfSession): void {
 
 /**
  * Hold `viewer` for its owner until the returned release: what
- * `useViewer()` does while its component is mounted. Released, the viewer
+ * `<PdfDocument>`, `<PdfView>`, and `useCreateViewer()` do while mounted.
+ * Released, the viewer
  * lets go of its document, which stops what it started for it and leaves
  * nothing of the viewer behind in the session; it keeps its view, and a
  * later hold shows the session again where the viewer showed it. React

@@ -37,9 +37,10 @@ again ([limitations](/about/limitations/)).
 
 Hooks such as `useViewer()`, `useViewState()`, and `useDocumentState()`
 belong in Client Components: put the toolbar and other controls in a file
-that starts with `"use client"`. A viewer from `useViewer()` cannot be
-passed from a Server Component; without one, `PdfViewer` uses a viewer of
-its own.
+that starts with `"use client"`. Because `PdfDocument` provides its viewer
+through context, a Server Component can render `<PdfDocument>`, your client
+`<Toolbar />`, and `<PdfViewer />` directly without a client wrapper to pass
+a viewer between them.
 
 The hooks that read the document's data and suspend, such as `useOutline()`
 and `usePageLabels()`, need a Suspense boundary on the server too: the

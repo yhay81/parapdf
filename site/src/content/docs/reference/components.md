@@ -9,7 +9,8 @@ description: Everything the parapdf package exports.
 
 Opens `source` as it renders, or joins the session another `PdfDocument`
 opened of it, and renders its children at once, giving them its
-`PdfSession` ([`useSession()`](/reference/state/#the-session)). Nothing
+`PdfSession` ([`useSession()`](/reference/state/#the-session)) and its
+default `Viewer` ([`useViewer()`](/reference/viewer/)). Nothing
 suspends before the first page draws. Every `PdfViewer` and `PdfThumbnails`
 inside it shows its document. It holds the document while it is mounted and
 shown: the document closes a second after no `PdfDocument` holds it any
@@ -18,15 +19,29 @@ more, and one React hides (`<Activity>`) and shows again opens it again.
 | Prop | |
 |---|---|
 | `source` | The document: its URL, `{ url }`, `{ data }` with its bytes, or `{ range }` with a pdf.js transport (see [Sources](/reference/sources/)). It reopens when its URL, request headers, credentials mode, or password change or, for data and transports, when they are another object or the password changes; a new object for the same URL keeps the open document. A URL's fragment, such as `#page=3`, opens it where it points, and a new fragment moves its viewers there (see [Sources](/reference/sources/#sessions)). |
+| `viewer` | A `Viewer` from `useCreateViewer()` to provide instead of creating one of its own. |
 | `passwordPrompt` | `true` by default: an encrypted document waits for a password (status `"password"`), which `useSession().submitPassword()` gives. `false` fails it at once (status `"error"`) when the source has no password or a wrong one, for this `PdfDocument` only: others of the same document may still answer. Changing it does not open the document again. |
 | `children` | Viewers, thumbnails, and your controls. |
+
+### `PdfView`
+
+Provides an independent `Viewer` scope inside a `PdfDocument`, for a split
+view or another pane whose controls, thumbnails, and `PdfViewer` act
+together without affecting sibling panes.
+
+| Prop | |
+|---|---|
+| `viewer` | A `Viewer` from `useCreateViewer()` to provide instead of creating one of its own. |
+| `ref` | Receives the scope's `Viewer`. |
+| `children` | Controls, thumbnails, and a `PdfViewer` for this pane. |
 
 ### `PdfViewer`
 
 One viewport onto the nearest `PdfDocument`'s document: the scroll
 container, with only the pages near the viewport mounted. Give it a
 definite height. It is focusable, so the browser's own keys scroll it.
-Several `PdfViewer`s may show one document, each with its own view. On a
+Several `PdfViewer`s may show one document, each in its own `PdfView` or
+with its own `viewer`. On a
 tagged PDF, each viewer's reading order refers to its own text and form
 fields.
 
@@ -35,7 +50,8 @@ remount (see [Options](/reference/options/)).
 
 | Prop | |
 |---|---|
-| `viewer` | The viewer to show the document with, from `useViewer()`, for the hooks and functions that act through it; without it, `PdfViewer` uses one of its own, which goes when it unmounts. |
+| `viewer` | The `Viewer` to show the document with; by default, the viewer of the nearest `PdfView` or `PdfDocument`. |
+| `ref` | Receives the `Viewer` shown. |
 | View state | `zoom`, `rotation`, `spread`, `scrollMode`, and `tool`, each controlled with its `on…Change` callback or left to the viewer with its `default…`; `defaultPage` and `onPageChange` (see [Options](/reference/options/#view-state)). |
 | The opening | `initialView` and `initialViewState` (see [Options](/reference/options/#the-opening)). |
 | Live options | The layers, forms, annotation editing, links, permissions, layout, zoom limits, and budgets (see [Options](/reference/options/)). |
@@ -54,7 +70,7 @@ follow the viewer's rotation (see [Thumbnails](/guides/thumbnails/)).
 
 | Prop | |
 |---|---|
-| `viewer` | The viewer whose document the thumbnails show and whose current page they mark. Required. |
+| `viewer` | The viewer whose document the thumbnails show and whose current page they mark; by default, the viewer of the nearest `PdfView` or `PdfDocument`. |
 | `width` | Each thumbnail's width in CSS pixels, 120 by default. |
 | `onSelect` | `(pageIndex) => void`, called with the page chosen; by default the viewer goes to it. |
 | `label` | The list's accessible name, "Page thumbnails" by default. |
@@ -70,7 +86,7 @@ link labelled with the page, as `PdfThumbnails` does.
 
 | Prop | |
 |---|---|
-| `viewer` | The viewer whose document, rotation, and drawing slots it uses. Required. |
+| `viewer` | The viewer whose document, rotation, and drawing slots it uses; by default, the viewer of the nearest `PdfView` or `PdfDocument`. |
 | `pageIndex` | The zero-based page. |
 | `width` | Width in CSS pixels; the height follows the page's shape as the view turns it. |
 | `className`, `style` | For the canvas. |
@@ -90,15 +106,18 @@ user-space unit (`/UserUnit`). Rendered anywhere else, it throws.
 
 ## Hooks
 
-`useViewer()` works anywhere; the others that take a viewer work anywhere
-too, and those that take none read the nearest `PdfDocument`.
+`useCreateViewer()` works anywhere; hooks that take an optional `viewer`
+read the nearest `PdfView` or `PdfDocument` when none is passed, and work
+outside them when given one; those that take none read the nearest
+`PdfDocument`.
 
 | Hook | Returns |
 |---|---|
-| `useViewer()` | A `Viewer` for the life of the calling component: give it to a `PdfViewer` and to the hooks and functions that act through it (see [Viewer](/reference/viewer/)). It keeps its view and annotations while its `PdfViewer` unmounts and while React hides the calling component or the `PdfDocument` (`<Activity>`), and goes with the calling component. |
-| `useViewState(viewer, selector)` | The selected part of the viewer's view state, rendering again only when it changes (see [State](/reference/state/#view-state)). |
+| `useViewer()` | The `Viewer` of the nearest `PdfView` or `PdfDocument` (see [Viewer](/reference/viewer/)). |
+| `useCreateViewer()` | A `Viewer` for the life of the calling component, to pass to `PdfDocument`, `PdfView`, `PdfViewer`, and hooks outside their scope. It keeps its view and annotations while its `PdfViewer` unmounts and while React hides the calling component or the `PdfDocument` (`<Activity>`), and goes with the calling component. |
+| `useViewState(viewer?)`, `useViewState(selector, viewer?)` | The viewer's `ViewerState`, tracking read fields when called without `selector` and comparing `selector`'s result shallowly otherwise, rendering again only when what it reads changes (see [State](/reference/state/#view-state)). |
 | `useSession()` | The nearest `PdfDocument`'s `PdfSession` (see [State](/reference/state/#the-session)). |
-| `useDocumentState(selector)` | The selected part of the document's state: status, error, password request, progress, page count, and permissions (see [State](/reference/state/#document-state)). |
+| `useDocumentState()`, `useDocumentState(selector)` | The document's `DocumentState` (status, error, password request, progress, page count, permissions), tracking read fields when called without `selector` and comparing `selector`'s result shallowly otherwise (see [State](/reference/state/#document-state)). |
 | `useOutline()` | The outline (bookmarks) as `OutlineNode`s: `title`, `dest`, `url`, `bold`, `italic`, and `items`; empty when the document has none. |
 | `usePageLabels()` | Each page's label, such as `"iv"` or `"A-3"`; null when the document defines none. |
 | `useMetadata()` | Title, author, subject, keywords, creator, producer, creation and modification dates, PDF version, and language, with the file name the server gives (`Content-Disposition`), the file's length, whether it is linearized (Fast Web View), and the fingerprint, which identifies the document for a view an application keeps; null when they cannot be read. |
@@ -107,12 +126,12 @@ too, and those that take none read the nearest `PdfDocument`.
 | `useLayers()` | The layers (optional content) and which show, following `setLayerVisible()` in any viewer of the document. |
 | `useFormFields()` | The form fields with their values as first read; `getFormFields()` reads them again (see [Forms](/guides/forms/)). |
 | `useInitialView()` | How the document asks to be shown: its /OpenAction destination, /PageLayout, and /PageMode; null when it cannot be read (see [Keeping the view](/guides/view-state/)). |
-| `useSearch(viewer)` | The viewer's search state with `search(query, options)`, `next()`, `previous()`, and `clear()` (see [Search](/guides/search/)). |
-| `useHistory(viewer)` | `back()`, `forward()`, `canGoBack`, and `canGoForward` for the viewer's link and outline jumps (see [Navigation](/guides/navigation/)). |
-| `useAnnotations(viewer)` | With `annotationEditing`, the annotation tool, state, and styles with the methods that change them; null until the editing code loads, and without the option (see [Annotations](/guides/annotations/)). |
-| `useAnnotationEditing(viewer)` | The annotation editing feature itself, with its `store`; null as for `useAnnotations()`. |
-| `useFormChange(viewer, listener)` | Nothing: calls `listener` with `{ name, value }` for each value the reader enters into a form field, as they type. Needs `forms`. |
-| `useSelection(viewer)` | The selection in the viewer, its text and its rectangles in PDF points, or null; it follows a drag at most once a frame (see [Text, selections, and overlays](/guides/text/)). |
+| `useSearch(viewer?)` | The viewer's search state with `search(query, options)`, `next()`, `previous()`, and `clear()` (see [Search](/guides/search/)). |
+| `useHistory(viewer?)` | `back()`, `forward()`, `canGoBack`, and `canGoForward` for the viewer's link and outline jumps (see [Navigation](/guides/navigation/)). |
+| `useAnnotations(viewer?)` | With `annotationEditing`, the annotation tool, state, and styles with the methods that change them; null until the editing code loads, and without the option (see [Annotations](/guides/annotations/)). |
+| `useAnnotationEditing(viewer?)` | The annotation editing feature itself, with its `store`; null as for `useAnnotations()`. |
+| `useFormChange(listener, viewer?)` | Nothing: calls `listener` with `{ name, value }` for each value the reader enters into a form field, as they type. Needs `forms`. |
+| `useSelection(viewer?)` | The selection in the viewer, its text and its rectangles in PDF points, or null; it follows a drag at most once a frame (see [Text, selections, and overlays](/guides/text/)). |
 
 The seven hooks of the document's data suspend until it is read: render
 them under a `<Suspense>` boundary of your own, apart from the viewer. A
@@ -162,5 +181,6 @@ Each takes the viewer it acts through.
 | `legacyBuild` | From `parapdf/legacy`: pdf.js's legacy build, for `configurePdfjs({ build })`. |
 
 Every type the API uses is exported as well, such as `PdfViewerProps`,
-`Zoom`, `Viewer`, `ViewerState`, `DocumentState`, `PdfSession`, `ViewState`,
-`PdfSource`, `SearchMatch`, `FormField`, and `SavedAnnotation`.
+`PdfViewProps`, `Zoom`, `Viewer`, `ViewerState`, `DocumentState`,
+`PdfSession`, `ViewState`, `PdfSource`, `SearchMatch`, `FormField`, and
+`SavedAnnotation`.
