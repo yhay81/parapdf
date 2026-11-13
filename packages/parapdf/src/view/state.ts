@@ -1,3 +1,4 @@
+import type { PageSize } from "../document/session.ts";
 import { type ReadableStore, Store } from "../document/store.ts";
 import type { Rotation } from "../pdfjs/draw.ts";
 import type { Direction, Layout, ScrollMode, SpreadMode } from "./layout.ts";
@@ -68,16 +69,22 @@ export type ColdViewState = Pick<
   "pageCount" | "rotation" | "spread" | "scrollMode" | "tool" | "direction"
 >;
 
+export interface PageSizesState {
+  sizes: readonly PageSize[] | undefined;
+}
+
 /**
- * A viewer's view state: its hot and cold parts, published apart, and the
- * two together. Patches are atomic across all three subscription surfaces.
+ * A viewer's view state: its hot, cold, and page-size parts, published apart,
+ * and all fields together. Patches are atomic across every subscription surface.
  */
 export class ViewerStore implements ReadableStore<ViewerState> {
   readonly #all: Store<ViewerState>;
   readonly #hot: Store<HotViewState>;
   readonly #cold: Store<ColdViewState>;
+  readonly #sizes: Store<PageSizesState>;
   readonly hot: ReadableStore<HotViewState>;
   readonly cold: ReadableStore<ColdViewState>;
+  readonly sizes: ReadableStore<PageSizesState>;
 
   constructor(initial: ViewerState) {
     this.#all = new Store(initial);
@@ -104,6 +111,7 @@ export class ViewerStore implements ReadableStore<ViewerState> {
       tool,
       direction,
     });
+    this.sizes = this.#sizes = new Store({ sizes: layout?.sizes });
   }
 
   get = (): ViewerState => this.#all.get();
@@ -123,8 +131,11 @@ export class ViewerStore implements ReadableStore<ViewerState> {
     }
     const hotChanged = this.#hot.update(hot);
     const coldChanged = this.#cold.update(cold);
+    const sizesChanged =
+      "layout" in full ? this.#sizes.update({ sizes: full.layout?.sizes }) : false;
     this.#all.publish();
     if (hotChanged) this.#hot.publish();
     if (coldChanged) this.#cold.publish();
+    if (sizesChanged) this.#sizes.publish();
   }
 }

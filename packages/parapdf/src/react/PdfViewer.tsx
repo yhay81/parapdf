@@ -10,7 +10,6 @@ import {
   useEffect,
   useImperativeHandle,
   useLayoutEffect,
-  useMemo,
   useReducer,
   useRef,
 } from "react";
@@ -23,11 +22,11 @@ import {
 import type { PageColors, Rotation } from "../pdfjs/draw.ts";
 import type { Direction, PdfPagePoint, ScrollMode, SpreadMode } from "../view/layout.ts";
 import type { ViewerOptions } from "../view/options.ts";
-import type { FitMode, PointerTool, ViewerState } from "../view/state.ts";
+import type { FitMode, HotViewState, PointerTool, ViewerState } from "../view/state.ts";
 import type { ViewState } from "../view/view-state.ts";
 import type { Viewer, ViewerController } from "../view/viewer.ts";
-import { useOptionalSession, useOptionalViewer, useSelected, ViewerContext } from "./context.ts";
-import { usePageOverlays } from "./overlays.ts";
+import { useOptionalSession, useOptionalViewer, useStoreSlice, ViewerContext } from "./context.ts";
+import { PdfPageOverlaySlot, useOverlayActivity } from "./overlays.ts";
 import { VIEWER_CSS } from "./styles.ts";
 
 /** A zoom: CSS pixels per PDF point, or a fit that keeps fitting as the viewport resizes. */
@@ -283,9 +282,6 @@ function ViewerViewport({
   const session = useOptionalSession();
   const scrollerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const layout = useSelected(viewer.store.hot, (state) => state.layout);
-  const first = useSelected(viewer.store.hot, (state) => state.first);
-  const last = useSelected(viewer.store.hot, (state) => state.last);
 
   const initialScale = zoom ?? defaultZoom;
   const initialRotation = rotation ?? defaultRotation;
@@ -444,33 +440,6 @@ function ViewerViewport({
       }
     : undefined;
 
-  const pages: ReactNode[] = [];
-  if (layout) {
-    const { shown } = layout;
-    const pageCount = layout.sizes.length;
-    const centered = layout.scrollMode === "horizontal" || shown !== null;
-    for (let index = first; index <= last; index++) {
-      pages.push(
-        <PdfPage
-          key={index}
-          viewer={viewer}
-          index={index}
-          label={pageLabel(index + 1, pageCount)}
-          top={layout.tops[index] ?? 0}
-          gap={layout.gap}
-          rowWidth={layout.rowWidths[index] ?? 0}
-          rowHeight={centered ? (layout.rowHeights[index] ?? 0) : null}
-          hidden={shown !== null && (index < shown.first || index > shown.last)}
-          offset={layout.offsets[index] ?? 0}
-          width={layout.widths[index] ?? 0}
-          height={layout.heights[index] ?? 0}
-          scale={layout.scale}
-          rotation={layout.rotation}
-        />,
-      );
-    }
-  }
-
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: onPageClick is a pointer coordinate hook for page surfaces; interactive items inside pages keep their own accessible controls.
     <div
@@ -504,11 +473,59 @@ function ViewerViewport({
       {children}
       {/* The viewer sizes this element imperatively so zoom can restore the scroll position first. */}
       <div ref={contentRef} className="parapdf-pages" style={{ position: "relative" }}>
-        {pages}
+        <ViewerPages viewer={viewer} pageLabel={pageLabel} />
       </div>
     </div>
   );
 }
+
+const selectPageWindow = (state: HotViewState) => ({
+  layout: state.layout,
+  first: state.first,
+  last: state.last,
+});
+
+const ViewerPages = memo(function ViewerPages({
+  viewer,
+  pageLabel,
+}: {
+  viewer: ViewerController;
+  pageLabel: (pageNumber: number, pageCount: number) => string;
+}) {
+  const { layout, first, last } = useStoreSlice(
+    viewer.store.hot,
+    viewer.store.hot.get,
+    selectPageWindow,
+  );
+  const overlayActivity = useOverlayActivity(viewer);
+  if (!layout) return null;
+  const { shown } = layout;
+  const pageCount = layout.sizes.length;
+  const centered = layout.scrollMode === "horizontal" || shown !== null;
+  const pages: ReactNode[] = [];
+  for (let index = first; index <= last; index++) {
+    pages.push(
+      <PdfPage
+        key={index}
+        viewer={viewer}
+        index={index}
+        label={pageLabel(index + 1, pageCount)}
+        top={layout.tops[index] ?? 0}
+        gap={layout.gap}
+        rowWidth={layout.rowWidths[index] ?? 0}
+        rowHeight={centered ? (layout.rowHeights[index] ?? 0) : null}
+        hidden={shown !== null && (index < shown.first || index > shown.last)}
+        offset={layout.offsets[index] ?? 0}
+        width={layout.widths[index] ?? 0}
+        height={layout.heights[index] ?? 0}
+        scale={layout.scale}
+        rotation={layout.rotation}
+        overlaysActive={overlayActivity.allPages || overlayActivity.portalPages.has(index)}
+      />,
+    );
+  }
+  return pages;
+});
 
 interface PdfPageProps {
   viewer: ViewerController;
@@ -530,6 +547,7 @@ interface PdfPageProps {
   /** CSS pixels per PDF point; the DOM layers apply the page's user-space unit to it. */
   scale: number;
   rotation: Rotation;
+  overlaysActive: boolean;
 }
 
 const PdfPage = memo(function PdfPage({
@@ -546,52 +564,61 @@ const PdfPage = memo(function PdfPage({
   height,
   scale,
   rotation,
+  overlaysActive,
 }: PdfPageProps) {
   const hostRef = useRef<HTMLElement>(null);
-  const page = useMemo(() => ({ viewer, pageIndex: index }), [viewer, index]);
 
   // The renderer builds the page's canvases and layers at the start of the
-  // section; the overlay's layer follows them.
+  // section; when overlays are active, their layer follows them.
   useLayoutEffect(() => {
     const host = hostRef.current;
     if (!host) return;
     return viewer.attachPage(index, host);
   }, [viewer, index]);
 
-  const overlayPortal = usePageOverlays(viewer, index, hostRef, page, rotation, width, height);
-
   return (
-    // A labelled section is a region landmark, the role pdf.js gives its pages.
-    <section
-      ref={hostRef}
-      data-page={index + 1}
-      aria-label={label}
-      // Focusable, out of the tab order: the viewer moves the focus to the
-      // page shown, and a screen reader reads on from it.
-      tabIndex={-1}
-      style={
-        {
-          position: "absolute",
-          // Its row centered in the viewport, at the gap when larger:
-          // pageLeft() and pageTop() in layout.ts.
-          top:
-            rowHeight === null
-              ? top
-              : `calc(${top}px + max(0px, (100cqh - ${rowHeight}px) / 2 - ${gap}px))`,
-          left: `calc(max(${gap}px, (100cqw - ${rowWidth}px) / 2) + ${offset}px)`,
-          visibility: hidden ? "hidden" : undefined,
-          width,
-          height,
-          background: "#fff",
-          boxShadow: "0 1px 3px rgb(0 0 0 / 0.3)",
-          contain: "strict",
-          "--scale-factor": scale,
-          "--scale-round-x": "1px",
-          "--scale-round-y": "1px",
-        } as CSSProperties
-      }
-    >
-      {overlayPortal}
-    </section>
+    <>
+      {/* A labelled section is a region landmark, the role pdf.js gives its pages. */}
+      <section
+        ref={hostRef}
+        data-page={index + 1}
+        aria-label={label}
+        // Focusable, out of the tab order: the viewer moves the focus to the
+        // page shown, and a screen reader reads on from it.
+        tabIndex={-1}
+        style={
+          {
+            position: "absolute",
+            // Its row centered in the viewport, at the gap when larger:
+            // pageLeft() and pageTop() in layout.ts.
+            top:
+              rowHeight === null
+                ? top
+                : `calc(${top}px + max(0px, (100cqh - ${rowHeight}px) / 2 - ${gap}px))`,
+            left: `calc(max(${gap}px, (100cqw - ${rowWidth}px) / 2) + ${offset}px)`,
+            visibility: hidden ? "hidden" : undefined,
+            width,
+            height,
+            background: "#fff",
+            boxShadow: "0 1px 3px rgb(0 0 0 / 0.3)",
+            contain: "strict",
+            "--scale-factor": scale,
+            "--scale-round-x": "1px",
+            "--scale-round-y": "1px",
+          } as CSSProperties
+        }
+      />
+      {/* Sibling after <section ref={hostRef}> so React attaches hostRef before PdfPageOverlaySlot's layout effect runs; its portal appends inside <section>. */}
+      {overlaysActive ? (
+        <PdfPageOverlaySlot
+          viewer={viewer}
+          index={index}
+          hostRef={hostRef}
+          rotation={rotation}
+          width={width}
+          height={height}
+        />
+      ) : null}
+    </>
   );
 });

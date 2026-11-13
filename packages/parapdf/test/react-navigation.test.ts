@@ -14,10 +14,69 @@ import {
   scrollOffsetForThumbnail,
   thumbnailCanvasHeight,
 } from "../src/react/thumbnails.ts";
+import { computeLayout } from "../src/view/layout.ts";
 import { ViewerController } from "../src/view/viewer.ts";
 import { fakeDocument, fakePdfjs, LETTER, settle } from "./fake-pdfjs.ts";
 
 describe("thumbnailCanvasHeight", () => {
+  it("publishes viewer.store.sizes only on open, non-uniform size updates, and close, ignoring scroll and zoom commits", () => {
+    const viewer = new ViewerController();
+    let notifications = 0;
+    const unsub = viewer.store.sizes.subscribe(() => notifications++);
+    assert.equal(viewer.store.sizes.get().sizes, undefined);
+
+    const uniformSizes = [LETTER, LETTER, LETTER];
+    const layoutAt1 = computeLayout(uniformSizes, 1, {
+      gap: 12,
+      rotation: 0,
+      spread: "none",
+      scrollMode: "vertical",
+      direction: "ltr",
+      viewportWidth: 800,
+      page: 0,
+    });
+    viewer.store.set({ layout: layoutAt1, scale: 1, first: 0, last: 1 });
+    assert.equal(notifications, 1);
+    assert.equal(viewer.store.sizes.get().sizes, uniformSizes);
+
+    // Scroll window shifts, currentPage flips, zoom commits sharing `uniformSizes`, and cold tool/rotation updates must not notify sizes subscribers:
+    viewer.store.set({ first: 1, last: 2, currentPage: 1 });
+    const layoutAt2 = computeLayout(uniformSizes, 2, {
+      gap: 12,
+      rotation: 0,
+      spread: "none",
+      scrollMode: "vertical",
+      direction: "ltr",
+      viewportWidth: 800,
+      page: 1,
+    });
+    viewer.store.set({ layout: layoutAt2, scale: 2 });
+    viewer.store.set({ rotation: 90, tool: "hand" });
+    assert.equal(notifications, 1);
+
+    // Background measurement discovering mixed page sizes publishes once:
+    const mixedSizes = [LETTER, { width: 792, height: 612 }, LETTER];
+    const mixedLayout = computeLayout(mixedSizes, 2, {
+      gap: 12,
+      rotation: 90,
+      spread: "none",
+      scrollMode: "vertical",
+      direction: "ltr",
+      viewportWidth: 800,
+      page: 1,
+    });
+    viewer.store.set({ layout: mixedLayout });
+    assert.equal(notifications, 2);
+    assert.equal(viewer.store.sizes.get().sizes, mixedSizes);
+
+    // Closing the document clears sizes once:
+    viewer.store.set({ layout: null, first: 0, last: -1 });
+    assert.equal(notifications, 3);
+    assert.equal(viewer.store.sizes.get().sizes, undefined);
+
+    unsub();
+  });
+
   it("falls back to US Letter aspect ratio until the page size is known", () => {
     const height = thumbnailCanvasHeight(undefined, 0, 120);
     assert.ok(Math.abs(height - (120 * 11) / 8.5) < 1e-9);

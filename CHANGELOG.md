@@ -6,6 +6,14 @@ change the API.
 
 ## Unreleased
 
+- Isolate `<PdfViewer>` page-window and zoom commits inside a memoized page-list
+  boundary so `<PdfViewer>` option setup, `{children}` subtrees, and
+  `configure` / controlled-prop layout effects stay idle while scrolling or
+  zooming; skip per-page overlay store subscriptions and host layout effects on
+  pages without an active `<PdfPageOverlay>` or `<PdfPageOverlays>`; and read
+  thumbnail page dimensions from a dedicated page-size store outside hot
+  viewport state.
+
 - Narrow `PdfSession` to a React-only handle interface:
   - **Breaking:** `PdfSession` is now a narrow TypeScript interface exposing
     `source`, `state: DocumentState` (synchronous snapshot, matching

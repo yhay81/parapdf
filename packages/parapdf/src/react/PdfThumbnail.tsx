@@ -37,7 +37,7 @@ export function PdfThumbnail({
 }: PdfThumbnailProps) {
   const viewer = useOptionalViewer(externalViewer);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const size = useSelected(viewer.store.hot, (state) => state.layout?.sizes[pageIndex]);
+  const size = useSelected(viewer.store.sizes, (state) => state.sizes?.[pageIndex]);
   const rotation = useSelected(viewer.store.cold, (state) => state.rotation);
   const height = thumbnailCanvasHeight(size, rotation, width);
 
