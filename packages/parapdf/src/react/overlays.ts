@@ -13,7 +13,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import type { Rotation } from "../pdfjs/draw.ts";
-import type { Viewer } from "../view/viewer.ts";
+import type { Viewer, ViewerController } from "../view/viewer.ts";
 import { PageContext, useOptionalViewer } from "./context.ts";
 
 interface OverlayRenderer {
@@ -221,9 +221,9 @@ class OverlayStore {
   }
 }
 
-const overlayStores = new WeakMap<Viewer, OverlayStore>();
+const overlayStores = new WeakMap<ViewerController, OverlayStore>();
 
-export function overlayStoreOf(viewer: Viewer): OverlayStore {
+export function overlayStoreOf(viewer: ViewerController): OverlayStore {
   let store = overlayStores.get(viewer);
   if (!store) {
     store = new OverlayStore();
@@ -322,10 +322,10 @@ export function PdfPageOverlays({ viewer, children }: PdfPageOverlaysProps) {
 
 /** Internal hook `memo(PdfPage)` uses to host `<PdfPageOverlays>` and `<PdfPageOverlay>` portals. */
 export function usePageOverlays(
-  viewer: Viewer,
+  viewer: ViewerController,
   index: number,
   hostRef: RefObject<HTMLElement | null>,
-  pageContext: { viewer: Viewer; pageIndex: number },
+  pageContext: { viewer: ViewerController; pageIndex: number },
   rotation: Rotation,
   width: number,
   height: number,

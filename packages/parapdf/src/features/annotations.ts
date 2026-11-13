@@ -15,7 +15,7 @@ import type {
   SignatureInput,
 } from "../pdfjs/editor-types.ts";
 import { linked } from "../view/signals.ts";
-import type { Viewer } from "../view/viewer.ts";
+import type { ViewerController } from "../view/viewer.ts";
 import { onEnforcementChange, permits } from "./permissions.ts";
 
 export interface AnnotationEditingOptions {
@@ -162,7 +162,7 @@ const STOPPED: AnnotationEditingStore = { tool: "none", state: null, styles: nul
  * session again; one that forgets the session drops them. `detach()` undoes it.
  */
 export function attachAnnotationEditing(
-  viewer: Viewer,
+  viewer: ViewerController,
   options: AnnotationEditingOptions = {},
 ): AnnotationEditing {
   let labels = { ...ANNOTATION_LABELS, ...options.labels };

@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import type { DocumentPermissions } from "../src/document/session.ts";
 import { attachFormLayers } from "../src/features/forms/layers.ts";
 import { enforcePermissions, permits, permitted } from "../src/features/permissions.ts";
-import { Viewer } from "../src/view/viewer.ts";
+import { ViewerController } from "../src/view/viewer.ts";
 import { fakeDocument, fakePdfjs, settle, show } from "./fake-pdfjs.ts";
 
 const restricted: DocumentPermissions = {
@@ -34,7 +34,7 @@ describe("permissions", () => {
 
   it("updates existing form layers when enforcement changes", async (context) => {
     context.mock.timers.enable({ apis: ["setTimeout"] });
-    const viewer = new Viewer();
+    const viewer = new ViewerController();
     const layers = context.mock.method(viewer, "setFormLayers");
     const forms = attachFormLayers(viewer);
     const document = fakeDocument({ proxy: { getPermissions: async () => new Set<number>() } });
@@ -60,7 +60,7 @@ describe("permissions", () => {
     // Permitted: filling in forms, copying for accessibility, and assembling.
     const flags = new Set([0x100, 0x200, 0x400]);
     const document = fakeDocument({ proxy: { getPermissions: async () => flags } });
-    const viewer = new Viewer();
+    const viewer = new ViewerController();
     const { close } = show(viewer, { url: "/a.pdf" }, fakePdfjs(async () => document.proxy).loader);
     await settle();
     assert.equal(permits(viewer, "print"), true, "a viewer reports them only, by default");

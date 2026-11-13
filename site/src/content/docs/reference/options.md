@@ -37,6 +37,7 @@ React nothing unless you set state in them.
 | `tool`, `defaultTool`, `onToolChange` | `"select"` | What a mouse drag does: select text, or, with `"hand"`, scroll the document. |
 | `defaultPage` | `0` | The zero-based page a document opens at, at the top of the viewport. This also applies when the source changes in the same viewer. |
 | `onPageChange` | none | `(pageIndex) => void`: hears the current page change as the reader scrolls, follows a link, or `goToPage()` shows another. |
+| `onViewStateChange` | none | `(viewState) => void`: hears settled `ViewState` snapshots after the reader scrolls (including within a page), zooms, rotates, or changes spread or scroll mode, and flushes pending scrolls on `pagehide` and unmount; does not fire on initial open or per frame while scrolling or pinching (see [Keeping the view](/guides/view-state/)). |
 
 The current page is never controlled: `viewer.goToPage()` sets it.
 

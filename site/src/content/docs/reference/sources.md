@@ -103,4 +103,4 @@ function useDocumentId(): string | null {
 ```
 
 The proxy belongs to the session, which every viewer of the document
-shares: do not destroy it. `viewer.session?.proxy` is the same document.
+shares: do not destroy it.

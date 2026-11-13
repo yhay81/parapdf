@@ -1,5 +1,6 @@
 import { useViewer, useViewState } from "parapdf";
 import { useEffect } from "react";
+import { controllerOf } from "./internals.ts";
 import {
   blockedThreshold,
   type IdleBaseline,
@@ -35,7 +36,7 @@ export interface BenchDriverProps {
  * Playwright runner.
  */
 export function BenchDriver({ speed, durationMs, idle, commits, label }: BenchDriverProps) {
-  const viewer = useViewer();
+  const viewer = controllerOf(useViewer());
   const ready = useViewState((state) => state.layout !== null);
 
   useEffect(() => {

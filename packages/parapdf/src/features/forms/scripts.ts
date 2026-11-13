@@ -10,12 +10,12 @@ import { type DocumentScripting, startScripting } from "../../pdfjs/scripting.ts
 import { filenameFromUrl } from "../../view/files.ts";
 import { ZOOM_STEP } from "../../view/input.ts";
 import type { FitMode } from "../../view/state.ts";
-import type { Viewer } from "../../view/viewer.ts";
+import type { ViewerController } from "../../view/viewer.ts";
 import { PDF_TO_CSS } from "../../view/zoom.ts";
 
 /** A viewer whose form fields run the document's scripts (`formScripts`). */
 export interface ScriptingViewer {
-  readonly viewer: Viewer;
+  readonly viewer: ViewerController;
   /** The scripts changed the value of the field `id`. */
   changed(id: string): void;
 }
@@ -51,7 +51,7 @@ const ZOOM_MODES: Readonly<Record<string, FitMode>> = {
 };
 
 /** The viewer the scripts' requests act on. */
-const target = (run: Running): Viewer | undefined =>
+const target = (run: Running): ViewerController | undefined =>
   (run.last ?? run.viewers.values().next().value)?.viewer;
 
 /** The sandbox's PageOpen and PageClose follow the current page of the first viewer. */

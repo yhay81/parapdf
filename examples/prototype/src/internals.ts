@@ -12,27 +12,37 @@ import { type History, historyOf } from "../../../packages/parapdf/src/features/
 import { type Search, searchOf } from "../../../packages/parapdf/src/features/search/index.ts";
 import { getSelection } from "../../../packages/parapdf/src/features/selection.ts";
 import { useAnnotationEditing } from "../../../packages/parapdf/src/react/annotations.ts";
-import {
-  attachViewport,
-  openViewer,
-  type Viewer,
-} from "../../../packages/parapdf/src/view/viewer.ts";
+import { controllerOf, type ViewerController } from "../../../packages/parapdf/src/view/viewer.ts";
 
 export {
   type AnnotationEditing,
-  attachViewport,
+  controllerOf,
   getSelection,
   type History,
   historyOf,
   type Search,
   searchOf,
   useAnnotationEditing,
+  type ViewerController,
 };
 
+/** Bind `viewer` to `scroller` and `content`, for `check-options.ts`. */
+export function attachViewport(
+  viewer: ViewerController,
+  scroller: HTMLElement,
+  content: HTMLElement,
+): () => void {
+  return viewer.attachViewport(scroller, content);
+}
+
 /** Show `source`, opened with `pdfjs`, in `viewer`; returns what closes it. */
-export function showWith(viewer: Viewer, source: PdfSource, pdfjs: PdfjsLoader): () => void {
+export function showWith(
+  viewer: ViewerController,
+  source: PdfSource,
+  pdfjs: PdfjsLoader,
+): () => void {
   const session = new PdfSession(source, { pdfjs });
   const close = connectSession(session);
-  openViewer(viewer, session);
+  viewer.open(session);
   return close;
 }

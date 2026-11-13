@@ -115,7 +115,6 @@ export { useSelection } from "./react/selection.ts";
 export type { ThumbnailItem } from "./react/thumbnails.ts";
 export { useCreateViewer, useViewer } from "./react/viewer.ts";
 export type { RenderStats } from "./render/renderer.ts";
-export type { ViewerExtension } from "./view/extensions.ts";
 export type {
   Direction,
   Layout,
@@ -124,7 +123,7 @@ export type {
   SpreadMode,
 } from "./view/layout.ts";
 export type { ViewerPosition } from "./view/navigation.ts";
-export type { Opening, ShownView } from "./view/options.ts";
+export type { ShownView } from "./view/options.ts";
 export type { FitMode, PointerTool, ViewerState, ZoomMode } from "./view/state.ts";
 export type { ViewState } from "./view/view-state.ts";
 export type { Viewer } from "./view/viewer.ts";

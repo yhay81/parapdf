@@ -102,3 +102,17 @@ export function viewStateAt(
     scrollMode: state.scrollMode,
   };
 }
+
+/** Whether two `ViewState` snapshots describe the exact same view. */
+export function sameViewState(a: ViewState | null, b: ViewState): boolean {
+  return (
+    a !== null &&
+    a.page === b.page &&
+    a.x === b.x &&
+    a.y === b.y &&
+    a.scale === b.scale &&
+    a.rotation === b.rotation &&
+    a.spread === b.spread &&
+    a.scrollMode === b.scrollMode
+  );
+}

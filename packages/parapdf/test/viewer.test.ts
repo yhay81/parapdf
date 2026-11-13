@@ -10,17 +10,13 @@ import {
 } from "../src/document/pdf-session.ts";
 import type { PdfjsLoader } from "../src/document/registry.ts";
 import type { PdfSource } from "../src/document/session.ts";
+import { initialViewOpening } from "../src/features/initial-view.ts";
 import { attachSearch } from "../src/features/search/index.ts";
 import { getText } from "../src/features/text/index.ts";
 import type { Rotation } from "../src/pdfjs/draw.ts";
 import type { ViewerOptions } from "../src/view/options.ts";
-import {
-  attachViewport,
-  holdViewer,
-  openViewer,
-  setViewerOptions,
-  Viewer,
-} from "../src/view/viewer.ts";
+import type { ViewState } from "../src/view/view-state.ts";
+import { ViewerController } from "../src/view/viewer.ts";
 import {
   askPassword,
   fakeDocument,
@@ -114,8 +110,8 @@ describe("a session's document state", () => {
     assert.equal(second.state.get(), state);
     assert.ok(first.proxy);
     // A viewer keeps view state only.
-    const viewer = new Viewer();
-    openViewer(viewer, first);
+    const viewer = new ViewerController();
+    viewer.open(first);
     await settle();
     assert.equal("status" in viewer.store.get(), false);
     assert.equal(viewer.session?.proxy, first.proxy);
@@ -281,7 +277,7 @@ describe("closing a viewer's document", () => {
 
   it("stops what the viewer and session started for the document", async () => {
     const { loader, read } = slowTexts();
-    const viewer = new Viewer();
+    const viewer = new ViewerController();
     const { session: pdfSession, close: closeDocument } = show(viewer, { url: "/a.pdf" }, loader);
     await settle();
     assert.ok(viewer.store.get().layout);
@@ -308,7 +304,7 @@ describe("closing a viewer's document", () => {
 
   it("drops what the viewer held of the document", async () => {
     const { loader } = fakePdfjs();
-    const viewer = new Viewer();
+    const viewer = new ViewerController();
     const { session: pdfSession, close: closeDocument } = show(
       viewer,
       { url: "/files/a.pdf" },
@@ -336,7 +332,7 @@ describe("closing a viewer's document", () => {
 
   it("stops a search, which reads no more pages once its document closes", async () => {
     const { loader, read, textsRead } = slowTexts(3);
-    const viewer = new Viewer();
+    const viewer = new ViewerController();
     const { close: closeDocument } = show(viewer, { url: "/a.pdf" }, loader);
     await settle();
     attachSearch(viewer).search("hello");
@@ -355,7 +351,7 @@ describe("closing a viewer's document", () => {
   it("lays the pages out again once their sizes are known, unless the document closed", async () => {
     const pages = [LETTER, A4, LETTER];
     const open = fakePdfjs(async () => fakeDocument({ pages }).proxy);
-    const viewer = new Viewer();
+    const viewer = new ViewerController();
     close.push(show(viewer, { url: "/a.pdf" }, open.loader).close);
     await settle();
     // Every page has the first one's size until the background pass knows better.
@@ -365,7 +361,7 @@ describe("closing a viewer's document", () => {
     assert.deepEqual(viewer.store.get().layout?.sizes, pages);
 
     const closed = fakePdfjs(async () => fakeDocument({ pages }).proxy);
-    const other = new Viewer();
+    const other = new ViewerController();
     const { close: closeOther } = show(other, { url: "/a.pdf" }, closed.loader);
     await settle();
     closeOther();
@@ -378,8 +374,8 @@ describe("closing a viewer's document", () => {
 
   it("leaves the work of another viewer of the same document running", async () => {
     const { loader, calls, read } = slowTexts();
-    const first = new Viewer();
-    const second = new Viewer();
+    const first = new ViewerController();
+    const second = new ViewerController();
     const { close: closeFirst } = show(first, { url: "/a.pdf" }, loader);
     const { session: secondSession, close: closeSecond } = show(second, { url: "/a.pdf" }, loader);
     close.push(closeSecond);
@@ -411,7 +407,7 @@ describe("closing a viewer's document", () => {
     });
     context.mock.method(console, "error", () => {});
     const { loader } = fakePdfjs(async () => document.proxy);
-    const viewer = new Viewer();
+    const viewer = new ViewerController();
     close.push(show(viewer, { url: "/a.pdf" }, loader).close);
     await settle();
     const search = attachSearch(viewer);
@@ -430,7 +426,7 @@ describe("closing a viewer's document", () => {
 
   it("closes the open document when it opens another", async () => {
     const { loader, calls } = fakePdfjs();
-    const viewer = new Viewer();
+    const viewer = new ViewerController();
     const a = show(viewer, { url: "/a.pdf" }, loader);
     await settle();
     const first = viewer.session;
@@ -490,7 +486,7 @@ describe("a viewer's extensions", () => {
   };
 
   it("hear a document's load once, whether they extend before or after it", async () => {
-    const viewer = new Viewer();
+    const viewer = new ViewerController();
     const early = counting();
     viewer.extend(early.extension);
     const { close: closeDocument } = show(viewer, { url: "/a.pdf" }, fakePdfjs().loader);
@@ -510,7 +506,7 @@ describe("a viewer's extensions", () => {
 
   it("finish the edits in progress of every viewer of the document before it saves", async () => {
     const { loader } = fakePdfjs();
-    const viewers = [new Viewer(), new Viewer()];
+    const viewers = [new ViewerController(), new ViewerController()];
     for (const viewer of viewers) close.push(show(viewer, { url: "/a.pdf" }, loader).close);
     await settle();
     const session = viewers[0]?.session;
@@ -568,7 +564,7 @@ describe("a viewer's viewport", () => {
 
   /** A scroller, 1000 by 800 CSS pixels, whose content is its viewer's layout. */
   class Scroller extends EventTarget {
-    viewer: Viewer | null = null;
+    viewer: ViewerController | null = null;
     clientWidth = 1000;
     clientHeight = 800;
     clientLeft = 0;
@@ -611,11 +607,10 @@ describe("a viewer's viewport", () => {
   }
 
   /** Attach `scroller` to `viewer`'s viewport until the test ends. */
-  function attach(viewer: Viewer, scroller: Scroller): () => void {
+  function attach(viewer: ViewerController, scroller: Scroller): () => void {
     scroller.viewer = viewer;
     const content = { style: {}, classList: { remove: () => {} } };
-    const detach = attachViewport(
-      viewer,
+    const detach = viewer.attachViewport(
       scroller as unknown as HTMLElement,
       content as unknown as HTMLElement,
     );
@@ -625,7 +620,7 @@ describe("a viewer's viewport", () => {
 
   /** A viewer of five Letter pages in a viewport. */
   async function viewing(options: ViewerOptions = {}) {
-    const viewer = new Viewer(options);
+    const viewer = new ViewerController(options);
     const scroller = new Scroller();
     attach(viewer, scroller);
     const document = fakeDocument({ pages: Array.from({ length: 5 }, () => LETTER) });
@@ -711,25 +706,25 @@ describe("a viewer's viewport", () => {
     const { viewer, scroller } = await viewing();
     const zoom = () => [viewer.store.get().scale, viewer.store.get().zoomMode];
     assert.deepEqual(zoom(), [fitWidth(1000), "fit-width"]);
-    setViewerOptions(viewer, { minScale: 2 });
+    viewer.configure({ minScale: 2 });
     assert.deepEqual(zoom(), [2, "fit-width"]);
     resize(scroller, 1400, 800);
     assert.deepEqual(zoom(), [fitWidth(1400), "fit-width"]);
     viewer.setScale(5);
-    setViewerOptions(viewer, { minScale: 2, maxScale: 3 });
+    viewer.configure({ minScale: 2, maxScale: 3 });
     assert.deepEqual(zoom(), [3, "custom"]);
   });
 
   it("fits again as the scale limits change, widening or narrowing", async () => {
     const { viewer } = await viewing();
     const zoom = () => [viewer.store.get().scale, viewer.store.get().zoomMode];
-    setViewerOptions(viewer, { maxScale: 1 });
+    viewer.configure({ maxScale: 1 });
     assert.deepEqual(zoom(), [1, "fit-width"]);
-    setViewerOptions(viewer, {});
+    viewer.configure({});
     assert.deepEqual(zoom(), [fitWidth(1000), "fit-width"]);
-    setViewerOptions(viewer, { minScale: 2 });
+    viewer.configure({ minScale: 2 });
     assert.deepEqual(zoom(), [2, "fit-width"]);
-    setViewerOptions(viewer, { minScale: 1 });
+    viewer.configure({ minScale: 1 });
     assert.deepEqual(zoom(), [fitWidth(1000), "fit-width"]);
   });
 
@@ -776,7 +771,7 @@ describe("a viewer's viewport", () => {
   it("keeps a custom zoom within limits that change as the document is built again", async () => {
     const { viewer } = await viewing();
     viewer.setScale(5);
-    setViewerOptions(viewer, { textLayer: false, maxScale: 2 });
+    viewer.configure({ textLayer: false, maxScale: 2 });
     await settle();
     assert.deepEqual([viewer.store.get().scale, viewer.store.get().zoomMode], [2, "custom"]);
   });
@@ -785,7 +780,7 @@ describe("a viewer's viewport", () => {
     const { viewer, scroller } = await viewing();
     viewer.setScale(5);
     release.shift()?.();
-    setViewerOptions(viewer, { maxScale: 2 });
+    viewer.configure({ maxScale: 2 });
     attach(viewer, scroller);
     await settle();
     assert.deepEqual([viewer.store.get().scale, viewer.store.get().zoomMode], [2, "custom"]);
@@ -796,7 +791,7 @@ describe("a viewer's viewport", () => {
     viewer.goToPage(2);
     const top = scroller.scrollTop;
     resize(scroller, 0, 0);
-    setViewerOptions(viewer, { textLayer: false });
+    viewer.configure({ textLayer: false });
     await settle();
     resize(scroller, 1000, 800);
     assert.equal(viewer.store.get().scale, fitWidth(1000));
@@ -838,11 +833,11 @@ describe("a viewer's viewport", () => {
    * child's before its parent's. The returned `hide` destroys them in that
    * order, as React does when it hides the tree or unmounts it.
    */
-  function mount(viewer: Viewer, scroller: Scroller, session: PdfSession): () => void {
+  function mount(viewer: ViewerController, scroller: Scroller, session: PdfSession): () => void {
     const detach = attach(viewer, scroller);
-    openViewer(viewer, session);
+    viewer.open(session);
     const releaseSession = connectSession(session);
-    const releaseViewer = holdViewer(viewer);
+    const releaseViewer = viewer.hold();
     const hide = () => {
       detach();
       releaseSession();
@@ -861,7 +856,7 @@ describe("a viewer's viewport", () => {
     for (const away of [999, 1000]) {
       const { loader, calls } = fivePages();
       const session = new PdfSession({ url: "/a.pdf" }, { pdfjs: loader });
-      const viewer = new Viewer();
+      const viewer = new ViewerController();
       const scroller = new Scroller();
       const hide = mount(viewer, scroller, session);
       await settle();
@@ -910,7 +905,7 @@ describe("a viewer's viewport", () => {
           }).proxy,
       );
       const session = new PdfSession({ url: "/latest.pdf" }, { pdfjs: loader });
-      const viewer = new Viewer();
+      const viewer = new ViewerController();
       const scroller = new Scroller();
       const forgotten: boolean[] = [];
       viewer.extend({ closed: (kept) => void forgotten.push(kept) });
@@ -933,7 +928,7 @@ describe("a viewer's viewport", () => {
   it("shows a document once, however often React runs the effects that mount it", async () => {
     const { loader, calls } = fivePages();
     const session = new PdfSession({ url: "/a.pdf" }, { pdfjs: loader });
-    const viewer = new Viewer({ initialScale: 2 });
+    const viewer = new ViewerController({ initialScale: 2 });
     const heard: string[] = [];
     viewer.extend({
       ready: () => void heard.push("ready"),
@@ -952,12 +947,12 @@ describe("a viewer's viewport", () => {
 
   it("lets go of a document its owner lets go, whatever the provider holds, and shows it again", async () => {
     const { loader, calls } = fivePages();
-    const viewer = new Viewer();
+    const viewer = new ViewerController();
     const scroller = new Scroller();
     attach(viewer, scroller);
     // The provider stays mounted; React hides the component that owns the viewer.
     release.push(show(viewer, { url: "/a.pdf" }, loader).close);
-    const letGo = holdViewer(viewer);
+    const letGo = viewer.hold();
     await settle();
     viewer.goToPage(2);
     const top = scroller.scrollTop;
@@ -967,7 +962,7 @@ describe("a viewer's viewport", () => {
     assert.deepEqual([viewer.session, viewer.store.get().layout], [null, null]);
     assert.equal(scroller.scrollTop, 0, "the viewport shows nothing of it");
     letGo();
-    release.push(holdViewer(viewer));
+    release.push(viewer.hold());
     await settle();
     assert.equal(viewer.session, shown);
     assert.deepEqual([viewer.store.get().currentPage, scroller.scrollTop], [2, top]);
@@ -976,7 +971,7 @@ describe("a viewer's viewport", () => {
 
   it("forgets the view of a session it let go once another session opens", async () => {
     const { loader } = fivePages();
-    const viewer = new Viewer();
+    const viewer = new ViewerController();
     const heard: boolean[] = [];
     viewer.extend({ closed: (kept) => void heard.push(kept) });
     const scroller = new Scroller();
@@ -993,5 +988,105 @@ describe("a viewer's viewport", () => {
     const { currentPage, scale, zoomMode } = viewer.store.get();
     assert.deepEqual([currentPage, scale, zoomMode], [0, fitWidth(1000), "fit-width"]);
     assert.equal(scroller.scrollTop, 0);
+  });
+
+  it("reports settled and compound ViewState changes without echoing open or scrolling per frame", async (context) => {
+    let now = 1000;
+    context.mock.method(performance, "now", () => now);
+    const initial: ViewState = {
+      page: 1,
+      x: 0,
+      y: 80,
+      scale: 1.5,
+      rotation: 0,
+      spread: "none",
+      scrollMode: "vertical",
+    };
+    const viewer = new ViewerController({
+      opening: initialViewOpening({ initialViewState: initial }),
+    });
+    const scroller = new Scroller();
+    const detach = attach(viewer, scroller);
+    const heard: ViewState[] = [];
+    const unsubscribe = viewer.onViewStateChange((view) => heard.push(view));
+    const document = fakeDocument({ pages: Array.from({ length: 5 }, () => LETTER) });
+    release.push(
+      show(viewer, { url: "/persisted.pdf" }, fakePdfjs(async () => document.proxy).loader).close,
+    );
+    await settle();
+
+    // Opening with initialViewState places the view without echoing onViewStateChange.
+    assert.equal(viewer.viewState()?.page, 1);
+    assert.equal(viewer.viewState()?.y, 80);
+    assert.equal(heard.length, 0);
+
+    // Compound view updates fire synchronously once with the final ViewState, and deduplicate equals.
+    viewer.setViewState({
+      page: 2,
+      x: 0,
+      y: 120,
+      scale: 2,
+      rotation: 90,
+      spread: "odd",
+      scrollMode: "vertical",
+    });
+    assert.equal(heard.length, 1);
+    assert.equal(heard[0]?.page, 2);
+    assert.equal(heard[0]?.scale, 2);
+    assert.equal(heard[0]?.rotation, 90);
+    assert.equal(heard[0]?.spread, "odd");
+
+    const first = heard[0];
+    assert.ok(first);
+    viewer.setViewState(first);
+    assert.equal(heard.length, 1);
+
+    viewer.batchView(() => {
+      viewer.setRotation(0);
+      viewer.setSpread("none");
+      viewer.setScale(1.5);
+    });
+    assert.equal(heard.length, 2);
+    assert.equal(heard[1]?.rotation, 0);
+    assert.equal(heard[1]?.spread, "none");
+    assert.equal(heard[1]?.scale, 1.5);
+
+    // Intra-page scrolling stays quiet per frame while scrolling, then emits once after SETTLE_DELAY.
+    const beforeScrollY = viewer.viewState()?.y ?? 0;
+    for (const delta of [30, 30, 30]) {
+      now += 16;
+      scroller.scrollTop += delta;
+      scroller.dispatchEvent(new Event("scroll"));
+      for (const frame of frames.splice(0)) frame();
+    }
+    assert.equal(heard.length, 2, "active scroll frames never fire onViewStateChange");
+
+    now += 200;
+    mock.timers.tick(200);
+    for (const frame of frames.splice(0)) frame();
+    assert.equal(heard.length, 3);
+    assert.ok((heard[2]?.y ?? 0) > beforeScrollY);
+
+    // flushViewState() and viewport detach flush unsettled scrolls immediately, except when collapsed (0x0).
+    now += 16;
+    scroller.scrollTop += 45;
+    scroller.dispatchEvent(new Event("scroll"));
+    assert.equal(heard.length, 3);
+    viewer.flushViewState();
+    assert.equal(heard.length, 4);
+
+    now += 16;
+    scroller.scrollTop += 45;
+    scroller.dispatchEvent(new Event("scroll"));
+    scroller.clientWidth = 0;
+    scroller.clientHeight = 0;
+    viewer.flushViewState();
+    assert.equal(heard.length, 4, "a collapsed display:none scroller does not overwrite ViewState");
+
+    scroller.clientWidth = 1000;
+    scroller.clientHeight = 800;
+    detach();
+    assert.equal(heard.length, 5, "detaching the viewport flushes the unsettled scroll");
+    unsubscribe();
   });
 });

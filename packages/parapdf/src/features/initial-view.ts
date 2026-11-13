@@ -9,7 +9,7 @@ import type { ScrollMode, SpreadMode } from "../view/layout.ts";
 import type { Opening, ViewerOptions } from "../view/options.ts";
 import { linked } from "../view/signals.ts";
 import { toShownView, type ViewState } from "../view/view-state.ts";
-import type { Viewer } from "../view/viewer.ts";
+import type { ViewerController } from "../view/viewer.ts";
 
 export interface InitialViewOptions {
   /**
@@ -109,7 +109,7 @@ async function firstResolved(
  * fragment of an open document's URL.
  */
 export async function goToFragment(
-  viewer: Viewer,
+  viewer: ViewerController,
   fragment: string,
   signal: AbortSignal,
 ): Promise<void> {
@@ -120,9 +120,9 @@ export async function goToFragment(
 
 type FragmentSource = ReadableStore<{ fragment: string }>;
 /** The fragment a viewer last applied, kept while its viewport is hidden. */
-const fragments = new WeakMap<Viewer, { source: FragmentSource; seen: string }>();
+const fragments = new WeakMap<ViewerController, { source: FragmentSource; seen: string }>();
 
-function fragmentState(viewer: Viewer, source: FragmentSource) {
+function fragmentState(viewer: ViewerController, source: FragmentSource) {
   let state = fragments.get(viewer);
   if (!state || state.source !== source) {
     state = { source, seen: source.get().fragment };
@@ -132,14 +132,14 @@ function fragmentState(viewer: Viewer, source: FragmentSource) {
 }
 
 /** Remember the fragment the initial opening is about to apply. */
-export function openingFragment(viewer: Viewer, source: FragmentSource): string {
+export function openingFragment(viewer: ViewerController, source: FragmentSource): string {
   const state = fragmentState(viewer, source);
   state.seen = source.get().fragment;
   return state.seen;
 }
 
 /** Follow fragment changes, including those deferred while the viewport was unavailable. */
-export function followFragments(viewer: Viewer, source: FragmentSource): () => void {
+export function followFragments(viewer: ViewerController, source: FragmentSource): () => void {
   const state = fragmentState(viewer, source);
   let ready: AbortSignal | null = null;
   let pending: AbortController | null = null;

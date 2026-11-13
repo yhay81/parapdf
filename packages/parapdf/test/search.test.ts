@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it, mock } from "node:test";
 import { attachSearch, searchOf } from "../src/features/search/index.ts";
-import { Viewer } from "../src/view/viewer.ts";
+import { ViewerController } from "../src/view/viewer.ts";
 import { fakeDocument, fakePdfjs, LETTER, settle, show } from "./fake-pdfjs.ts";
 
 describe("the search feature", () => {
@@ -32,7 +32,7 @@ describe("the search feature", () => {
       texts: [[{ str: "a rose" }], [{ str: "tulip" }], [{ str: "Rose and rose" }]],
     });
     const { loader } = fakePdfjs(async () => document.proxy);
-    const viewers = [new Viewer(), new Viewer()] as const;
+    const viewers = [new ViewerController(), new ViewerController()] as const;
     for (const viewer of viewers) close.push(show(viewer, { url: "/a.pdf" }, loader).close);
     await settle();
     return { viewers, textsRead: document.textsRead };
@@ -92,7 +92,7 @@ describe("the search feature", () => {
         [{ str: "rose" }],
       ],
     });
-    const viewer = new Viewer();
+    const viewer = new ViewerController();
     close.push(show(viewer, { url: "/a.pdf" }, fakePdfjs(async () => document.proxy).loader).close);
     await settle();
     // Each page takes long enough for what was found so far to be published.
@@ -208,7 +208,7 @@ describe("the search feature", () => {
     });
     const document = fakeDocument({ texts: [[{ str: "rose tulip tulip" }]], textsReady });
     const { loader } = fakePdfjs(async () => document.proxy);
-    const viewer = new Viewer();
+    const viewer = new ViewerController();
     close.push(show(viewer, { url: "/slow.pdf" }, loader).close);
     await settle();
     const search = attachSearch(viewer);
@@ -232,7 +232,7 @@ describe("the search feature", () => {
     });
     const document = fakeDocument({ texts: [[{ str: "rose" }]], textsReady });
     const { loader } = fakePdfjs(async () => document.proxy);
-    const viewer = new Viewer();
+    const viewer = new ViewerController();
     close.push(show(viewer, { url: "/slow.pdf" }, loader).close);
     await settle();
     const search = attachSearch(viewer);
@@ -253,7 +253,7 @@ describe("the search feature", () => {
       texts: [[{ str: "a rose" }], [{ str: "rose" }]],
     });
     const { loader } = fakePdfjs(async () => document.proxy);
-    const viewer = new Viewer();
+    const viewer = new ViewerController();
     const shown = show(viewer, { url: "/a.pdf" }, loader);
     await settle();
     const search = attachSearch(viewer);

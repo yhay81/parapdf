@@ -26,14 +26,15 @@ its snapshot while its fields stay equal.
 ## View state
 
 `useViewState(viewer?)` and `useViewState(selector, viewer?)` read a viewer's
-`ViewerState` (the nearest `PdfView` or `PdfDocument`'s by default). Outside
-React, `viewer.store.get()` returns it and `viewer.store.subscribe(listener)`
-hears each change; `viewer.store.hot` and `viewer.store.cold` publish its
-two parts apart.
+`ViewerState` (the nearest `PdfView` or `PdfDocument`'s by default). In event
+handlers and effects that do not subscribe to changes, `viewer.state` returns
+the current `ViewerState` snapshot, and `PdfViewer`'s `onViewStateChange`
+reports settled `ViewState` snapshots for persistence (see [Keeping the
+view](/guides/view-state/)).
 
-The store publishes when the document is laid out, the mounted pages or the
-current page change, or the view does; scrolling and zoom gestures change
-nothing in it per frame.
+The viewer's hot and cold stores publish apart when the document is laid out,
+the mounted pages or the current page change, or the view does; scrolling and
+zoom gestures change nothing in them per frame.
 
 | Field | Part | Meaning |
 |---|---|---|

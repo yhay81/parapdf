@@ -1014,7 +1014,7 @@ function RuntimeTelemetry({ viewer, file }: { viewer: Viewer; file: string }) {
 
 /**
  * Demonstrates 1,000-page virtualization and zero per-frame React commits with
- * live telemetry from `viewer.store`.
+ * live telemetry from `useViewState` and `viewer`.
  */
 export function StressShowcase() {
   const [file, setFile] = useState("synthetic-text-1000.pdf");

@@ -9,7 +9,7 @@ import {
   type Viewer,
 } from "parapdf";
 import { Activity, type ReactNode, Suspense, useEffect, useState, useTransition } from "react";
-import { searchOf, useAnnotationEditing } from "./internals.ts";
+import { controllerOf, searchOf, useAnnotationEditing } from "./internals.ts";
 import { type DemoFeatures, ViewerFeatures } from "./ViewerFeatures.tsx";
 
 declare global {
@@ -99,7 +99,7 @@ function Shown({
 
 /** Exposes the viewer, its session, and its features to the checks, as the demo does. */
 function Probes() {
-  const viewer = useViewer();
+  const viewer = controllerOf(useViewer());
   window.__viewer = viewer;
   window.__session = useSession();
   window.__search = searchOf(viewer);

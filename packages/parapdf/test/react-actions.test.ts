@@ -26,7 +26,7 @@ import { historyControlsStore, useHistory } from "../src/react/history.ts";
 import { createPrintController, type PrintState, usePrint } from "../src/react/print.ts";
 import { useSave } from "../src/react/save.ts";
 import { searchControlsStore, useSearch } from "../src/react/search.ts";
-import { attachViewport, openViewer, Viewer } from "../src/view/viewer.ts";
+import { ViewerController } from "../src/view/viewer.ts";
 import { fakeDocument, fakePdfjs, LETTER, settle, show } from "./fake-pdfjs.ts";
 
 class PrintElement {
@@ -175,6 +175,8 @@ describe("public React-first surface (decision 0035)", () => {
       "getSelection",
       "getViewState",
       "setViewState",
+      "ViewerExtension",
+      "Opening",
     ];
     for (const name of removed) {
       assert.equal(specifiers.has(name), false, `${name} should not be exported`);
@@ -345,17 +347,17 @@ describe("viewer.viewState() and viewer.setViewState()", () => {
   it("reads null before layout and round-trips view state on an attached viewer", async () => {
     await withViewportGlobals(async () => {
       const doc = fakeDocument({ pages: [LETTER, LETTER, LETTER] });
-      const viewer = new Viewer();
+      const viewer = new ViewerController();
       assert.equal(viewer.viewState(), null);
 
       const { scroller, content } = fakeViewport();
-      const detach = attachViewport(viewer, scroller, content);
+      const detach = viewer.attachViewport(scroller, content);
       const session = new PdfSession(
         { url: "/book.pdf" },
         { pdfjs: fakePdfjs(async () => doc.proxy).loader },
       );
       const release = connectSession(session);
-      openViewer(viewer, session);
+      viewer.open(session);
       await settle();
 
       viewer.setViewState({
@@ -384,7 +386,7 @@ describe("viewer.viewState() and viewer.setViewState()", () => {
 describe("useSave, usePrint, useSearch, and useHistory", () => {
   it("resolves context or explicit instances on the server and throws without context", () => {
     const session = new PdfSession({ url: "/doc.pdf" });
-    const viewer = new Viewer();
+    const viewer = new ViewerController();
 
     assert.throws(
       () =>
@@ -443,7 +445,7 @@ describe("useSave, usePrint, useSearch, and useHistory", () => {
   it("tracks progress, supports clean cancel() and dispose(), and propagates errors in createPrintController", async (t) => {
     const env = mockPrintEnvironment(t);
     const doc = fakeDocument({ pages: [LETTER, LETTER, LETTER] });
-    const viewer = new Viewer();
+    const viewer = new ViewerController();
     const { close } = show(viewer, { url: "/three.pdf" }, fakePdfjs(async () => doc.proxy).loader);
     t.after(close);
     await settle();
@@ -494,7 +496,7 @@ describe("useSave, usePrint, useSearch, and useHistory", () => {
       pages: [LETTER],
       proxy: { getPermissions: async () => new Set<number>() },
     });
-    const restrictedViewer = new Viewer();
+    const restrictedViewer = new ViewerController();
     const detachPermissions = enforcePermissions(restrictedViewer);
     const { close: closeRestricted } = show(
       restrictedViewer,
@@ -515,7 +517,7 @@ describe("useSave, usePrint, useSearch, and useHistory", () => {
       pages: [LETTER, LETTER],
       texts: [[{ str: "React PDF" }], [{ str: "React viewer" }]],
     });
-    const viewer = new Viewer();
+    const viewer = new ViewerController();
     const { close } = show(viewer, { url: "/search.pdf" }, fakePdfjs(async () => doc.proxy).loader);
     await settle();
 

@@ -1,11 +1,11 @@
 "use client";
 
-import type { Viewer } from "../../view/viewer.ts";
+import type { ViewerController } from "../../view/viewer.ts";
 import { ThumbnailRenderer } from "./renderer.ts";
 
 /** Each viewer's thumbnails, while any is attached. */
 const renderers = new WeakMap<
-  Viewer,
+  ViewerController,
   { renderer: ThumbnailRenderer; count: number; detach(): void }
 >();
 
@@ -16,7 +16,7 @@ const renderers = new WeakMap<
  * the function that releases it. `<PdfThumbnail>` calls this.
  */
 export function attachThumbnail(
-  viewer: Viewer,
+  viewer: ViewerController,
   pageIndex: number,
   canvas: HTMLCanvasElement,
   width: number,

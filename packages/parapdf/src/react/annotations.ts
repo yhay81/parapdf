@@ -14,7 +14,7 @@ import type {
   SavedAnnotation,
   SignatureInput,
 } from "../pdfjs/editor-types.ts";
-import type { Viewer } from "../view/viewer.ts";
+import type { Viewer, ViewerController } from "../view/viewer.ts";
 import { useOptionalViewer, useStore, useStoreSlice } from "./context.ts";
 
 export interface AnnotationControls extends AnnotationEditingStore {
@@ -62,16 +62,16 @@ export interface AnnotationSlot {
   unsubscribeEditing: (() => void) | null;
   removeViewportGuard: (() => void) | null;
   mount(
-    attach: (viewer: Viewer, options?: AnnotationEditingOptions) => AnnotationEditing,
+    attach: (viewer: ViewerController, options?: AnnotationEditingOptions) => AnnotationEditing,
     labels: Partial<AnnotationLabels> | undefined,
   ): () => void;
   updateLabels(labels: Partial<AnnotationLabels> | undefined): void;
   detachNow(): void;
 }
 
-const slots = new WeakMap<Viewer, AnnotationSlot>();
+const slots = new WeakMap<ViewerController, AnnotationSlot>();
 
-export function annotationSlot(viewer: Viewer): AnnotationSlot {
+export function annotationSlot(viewer: ViewerController): AnnotationSlot {
   const existing = slots.get(viewer);
   if (existing) return existing;
   const editingStore = new Store<{ editing: AnnotationEditing | null }>({ editing: null });
@@ -202,7 +202,7 @@ export interface AnnotationToolBinding {
  * controlled `tool`, per-session `defaultTool`, and `onToolChange`.
  */
 export function bindAnnotationTool(
-  viewer: Viewer,
+  viewer: ViewerController,
   slot: AnnotationSlot,
   getBinding: () => AnnotationToolBinding,
   onDiverge: () => void,

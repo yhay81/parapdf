@@ -53,7 +53,7 @@ remount (see [Options](/reference/options/)).
 |---|---|
 | `viewer` | The `Viewer` to show the document with; by default, the viewer of the nearest `PdfView` or `PdfDocument`. |
 | `ref` | Receives the `Viewer` shown. |
-| View state | `zoom`, `rotation`, `spread`, `scrollMode`, and `tool`, each controlled with its `on…Change` callback or left to the viewer with its `default…`; `defaultPage` and `onPageChange` (see [Options](/reference/options/#view-state)). |
+| View state | `zoom`, `rotation`, `spread`, `scrollMode`, and `tool`, each controlled with its `on…Change` callback or left to the viewer with its `default…`; `defaultPage`, `onPageChange`, and `onViewStateChange` (see [Options](/reference/options/#view-state)). |
 | The opening | `initialView` and `initialViewState` (see [Options](/reference/options/#the-opening)). |
 | Live options | The layers, links, layout, zoom limits, and budgets (see [Options](/reference/options/)). |
 | `className`, `style` | For the scroll container. |

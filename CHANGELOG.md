@@ -6,6 +6,32 @@ change the API.
 
 ## Unreleased
 
+- Narrow `Viewer` to a React-only handle interface and add `<PdfViewer onViewStateChange>`:
+  - **Breaking:** `Viewer` is now a TypeScript interface rather than a
+    constructible class (`new Viewer()` is removed; obtain a `Viewer` via
+    `useViewer()`, `useCreateViewer()`, or a `ref` on `<PdfViewer>` /
+    `<PdfView>`).
+  - **Breaking:** Removed `viewer.store`, `viewer.extend()`, `viewer.defer()`,
+    `viewer.renderer`, `viewer.session`, `viewer.pdfSession`,
+    `viewer.permissions`, `viewer.layers`, `viewer.textLayers`,
+    `viewer.annotationLayers`, `viewer.workSignal`, `viewer.signal`,
+    `viewer.pageColors`, `viewer.textLayer`, `viewer.annotationLayer`,
+    `viewer.setFormLayers()`, `viewer.setFormScripting()`,
+    `viewer.setAnnotationEditor()`, `viewer.claimPointer()`,
+    `viewer.invalidateContent()`, and `viewer.invalidateDrawings()` from the
+    public `Viewer` surface, and removed `ViewerExtension` and `Opening` from
+    `parapdf` exports. Read reactive state with `useViewState()`, read
+    synchronous snapshots in event handlers with `viewer.state`, and mount
+    `<PdfForms />`, `<PdfAnnotationEditor />`, `<PdfAutoLinks />`, and
+    `<PdfPermissions />` for features.
+  - Added `viewer.state: ViewerState` for synchronous reads in event handlers
+    and callbacks.
+  - Added `<PdfViewer onViewStateChange={(viewState) => ...} />` to persist
+    settled `ViewState` snapshots across intra-page scrolls, zoom, rotation,
+    spread, and scroll-mode changes without firing on initial open, without
+    firing per frame during active scrolls or zoom previews, and flushing
+    pending scrolls on `pagehide` and viewport unmount.
+
 - Keep the active thumbnail visible when opening the sidebar at a deep page,
   resizing thumbnails, or rotating pages; retain numeric labels when PDF
   page labels cannot be read, and provide controls to expand collapsed

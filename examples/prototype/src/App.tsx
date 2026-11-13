@@ -37,7 +37,7 @@ import {
   useSession,
   useViewer,
   useViewState,
-  type Viewer as ViewerHandle,
+  type ViewState,
 } from "parapdf";
 import type { PDFDataRangeTransport } from "pdfjs-dist";
 import {
@@ -57,6 +57,7 @@ import { Icon, type IconName } from "./Icon.tsx";
 import {
   type AnnotationEditing,
   attachViewport,
+  controllerOf,
   getSelection,
   type History,
   historyOf,
@@ -64,6 +65,7 @@ import {
   searchOf,
   showWith,
   useAnnotationEditing,
+  type ViewerController,
 } from "./internals.ts";
 import { PasswordPrompt } from "./PasswordPrompt.tsx";
 import { PresentationControls, usePresentation } from "./Presentation.tsx";
@@ -278,6 +280,7 @@ const viewerProps: PdfViewerProps = {
   ...(settings.initialScale !== undefined ? { defaultZoom: settings.initialScale } : {}),
   ...(settings.maxScale ? { maxScale: settings.maxScale } : {}),
   ...settings.canvasLimits,
+  onViewStateChange: (state) => window.__viewStates?.push(state),
 };
 const initialFeatures: DemoFeatures = {
   autoLinks: settings.autoLinks,
@@ -492,7 +495,7 @@ const demoApi = {
 declare global {
   interface Window {
     /** The viewer and its features, for the Playwright checks; not part of the library surface. */
-    __viewer?: ViewerHandle;
+    __viewer?: ViewerController;
     /** The session of the viewer's document, whose state the checks read. */
     __session?: PdfSession;
     /** The package's functions, which take the viewer. */
@@ -510,6 +513,8 @@ declare global {
     __attachViewport?: typeof attachViewport;
     /** Changes props of the viewer's `<PdfViewer>`, which are live, for check-options.ts. */
     __setViewerProps?: (props: Partial<PdfViewerProps>) => void;
+    /** Settled view states emitted by `<PdfViewer onViewStateChange>`, for check-options.ts. */
+    __viewStates?: ViewState[];
     /** Mounts or updates the viewer's declarative feature components (`<PdfForms>`, `<PdfAnnotationEditor>`, `<PdfAutoLinks>`, `<PdfPermissions>`). */
     __setFeatures?: (patch: Partial<DemoFeatures>) => void;
     /** Mounts or updates overlay and selection-popover test harnesses. */
@@ -529,10 +534,11 @@ window.__parapdf = demoApi;
 window.__showWith = showWith;
 window.__attachViewport = attachViewport;
 window.__commits = () => commits.count;
+window.__viewStates = [];
 
 /** Exposes the viewer and its features to the checks: the same the toolbars use. */
 function Probes() {
-  const viewer = useViewer();
+  const viewer = controllerOf(useViewer());
   const session = useSession();
   window.__viewer = viewer;
   window.__session = session;

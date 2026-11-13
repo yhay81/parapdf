@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { holdViewer, Viewer } from "../view/viewer.ts";
+import { type Viewer, ViewerController } from "../view/viewer.ts";
 import { useOptionalViewer } from "./context.ts";
 
 /**
@@ -22,10 +22,10 @@ export function useViewer(): Viewer {
  * calling component unmounts.
  */
 export function useCreateViewer(): Viewer {
-  const [viewer] = useState(() => new Viewer());
+  const [viewer] = useState(() => new ViewerController());
   // React cleans up alike for a component it hides and for one it removes,
   // and says nothing more of one it removes while hidden: the viewer lets go
   // of the document, and what it keeps goes with the component's state.
-  useEffect(() => holdViewer(viewer), [viewer]);
+  useEffect(() => viewer.hold(), [viewer]);
   return viewer;
 }

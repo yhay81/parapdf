@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { attachHistory, HISTORY_LIMIT, historyOf, Positions } from "../src/features/history.ts";
 import type { ViewerExtension } from "../src/view/extensions.ts";
 import type { ViewerPosition } from "../src/view/navigation.ts";
-import type { Viewer } from "../src/view/viewer.ts";
+import type { ViewerController } from "../src/view/viewer.ts";
 
 const at = (pageIndex: number): ViewerPosition => ({
   pageIndex,
@@ -29,7 +29,7 @@ function fakeViewer() {
       restored.push(entry.pageIndex);
       position = entry;
     },
-  } as unknown as Viewer;
+  } as unknown as ViewerController;
   const hear = (hook: keyof ViewerExtension, ...args: unknown[]) => {
     for (const extension of extensions) {
       (extension[hook] as ((...values: unknown[]) => void) | undefined)?.(...args);

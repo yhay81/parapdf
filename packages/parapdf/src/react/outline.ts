@@ -2,7 +2,7 @@
 
 import { type CSSProperties, createElement, type ReactNode, useCallback, useState } from "react";
 import type { OutlineNode } from "../document/session.ts";
-import { externalLinksStoreOf, type Viewer } from "../view/viewer.ts";
+import type { Viewer } from "../view/viewer.ts";
 import { useOptionalViewer, useSelected } from "./context.ts";
 import { useOutline } from "./data.ts";
 
@@ -105,7 +105,7 @@ export function OutlineTree({
   style,
 }: OutlineTreeProps): ReactNode {
   const viewer = useOptionalViewer(externalViewer);
-  const externalLinks = useSelected(externalLinksStoreOf(viewer), (state) => state.externalLinks);
+  const externalLinks = useSelected(viewer.externalLinksStore, (state) => state.externalLinks);
   if (items.length === 0) return null;
   return createElement(
     "nav",
