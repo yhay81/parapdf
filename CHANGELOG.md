@@ -6,6 +6,9 @@ change the API.
 
 ## Unreleased
 
+- Keep dynamic overlays visible through React StrictMode effect replay, and
+  keep multiple overlays independent when moving one to another viewer.
+
 - Declarative page overlays (`<PdfPageOverlay>`, `<PdfPageOverlays>`),
   unclipped selection popovers (`<PdfSelectionPopover>`, `selection.anchor`),
   PDF-coordinate pointer queries (`viewer.pointAt()`, `onPageClick`), and
@@ -29,6 +32,9 @@ change the API.
   - Added `preloadDocument(source)` to warm pdf.js, React's URL preload, and
     the shared document registry ahead of `<PdfDocument>` mounting (such as on
     route hover).
+
+- Restore saving and printing status when controls reconnect after React
+  Activity hides them during an operation.
 
 - Document-level operations now take `PdfSession` instead of `Viewer`, React
   action hooks (`useSave`, `usePrint`) cover saving and printing state, and
@@ -56,6 +62,9 @@ change the API.
   - Upgraded `useSearch` and `useHistory` to track read properties (or compare
     an optional `(state) => slice` selector shallowly) and return referentially
     stable action methods.
+
+- Keep annotation edits across React hides and remounts when the editor
+  component is a sibling rendered after its viewport.
 
 - Declarative feature components replace `PdfViewer`'s boolean feature props,
   so bundlers statically tree-shake unused features instead of emitting lazy

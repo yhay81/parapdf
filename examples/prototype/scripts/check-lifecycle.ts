@@ -225,6 +225,18 @@ async function checkReaders(browser: Browser, dev: ViteDevServer, base: string):
       unlocked,
       (await page.locator("#encrypted").textContent()) ?? "",
     );
+    const actions = await page.evaluate(
+      async ({ url, engine }) => {
+        const fixture: typeof import("./lifecycle-actions.tsx") = await import(url);
+        return fixture.checkActionLifetimes(engine);
+      },
+      { url: new URL("/scripts/lifecycle-actions.tsx", base).href, engine },
+    );
+    check(
+      "saving resets after a save finishes while its controls are hidden",
+      actions.save === true,
+    );
+    check("printing resets after its controls hide and cancel preparation", actions.print === true);
   } finally {
     await page.context().close();
   }

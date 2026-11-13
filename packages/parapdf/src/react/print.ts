@@ -130,6 +130,8 @@ export function usePrint(viewer?: Viewer): PrintControls {
   useEffect(() => {
     const controller = createPrintController(resolved, setState);
     controllerRef.current = controller;
+    // Replacing or reconnecting the controller starts with no active job.
+    setState(IDLE);
     return () => {
       controller.dispose();
       if (controllerRef.current === controller) controllerRef.current = null;
