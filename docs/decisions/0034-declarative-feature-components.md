@@ -88,6 +88,40 @@ Chromium and Firefox drop 0 frames in every job; WebKit drops 0 and 0, 1 and 1,
 `autoLinks` enabled in Chromium is 140 vs 139 ms at 900 px/s and 137 vs 142 ms
 at 3600 px/s. No timing difference beyond run-to-run variation is claimed.
 
+## Review: sibling editor remounts
+
+A viewport can reconnect before a sibling `<PdfAnnotationEditor>` runs its
+layout effect. Detaching the kept editor synchronously at that point discards
+annotations even when both reconnect in the same React commit. The guard now
+checks again in a microtask, as live unmount cleanup already does. The unit
+regression failed before the fix; `check:lifecycle` now puts the editor after
+its viewport as a sibling and passes with `check:annotations` in Chromium,
+WebKit, and Firefox. The site's new showcases also pass in all three.
+
+A same-run comparison against `306a0e6` measured `bill-hr815.pdf` at 3600 px/s
+for two seconds, median of three runs, on the same AC-powered Mac. Reports:
+[`Chromium`](../../examples/prototype/results/declarative-review-chromium.md),
+[`WebKit`](../../examples/prototype/results/declarative-review-webkit.md),
+[`Firefox`](../../examples/prototype/results/declarative-review-firefox.md),
+and with `QUERY=annotations=1`:
+[`Chromium`](../../examples/prototype/results/declarative-review-annotations-chromium.md),
+[`WebKit`](../../examples/prototype/results/declarative-review-annotations-webkit.md),
+[`Firefox`](../../examples/prototype/results/declarative-review-annotations-firefox.md).
+Main-thread blocked time (after, before), in ms:
+
+| Configuration | Chromium | WebKit | Firefox |
+|---|---:|---:|---:|
+| Default | 2, 2 | 29, 25 | 30, 42 |
+| Annotation editor | 8, 16 | 33, 34 | 55, 21 |
+
+All jobs have 0.0% blank area, zero dropped frames, and 118 MiB canvas memory.
+React commits remain tied to window and current-page changes (8 or 9,
+depending on whether the last frame crosses page 4). Firefox's annotation
+result varied most, so a five-run same-run repeat was also recorded
+([report](../../examples/prototype/results/declarative-review-annotations-firefox-repeat.md)).
+No speed improvement is claimed; this fixes annotation ownership at reconnect,
+without adding work to scroll frames.
+
 ## Reopen if
 
 - Mounting a feature lazily with `React.lazy()` after the first paint produces a

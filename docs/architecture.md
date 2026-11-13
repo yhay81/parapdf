@@ -300,7 +300,8 @@ the DOM declares `"use client"`.
   (`tool`, `defaultTool`, `onToolChange`), and preserves kept snapshots when
   hidden with its viewport (`<Activity>` or unmounting `PdfViewer`) while
   detaching immediately when removed from an attached viewport (decision
-  0034). `useAnnotations()` returns a non-null, getter-tracked
+  0034). Cleanup waits until the commit finishes so a sibling editor can
+  mount after the viewport and reclaim its kept annotations. `useAnnotations()` returns a non-null, getter-tracked
   `AnnotationControls` object whose action methods stay referentially stable.
   `renderOverlay` renders through a
   portal into the page's host; React renders nothing else there.
@@ -315,7 +316,8 @@ the DOM declares `"use client"`.
   array elements, or own properties of plain objects) (decisions 0033 and 0035).
   `useSearch()` and `useHistory()` keep their action methods referentially
   stable per feature instance, and `useSave()` and `usePrint()` expose reactive
-  saving and print-progress state with clean abort/unmount cancellation. The
+  saving and print-progress state with clean abort/unmount cancellation. They
+  reconcile that state when React reconnects their effects after Activity hides. The
   document's data is read with `use()` under the application's Suspense
   boundaries.
 - On the server the viewer renders an empty viewport, a URL source's

@@ -6,6 +6,9 @@ change the API.
 
 ## Unreleased
 
+- Restore saving and printing status when controls reconnect after React
+  Activity hides them during an operation.
+
 - Document-level operations now take `PdfSession` instead of `Viewer`, React
   action hooks (`useSave`, `usePrint`) cover saving and printing state, and
   vanilla-only feature plumbing is no longer part of the public surface:
@@ -32,6 +35,9 @@ change the API.
   - Upgraded `useSearch` and `useHistory` to track read properties (or compare
     an optional `(state) => slice` selector shallowly) and return referentially
     stable action methods.
+
+- Keep annotation edits across React hides and remounts when the editor
+  component is a sibling rendered after its viewport.
 
 - Declarative feature components replace `PdfViewer`'s boolean feature props,
   so bundlers statically tree-shake unused features instead of emitting lazy

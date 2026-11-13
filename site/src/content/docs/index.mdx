@@ -1,19 +1,22 @@
 ---
 title: ParaPDF
-description: A fast PDF viewer for React, built on pdf.js.
+description: A fast PDF viewer for React, built on pdf.js—without an iframe.
 head:
   - tag: title
     content: ParaPDF, a fast PDF viewer for React
 template: splash
 hero:
-  tagline: A fast PDF viewer for React, built on pdf.js. Scrolling and zooming never wait for React, only the pages near the viewport exist, and pages you come back to show at once.
+  tagline: Put pdf.js directly in your React tree instead of an iframe. Mount React components on pages in PDF points, share state with forms and selections, and scroll 1,000 pages with zero per-frame React commits.
   actions:
     - text: Get started
       link: /getting-started/
       icon: right-arrow
+    - text: Why not an iframe?
+      link: /why-react/
+      variant: secondary
     - text: Open the demo
       link: /demo/
-      variant: secondary
+      variant: minimal
     - text: GitHub
       link: https://github.com/yhay81/parapdf
       icon: github
@@ -21,7 +24,7 @@ hero:
 ---
 
 import { Card, CardGrid } from "@astrojs/starlight/components";
-import { HeroViewer } from "../../components/examples.tsx";
+import { HeroViewer } from "../../components/showcases.tsx";
 
 <HeroViewer client:visible />
 
@@ -42,33 +45,35 @@ export function App() {
 ```
 
 That is all the setup: ParaPDF ships pdf.js, its worker, and the files it
-loads on demand, and your bundler serves them from your application's origin.
+loads on demand, and your bundler serves them from your application's origin—no
+`public/pdfjs/` folder, no `viewer.html`, and no `postMessage` bridge.
 
 <CardGrid>
+  <Card title="Your React UI, right on the page" icon="puzzle">
+    Portal highlights, citations, review cards, and validation badges onto
+    pages in PDF points with `PdfPageRect`. They follow zoom and rotation
+    through CSS layout alone, without clipping at an `iframe` border or lagging
+    behind `postMessage`.
+  </Card>
   <Card title="React stays out of the hot path" icon="rocket">
     Scrolling and zooming commit no React state per frame. React renders only
-    when the set of mounted pages or the current page changes, and pixels
-    never go through React: the renderer owns each page's canvases.
+    when the window of mounted pages or the current page changes, pixels stay in
+    imperative canvases, and pages you come back to show the canvases they kept.
   </Card>
-  <Card title="Only what is near the viewport exists" icon="document">
-    Pages outside a small window unmount. Each page draws a quick base first
-    and full resolution once scrolling settles, within pixel budgets you can
-    set, and a page you come back to shows the canvases it kept.
+  <Card title="One document, many views & lifetimes" icon="open-book">
+    A `PdfDocument` opens one worker and session for any number of `PdfViewer`s
+    and `PdfThumbnails`, and `useViewer()` keeps scroll position, zoom, search,
+    and edits across React unmounts, tabs, and `<Activity>`.
   </Card>
-  <Card title="One document, many views" icon="open-book">
-    A `PdfDocument` opens a document once; any number of `PdfViewer`s and
-    thumbnail lists show it, each with its own scroll position, zoom,
-    rotation, and layout.
-  </Card>
-  <Card title="What a document viewer does" icon="pencil">
-    Selectable text in a tagged PDF's structure, whole-document search, links
-    and the outline with back and forward, fillable forms, annotations,
-    layers, attachments, printing, and encrypted documents. Features load
-    only when you use them.
+  <Card title="Typed hooks, zero viewer bloat" icon="pencil">
+    Selectable tagged text, whole-document search, outline and link history,
+    two-way AcroForm state, annotation editing, layers, attachments, printing,
+    auth headers, and SSR—each loaded only when your app uses it.
   </Card>
 </CardGrid>
 
-ParaPDF is at 0.x: its API may change in any minor release until 1.0. The
-[changelog](https://github.com/yhay81/parapdf/blob/main/CHANGELOG.md) lists
-the releases, and [Performance](/about/performance/) the measurements behind
+ParaPDF is at 0.x: its API may change in any minor release until 1.0. See
+[Why React, not an iframe](/why-react/) for side-by-side interactive examples,
+the [changelog](https://github.com/yhay81/parapdf/blob/main/CHANGELOG.md) for
+releases, and [Performance](/about/performance/) for the measurements behind
 the design, losses included.
