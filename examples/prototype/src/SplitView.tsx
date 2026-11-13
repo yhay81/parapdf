@@ -1,19 +1,22 @@
 import {
-  type AnnotationEditing,
   PdfDocument,
   type PdfSource,
   PdfView,
   PdfViewer,
   type PdfViewerProps,
-  type Search,
-  searchOf,
-  useAnnotationEditing,
   useDocumentState,
+  useSession,
   useViewer,
   useViewState,
   type Viewer,
 } from "parapdf";
 import { useRef, useState } from "react";
+import {
+  type AnnotationEditing,
+  type Search,
+  searchOf,
+  useAnnotationEditing,
+} from "./internals.ts";
 import { type DemoFeatures, ViewerFeatures } from "./ViewerFeatures.tsx";
 
 declare global {
@@ -52,6 +55,7 @@ export default function SplitView({
       </button>
       {open ? (
         <PdfDocument source={source} passwordPrompt={passwordPrompt}>
+          <SplitSessionProbe />
           <div style={{ display: "flex", flex: 1, minHeight: 0, gap: 12 }}>
             {mounted.map((show, index) => (
               <div
@@ -85,6 +89,11 @@ export default function SplitView({
       ) : null}
     </main>
   );
+}
+
+function SplitSessionProbe() {
+  window.__session = useSession();
+  return null;
 }
 
 function Pane({

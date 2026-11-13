@@ -98,8 +98,8 @@ function layerStore(reading: Promise<LayerState | null>): LayerStore {
 
 /**
  * The document's layers (optional content) in its own order, and which
- * show, as any viewer of it shows or hides them (`setLayerVisible()`);
- * empty when it has none. Suspends as `useOutline()` does.
+ * show, as `setLayerVisible()` shows or hides them across every viewer of
+ * the document; empty when it has none. Suspends as `useOutline()` does.
  */
 export function useLayers(): readonly PdfLayer[] {
   const store = layerStore(useSessionData("useLayers").layers());

@@ -96,6 +96,8 @@ export interface SessionListener {
 export interface SharedSession {
   /** The shared session; rejects when the document cannot be opened. */
   readonly session: Promise<DocumentSession>;
+  /** The loaded document session once ready, null while loading or after closing. */
+  readonly document: DocumentSession | null;
   /** pdf.js's document as soon as it opens, including for a provider joining later. */
   readonly proxy: DocumentSession["proxy"] | null;
   /** The current password request. Only this request accepts its answer. */
@@ -124,6 +126,7 @@ export interface SharedSession {
 
 interface Entry {
   session: Promise<DocumentSession>;
+  document: DocumentSession | null;
   proxy: DocumentSession["proxy"] | null;
   /** The session's AbortController, from before it loads: aborting it stops the load. */
   readonly controller: AbortController;
@@ -233,6 +236,7 @@ function closeEntry(registry: Map<unknown, Entry>, key: unknown, entry: Entry): 
   // A failed session was forgotten already, and another may have its place.
   if (registry.get(key) === entry) registry.delete(key);
   // Stops a load still in progress, or waiting for a password.
+  entry.document = null;
   entry.proxy = null;
   entry.controller.abort();
   entry.passwordRequest?.answer(null);
@@ -278,6 +282,7 @@ function openEntry(
   const entry: Entry = {
     // Replaced at once: opening calls back into the entry before it returns.
     session: new Promise<DocumentSession>(() => {}),
+    document: null,
     proxy: null,
     controller,
     signal: controller.signal,
@@ -386,6 +391,7 @@ function openEntry(
   entry.session.then(
     async (session) => {
       if (entry.signal.aborted) return;
+      entry.document = session;
       entry.proxy = session.proxy;
       const permissions = await session.permissions().catch((error: unknown) => {
         console.error("reading permissions failed", error);

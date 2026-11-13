@@ -13,10 +13,10 @@ Suspense boundary of your own, apart from the viewer, which never waits for
 them.
 
 ```tsx
-import { setLayerVisible, useLayers, useViewer } from "parapdf";
+import { setLayerVisible, useLayers, useSession } from "parapdf";
 
 function Layers() {
-  const viewer = useViewer();
+  const session = useSession();
   const layers = useLayers();
   return (
     <ul>
@@ -27,7 +27,7 @@ function Layers() {
               <input
                 type="checkbox"
                 checked={visible}
-                onChange={(event) => setLayerVisible(viewer, id, event.target.checked)}
+                onChange={(event) => setLayerVisible(session, id, event.target.checked)}
               />
               {name}
             </label>
@@ -50,7 +50,7 @@ order, empty when it has none: `{ id, name, visible, children }`, where a
 heading that only groups others has a null `id`. It follows their
 visibility as it changes.
 
-`setLayerVisible(viewer, id, visible)` shows or hides one in every viewer of
+`setLayerVisible(session, id, visible)` shows or hides one in every viewer of
 the document, their thumbnails, and their printouts; showing one of a set
 of exclusive layers hides the others, and links in the document that switch
 layers work too. Pages keep their old pixels while they are drawn again.
@@ -60,10 +60,10 @@ layers work too. Pages keep their old pixels while they are drawn again.
 `useAttachments()` lists the embedded files as
 `{ id, filename, description }`, empty when there are none.
 
-- `getAttachmentContent(viewer, id)` resolves to a file's bytes, or null.
-- `openAttachment(viewer, attachment)` does what activating a file
+- `getAttachmentContent(session, id)` resolves to a file's bytes, or null.
+- `openAttachment(session, attachment)` does what activating a file
   attachment annotation does: by default, the browser downloads the file.
-- `PdfViewer`'s `openAttachment` prop, `({ filename, content }) => void`,
+- `PdfDocument`'s `onOpenAttachment` prop, `({ filename, content }) => void`,
   replaces that, for both.
 
 ## Page labels and metadata

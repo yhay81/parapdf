@@ -127,11 +127,6 @@ export interface PdfViewerProps extends InitialViewOptions {
    */
   externalLinks?: "new-tab" | "disabled";
   /**
-   * Called when the reader opens a file attachment annotation or a link to
-   * an embedded file. By default the browser downloads the file.
-   */
-  openAttachment?: (attachment: { filename: string; content: Uint8Array }) => void;
-  /**
    * Draw pages in these two colors instead of their own, for example
    * `{ background: "Canvas", foreground: "CanvasText" }` in forced-colors mode.
    */
@@ -263,7 +258,6 @@ function ViewerViewport({
   destinationZoom,
   direction,
   externalLinks,
-  openAttachment,
   pageColors,
   gap,
   overscan,
@@ -316,7 +310,6 @@ function ViewerViewport({
     destinationZoom,
     direction,
     externalLinks,
-    openAttachment,
     pageColors,
     gap,
     overscan,

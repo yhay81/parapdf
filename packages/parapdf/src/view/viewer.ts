@@ -4,7 +4,7 @@
 // Mozilla Foundation, Apache License 2.0, and changed for ParaPDF; see
 // NOTICE.md.
 
-import { documentOf, type PdfSession } from "../document/pdf-session.ts";
+import { documentOf, openAttachmentHandlerOf, type PdfSession } from "../document/pdf-session.ts";
 import type { DocumentPermissions, DocumentSession, PageSize } from "../document/session.ts";
 import type {
   AnnotationLayerHandle,
@@ -20,7 +20,7 @@ import { type AnnotationSetup, DEFAULT_ANNOTATION_SETUP } from "../render/dom-la
 import { Renderer, type RenderStats } from "../render/renderer.ts";
 import { TextSelectionTracker } from "../render/selection.ts";
 import { ExtensionSet, type ViewerExtension } from "./extensions.ts";
-import { downloadBytes, filenameFromUrl } from "./files.ts";
+import { downloadBytes } from "./files.ts";
 import { ViewerGestures } from "./gestures.ts";
 import { ViewerInput } from "./input.ts";
 import {
@@ -65,6 +65,7 @@ import {
 } from "./scrolling.ts";
 import { linked } from "./signals.ts";
 import { type FitMode, type PointerTool, ViewerStore, type ZoomMode } from "./state.ts";
+import { toShownView, type ViewState, viewStateAt } from "./view-state.ts";
 import { destinationScale, fitScale, refits, requestedZoom } from "./zoom.ts";
 
 /** Whether a visible area is all of its page. */
@@ -87,8 +88,6 @@ interface Showing {
    * null from then until it shows the session again.
    */
   connection: AbortController | null;
-  /** The file name the document's URL gives, for download(). */
-  readonly sourceName: string | null;
   /** Work for the viewport and the document; either ending aborts it. */
   work: AbortController | null;
   /**
@@ -178,7 +177,12 @@ export class Viewer {
       if (current !== page) this.#focusPage(current, source);
     },
     externalLinks: "new-tab",
-    openAttachment: (file) => this.openFile(file),
+    openAttachment: (file) => {
+      const pdf = this.pdfSession;
+      const handler = pdf ? openAttachmentHandlerOf(pdf) : undefined;
+      if (handler) handler(file);
+      else downloadBytes(file.content, file.filename);
+    },
     setLayers: (action) => this.#shown?.layers?.apply(action),
   };
   /** What the features attached hear. */
@@ -395,10 +399,10 @@ export class Viewer {
     return this.#options.pageColors;
   }
 
-  /** The file name the open document's URL gives; null for bytes and with no document open. */
-  get sourceName(): string | null {
+  /** The provider's `PdfSession` while this viewer is connected to it; null otherwise. */
+  get pdfSession(): PdfSession | null {
     const shown = this.#shown;
-    return shown?.connection ? shown.sourceName : null;
+    return shown?.connection ? (shown.pdf.deref() ?? null) : null;
   }
 
   /** Render counters for the current document. */
@@ -475,13 +479,6 @@ export class Viewer {
     this.#shown?.renderer?.invalidateDrawings();
   }
 
-  /** Open an embedded file as activating its annotation does: by default, download it. */
-  openFile(file: { filename: string; content: Uint8Array }): void {
-    const { openAttachment } = this.#options;
-    if (openAttachment) openAttachment(file);
-    else downloadBytes(file.content, file.filename);
-  }
-
   /**
    * Show `pdf` until another session opens; a viewer shows one session at
    * a time, and opening the one it shows changes nothing. It shows the
@@ -499,12 +496,10 @@ export class Viewer {
       return;
     }
     if (showing) this.#stop(showing, false);
-    const { source } = pdf;
     const shown: Showing = {
       pdf: new WeakRef(pdf),
       fingerprints: null,
       connection: null,
-      sourceName: "url" in source ? filenameFromUrl(source.url) : null,
       work: null,
       savedPosition: null,
       session: null,
@@ -669,6 +664,7 @@ export class Viewer {
       signal,
     });
     shown.renderer = renderer;
+    session.onContentChange(() => renderer.invalidateContent(), signal);
     // Pages unmounting while no viewport shows them keep nothing.
     if (!this.#scroller) renderer.setKeeping(false);
     for (const [index, host] of this.#pageHosts) renderer.attach(index, host);
@@ -1086,6 +1082,29 @@ export class Viewer {
     // The destination's zoom applies only when the view leaves the zoom unsaid.
     if (target.x === null && target.y === null && !target.view) this.goToPage(page);
     else this.#jump(target, view.scale === undefined && this.#destinationZoom, true);
+  }
+
+  /**
+   * Where and how this viewer shows its document now, as a plain,
+   * JSON-compatible object to keep and restore with `setViewState()` or
+   * `initialViewState`. Null until the document is laid out in an attached viewport.
+   */
+  viewState(): ViewState | null {
+    const state = this.store.get();
+    const layout = state.layout;
+    const scroller = this.#scroller;
+    if (!layout || !scroller) return null;
+    return viewStateAt(layout, scroller, state);
+  }
+
+  /**
+   * Show a view kept from `viewState()`: its arrangement, rotation, and zoom,
+   * and the same point of the same page at the viewport's top-left corner.
+   * Fields left out keep the view's; without `x` and `y`, the page shows from
+   * its top. Values out of range are clamped or ignored.
+   */
+  setViewState(view: Partial<ViewState>): void {
+    this.show(toShownView(view));
   }
 
   /**

@@ -32,9 +32,10 @@ function Find() {
 
 `useSearch(viewer?)` gives the viewer's own search, shared by every component
 that asks for it: its state (`query`, `status`, `matches`, `current`,
-`pagesSearched`) with `search()`, `next()`, `previous()`, and `clear()`.
-Search's code is part of an application only when it imports the hook, or
-`searchOf(viewer)`, which gives the same search outside React.
+`pagesSearched`) with referentially stable `search()`, `next()`, `previous()`,
+and `clear()`, tracking read fields when called without a selector and
+comparing `useSearch(selector, viewer?)` shallowly otherwise. Search's code is
+part of an application only when it imports `useSearch`.
 
 Search starts on the current page, scans forward to the end, then wraps to
 the beginning. It selects the first match it finds and scrolls it into

@@ -9,9 +9,9 @@ import {
   openingFragment,
   openingOf,
 } from "../src/features/initial-view.ts";
-import { toShownView } from "../src/features/view-state.ts";
 import type { Destination } from "../src/pdfjs/destinations.ts";
 import type { ViewerExtension } from "../src/view/extensions.ts";
+import { toShownView } from "../src/view/view-state.ts";
 import { Viewer } from "../src/view/viewer.ts";
 import { fakeDocument, fakePdfjs, LETTER, settle, show } from "./fake-pdfjs.ts";
 

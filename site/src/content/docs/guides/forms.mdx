@@ -16,12 +16,17 @@ by its viewers, and a page keeps its values when it unmounts and mounts again.
 
 ## Saving and printing
 
-- `save(viewer, { pages })` resolves to the PDF's bytes with the values
-  and the annotations created written in, and
-  `download(viewer, { filename, pages })` hands them to the browser as a
-  download, named by default as the server names the file, or else after
-  the document's URL. With `pages`, only the pages chosen (see below).
-- `print(viewer, { resolution, autoRotate, onProgress, signal })` draws every
+- `useSave(session?)` returns `{ save, download, saving }` for the nearest
+  `PdfDocument`'s session; outside React components, `save(session, { pages })`
+  resolves to the PDF's bytes with the values and the annotations created
+  written in, and `download(session, { filename, pages })` hands them to the
+  browser as a download, named by default as the server names the file, or else
+  after the document's URL. Both belong to the document session and work even
+  without a mounted `PdfViewer`. With `pages`, only the pages chosen are saved
+  (see below).
+- `usePrint(viewer?)` returns `{ print, printing, progress, cancel }` for
+  React toolbars, and `print(viewer, { resolution, autoRotate, onProgress, signal })`
+  runs the same print job directly: it draws every
   page for printing, the typed values and the annotations created included,
   with the layers the viewer shows, at 150 dpi by default, and opens the
   browser's print dialog with only those pages, on sheets the size of the
@@ -39,31 +44,31 @@ chosen by `includePages` and `excludePages` (0-based indices and
 typed and the annotations created.
 
 ```ts
-const bytes = await save(viewer, {
+const bytes = await save(session, {
   pages: [{ includePages: [[0, 2]] }, { document: appendix, includePages: [0] }],
 });
-await download(viewer, { filename: "excerpt.pdf", pages: [{ excludePages: [3] }] });
+await download(session, { filename: "excerpt.pdf", pages: [{ excludePages: [3] }] });
 ```
 
 ## Reading and filling the form
 
 ```tsx
-import { getFormFields, setFormValues, useFormChange, useViewer } from "parapdf";
+import { getFormFields, setFormValues, useFormChange, useSession } from "parapdf";
 
 function FormSync({ onChange }: { onChange: (name: string, value: unknown) => void }) {
-  const viewer = useViewer();
+  const session = useSession();
   // Each value the reader enters, as they type.
   useFormChange(({ name, value }) => onChange(name, value));
   const fill = async () => {
-    const fields = await getFormFields(viewer);
+    const fields = await getFormFields(session);
     console.log(fields.map(({ name, type, value }) => [name, type, value]));
-    await setFormValues(viewer, { name: "Ada Lovelace", agree: true, size: "large" });
+    await setFormValues(session, { name: "Ada Lovelace", agree: true, size: "large" });
   };
   return <button type="button" onClick={fill}>Fill in</button>;
 }
 ```
 
-- `getFormFields(viewer)` resolves to every field (`FormField`): its
+- `getFormFields(session)` resolves to every field (`FormField`): its
   qualified `name`, `type` (`"text"`, `"checkbox"`, `"radio"`, `"combobox"`,
   `"listbox"`, `"button"`, or `"signature"`), current `value`,
   `defaultValue`, `readOnly`, `required`, `multiple`, the `options` of a
@@ -71,7 +76,7 @@ function FormSync({ onChange }: { onChange: (name: string, value: unknown) => vo
   page and a rectangle in PDF points. A value is text, the export value of
   the checked box or radio button (`"Off"` for none), or the selected
   options' export values, an array for a list that takes several.
-- `setFormValues(viewer, values)` sets fields by name, `true` and `false`
+- `setFormValues(session, values)` sets fields by name, `true` and `false`
   checking the first box or none, and resolves to the names it set. The
   fields shown show the values, and `save()` and `print()` include them; it
   is not heard as the reader's input.

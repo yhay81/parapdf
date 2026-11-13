@@ -6,6 +6,33 @@ change the API.
 
 ## Unreleased
 
+- Document-level operations now take `PdfSession` instead of `Viewer`, React
+  action hooks (`useSave`, `usePrint`) cover saving and printing state, and
+  vanilla-only feature plumbing is no longer part of the public surface:
+  - **Breaking:** `save`, `download`, `getText`, `getFormFields`,
+    `setFormValues`, `setLayerVisible`, `getAttachmentContent`, and
+    `openAttachment` now take `session: PdfSession` (`useSession()`) instead of
+    `viewer: Viewer`, so they work even without a mounted `<PdfViewer>` while
+    remaining tree-shakeable standalone functions.
+  - **Breaking:** Moved embedded-file handling from `<PdfViewer openAttachment>`
+    to `<PdfDocument onOpenAttachment>` (`AttachmentHandler`), and removed
+    `viewer.openFile()` and `viewer.sourceName` (`viewer.pdfSession` exposes the
+    attached `PdfSession`).
+  - **Breaking:** Replaced `getViewState(viewer)` and `setViewState(viewer, view)`
+    with `viewer.viewState()` and `viewer.setViewState(view)`.
+  - **Breaking:** Removed vanilla/internal exports `searchOf`, `attachSearch`,
+    `Search`, `historyOf`, `attachHistory`, `History`, `HistoryState`,
+    `attachThumbnail`, `enforcePermissions`, `useAnnotationEditing`,
+    `AnnotationEditing`, `AnnotationEditingOptions`, `AnnotationEditingStore`,
+    `FormLayers`, and `getSelection` from `parapdf`; use the React components
+    and hooks (`useSearch`, `useHistory`, `useAnnotations`, `useSelection`,
+    `<PdfThumbnail>`, `<PdfPermissions>`) instead.
+  - Added `useSave(session?)` (`{ save, download, saving }`) and
+    `usePrint(viewer?)` (`{ print, printing, progress, cancel }`).
+  - Upgraded `useSearch` and `useHistory` to track read properties (or compare
+    an optional `(state) => slice` selector shallowly) and return referentially
+    stable action methods.
+
 - Declarative feature components replace `PdfViewer`'s boolean feature props,
   so bundlers statically tree-shake unused features instead of emitting lazy
   feature chunks for every application:

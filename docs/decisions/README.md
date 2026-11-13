@@ -41,6 +41,7 @@ it. A new choice gets a new record, numbered next.
 | [0032](0032-react-lifetimes.md) | Documents open in render, and viewers keep their view while hidden | adopted |
 | [0033](0033-viewer-context-and-state.md) | Viewer context, React 19 refs, and tracked state hooks | adopted |
 | [0034](0034-declarative-feature-components.md) | Declarative feature components and synchronous annotation controls | adopted |
+| [0035](0035-document-actions-and-react-surface.md) | Document-owned actions and a React-only public surface | adopted |
 
 ## Template
 

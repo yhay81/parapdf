@@ -1,6 +1,6 @@
+import { openDocumentOf, type PdfSession } from "../../document/pdf-session.ts";
 import type { PageText } from "../../pdfjs/text.ts";
 import { clamp } from "../../view/layout.ts";
-import type { Viewer } from "../../view/viewer.ts";
 import {
   type DocumentText,
   PAGE_SEPARATOR,
@@ -21,7 +21,7 @@ export type {
 const TEXT_READ_AHEAD = 4;
 
 /**
- * The text of `viewer`'s document, read from pdf.js's text content of every
+ * The text of `session`'s document, read from pdf.js's text content of every
  * page between `from` and `to`, mounted or not: items in content order, as
  * search and the text layers read them, with "\n" where lines end or, with
  * `lineBreaks: "join"`, lines joined as search joins them. Pages are
@@ -29,14 +29,16 @@ const TEXT_READ_AHEAD = 4;
  * second read, or a search, parses nothing again. Rejects while no
  * document is open, and once it closes.
  */
-export async function getText(viewer: Viewer, options: TextOptions = {}): Promise<DocumentText> {
-  const session = viewer.session;
-  const work = viewer.workSignal;
-  if (!session || !work) throw new Error("No document is open");
-  work.throwIfAborted();
+export async function getText(
+  session: PdfSession,
+  options: TextOptions = {},
+): Promise<DocumentText> {
+  const doc = openDocumentOf(session);
+  const work = session.signal;
+  if (!doc || work.aborted) throw new Error("No document is open");
   const { from, to, lineBreaks = "keep", signal } = options;
   signal?.throwIfAborted();
-  const lastPage = session.pageCount - 1;
+  const lastPage = doc.pageCount - 1;
   const start = typeof from === "number" ? { pageIndex: from } : from;
   const end = typeof to === "number" ? { pageIndex: to } : to;
   const first = clamp(start?.pageIndex ?? 0, 0, lastPage);
@@ -46,7 +48,7 @@ export async function getText(viewer: Viewer, options: TextOptions = {}): Promis
   const requested = new Map<number, Promise<PageText>>();
   const request = (pageIndex: number) => {
     if (pageIndex > last || requested.has(pageIndex)) return;
-    const text = session.text(pageIndex);
+    const text = doc.text(pageIndex);
     // Abandoned when the read stops early; the read itself awaits it.
     text.catch(() => {});
     requested.set(pageIndex, text);

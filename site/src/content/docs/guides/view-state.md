@@ -5,7 +5,7 @@ description: Store where the reader is, open there again, and follow how the doc
 
 ## View states
 
-`getViewState(viewer)` returns where and how the viewer shows its document,
+`viewer.viewState()` returns where and how the viewer shows its document,
 as a plain object to store or put in a URL, or null until the document is
 ready:
 
@@ -19,7 +19,7 @@ ready:
 The point keeps its place on the page whatever the zoom or the viewport's
 size, so the view moves between a phone and a desktop.
 
-`setViewState(viewer, view)` shows such a view again, and `PdfViewer`'s
+`viewer.setViewState(view)` shows such a view again, and `PdfViewer`'s
 `initialViewState` opens the document with it, before anything is drawn
 elsewhere. It wins over `defaultPage`, the zoom, the spread, the scroll
 mode, and `initialView`, and the fields it leaves out still follow them.
@@ -29,7 +29,7 @@ Neither adds a back entry, and values out of range are clamped or ignored,
 so a view read from a URL needs no checking:
 
 ```tsx
-import { getViewState, PdfDocument, PdfViewer, useCreateViewer } from "parapdf";
+import { PdfDocument, PdfViewer, useCreateViewer } from "parapdf";
 import { useEffect, useState } from "react";
 
 function Reader({ url }: { url: string }) {
@@ -38,7 +38,7 @@ function Reader({ url }: { url: string }) {
   const [saved] = useState(() => localStorage.getItem(`view:${url}`));
   useEffect(() => {
     const save = () => {
-      const view = getViewState(viewer);
+      const view = viewer.viewState();
       if (view) localStorage.setItem(`view:${url}`, JSON.stringify(view));
     };
     // As the reader moves through the document, and when the page is left.

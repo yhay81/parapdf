@@ -1,11 +1,13 @@
 "use client";
 
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useLayoutEffect, useState } from "react";
 import { preload } from "react-dom";
 import {
+  type AttachmentHandler,
   connectSession,
   PdfSession,
   setFragment,
+  setOpenAttachment,
   setPasswordPrompt,
   startSession,
 } from "../document/pdf-session.ts";
@@ -39,6 +41,12 @@ export interface PdfDocumentProps {
    * for applications that show no password prompt.
    */
   passwordPrompt?: boolean;
+  /**
+   * Called when the reader opens a file attachment annotation, a link to an
+   * embedded file, or `openAttachment(session, attachment)`. By default the
+   * browser downloads the file.
+   */
+  onOpenAttachment?: AttachmentHandler;
   children?: ReactNode;
 }
 
@@ -63,6 +71,7 @@ export function PdfDocument({
   source,
   viewer: externalViewer,
   passwordPrompt = true,
+  onOpenAttachment,
   children,
 }: PdfDocumentProps) {
   const resolved: PdfSource = typeof source === "string" ? { url: source } : source;
@@ -119,6 +128,7 @@ export function PdfDocument({
   );
   // The prompt changes what the session shows, not the document.
   useEffect(() => setPasswordPrompt(session, passwordPrompt), [session, passwordPrompt]);
+  useLayoutEffect(() => setOpenAttachment(session, onOpenAttachment), [session, onOpenAttachment]);
   // A new fragment moves the viewers where it points, as a link would.
   const fragment = "url" in resolved ? splitFragment(resolved.url)[1] : "";
   useEffect(() => setFragment(session, fragment), [session, fragment]);

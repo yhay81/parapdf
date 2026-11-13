@@ -158,10 +158,14 @@ import {
   useCreateViewer,
   useDocumentState,
   useFormChange,
+  useHistory,
+  usePrint,
+  useSave,
   useSearch,
   useSession,
   useViewer,
   useViewState,
+  setLayerVisible,
   type Viewer,
 } from "parapdf";
 
@@ -172,7 +176,7 @@ const options: PdfViewerProps = { defaultZoom: "fit-width", maxCanvasPixels: 50_
 export function Reader() {
   const viewerRef = useRef<Viewer>(null);
   return (
-    <PdfDocument source="/manual.pdf">
+    <PdfDocument source="/manual.pdf" onOpenAttachment={(file) => void file.filename}>
       <Toolbar />
       <PdfThumbnails />
       <PdfViewer
@@ -214,24 +218,35 @@ export function SplitReader() {
 
 function Toolbar() {
   const viewer = useViewer();
+  const session = useSession();
   const search = useSearch();
+  const history = useHistory();
+  const { save, saving } = useSave();
+  const { print, printing, progress, cancel } = usePrint();
   const annotations = useAnnotations();
   const { currentPage, pageCount } = useViewState();
   const slice = useViewState((state) => ({ page: state.currentPage, scale: state.scale }));
   const { status } = useDocumentState();
   const pages: number = useDocumentState((state) => state.pageCount);
   useFormChange(() => {});
-  const proxy = useSession().proxy;
+  const proxy = session.proxy;
   return (
     <button
       type="button"
       onClick={() => {
         viewer.setScale("fit-width");
+        const view = viewer.viewState();
+        if (view) viewer.setViewState(view);
+        setLayerVisible(session, "layer-1", true);
         search.search("pdf");
+        history.back();
+        void save();
+        if (printing) cancel();
+        else void print();
         void annotations.setTool("highlight");
       }}
     >
-      {currentPage + 1} / {pageCount} ({slice.scale}, {status}, {pages}, {annotations.tool}) {proxy?.numPages}
+      {currentPage + 1} / {pageCount} ({slice.scale}, {status}, {pages}, {annotations.tool}, {String(saving)}, {progress?.done ?? 0}) {proxy?.numPages}
     </button>
   );
 }
@@ -301,16 +316,40 @@ import {
   PdfViewer,
   useAnnotations,
   useDocumentState,
+  useHistory,
+  usePrint,
+  useSave,
+  useSearch,
   useViewer,
   useViewState,
 } from "parapdf";
+import * as parapdfExports from "parapdf";
+
+for (const removed of [
+  "searchOf",
+  "attachSearch",
+  "historyOf",
+  "attachHistory",
+  "attachThumbnail",
+  "enforcePermissions",
+  "useAnnotationEditing",
+  "getSelection",
+  "getViewState",
+  "setViewState",
+]) {
+  if (removed in parapdfExports) throw new Error(\`\${removed} is still exported\`);
+}
 
 function Toolbar() {
   useViewer();
+  useSearch();
+  useHistory();
+  const { saving } = useSave();
+  const { printing } = usePrint();
   const { tool } = useAnnotations();
   const { currentPage, pageCount } = useViewState();
   const { status } = useDocumentState();
-  return createElement("output", null, \`\${status}:\${currentPage}/\${pageCount}:\${tool}\`);
+  return createElement("output", null, \`\${status}:\${currentPage}/\${pageCount}:\${tool}:\${saving}:\${printing}\`);
 }
 
 process.stdout.write(
@@ -345,7 +384,7 @@ process.stdout.write(
     html.includes('aria-label="Manual"') &&
     html.includes('aria-label="Secondary"') &&
     html.includes('data-precedence="parapdf"') &&
-    html.includes("<output>loading:0/0:none</output>");
+    html.includes("<output>loading:0/0:none:false:false</output>");
   check("the components render on the server", rendered, rendered ? "" : html.slice(0, 200));
   check(
     "the server's page starts downloading the PDF",

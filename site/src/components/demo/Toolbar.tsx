@@ -1,11 +1,13 @@
 import {
-  print,
+  type SaveControls,
   type ScrollMode,
   type SpreadMode,
   useAnnotations,
   useDocumentState,
   useHistory,
   usePageLabels,
+  usePrint,
+  useSave,
   useViewer,
   useViewState,
 } from "parapdf";
@@ -41,7 +43,7 @@ export interface ToolbarProps {
   /** Asks for a PDF on the reader's device. */
   onOpenFile: () => void;
   /** Downloads the document with what the reader typed and drew. */
-  onDownload: () => void;
+  onDownload: (download: SaveControls["download"]) => void;
   sidebar: boolean;
   onSidebarChange: (open: boolean) => void;
   onShowInfo: () => void;
@@ -70,9 +72,10 @@ function useAnnotatingToggle({ annotating, onAnnotatingChange }: ToolbarProps) {
  */
 export function Toolbar(props: ToolbarProps) {
   const { sidebar, onSidebarChange, finding, onFindingChange, annotating } = props;
-  const viewer = useViewer();
   const toggleAnnotating = useAnnotatingToggle(props);
   const ready = useDocumentState((state) => state.status === "ready");
+  const { download, saving } = useSave();
+  const { print, printing } = usePrint();
   const findButton = useRef<HTMLButtonElement>(null);
   return (
     <header className="demo-header">
@@ -126,15 +129,15 @@ export function Toolbar(props: ToolbarProps) {
           className="demo-from-lg"
           icon="download"
           label="Download"
-          disabled={!ready}
-          onClick={props.onDownload}
+          disabled={!ready || saving}
+          onClick={() => props.onDownload(download)}
         />
         <IconButton
           className="demo-from-lg"
           icon="print"
           label="Print"
-          disabled={!ready}
-          onClick={() => void print(viewer)}
+          disabled={!ready || printing}
+          onClick={() => void print()}
         />
         <MoreMenu {...props} />
       </div>
@@ -360,6 +363,8 @@ function MoreMenu(props: ToolbarProps) {
   const viewer = useViewer();
   const toggleAnnotating = useAnnotatingToggle(props);
   const ready = useDocumentState((state) => state.status === "ready");
+  const { download, saving } = useSave();
+  const { print, printing } = usePrint();
   const { pageCount, scrollMode, spread, tool } = useViewState();
   const { canGoBack: canBack, canGoForward: canForward, back, forward } = useHistory();
   return (
@@ -386,10 +391,10 @@ function MoreMenu(props: ToolbarProps) {
         </MenuItem>
       </div>
       <div className="demo-until-lg">
-        <MenuItem icon="download" disabled={!ready} onSelect={onDownload}>
+        <MenuItem icon="download" disabled={!ready || saving} onSelect={() => onDownload(download)}>
           Download
         </MenuItem>
-        <MenuItem icon="print" disabled={!ready} onSelect={() => void print(viewer)}>
+        <MenuItem icon="print" disabled={!ready || printing} onSelect={() => void print()}>
           Print
         </MenuItem>
         <hr />

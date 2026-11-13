@@ -299,8 +299,12 @@ export class DocumentSession {
   readonly #password: string | undefined;
   /** What hears the document being saved and printed; see `output()`. */
   readonly #outputs = new Set<(event: OutputEvent) => Promise<void>>();
+  /** What hears the document's content change, such as form values; see `invalidateContent()`. */
+  readonly #contentListeners = new Set<() => void>();
   /** Every page's size, once the background pass has learned them. */
   #sizes: readonly PageSize[] | null = null;
+  /** Which layers show, once read. */
+  #loadedLayers: LayerState | null = null;
 
   private constructor(
     pdfjs: LoadedPdfjs,
@@ -684,7 +688,31 @@ export class DocumentSession {
    * viewer (`LayerState.subscribe`).
    */
   layers(): Promise<LayerState> {
-    return this.#once("layers", () => LayerState.load(this.proxy));
+    return this.#once("layers", async () => {
+      const layers = await LayerState.load(this.proxy);
+      this.#loadedLayers = layers;
+      return layers;
+    });
+  }
+
+  /** Which of the document's layers show, once `layers()` has loaded them. */
+  get loadedLayers(): LayerState | null {
+    return this.#loadedLayers;
+  }
+
+  /**
+   * Call `listener` whenever the document's content changes outside a single
+   * viewer (such as `setFormValues()`), until `signal` aborts.
+   */
+  onContentChange(listener: () => void, signal: AbortSignal): void {
+    if (signal.aborted) return;
+    this.#contentListeners.add(listener);
+    signal.addEventListener("abort", () => this.#contentListeners.delete(listener), { once: true });
+  }
+
+  /** Tell every viewer of this session to redraw its pages and rebuild its layers. */
+  invalidateContent(): void {
+    for (const listener of [...this.#contentListeners]) listener();
   }
 
   /** Where a named or explicit destination points; null when it points nowhere. */

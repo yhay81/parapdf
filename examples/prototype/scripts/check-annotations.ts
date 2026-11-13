@@ -88,8 +88,9 @@ interface Editing {
 /** The demo's window: other checks declare `__viewer` with their own `Viewer`. */
 type Demo = {
   __viewer?: Viewer;
+  __session?: unknown;
   __annotations?: Editing | null;
-  __parapdf?: { save(viewer: Viewer | undefined): Promise<Uint8Array | null> };
+  __parapdf?: { save(session: unknown): Promise<Uint8Array | null> };
   __setFeatures?: (patch: Record<string, unknown>) => void;
 };
 
@@ -215,7 +216,7 @@ const demo = (query: string) => `${baseUrl}?engine=${engine}&annotations=1&${que
 /** Read the saved bytes with a separate pdf.js document, including hidden edits. */
 const savedTypes = (page: Page) =>
   page.evaluate(async () => {
-    const bytes = window.__viewer && (await window.__parapdf?.save(window.__viewer));
+    const bytes = window.__session && (await window.__parapdf?.save(window.__session));
     if (!bytes || !window.pdfjsLib) throw new Error("No document to save");
     const task = window.pdfjsLib.getDocument({ data: bytes });
     const document = await task.promise;
@@ -658,7 +659,7 @@ try {
   // cache in this context: pdf.js then parses on the page.
   const subtypes = await page.evaluate(async () => {
     const bytes = await (window as unknown as Demo).__parapdf?.save(
-      (window as unknown as Demo).__viewer,
+      (window as unknown as Demo).__session,
     );
     if (!bytes || !window.pdfjsLib) return [];
     const saved = await window.pdfjsLib.getDocument({ data: bytes }).promise;
@@ -777,7 +778,7 @@ try {
         demo.__imageSettled = true;
         // Deliberately no canvas, timeout, or frame wait after addImage().
         const exported = demo.__annotations?.export() ?? [];
-        const bytes = await demo.__parapdf?.save(demo.__viewer);
+        const bytes = await demo.__parapdf?.save(demo.__session);
         const doc = bytes && (await window.pdfjsLib?.getDocument({ data: bytes }).promise);
         const annotations = doc ? await (await doc.getPage(1)).getAnnotations() : [];
         return {
@@ -819,7 +820,7 @@ try {
         before,
         after,
         saved:
-          (await (window as unknown as Demo).__parapdf?.save((window as unknown as Demo).__viewer))
+          (await (window as unknown as Demo).__parapdf?.save((window as unknown as Demo).__session))
             ?.byteLength ?? 0,
         tool: viewer?.store.get().tool,
         stampEditing: document
@@ -843,7 +844,7 @@ try {
       const added = await viewer?.addSignature({ image: blob }, { description: "Image signature" });
       const exported = viewer?.export() ?? [];
       const bytes = await (window as unknown as Demo).__parapdf?.save(
-        (window as unknown as Demo).__viewer,
+        (window as unknown as Demo).__session,
       );
       const doc = bytes && (await window.pdfjsLib?.getDocument({ data: bytes }).promise);
       const annotations = doc ? await (await doc.getPage(1)).getAnnotations() : [];
@@ -869,7 +870,7 @@ try {
         );
         const exported = viewer?.export() ?? [];
         const bytes = await (window as unknown as Demo).__parapdf?.save(
-          (window as unknown as Demo).__viewer,
+          (window as unknown as Demo).__session,
         );
         const doc = bytes && (await window.pdfjsLib?.getDocument({ data: bytes }).promise);
         const annotations = doc ? await (await doc.getPage(1)).getAnnotations() : [];
@@ -1274,7 +1275,7 @@ try {
     const before = errors.length;
     const saved = await page.evaluate(async () => {
       const demo = window as unknown as Demo;
-      const bytes = await demo.__parapdf?.save(demo.__viewer);
+      const bytes = await demo.__parapdf?.save(demo.__session);
       if (!bytes || !window.pdfjsLib) return [];
       const doc = await window.pdfjsLib.getDocument({ data: bytes }).promise;
       const found = await (await doc.getPage(1)).getAnnotations();
@@ -1363,7 +1364,7 @@ try {
       const selected = editing?.store.get().state?.selected ?? null;
       const set = editing?.setComment("From the reader");
       const ink = editing?.export().find((annotation) => annotation.type === "ink");
-      const bytes = await demo.__parapdf?.save(demo.__viewer);
+      const bytes = await demo.__parapdf?.save(demo.__session);
       if (!bytes || !window.pdfjsLib) return { selected, set, ink, saved: null };
       const doc = await window.pdfjsLib.getDocument({ data: bytes }).promise;
       const found = await (await doc.getPage(1)).getAnnotations();

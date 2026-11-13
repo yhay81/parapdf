@@ -253,6 +253,16 @@ export function useSession(): PdfSession {
   return session;
 }
 
+/** `session` when given, otherwise the session of the nearest `<PdfDocument>`. */
+export function useOptionalSession(session?: PdfSession): PdfSession {
+  const contextSession = useContext(SessionContext);
+  const resolved = session ?? contextSession;
+  if (!resolved) {
+    throw new Error("useSession must be used inside <PdfDocument>, or pass a PdfSession");
+  }
+  return resolved;
+}
+
 /**
  * The session, for a hook that reads the document's secondary data. The
  * server opens no document, so `browser()` throws there instead of the hook

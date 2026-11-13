@@ -59,12 +59,16 @@ function withoutPrompt(
   };
 }
 
+export type AttachmentHandler = (attachment: { filename: string; content: Uint8Array }) => void;
+
 /** Starts opening a session's document; see `startSession()`. */
 let start: (session: PdfSession) => void;
 /** Holds a session's document; see `connectSession()`. */
 let connect: (session: PdfSession) => () => void;
 /** The document a session's provider holds; see `documentOf()`. */
 let held: (session: PdfSession) => Promise<DocumentSession>;
+/** The ready document a session currently holds; see `openDocumentOf()`. */
+let openDoc: (session: PdfSession) => DocumentSession | null;
 /** What a session's readers got; see `readsOf()`. */
 let reads: (session: PdfSession) => object | null;
 /** Read optional feature data with the document's cache and failure handling. */
@@ -76,6 +80,9 @@ export let readSessionData: <T>(
 ) => Promise<T>;
 /** Shows or hides a session's password requests; see `setPasswordPrompt()`. */
 let prompt: (session: PdfSession, passwordPrompt: boolean) => void;
+/** Sets or reads the handler for embedded files opened from this session. */
+let setAttachmentHandler: (session: PdfSession, handler: AttachmentHandler | undefined) => void;
+let getAttachmentHandler: (session: PdfSession) => AttachmentHandler | undefined;
 /** The fragment of a session's URL; see `fragmentOf()`. */
 let fragment: (session: PdfSession) => Store<{ fragment: string }>;
 
@@ -96,6 +103,13 @@ export class PdfSession {
     };
     connect = (session) => session.#connect();
     held = (session) => session.#lease?.session ?? session.#held.then((shared) => shared.session);
+    openDoc = (session) => {
+      const active =
+        session.#lease !== null ||
+        (session.#beforeFirstHold && session.#shared !== null && !session.#shared.signal.aborted);
+      if (!active || session.state.get().status !== "ready") return null;
+      return session.#shared?.document ?? null;
+    };
     reads = (session) => session.#shared?.reads ?? null;
     readSessionData = (provider, what, read, fallback) => provider.#read(what, read, fallback);
     prompt = (session, passwordPrompt) => {
@@ -103,6 +117,10 @@ export class PdfSession {
       session.#prompt = passwordPrompt;
       session.#notify();
     };
+    setAttachmentHandler = (session, handler) => {
+      session.#openAttachment = handler;
+    };
+    getAttachmentHandler = (session) => session.#openAttachment;
     fragment = (session) => session.#fragment;
   }
 
@@ -135,6 +153,8 @@ export class PdfSession {
   /** Accept an answer from a descendant's mount effect before the provider's first hold. */
   #beforeFirstHold = true;
   #earlyAnswer: (() => void) | null = null;
+  /** Optional handler `<PdfDocument onOpenAttachment>` sets for embedded files. */
+  #openAttachment: AttachmentHandler | undefined;
   /** Where its URL's fragment says to open, which changes without opening the document again. */
   readonly #fragment: Store<{ fragment: string }>;
 
@@ -360,6 +380,27 @@ export function setPasswordPrompt(session: PdfSession, passwordPrompt: boolean):
  */
 export function fragmentOf(session: PdfSession): ReadableStore<{ fragment: string }> {
   return fragment(session);
+}
+
+/**
+ * The ready document `session` currently holds, or null while loading,
+ * waiting for a password, failed, or after its provider released it.
+ */
+export function openDocumentOf(session: PdfSession): DocumentSession | null {
+  return openDoc(session);
+}
+
+/** Configure how embedded files opened from `session` are handled. */
+export function setOpenAttachment(
+  session: PdfSession,
+  handler: AttachmentHandler | undefined,
+): void {
+  setAttachmentHandler(session, handler);
+}
+
+/** The handler `<PdfDocument onOpenAttachment>` set on `session`, if any. */
+export function openAttachmentHandlerOf(session: PdfSession): AttachmentHandler | undefined {
+  return getAttachmentHandler(session);
 }
 
 /** Point `session`'s fragment elsewhere: a new fragment of `<PdfDocument>`'s source. */

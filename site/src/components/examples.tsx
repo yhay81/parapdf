@@ -1,6 +1,5 @@
 import {
   type AnnotationTool,
-  download,
   getFormFields,
   getText,
   PdfAnnotationEditor,
@@ -11,13 +10,15 @@ import {
   PdfThumbnails,
   PdfViewer,
   type PdfViewerProps,
-  print,
   type ScrollMode,
   type SpreadMode,
   useAnnotations,
   useFormChange,
   usePageLabels,
+  usePrint,
+  useSave,
   useSelection,
+  useSession,
   useViewer,
   useViewState,
 } from "parapdf";
@@ -214,7 +215,7 @@ function SelectionTools({
   onKeep: (rects: readonly { pageIndex: number; rect: PdfRect }[]) => void;
   onClear: () => void;
 }) {
-  const viewer = useViewer();
+  const session = useSession();
   const selection = useSelection();
   const [read, setRead] = useState("");
   return (
@@ -240,7 +241,7 @@ function SelectionTools({
       <button
         type="button"
         onClick={async () => {
-          const { text, pages } = await getText(viewer);
+          const { text, pages } = await getText(session);
           setRead(`${text.length.toLocaleString("en")} characters on ${pages.length} pages`);
         }}
       >
@@ -293,19 +294,25 @@ export function TextExample() {
 }
 
 function FormTools() {
-  const viewer = useViewer();
+  const session = useSession();
+  const { download, saving } = useSave();
+  const { print, printing } = usePrint();
   const [last, setLast] = useState("Type in a field");
   const [fields, setFields] = useState<number | null>(null);
   useFormChange(({ name, value }) => setLast(`${name} = ${JSON.stringify(value)}`));
   return (
     <>
-      <button type="button" onClick={async () => setFields((await getFormFields(viewer)).length)}>
+      <button type="button" onClick={async () => setFields((await getFormFields(session)).length)}>
         Count fields
       </button>
-      <button type="button" onClick={() => void download(viewer, { filename: "f1040-filled.pdf" })}>
+      <button
+        type="button"
+        disabled={saving}
+        onClick={() => void download({ filename: "f1040-filled.pdf" })}
+      >
         Download
       </button>
-      <button type="button" onClick={() => void print(viewer)}>
+      <button type="button" disabled={printing} onClick={() => void print()}>
         Print
       </button>
       <output aria-live="polite" style={{ maxWidth: "24rem", overflow: "hidden" }}>
@@ -335,7 +342,7 @@ const TOOLS: readonly [AnnotationTool, string][] = [
 ];
 
 function AnnotationTools() {
-  const viewer = useViewer();
+  const { download, saving } = useSave();
   const annotations = useAnnotations();
   const { tool, state: editing, styles } = annotations;
   const ink = styles?.ink;
@@ -365,7 +372,11 @@ function AnnotationTools() {
       <button type="button" disabled={!editing?.canRedo} onClick={() => annotations.redo()}>
         Redo
       </button>
-      <button type="button" onClick={() => void download(viewer, { filename: "annotated.pdf" })}>
+      <button
+        type="button"
+        disabled={saving}
+        onClick={() => void download({ filename: "annotated.pdf" })}
+      >
         Download
       </button>
     </>

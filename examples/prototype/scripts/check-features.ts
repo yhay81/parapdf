@@ -202,10 +202,11 @@ try {
     const extractEncrypted = async (target: Page) => {
       const bytes = await target.evaluate(async () => {
         const viewer = window.__viewer;
-        if (!viewer?.session) return null;
+        const session = window.__session;
+        if (!viewer?.session || !session) return null;
         // A nonempty storage makes save() reopen the edited document's bytes.
         viewer.session.proxy.annotationStorage.setValue("test", { value: "edited" });
-        const result = await window.__parapdf?.save(viewer, { pages: [{ includePages: [0] }] });
+        const result = await window.__parapdf?.save(session, { pages: [{ includePages: [0] }] });
         return result ? [...result] : null;
       });
       if (!bytes) return 0;
@@ -339,9 +340,9 @@ try {
       JSON.stringify(comments),
     );
     const content = await page.evaluate(async () => {
-      const viewer = window.__viewer;
-      const bytes = viewer
-        ? await window.__parapdf?.getAttachmentContent(viewer, "notes.txt")
+      const session = window.__session;
+      const bytes = session
+        ? await window.__parapdf?.getAttachmentContent(session, "notes.txt")
         : null;
       return bytes ? new TextDecoder().decode(bytes) : null;
     });
@@ -385,10 +386,10 @@ try {
       before.join(" / "),
     );
     await page.evaluate(([a, b]) => {
-      const viewer = window.__viewer;
-      if (viewer) {
-        window.__parapdf?.setLayerVisible(viewer, b ?? "", true);
-        window.__parapdf?.setLayerVisible(viewer, a ?? "", false);
+      const session = window.__session;
+      if (session) {
+        window.__parapdf?.setLayerVisible(session, b ?? "", true);
+        window.__parapdf?.setLayerVisible(session, a ?? "", false);
       }
     }, layerIds);
     await settle(page);
@@ -518,8 +519,8 @@ try {
       checkedShown,
     );
     const saved = await page.evaluate(async () => {
-      const viewer = window.__viewer;
-      const bytes = viewer ? await window.__parapdf?.save(viewer) : null;
+      const session = window.__session;
+      const bytes = session ? await window.__parapdf?.save(session) : null;
       return bytes ? new TextDecoder("latin1").decode(bytes) : "";
     });
     check(
@@ -533,12 +534,12 @@ try {
 
     // Chosen pages: two of this document's, with the form, and one of another document's.
     const extracted = await page.evaluate(async () => {
-      const viewer = window.__viewer;
+      const session = window.__session;
       const other = new Uint8Array(
         await (await fetch("/corpus/synthetic-links-in-text.pdf")).arrayBuffer(),
       );
-      const bytes = viewer
-        ? await window.__parapdf?.save(viewer, {
+      const bytes = session
+        ? await window.__parapdf?.save(session, {
             pages: [{ includePages: [[1, 2]] }, { document: other, includePages: [1] }],
           })
         : null;

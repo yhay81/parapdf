@@ -45,7 +45,7 @@ The current page is never controlled: `viewer.goToPage()` sets it.
 | Prop | Default | |
 |---|---|---|
 | `initialView` | `"options"` | `"document"` opens where and as the document asks: at its /OpenAction destination, with its zoom, its pages arranged as its /PageLayout says (see [Keeping the view](/guides/view-state/)). The page, zoom, spread, and scroll mode you set, controlled or by default, win. |
-| `initialViewState` | none | A view kept from `getViewState()` to open with. Its fields win over the page, zoom, spread, and scroll mode you set and over `initialView`; those it leaves out still apply. |
+| `initialViewState` | none | A view kept from `viewer.viewState()` to open with. Its fields win over the page, zoom, spread, and scroll mode you set and over `initialView`; those it leaves out still apply. |
 
 Both apply once per document. A viewport that reattaches returns to where
 it was instead.
@@ -71,7 +71,6 @@ children of `<PdfViewer>` so bundlers exclude unused features statically (see
 | `destinationZoom` | `true` | `false` keeps the zoom when following links and the outline; they only scroll. |
 | `direction` | the document's | `"rtl"` orders pages right to left, `"ltr"` left to right; unset, the document's `/ViewerPreferences /Direction` decides, and left to right where it says nothing (see [Right to left](/guides/layout/#right-to-left)). |
 | `externalLinks` | `"new-tab"` | `"disabled"` leaves links to other documents inert; internal links and the outline keep working. |
-| `openAttachment` | download | What opening a file attachment annotation or a link to an embedded file does: `({ filename, content }) => void`. |
 
 ## Layout and zoom
 
@@ -100,5 +99,5 @@ works](/about/how-it-works/#memory).
 
 `className`, `style`, `label`, `pageLabel`, `renderOverlay`, `children`,
 `viewer`, and `ref` are listed with [`PdfViewer`](/reference/components/#pdfviewer).
-`PdfDocument` takes only `source`, `viewer`, `passwordPrompt`, and `children`:
-everything about how the document is shown belongs to its viewers.
+`PdfDocument` takes `source`, `viewer`, `passwordPrompt`, `onOpenAttachment`,
+and `children`: everything about how the document is shown belongs to its viewers.

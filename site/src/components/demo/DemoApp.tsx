@@ -1,12 +1,11 @@
 import {
-  download,
   PdfDocument,
   PdfForms,
   type PdfSource,
   PdfViewer,
+  type SaveControls,
   useAnnotations,
   useFormChange,
-  type Viewer,
 } from "parapdf";
 import {
   lazy,
@@ -88,7 +87,6 @@ export default function DemoApp() {
   const [finding, setFinding] = useState(false);
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
-  const viewerRef = useRef<Viewer>(null);
   const pendingFile = useRef<File | undefined>(undefined);
   /** Each edit gets a new marker. A download can clear only the edits it started with. */
   const unsaved = useRef<symbol | null>(null);
@@ -122,12 +120,10 @@ export default function DemoApp() {
     }
   };
   const openDropped = useEffectEvent(openFile);
-  const save = async () => {
-    const viewer = viewerRef.current;
-    if (!viewer) return;
+  const save = async (downloadDocument: SaveControls["download"]) => {
     const edits = unsaved.current;
     try {
-      await download(viewer, "name" in opened ? { filename: opened.name } : {});
+      await downloadDocument("name" in opened ? { filename: opened.name } : {});
       if (unsaved.current === edits) unsaved.current = null;
     } catch {
       alert("The download failed. Try downloading the document again.");
@@ -204,7 +200,7 @@ export default function DemoApp() {
           opened={opened}
           onOpen={replace}
           onOpenFile={() => fileInput.current?.click()}
-          onDownload={() => void save()}
+          onDownload={(downloadDocument) => void save(downloadDocument)}
           sidebar={sidebar}
           onSidebarChange={setSidebar}
           onShowInfo={() => {
@@ -239,7 +235,7 @@ export default function DemoApp() {
             </>
           ) : null}
           <div className="demo-stage">
-            <PdfViewer ref={viewerRef} className="demo-viewport" label={title}>
+            <PdfViewer className="demo-viewport" label={title}>
               <PdfForms />
               {session.editing ? (
                 <Suspense fallback={null}>

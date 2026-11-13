@@ -101,11 +101,6 @@ export interface ViewerOptions {
    */
   externalLinks?: "new-tab" | "disabled";
   /**
-   * Called when the reader opens a file attachment annotation or a link to
-   * an embedded file. By default the browser downloads the file.
-   */
-  openAttachment?: (attachment: { filename: string; content: Uint8Array }) => void;
-  /**
    * The most pixels one page's detail canvas holds (default 16 777 216, the
    * canvas area limit of iOS). A page larger at full resolution gets detail
    * only for its visible area plus a margin, still at full resolution.

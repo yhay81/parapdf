@@ -4,7 +4,7 @@ import {
   getText,
   type SelectedAnnotation,
   useAnnotations,
-  useViewer,
+  useSession,
   useViewState,
 } from "parapdf";
 import { useRef, useState } from "react";
@@ -29,7 +29,7 @@ const storageKey = (file: string) => `parapdf-annotations:${file}`;
  * annotation selected.
  */
 export function AnnotationToolbar({ file }: { file: string }) {
-  const viewer = useViewer();
+  const session = useSession();
   const annotations = useAnnotations();
   const { tool, state: editing, styles } = annotations;
   const ready = useViewState((state) => state.layout !== null) && editing !== null;
@@ -50,7 +50,7 @@ export function AnnotationToolbar({ file }: { file: string }) {
     setMessage(`Restored ${count}`);
   };
   const copyText = async () => {
-    const { text, pages } = await getText(viewer);
+    const { text, pages } = await getText(session);
     await navigator.clipboard.writeText(text).catch(() => {});
     setMessage(`${text.length} characters from ${pages.length} pages`);
   };
