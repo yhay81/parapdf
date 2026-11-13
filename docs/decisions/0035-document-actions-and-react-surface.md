@@ -92,6 +92,30 @@ blocked while scrolling, in ms, after and before:
 
 No timing difference beyond run-to-run variation is claimed.
 
+## Review: action controls hidden by Activity
+
+A save finishing while React Activity disconnects the controls' effects left
+`saving` true after reconnect. Print cleanup cancelled preparation but likewise
+left the retained hook state busy. `useSave` now reconciles its pending count on
+reconnect, and `usePrint` publishes idle when installing a fresh controller.
+`lifecycle-actions.tsx`, run by `check:lifecycle`, holds an operation at the
+session's commit callback, hides only its controls, finishes it, and shows the
+controls again. Both checks failed before the fix and pass in Chromium,
+WebKit, and Firefox. The new site showcases use document sessions for form
+writes and downloads, and the viewer's methods for view state.
+
+A same-run comparison isolated these two hook changes from the reviewed parent
+changes: `bill-hr815.pdf`, 3600 px/s, two seconds, median of three runs on AC
+power. Reports:
+[`Chromium`](../../examples/prototype/results/actions-review-chromium.md),
+[`WebKit`](../../examples/prototype/results/actions-review-webkit.md),
+[`Firefox`](../../examples/prototype/results/actions-review-firefox.md).
+Main-thread blocked time (after, before) was 6, 8 ms; 25, 13 ms; and 49, 56 ms,
+respectively. All jobs had zero blank area and dropped frames, and 118 MiB
+canvas memory. React commits still matched window/current-page updates (8 or
+9, depending on crossing page 4). First paint was 137, 138 ms; 153, 152 ms;
+and 205, 221 ms. No speed improvement is claimed.
+
 ## Reopen if
 
 - A bundler fails to tree-shake standalone `PdfSession` functions (`save`,

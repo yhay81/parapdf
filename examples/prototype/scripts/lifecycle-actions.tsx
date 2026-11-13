@@ -78,7 +78,13 @@ export async function checkActionLifetimes(engine: string) {
       await pending;
       stop.abort();
       flushSync(() => probe.show(true));
-      await tick();
+      // Reconnected passive effects schedule a render; a loaded CI runner can
+      // take more than one timer tick to publish that render's controls.
+      await until(() =>
+        action === "save"
+          ? !currentControls().save.saving
+          : !currentControls().print.printing && currentControls().print.progress === null,
+      );
       results[action] =
         action === "save"
           ? !currentControls().save.saving
