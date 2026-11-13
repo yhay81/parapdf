@@ -157,6 +157,8 @@ Server Components can pass streamed JSX directly through it.
 Renders dynamic overlays across every mounted page of a viewer, evaluating
 `children(pageIndex)` inside each page's memoized subtree so scrolling the
 mounted window never re-evaluates overlays on pages that remain mounted.
+Overlays stay visible under StrictMode and Activity; changing `viewer` moves
+only that component's overlays and preserves others already in the target viewer.
 
 | Prop | |
 |---|---|

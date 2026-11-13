@@ -307,7 +307,9 @@ the DOM declares `"use client"`.
   `PdfPageOverlays` (evaluated inside each page's `memo(PdfPage)` so mounted
   pages stay memoized as the window shifts) render through portals into a
   lazily created `.parapdf-overlay-layer` in the page's host; React renders
-  nothing else there (decision 0036). `PdfViewer`'s `onPageClick` and
+  nothing else there. Dynamic portals retain their render-time container through
+  effect replay, and renderer identities are unique across viewers so changing
+  an overlay's viewer cannot overwrite another overlay (decision 0036). `PdfViewer`'s `onPageClick` and
   `viewer.pointAt()` map client coordinates back to unturned PDF points
   (`PdfPageRect`'s coordinates) across rotations, zoom previews, and
   `/UserUnit` pages. `PdfSelectionPopover` portals floating selection UI to
