@@ -52,7 +52,12 @@ export default defineConfig({
       sidebar: [
         {
           label: "Start here",
-          items: ["getting-started", { label: "Live demo", link: "/demo/" }, "guides/controls"],
+          items: [
+            "getting-started",
+            "why-react",
+            { label: "Live demo", link: "/demo/" },
+            "guides/controls",
+          ],
         },
         {
           label: "Guides",
