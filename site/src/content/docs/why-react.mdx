@@ -1,0 +1,317 @@
+---
+title: Why React, not an iframe
+description: What you gain by rendering PDFs in your React tree instead of embedding pdf.js's viewer or the browser's in an iframe.
+---
+
+import { LinkCard, CardGrid } from "@astrojs/starlight/components";
+import {
+  CitationsShowcase,
+  ComparisonTable,
+  FormSyncShowcase,
+  LifecycleShowcase,
+  SplitSessionShowcase,
+  StressShowcase,
+} from "../../components/showcases.tsx";
+
+Most web applications start with one of two `<iframe>`s:
+
+- `<iframe src="/manual.pdf">`, which hands the file to whatever PDF viewer
+  the browser has. Desktop browsers each show different chrome, mobile
+  browsers often render only page 1 or download the file instead, and your
+  application cannot read or control anything inside the frame.
+- `<iframe src="/pdfjs/web/viewer.html?file=…">`, which renders consistently
+  with pdf.js, at the cost of a separate `window` and DOM, static files copied
+  into `public/`, and either `postMessage` glue or pdf.js's internal
+  `PDFViewerApplication` globals whenever your UI and the document need to
+  meet.
+
+ParaPDF runs the same pdf.js engine directly in your React tree—without
+putting React in the scroll or zoom frame loop. Every example on this page is
+live.
+
+<ComparisonTable />
+
+## Components on the page
+
+Because each mounted page is part of your React tree, `renderOverlay` portals
+ordinary React components into a layer of that page, and `<PdfPageRect>`
+positions them in PDF points from the page's top-left corner. Coordinates
+become CSS percentages of the page box: zooming and rotating resize and move
+your components through browser layout alone, without re-rendering them or
+waiting on `postMessage` across a frame boundary.
+
+Select any sentence on the page below to pin a React review card to its exact
+coordinates, or click **Rotate 90°** and **+** to watch pinned highlights and
+cards stay locked to the text.
+
+<CitationsShowcase client:visible />
+
+```tsx
+import {
+  PdfDocument,
+  PdfPageRect,
+  PdfViewer,
+  setViewState,
+  useSelection,
+  useCreateViewer,
+} from "parapdf";
+
+function ReviewWorkspace() {
+  const viewer = useCreateViewer();
+  const selection = useSelection(viewer);
+
+  return (
+    <PdfDocument source="/manual.pdf">
+      {selection ? (
+        <aside>
+          Selected “{selection.text}” on page {selection.pages[0].pageIndex + 1}
+        </aside>
+      ) : null}
+      <PdfViewer
+        viewer={viewer}
+        style={{ height: "85vh" }}
+        renderOverlay={(pageIndex) =>
+          pageIndex === 1 ? (
+            <PdfPageRect x={123} y={300} width={348} height={39}>
+              <button
+                type="button"
+                onClick={() => setViewState(viewer, { page: 4, y: 120 })}
+              >
+                Jump to §2.2
+              </button>
+            </PdfPageRect>
+          ) : null
+        }
+      />
+    </PdfDocument>
+  );
+}
+```
+
+With an `<iframe>`, elements inside your app clip at the frame's border and
+trail a frame behind scroll and zoom over `postMessage`, while elements
+injected into `iframe.contentDocument` live outside your React context, state,
+router, and design system.
+
+## Two-way form state
+
+In `viewer.html`, reading or prefilling AcroForm fields means waiting on
+internal event buses and mutating `PDFViewerApplication.pdfDocument.annotationStorage`
+by raw annotation IDs—and you still cannot render your own validation UI over a
+specific PDF input.
+
+In ParaPDF, `setFormValues()` writes to pdf.js's form storage and live widgets
+at once, `useFormChange()` subscribes to edits the reader makes on the PDF,
+`<PdfPageRect>` places validation right over the field, and `download()` saves
+the filled PDF bytes in the browser. Edit either side below, or click **Try
+invalid ZIP**.
+
+<FormSyncShowcase client:visible />
+
+```tsx
+import {
+  download,
+  PdfDocument,
+  PdfViewer,
+  setFormValues,
+  useFormChange,
+  useCreateViewer,
+} from "parapdf";
+import { useState } from "react";
+
+function TaxForm() {
+  const viewer = useCreateViewer();
+  const [firstName, setFirstName] = useState("Ada");
+
+  useFormChange(({ name, value }) => {
+    if (name === "topmostSubform[0].Page1[0].f1_14[0]" && typeof value === "string") {
+      setFirstName(value);
+    }
+  }, viewer);
+
+  return (
+    <PdfDocument source="/f1040.pdf">
+      <input
+        value={firstName}
+        onChange={(e) => {
+          setFirstName(e.target.value);
+          void setFormValues(viewer, {
+            "topmostSubform[0].Page1[0].f1_14[0]": e.target.value,
+          });
+        }}
+      />
+      <button type="button" onClick={() => void download(viewer, { filename: "filled.pdf" })}>
+        Download filled PDF
+      </button>
+      <PdfViewer viewer={viewer} forms style={{ height: "85vh" }} />
+    </PdfDocument>
+  );
+}
+```
+
+## One document, many views
+
+Showing two places in one PDF with `<iframe>`s—a table of contents beside the
+section you are reading, or a thumbnail rail beside the page—loads
+`viewer.html` twice, starts two workers, and downloads and parses the PDF
+twice.
+
+`<PdfDocument>` opens a session once. Any number of `<PdfViewer>` viewports
+and `<PdfThumbnails>` lists under it share that one pdf.js worker, parsed
+document, and search index, while keeping independent scroll positions, zoom
+levels, and rotations.
+
+<SplitSessionShowcase client:visible />
+
+```tsx
+import { PdfDocument, PdfThumbnails, PdfViewer, useCreateViewer } from "parapdf";
+
+export function SplitReader() {
+  const reference = useCreateViewer();
+  const reading = useCreateViewer();
+
+  return (
+    <PdfDocument source="/manual.pdf">
+      <div style={{ display: "grid", gridTemplateColumns: "10rem 1fr 1fr", height: "90vh" }}>
+        <PdfThumbnails viewer={reading} />
+        <PdfViewer viewer={reference} defaultPage={0} />
+        <PdfViewer viewer={reading} defaultPage={18} />
+      </div>
+    </PdfDocument>
+  );
+}
+```
+
+## React lifetimes and live options
+
+React applications routinely mount and unmount views inside tabs, drawers,
+resizable panes, and `<Activity>`. Unmounting an `<iframe>` destroys its
+`window`: mounting it again reloads `viewer.html` and reopens the PDF at page
+1, losing scroll position, zoom, search matches, form values, and annotations.
+Hiding the `<iframe>` with CSS instead keeps all of its canvases and timers in
+memory.
+
+`useCreateViewer()` holds a `Viewer` in React state while `<PdfViewer />` owns only
+the DOM viewport. When `<PdfViewer />` unmounts, in-flight drawing stops and
+its canvases are released; when it mounts again, it restores the exact page,
+scroll offset, zoom, search query, and edits. And options such as
+`pageColors`, `spread`, `scrollMode`, and `forms` are plain React props—no
+query-string serialization or frame reloads.
+
+Scroll, zoom, or search below, then click **Unmount `<PdfViewer />`** and
+mount it again.
+
+<LifecycleShowcase client:visible />
+
+```tsx
+import { PdfDocument, PdfViewer, useCreateViewer } from "parapdf";
+import { useState } from "react";
+
+export function CollapsiblePreview() {
+  const viewer = useCreateViewer();
+  const [open, setOpen] = useState(true);
+  const [dark, setDark] = useState(false);
+
+  return (
+    <PdfDocument source="/manual.pdf">
+      <button type="button" onClick={() => setOpen((v) => !v)}>
+        {open ? "Hide preview" : "Show preview"}
+      </button>
+      <button type="button" onClick={() => setDark((v) => !v)}>
+        Toggle dark ink
+      </button>
+      {open ? (
+        <PdfViewer
+          viewer={viewer}
+          pageColors={dark ? { background: "#141926", foreground: "#e4e9f7" } : undefined}
+          style={{ height: "80vh" }}
+        />
+      ) : null}
+    </PdfDocument>
+  );
+}
+```
+
+## Speed without an iframe
+
+Teams sometimes isolate a PDF viewer in an `<iframe>` out of fear that React
+re-renders will stall scrolling. ParaPDF keeps React out of the hot path:
+
+- **Zero per-frame React commits**: `PdfViewer` subscribes only to the mounted
+  page window (`first`..`last`) and layout, never the scroll offset. Scrolling
+  through a page commits React zero times; crossing into a new page commits
+  once.
+- **Imperative canvases and kept pixels**: React renders only each mounted
+  page's `<section>` host and your `renderOverlay` portal. Canvases are drawn
+  by the renderer, bounded by explicit pixel budgets (`maxCanvasPixels`), and
+  kept across unmounts (`maxKeptPixels`) so pages you scroll back to show at
+  once without redrawing.
+
+Drag the scrollbar across the 1,000-page document below or jump between pages
+1, 500, and 1,000 while watching **DOM pages** and **React commits**.
+
+<StressShowcase client:visible />
+
+See [How it works](/about/how-it-works/) for the runtime's architecture and
+[Performance](/about/performance/) for the benchmarks against pdf.js's viewer,
+PDFium, hayro, and react-pdf.
+
+## Authenticated sources, server rendering, and bundles
+
+- **Authorization headers and in-memory bytes**: `<PdfDocument>` accepts
+  `{ url, httpHeaders: { Authorization: "Bearer …" }, withCredentials: true }`,
+  `{ data: Uint8Array }`, or a custom `PDFDataRangeTransport` ([Sources](/reference/sources/)).
+  Browser PDF `<iframe>`s cannot attach custom headers, and `viewer.html?file=…`
+  rejects cross-origin or `blob:` URLs unless you host and patch `viewer.mjs`
+  yourself.
+- **Server Components without wrappers**: Every DOM-touching module declares
+  `"use client"`. `<PdfViewer />` renders an empty viewport container on the
+  server without `window is not defined` or `next/dynamic({ ssr: false })`,
+  and `<PdfDocument source="/manual.pdf">` emits a `<link rel="preload">` in
+  `<head>` so the PDF starts downloading with the HTML ([Server rendering](/setup/server-rendering/)).
+- **No `public/pdfjs/` directory to maintain**: `parapdf` pins one exact
+  `pdfjs-dist` and references its worker, CMaps, standard fonts, ICC profiles,
+  and Wasm modules with `new URL(…, import.meta.url)` so Vite, webpack,
+  Rsbuild, and Next.js emit them automatically ([Bundlers](/setup/bundlers/)).
+  Forms, sandboxed PDF JavaScript, search, annotation editing, and print load
+  only when your application uses them.
+
+## When an iframe is enough
+
+An `<iframe>` is still the simpler choice when:
+
+- **Your page is not a React app**, or the PDF is a standalone link target
+  that never shares state, auth headers, or UI with surrounding components.
+- **You want Mozilla's complete built-in chrome out of the box**:
+  `pdfjs-dist/web/viewer.html` ships a ready-made toolbar, sidebar, document
+  properties dialog, and over a hundred UI translations. ParaPDF gives you the
+  viewport, thumbnails, and hooks so controls live in your own components and
+  design system; if you want a full starting toolbar, copy from the
+  [live demo's components](https://github.com/yhay81/parapdf/tree/main/site/src/components/demo).
+- **You need XFA forms**: ParaPDF supports AcroForm fields and PDF JavaScript
+  actions, not XFA ([Limitations](/about/limitations/)).
+
+## Next
+
+<CardGrid>
+  <LinkCard
+    title="Getting started"
+    description="Install ParaPDF and render your first PDF in three lines of JSX."
+    href="/getting-started/"
+  />
+  <LinkCard
+    title="Controls and state"
+    description="Connect page numbers, zoom, rotation, and progress to your own UI."
+    href="/guides/controls/"
+  />
+  <LinkCard
+    title="Text and overlays"
+    description="Read selections and anchor React components on pages in PDF points."
+    href="/guides/text/"
+  />
+  <LinkCard
+    title="Forms"
+    description="Read, prefill, validate, and download fillable AcroForm PDFs."
+    href="/guides/forms/"
+  />
+</CardGrid>
