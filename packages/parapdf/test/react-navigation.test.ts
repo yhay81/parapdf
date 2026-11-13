@@ -129,6 +129,34 @@ describe("findThumbnailScroller", () => {
 });
 
 describe("createPageLabelsStore", () => {
+  it("keeps numeric labels when reading the PDF's labels fails", async () => {
+    const doc = fakeDocument({
+      pages: [LETTER],
+      proxy: {
+        getPageLabels: async () => {
+          throw new Error("Unreadable page labels");
+        },
+      },
+    });
+    const { loader: pdfjs } = fakePdfjs(async () => doc.proxy);
+    const session = new PdfSession({ url: "https://example.test/broken-labels.pdf" }, { pdfjs });
+    const viewer = new Viewer();
+    const releaseSession = connectSession(session);
+    const releaseViewer = holdViewer(viewer);
+    openViewer(viewer, session);
+    const store = createPageLabelsStore(viewer, null);
+    const unsubscribe = store.subscribe(() => {});
+    try {
+      await settle();
+      await settle();
+      assert.equal(store.get(), null);
+    } finally {
+      unsubscribe();
+      releaseViewer();
+      releaseSession();
+    }
+  });
+
   it("resolves pageLabels asynchronously without suspending and resets when closed", async () => {
     const doc = fakeDocument({
       pages: [LETTER, LETTER, LETTER],
@@ -267,6 +295,13 @@ describe("viewer.externalLinks and PdfOutline", () => {
     );
     assert.ok(!htmlDisabled.includes("https://example.org/spec"));
     assert.ok(htmlDisabled.includes('aria-disabled="true"'));
+
+    const defaultCollapsed = renderToString(
+      createElement(OutlineTree, { items, viewer, defaultExpanded: false }),
+    );
+    assert.ok(defaultCollapsed.includes('aria-expanded="false"'));
+    assert.ok(defaultCollapsed.includes('aria-label="Expand 1 Introduction"'));
+    assert.ok(!defaultCollapsed.includes("1.1 Scope"));
 
     // defaultExpanded={false} omits collapsed child branches; custom renderItem receives depth & helpers
     const htmlCollapsed = renderToString(

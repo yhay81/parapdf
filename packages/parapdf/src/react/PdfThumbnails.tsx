@@ -252,6 +252,7 @@ export function PdfThumbnails({
   }, [activeFirst, activeLast, pageCount, sizes, rotation, width, renderItem]);
 
   // Keep the active page's thumbnail scrolled into view (`block: "nearest"`), even if unmounted.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: realign for global geometry changes, not individual custom item measurements during manual browsing.
   useLayoutEffect(() => {
     const nav = navRef.current;
     const ol = olRef.current;
@@ -276,7 +277,16 @@ export function PdfThumbnails({
       scroller.scrollTop = target;
       syncWindowFromScroll();
     }
-  }, [currentPage, pageCount, syncWindowFromScroll]);
+  }, [
+    currentPage,
+    pageCount,
+    sizes,
+    rotation,
+    width,
+    chrome.extraHeight,
+    chrome.rowGap,
+    syncWindowFromScroll,
+  ]);
 
   // Stable while the props are, so that a new current page renders two items again, not all.
   const select = useCallback(

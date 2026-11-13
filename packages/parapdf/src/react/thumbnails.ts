@@ -244,9 +244,14 @@ export function createPageLabelsStore(
           },
           { once: true },
         );
-        void docSession.pageLabels().then((resolved) => {
-          if (!signal.aborted && current === token) set(resolved);
-        });
+        void docSession.pageLabels().then(
+          (resolved) => {
+            if (!signal.aborted && current === token) set(resolved);
+          },
+          () => {
+            if (!signal.aborted && current === token) set(null);
+          },
+        );
       },
     });
 

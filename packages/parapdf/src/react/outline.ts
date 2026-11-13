@@ -246,5 +246,22 @@ function OutlineEntry({
       }),
     );
   }
-  return createElement("li", null, link, childList);
+  return createElement(
+    "li",
+    null,
+    hasChildren
+      ? createElement(
+          "button",
+          {
+            type: "button",
+            "aria-expanded": expanded,
+            "aria-label": `${expanded ? "Collapse" : "Expand"} ${item.title}`,
+            onClick: toggle,
+          },
+          expanded ? "−" : "+",
+        )
+      : null,
+    link,
+    childList,
+  );
 }
