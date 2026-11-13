@@ -6,6 +6,9 @@ change the API.
 
 ## Unreleased
 
+- Keep annotation edits across React hides and remounts when the editor
+  component is a sibling rendered after its viewport.
+
 - Declarative feature components replace `PdfViewer`'s boolean feature props,
   so bundlers statically tree-shake unused features instead of emitting lazy
   feature chunks for every application:

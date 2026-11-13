@@ -91,9 +91,9 @@ function Shown({
       <div className="toolbar" data-file={file}>
         {children}
       </div>
-      <PdfViewer {...viewerProps} className="viewport">
-        <ViewerFeatures features={features} />
-      </PdfViewer>
+      <PdfViewer {...viewerProps} className="viewport" />
+      {/* Exercise features whose layout effects run after the viewport's. */}
+      <ViewerFeatures features={features} />
     </PdfDocument>
   );
 }

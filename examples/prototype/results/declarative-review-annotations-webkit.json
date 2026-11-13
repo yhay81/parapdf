@@ -1,0 +1,105 @@
+{
+  "environment": {
+    "runAt": "2026-11-13T14:49:22.075Z",
+    "os": "darwin 27.2.0 arm64",
+    "cpu": "Apple M2 Pro (12 logical cores)",
+    "browserName": "webkit",
+    "browser": "WebKit 27.2",
+    "headless": true,
+    "power": {
+      "source": "ac",
+      "lowPowerMode": false
+    },
+    "loadAverage": {
+      "start": 4.4,
+      "end": 4.3
+    },
+    "turnTaking": {
+      "waits": 0,
+      "waitedMs": 0,
+      "repeatedJobs": 0
+    },
+    "before": "PR 146 before review",
+    "versions": {
+      "pdfjs": "6.5.438"
+    },
+    "idle": {
+      "timerLagP50Ms": 3.9,
+      "timerLagP95Ms": 4.9,
+      "frameIntervalMs": 13.9
+    },
+    "settings": {
+      "runs": 3,
+      "durationMs": 2000,
+      "latencyMs": 0,
+      "bandwidthMbps": 0,
+      "scrollModes": ["vertical"],
+      "scales": ["fit-width"],
+      "viewport": "1280x900",
+      "devicePixelRatio": 2,
+      "focusViewport": false
+    }
+  },
+  "summaries": [
+    {
+      "file": "bill-hr815.pdf",
+      "speed": 3600,
+      "variant": "pdfjs-hwa",
+      "runs": 3,
+      "scrollMode": "vertical",
+      "scale": "fit-width",
+      "firstPaintMs": 155.1,
+      "firstPaintRunsMs": [155.1, 161.8, 154.2],
+      "pagesCrossed": 3,
+      "commitsDuringScroll": 8,
+      "commitsPerSecond": 4,
+      "storeUpdates": 8,
+      "windowChanges": 5,
+      "currentPageChanges": 3,
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "blockedMs": 33.4,
+      "lagP95Ms": 5,
+      "lagMaxMs": 13.3,
+      "droppedFrames": 0,
+      "frames": 145,
+      "baseRenders": 4,
+      "detailRenders": 0,
+      "textLayers": 0,
+      "annotationLayers": 0,
+      "cancelledRenders": 0,
+      "settleMs": 0,
+      "canvasMiB": 117.5
+    },
+    {
+      "file": "bill-hr815.pdf",
+      "speed": 3600,
+      "variant": "pdfjs-hwa, before",
+      "runs": 3,
+      "scrollMode": "vertical",
+      "scale": "fit-width",
+      "firstPaintMs": 163.4,
+      "firstPaintRunsMs": [177.5, 163.4, 163.4],
+      "pagesCrossed": 4,
+      "commitsDuringScroll": 9,
+      "commitsPerSecond": 4.5,
+      "storeUpdates": 9,
+      "windowChanges": 5,
+      "currentPageChanges": 4,
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "blockedMs": 33.9,
+      "lagP95Ms": 5.6,
+      "lagMaxMs": 9.1,
+      "droppedFrames": 0,
+      "frames": 145,
+      "baseRenders": 4,
+      "detailRenders": 0,
+      "textLayers": 0,
+      "annotationLayers": 0,
+      "cancelledRenders": 0,
+      "settleMs": 0,
+      "canvasMiB": 117.5
+    }
+  ]
+}

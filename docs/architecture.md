@@ -284,7 +284,8 @@ the DOM declares `"use client"`.
   (`tool`, `defaultTool`, `onToolChange`), and preserves kept snapshots when
   hidden with its viewport (`<Activity>` or unmounting `PdfViewer`) while
   detaching immediately when removed from an attached viewport (decision
-  0034). `useAnnotations()` returns a non-null, getter-tracked
+  0034). Cleanup waits until the commit finishes so a sibling editor can
+  mount after the viewport and reclaim its kept annotations. `useAnnotations()` returns a non-null, getter-tracked
   `AnnotationControls` object whose action methods stay referentially stable.
   `renderOverlay` renders through a
   portal into the page's host; React renders nothing else there.

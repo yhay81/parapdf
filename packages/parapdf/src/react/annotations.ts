@@ -108,6 +108,10 @@ export function annotationSlot(viewer: Viewer): AnnotationSlot {
     controlsStore.set(initialControls);
   };
 
+  const detachIfUnmounted = () => {
+    if (slot.mounts === 0 && viewer.scroller !== null) detachNow();
+  };
+
   const slot: AnnotationSlot = {
     editingStore,
     controlsStore,
@@ -120,12 +124,11 @@ export function annotationSlot(viewer: Viewer): AnnotationSlot {
     mount(attach, labels) {
       slot.mounts++;
       if (!slot.editing) {
-        // Registered before attachAnnotationEditing so a viewport that later
-        // attaches without <PdfAnnotationEditor> mounted detaches kept edits
-        // before the editor starts.
+        // A sibling editor can mount after the viewport in the same commit.
+        // Wait for its layout effect before discarding the kept annotations.
         slot.removeViewportGuard = viewer.extend({
           viewport() {
-            if (slot.mounts === 0) detachNow();
+            if (slot.mounts === 0) queueMicrotask(detachIfUnmounted);
           },
         });
         slot.labels = labels;
@@ -152,9 +155,7 @@ export function annotationSlot(viewer: Viewer): AnnotationSlot {
         // viewport hides (<Activity> or unmounting <PdfViewer>) keep the
         // editor's snapshot on the viewer, while removing <PdfAnnotationEditor>
         // from an attached viewport detaches editing immediately.
-        queueMicrotask(() => {
-          if (slot.mounts === 0 && viewer.scroller !== null) detachNow();
-        });
+        queueMicrotask(detachIfUnmounted);
       };
     },
     updateLabels(labels) {
