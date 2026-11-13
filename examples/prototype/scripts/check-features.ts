@@ -1106,22 +1106,84 @@ try {
     await page.context().close();
   }
 
-  // --- Thumbnails of a long document hold pixels only near view ---
+  // --- Thumbnails of a long document virtualize the DOM list and hold pixels only near view ---
   {
-    const { page } = await open(launched.browser, demo("file=bill-hr815.pdf"));
+    const { page } = await open(launched.browser, demo("file=synthetic-text-1000.pdf"));
     await page.getByRole("button", { name: "Thumbnails", exact: true }).click();
-    await page.waitForTimeout(1500);
+    await page.waitForTimeout(1000);
     const near = await page.evaluate(() => {
+      const scroller = document.querySelector<HTMLElement>("#sidebar");
+      const items = [...document.querySelectorAll<HTMLLIElement>(".parapdf-thumbnails li")];
       const canvases = [...document.querySelectorAll<HTMLCanvasElement>(".parapdf-thumbnail")];
       return {
-        total: canvases.length,
+        mountedItems: items.length,
         drawn: canvases.filter((canvas) => canvas.width > 0).length,
+        scrollHeight: scroller?.scrollHeight ?? 0,
       };
     });
     check(
-      "only thumbnails near view hold pixels",
-      near.total === (await documentState(page))?.pageCount && near.drawn > 0 && near.drawn < 30,
+      "thumbnails window-virtualize a 1,000-page list and draw only near view",
+      near.mountedItems > 0 &&
+        near.mountedItems < 30 &&
+        near.drawn > 0 &&
+        near.drawn <= near.mountedItems &&
+        near.scrollHeight > 100_000,
       JSON.stringify(near),
+    );
+    await page.evaluate(() => window.__viewer?.goToPage(500));
+    await page.waitForTimeout(300);
+    const thumbnailPosition = () =>
+      page.evaluate(() => {
+        const scroller = document.querySelector<HTMLElement>("#sidebar");
+        const active = document.querySelector<HTMLElement>(
+          '.parapdf-thumbnails button[aria-current="page"]',
+        );
+        const items = document.querySelectorAll(".parapdf-thumbnails li").length;
+        const scrollerRect = scroller?.getBoundingClientRect();
+        const activeRect = active?.getBoundingClientRect();
+        const inView =
+          Boolean(scrollerRect && activeRect) &&
+          (activeRect?.top ?? 0) >= (scrollerRect?.top ?? 0) - 2 &&
+          (activeRect?.bottom ?? 0) <= (scrollerRect?.bottom ?? 0) + 2;
+        return {
+          activeLabel: active?.getAttribute("aria-label") ?? null,
+          mountedItems: items,
+          inView,
+        };
+      });
+    const afterJump = await thumbnailPosition();
+    check(
+      "jumping to a deep page scrolls its virtualized thumbnail into view",
+      afterJump.activeLabel === "Page 501 of 1000" &&
+        afterJump.mountedItems < 30 &&
+        afterJump.inView,
+      JSON.stringify(afterJump),
+    );
+    await page.getByRole("button", { name: "Thumbnails", exact: true }).click();
+    await page.getByRole("button", { name: "Thumbnails", exact: true }).click();
+    await page.waitForTimeout(300);
+    const reopened = await thumbnailPosition();
+    check(
+      "opening thumbnails at a deep page aligns after measuring item height",
+      reopened.inView,
+      JSON.stringify(reopened),
+    );
+    await page.evaluate(() => window.__viewer?.setRotation(90));
+    await page.waitForTimeout(300);
+    const rotated = await thumbnailPosition();
+    check(
+      "rotating pages keeps the active thumbnail visible",
+      rotated.inView,
+      JSON.stringify(rotated),
+    );
+    await page.evaluate(() => {
+      const sidebar = document.querySelector<HTMLElement>("#sidebar");
+      if (sidebar) sidebar.scrollTop = 0;
+    });
+    await page.waitForTimeout(300);
+    check(
+      "manual thumbnail browsing stays at the chosen scroll position",
+      await page.evaluate(() => document.querySelector<HTMLElement>("#sidebar")?.scrollTop === 0),
     );
     await page.context().close();
   }

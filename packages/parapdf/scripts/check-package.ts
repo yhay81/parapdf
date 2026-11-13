@@ -139,14 +139,16 @@ try {
   // An application's use of the API, type-checked against the declarations.
   writeFileSync(
     join(project, "consumer.tsx"),
-    `import { useRef } from "react";
+    `import { Suspense, useRef } from "react";
 import {
   type AnnotationTool,
   configurePdfjs,
+  type OutlineItemHelpers,
   PdfAnnotationEditor,
   PdfAutoLinks,
   PdfDocument,
   PdfForms,
+  PdfOutline,
   PdfPageOverlay,
   PdfPageOverlays,
   type PdfPagePoint,
@@ -160,6 +162,7 @@ import {
   preloadDocument,
   preloadPdfjs,
   type SelectionAnchor,
+  type ThumbnailItem,
   useAnnotations,
   useCreateViewer,
   useDocumentState,
@@ -187,7 +190,25 @@ export function Reader() {
   return (
     <PdfDocument source="/manual.pdf" onOpenAttachment={(file) => void file.filename}>
       <Toolbar />
-      <PdfThumbnails />
+      <PdfThumbnails>
+        {(item: ThumbnailItem) => (
+          <button type="button" aria-label={item.ariaLabel} onClick={item.select}>
+            {item.thumbnail}
+            <span>{item.label}</span>
+          </button>
+        )}
+      </PdfThumbnails>
+      <Suspense fallback={null}>
+        <PdfOutline
+          defaultExpanded={false}
+          renderItem={(_node, helpers: OutlineItemHelpers) => (
+            <>
+              {helpers.link}
+              {helpers.children}
+            </>
+          )}
+        />
+      </Suspense>
       <PdfViewer
         {...options}
         ref={viewerRef}
@@ -330,13 +351,14 @@ export const misuse = <PdfViewer pageLabel={5} renderOverlay={() => null} />;
   // client components; pdf.js only loads in the browser.
   writeFileSync(
     join(project, "ssr.js"),
-    `import { createElement } from "react";
+    `import { createElement, Suspense } from "react";
 import { renderToString } from "react-dom/server";
 import {
   PdfAnnotationEditor,
   PdfAutoLinks,
   PdfDocument,
   PdfForms,
+  PdfOutline,
   PdfPageOverlay,
   PdfPageOverlays,
   PdfPageRect,
@@ -402,6 +424,7 @@ process.stdout.write(
       { source: "/manual.pdf" },
       createElement(Toolbar),
       createElement(PdfThumbnails),
+      createElement(Suspense, { fallback: null }, createElement(PdfOutline)),
       createElement(
         PdfViewer,
         { label: "Manual", onPageClick: () => {} },

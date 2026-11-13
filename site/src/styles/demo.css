@@ -989,7 +989,7 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.demo-thumbnails {
+.demo-thumbnails ol {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1043,8 +1043,7 @@ body {
   font-weight: 600;
 }
 
-.demo-outline,
-.demo-outline ul,
+.demo-outline ol,
 .demo-layers,
 .demo-layers ul,
 .demo-files {

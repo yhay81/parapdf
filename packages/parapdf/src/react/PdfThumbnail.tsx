@@ -2,9 +2,9 @@
 
 import { type CSSProperties, useLayoutEffect, useRef } from "react";
 import { attachThumbnail } from "../features/thumbnails/index.ts";
-import { turnedSize } from "../view/layout.ts";
 import type { Viewer } from "../view/viewer.ts";
 import { useOptionalViewer, useSelected } from "./context.ts";
+import { thumbnailCanvasHeight } from "./thumbnails.ts";
 
 export interface PdfThumbnailProps {
   /**
@@ -20,9 +20,6 @@ export interface PdfThumbnailProps {
   className?: string;
   style?: CSSProperties;
 }
-
-/** A US Letter page's height over its width, until the page's own size is known. */
-const LETTER_RATIO = 11 / 8.5;
 
 /**
  * A small picture of a page of `viewer`'s document, drawn once it comes
@@ -42,9 +39,7 @@ export function PdfThumbnail({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const size = useSelected(viewer.store.hot, (state) => state.layout?.sizes[pageIndex]);
   const rotation = useSelected(viewer.store.cold, (state) => state.rotation);
-  const turned = size ? turnedSize(size, rotation) : null;
-  const height =
-    turned && turned.width > 0 ? (width * turned.height) / turned.width : width * LETTER_RATIO;
+  const height = thumbnailCanvasHeight(size, rotation, width);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: a new size or rotation draws the page again.
   useLayoutEffect(() => {

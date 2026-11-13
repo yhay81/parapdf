@@ -76,7 +76,7 @@ Search, printing, saving, text, and the rest are hooks and functions (see
 | `scroller`, `content` | The scroll container and the element that holds the pages, while a viewport is attached. |
 | `signal` | Aborted while no viewport is attached. |
 | `workSignal` | What the viewer does for its open document stops with it: aborts when the document closes or the viewport detaches; null while no document is open. |
-| `textLayer`, `annotationLayer`, `pageColors` | The options as `PdfViewer` set them. |
+| `textLayer`, `annotationLayer`, `pageColors`, `externalLinks` | The options as `PdfViewer` set them (`externalLinks` stays live across `PdfOutline`, `PdfAutoLinks`, and annotation layers). |
 
 ## Measuring
 

@@ -1,21 +1,18 @@
 import {
-  type OutlineNode,
   openAttachment,
   type PdfLayer,
+  PdfOutline,
   type PdfSession,
-  PdfThumbnail,
+  PdfThumbnails,
   setLayerVisible,
   useAttachments,
   useDocumentState,
   useLayers,
   useMetadata,
   useOutline,
-  usePageLabels,
   useSession,
-  useViewer,
-  useViewState,
 } from "parapdf";
-import { type KeyboardEvent, useEffect, useRef, useState } from "react";
+import type { KeyboardEvent } from "react";
 import { corpusReadme } from "../../samples.ts";
 import type { Opened } from "./DemoApp.tsx";
 import { Icon, IconButton, type IconName } from "./icons.tsx";
@@ -107,103 +104,41 @@ export function SidePanel({
           {title}
           {count > 0 ? <span>{count.toLocaleString("en")}</span> : null}
         </h2>
-        {value === "thumbnails" ? <Thumbnails /> : null}
-        {value === "outline" && outline ? <OutlineList items={outline} depth={0} /> : null}
+        {value === "thumbnails" ? (
+          <PdfThumbnails width={THUMBNAIL_WIDTH} className="demo-thumbnails" />
+        ) : null}
+        {value === "outline" ? (
+          <PdfOutline
+            className="demo-outline"
+            defaultExpanded={false}
+            renderItem={(item, { depth, hasChildren, expanded, toggle, link, children }) => (
+              <>
+                <div className="demo-outline-row" style={{ paddingLeft: `${depth * 0.875}rem` }}>
+                  {hasChildren ? (
+                    <button
+                      type="button"
+                      className="demo-outline-toggle"
+                      aria-label={expanded ? `Collapse ${item.title}` : `Expand ${item.title}`}
+                      aria-expanded={expanded}
+                      onClick={toggle}
+                    >
+                      <Icon name="chevronRight" size={16} />
+                    </button>
+                  ) : (
+                    <span className="demo-outline-toggle" />
+                  )}
+                  {link}
+                </div>
+                {children}
+              </>
+            )}
+          />
+        ) : null}
         {value === "layers" ? <Layers /> : null}
         {value === "attachments" ? <Attachments /> : null}
         {value === "info" ? <Info opened={opened} /> : null}
       </div>
     </aside>
-  );
-}
-
-/**
- * Every page as a thumbnail; each one is drawn only near the panel's
- * visible part, and the current page's scrolls into view, as in pdf.js.
- */
-function Thumbnails() {
-  const viewer = useViewer();
-  const { currentPage, pageCount } = useViewState();
-  const labels = usePageLabels();
-  const list = useRef<HTMLOListElement>(null);
-  useEffect(() => {
-    list.current?.children[currentPage]?.scrollIntoView({ block: "nearest" });
-  }, [currentPage]);
-  return (
-    <ol ref={list} className="demo-thumbnails">
-      {Array.from({ length: pageCount }, (_, pageIndex) => {
-        const label = labels?.[pageIndex] ?? String(pageIndex + 1);
-        return (
-          // biome-ignore lint/suspicious/noArrayIndexKey: pages are identified by their index.
-          <li key={pageIndex}>
-            <button
-              type="button"
-              aria-label={`Page ${label}`}
-              aria-current={pageIndex === currentPage ? "page" : undefined}
-              onClick={() => viewer.goToPage(pageIndex)}
-            >
-              <PdfThumbnail pageIndex={pageIndex} width={THUMBNAIL_WIDTH} />
-              <span aria-hidden="true">{label}</span>
-            </button>
-          </li>
-        );
-      })}
-    </ol>
-  );
-}
-
-/** The outline as a tree whose entries with children open and close; all start closed. */
-function OutlineList({ items, depth }: { items: readonly OutlineNode[]; depth: number }) {
-  return (
-    <ul className={depth === 0 ? "demo-outline" : undefined}>
-      {items.map((item, index) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: the outline is fixed for a document.
-        <OutlineEntry key={index} item={item} depth={depth} />
-      ))}
-    </ul>
-  );
-}
-
-function OutlineEntry({ item, depth }: { item: OutlineNode; depth: number }) {
-  const viewer = useViewer();
-  const [open, setOpen] = useState(false);
-  const style = {
-    paddingLeft: `${depth * 0.875}rem`,
-    fontWeight: item.bold ? 600 : undefined,
-    fontStyle: item.italic ? "italic" : undefined,
-  };
-  return (
-    <li>
-      <div className="demo-outline-row" style={style}>
-        {item.items.length > 0 ? (
-          <button
-            type="button"
-            className="demo-outline-toggle"
-            aria-label={open ? `Collapse ${item.title}` : `Expand ${item.title}`}
-            aria-expanded={open}
-            onClick={() => setOpen(!open)}
-          >
-            <Icon name="chevronRight" size={16} />
-          </button>
-        ) : (
-          <span className="demo-outline-toggle" />
-        )}
-        {item.url ? (
-          <a href={item.url} target="_blank" rel="noopener noreferrer">
-            {item.title}
-          </a>
-        ) : (
-          <button
-            type="button"
-            disabled={item.dest === null}
-            onClick={() => void viewer.goToDestination(item.dest)}
-          >
-            {item.title}
-          </button>
-        )}
-      </div>
-      {open ? <OutlineList items={item.items} depth={depth + 1} /> : null}
-    </li>
   );
 }
 

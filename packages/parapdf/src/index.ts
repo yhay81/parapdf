@@ -79,6 +79,11 @@ export {
 export { useFormChange, useFormFields } from "./react/forms.ts";
 export { type HistoryControls, useHistory } from "./react/history.ts";
 export {
+  type OutlineItemHelpers,
+  PdfOutline,
+  type PdfOutlineProps,
+} from "./react/outline.ts";
+export {
   PdfPageOverlay,
   type PdfPageOverlayProps,
   PdfPageOverlays,
@@ -107,6 +112,7 @@ export { type PrintControls, type PrintProgress, usePrint } from "./react/print.
 export { type SaveControls, useSave } from "./react/save.ts";
 export { type SearchControls, useSearch } from "./react/search.ts";
 export { useSelection } from "./react/selection.ts";
+export type { ThumbnailItem } from "./react/thumbnails.ts";
 export { useCreateViewer, useViewer } from "./react/viewer.ts";
 export type { RenderStats } from "./render/renderer.ts";
 export type { ViewerExtension } from "./view/extensions.ts";

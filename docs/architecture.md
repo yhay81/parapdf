@@ -36,7 +36,7 @@ feature, and React is used only in `react/`.
 
 ```
 react/      PdfDocument, PdfView, PdfViewer, PdfForms, PdfAnnotationEditor,
-            PdfAutoLinks, PdfPermissions, PdfThumbnails, hooks; overlays through portals
+            PdfAutoLinks, PdfPermissions, PdfThumbnails, PdfOutline, hooks; overlays through portals
 features/   search, history, initial view, permissions, forms,
             annotations, autoLinks, print, download, thumbnails, layers,
             attachments, selection, text
@@ -320,7 +320,19 @@ the DOM declares `"use client"`.
   preloading `source`'s URL, and opening `source` in the shared registry ahead
   of `PdfDocument` mounting.
 - `PdfThumbnails` and `PdfThumbnail` draw the viewer's document at a lower
-  priority; `PdfPageRect` places content in PDF points.
+  priority. `PdfThumbnails` virtualizes its `<ol>` window over a prefix-sum
+  `Float64Array` of turned page heights (with `borderTop` / `borderBottom`
+  transparent spacers preserving stylesheet padding and flex `rowGap`,
+  `aria-setsize` / `aria-posinset` on mounted `<li>` items, non-suspending
+  `pageLabels` resolution, custom `children?: (item: ThumbnailItem) => ReactNode`,
+  and `block: "nearest"` auto-scroll of `currentPage` even when unmounted).
+  Active-page alignment follows measured item chrome, width, and rotation;
+  failed label reads retain numeric labels.
+  `PdfOutline` renders `<nav><ol>…</ol></nav>` over `useOutline()`, following
+  the viewer's live `externalLinks` store (`viewer.externalLinks`), providing
+  expand/collapse controls for nested entries, and honoring optional
+  `renderItem` customization (decision 0037). `PdfPageRect` places content in
+  PDF points.
 - `useViewState()`, `useDocumentState()`, `useSearch()`, and `useHistory()`
   read stores through `useSyncExternalStore` (`useStoreSlice`): called without
   a selector, they track the fields read during rendering (dropping fields no

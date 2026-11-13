@@ -95,8 +95,8 @@ that matters for performance or direction gets a decision record.
   feature components (`PdfForms`, `PdfAnnotationEditor`, `PdfAutoLinks`,
   `PdfPermissions`), declarative page overlays (`PdfPageOverlay`,
   `PdfPageOverlays`, `PdfPageRect`), `PdfSelectionPopover`,
-  `PdfThumbnails`, `useViewer()`, `useCreateViewer()`, `useSave()`,
-  `usePrint()`, and the hooks (`src/react/`, `"use client"`); unit tests in Node, which stand in for pdf.js with
+  `PdfThumbnails`, `PdfOutline`, `useViewer()`, `useCreateViewer()`,
+  `useSave()`, `usePrint()`, and the hooks (`src/react/`, `"use client"`); unit tests in Node, which stand in for pdf.js with
   `test/fake-pdfjs.ts` and for the elements of a page the renderer builds
   with `test/fake-dom.ts` (`test/`).
   `scripts/pdfjs-files.ts`, run by `pnpm install` and `build`, copies

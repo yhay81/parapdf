@@ -20,10 +20,14 @@ description: How ParaPDF exposes documents to assistive technology.
   zooms it; in `"page"` mode, Page Down, Space, and the arrow keys turn
   pages at the page's edges, and Home and End go to the first and last page.
   See [Controls and state](/guides/controls/).
-- `PdfThumbnails` is a labelled navigation list of buttons, each named by
-  `pageLabel` ("Page 3 of 12" by default), the current page marked with
-  `aria-current="page"`; the thumbnails themselves are hidden from assistive
-  technology.
+- `PdfThumbnails` is a labelled, window-virtualized navigation list of
+  buttons, each named by `pageLabel` ("Page iv" when the PDF defines custom page
+  labels, or "Page 3 of 12" by default) with `aria-setsize` and `aria-posinset`
+  on each mounted `<li>` and the current page marked with `aria-current="page"`;
+  the thumbnails themselves are hidden from assistive technology. `PdfOutline`
+  renders the document's bookmarks as a labelled `<nav><ol>…</ol></nav>`,
+  marking external links `aria-disabled="true"` without `href` when
+  `externalLinks="disabled"`.
 - `pageColors` draws pages in two colors, for example `Canvas` and
   `CanvasText` in forced-colors mode.
 - With `<PdfPermissions />` and a document that forbids copying, assistive

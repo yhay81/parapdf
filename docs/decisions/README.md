@@ -43,6 +43,7 @@ it. A new choice gets a new record, numbered next.
 | [0034](0034-declarative-feature-components.md) | Declarative feature components and synchronous annotation controls | adopted |
 | [0035](0035-document-actions-and-react-surface.md) | Document-owned actions and a React-only public surface | adopted |
 | [0036](0036-overlays-coordinates-and-preload.md) | Declarative overlays, selection popovers, PDF coordinates, and route preloading | adopted |
+| [0037](0037-virtualized-thumbnails-and-outline.md) | Window-virtualized thumbnails and headless document outline | adopted |
 
 ## Template
 
