@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { PdfPermissions } from "../src/document/session.ts";
+import type { DocumentPermissions } from "../src/document/session.ts";
 import { attachFormLayers } from "../src/features/forms/layers.ts";
 import { enforcePermissions, permits, permitted } from "../src/features/permissions.ts";
 import { Viewer } from "../src/view/viewer.ts";
 import { fakeDocument, fakePdfjs, settle, show } from "./fake-pdfjs.ts";
 
-const restricted: PdfPermissions = {
+const restricted: DocumentPermissions = {
   restricted: true,
   print: false,
   printHighQuality: false,

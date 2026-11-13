@@ -92,7 +92,7 @@ export type PasswordReason = "required" | "incorrect";
  * What the document's encryption dictionary permits (PDF 32000-1, Table 22).
  * Documents that are not encrypted permit everything.
  */
-export interface PdfPermissions {
+export interface DocumentPermissions {
   /** Whether the document restricts anything at all. */
   restricted: boolean;
   print: boolean;
@@ -503,7 +503,7 @@ export class DocumentSession {
   }
 
   /** What the document permits; everything when it is not encrypted. */
-  permissions(): Promise<PdfPermissions> {
+  permissions(): Promise<DocumentPermissions> {
     return this.#once("permissions", async () => {
       const flags = await this.proxy.getPermissions();
       const flag = this.pdfjs.pdfjs.PermissionFlag;

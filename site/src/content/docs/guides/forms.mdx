@@ -5,12 +5,12 @@ description: Let the reader fill in the PDF's form, then save, download, or prin
 
 import { FormsExample } from "../../../components/examples.tsx";
 
-With `<PdfViewer forms />`, form fields become inputs, check boxes,
-radio buttons, and lists the reader can fill in; without it, they show as the
-PDF draws them. The option is live: turning it on or off needs no remount,
-and the forms code loads only when it is set. What the reader types belongs
-to the document, shared by its viewers, and a page keeps its values when it
-unmounts and mounts again.
+With `<PdfForms />` mounted inside `<PdfViewer>`, form fields become inputs,
+check boxes, radio buttons, and lists the reader can fill in; without it, they
+show as the PDF draws them. Mounting or unmounting `<PdfForms />` needs no
+remount of `<PdfViewer>`, and the form layer code is in your bundle only when
+you import `PdfForms`. What the reader types belongs to the document, shared
+by its viewers, and a page keeps its values when it unmounts and mounts again.
 
 <FormsExample client:visible />
 
@@ -76,7 +76,7 @@ function FormSync({ onChange }: { onChange: (name: string, value: unknown) => vo
   fields shown show the values, and `save()` and `print()` include them; it
   is not heard as the reader's input.
 - `useFormChange(listener, viewer?)` hears `{ name, value }` for each value
-  the reader enters, with `forms` on.
+  the reader enters, or passes `onChange` directly on `<PdfForms />`.
 - `useFormFields()` gives the fields of the nearest `PdfDocument`'s document
   with their values as first read. It suspends until they are read, so
   render it under a Suspense boundary of your own; `getFormFields()` reads
@@ -85,18 +85,20 @@ function FormSync({ onChange }: { onChange: (name: string, value: unknown) => vo
 
 ## Form scripts
 
-With `formScripts` as well as `forms`, the document's scripts run in its
+With `<PdfForms scripts />`, the document's scripts run in its
 fields as they do in pdf.js's viewer: calculated fields follow their
 inputs, values are validated and formatted, keystrokes are checked as they
 are typed, buttons run their actions, and the document and its pages run
-their scripts as they open. The option is off by default, since the
+their scripts as they open. `scripts` is `false` by default, since the
 scripts are the document's own JavaScript. They run in pdf.js's sandbox,
 QuickJS compiled to WebAssembly, which loads only for a document that has
 scripts: 66 KB of sandbox and 475 KB of QuickJS (20 KB and 220 KB with
 gzip), served from the package's files like the worker's.
 
 ```tsx
-<PdfViewer forms formScripts />
+<PdfViewer>
+  <PdfForms scripts />
+</PdfViewer>
 ```
 
 The viewers of one document share its sandbox, which keeps the fields'

@@ -6,6 +6,27 @@ change the API.
 
 ## Unreleased
 
+- Keep annotation edits across React hides and remounts when the editor
+  component is a sibling rendered after its viewport.
+
+- Declarative feature components replace `PdfViewer`'s boolean feature props,
+  so bundlers statically tree-shake unused features instead of emitting lazy
+  feature chunks for every application:
+  - **Breaking:** Removed `forms`, `formScripts`, `annotationEditing`,
+    `annotationLabels`, `autoLinks`, and `enforcePermissions` from
+    `PdfViewerProps`. Mount `<PdfForms scripts? onChange? />`,
+    `<PdfAnnotationEditor labels? tool? defaultTool? onToolChange? />`,
+    `<PdfAutoLinks />`, and `<PdfPermissions />` inside `<PdfViewer>` (or pass
+    `viewer`) instead; `PdfViewer` now accepts `children`.
+  - **Breaking:** Renamed the `PdfPermissions` permissions-state interface to
+    `DocumentPermissions` so `<PdfPermissions />` names the component cleanly.
+  - **Breaking:** `useAnnotations(viewer?)` now always returns a non-nullable
+    `AnnotationControls` object (`state` and `styles` are `null` until
+    `<PdfAnnotationEditor>` starts editing) and tracks read properties so
+    components reading only methods (such as `const { setTool } =
+    useAnnotations()`) never re-render when the active tool, selection, or
+    styles change.
+
 - `PdfDocument` provides a default `Viewer` through React context, `PdfView`
   scopes an independent `Viewer` for split panes, and `useViewState()` and
   `useDocumentState()` track read fields or compare selected values shallowly:

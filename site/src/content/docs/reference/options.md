@@ -15,8 +15,9 @@ position and the annotations; the others apply at once.
   defaultZoom="fit-width"
   scrollMode={scrollMode}
   onScrollModeChange={setScrollMode}
-  forms
-/>
+>
+  <PdfForms />
+</PdfViewer>
 ```
 
 ## View state
@@ -54,16 +55,14 @@ it was instead.
 | Prop | Default | |
 |---|---|---|
 | `textLayer` | `true` | Selectable, screen-reader-visible text. Search works without it but paints matches only on text layers. |
-| `annotationLayer` | `true` | Focusable links, comment popups, and, with `forms`, form fields. |
-| `forms` | `false` | Form fields as HTML the reader fills in, whose values `save()` writes into the document; needs `annotationLayer` (see [Forms](/guides/forms/)). Its code loads only when set. |
-| `formScripts` | `false` | With `forms`, the document's scripts run in its fields: calculations, validation, formatting, and actions (see [Form scripts](/guides/forms/#form-scripts)). pdf.js's sandbox loads only for a document with scripts. |
-| `annotationEditing` | `false` | Highlights, text, drawings, images, and signatures the reader creates (see [Annotations](/guides/annotations/)). Its code and styles load only when set. |
-| `annotationLabels` | English | The accessible names of the annotation editor's controls, such as `{ removeInk: "線を削除" }`. |
+| `annotationLayer` | `true` | Focusable links, comment popups, and, with `<PdfForms />`, form fields. |
 | `pageColors` | none | `{ background, foreground }` to draw pages in two colors, for example `Canvas` and `CanvasText` in forced-colors mode. |
 
-Set as the viewer opens a document, `forms` and `annotationEditing` make
-its first layout wait for their code; set later, they attach to the open
-document, and unset, they detach.
+Interactive form fields (`<PdfForms />`), annotation editing
+(`<PdfAnnotationEditor />`), addresses linked in text (`<PdfAutoLinks />`),
+and permission enforcement (`<PdfPermissions />`) are mounted as declarative
+children of `<PdfViewer>` so bundlers exclude unused features statically (see
+[Components and hooks](/reference/components/)).
 
 ## Links and the document's wishes
 
@@ -72,9 +71,7 @@ document, and unset, they detach.
 | `destinationZoom` | `true` | `false` keeps the zoom when following links and the outline; they only scroll. |
 | `direction` | the document's | `"rtl"` orders pages right to left, `"ltr"` left to right; unset, the document's `/ViewerPreferences /Direction` decides, and left to right where it says nothing (see [Right to left](/guides/layout/#right-to-left)). |
 | `externalLinks` | `"new-tab"` | `"disabled"` leaves links to other documents inert; internal links and the outline keep working. |
-| `autoLinks` | `false` | URLs and e-mail addresses in the text become links, except where the file already links them; needs `textLayer` and `annotationLayer`, and loads its code only when set (see [Addresses in the text](/guides/navigation/#addresses-in-the-text)). |
 | `openAttachment` | download | What opening a file attachment annotation or a link to an embedded file does: `({ filename, content }) => void`. |
-| `enforcePermissions` | `false` | Follow what the document permits, as pdf.js does not by default (see [Permissions](/guides/permissions/)). |
 
 ## Layout and zoom
 
@@ -101,7 +98,7 @@ works](/about/how-it-works/#memory).
 
 ## Other props
 
-`className`, `style`, `label`, `pageLabel`, `renderOverlay`, `viewer`, and
-`ref` are listed with [`PdfViewer`](/reference/components/#pdfviewer).
+`className`, `style`, `label`, `pageLabel`, `renderOverlay`, `children`,
+`viewer`, and `ref` are listed with [`PdfViewer`](/reference/components/#pdfviewer).
 `PdfDocument` takes only `source`, `viewer`, `passwordPrompt`, and `children`:
 everything about how the document is shown belongs to its viewers.

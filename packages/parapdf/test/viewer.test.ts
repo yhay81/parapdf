@@ -503,20 +503,6 @@ describe("a viewer's extensions", () => {
     assert.equal(late.heard.closed, 0, "a removed extension hears nothing more");
   });
 
-  it("wait for the features they defer before the first layout", async () => {
-    const viewer = new Viewer();
-    let load = () => {};
-    viewer.defer(new Promise<void>((resolve) => (load = resolve)));
-    const { session, close: closeDocument } = show(viewer, { url: "/a.pdf" }, fakePdfjs().loader);
-    close.push(closeDocument);
-    await settle();
-    assert.equal(session.state.get().status, "ready");
-    assert.equal(viewer.store.get().layout, null);
-    load();
-    await settle();
-    assert.ok(viewer.store.get().layout);
-  });
-
   it("finish the edits in progress of every viewer of the document before it saves", async () => {
     const { loader } = fakePdfjs();
     const viewers = [new Viewer(), new Viewer()];

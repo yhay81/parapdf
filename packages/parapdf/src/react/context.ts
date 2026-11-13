@@ -173,10 +173,16 @@ export function selectCached<T, S>(
   return { raw, selector, value: next };
 }
 
-function useStoreSlice<T extends object, S>(
+export function useStoreSlice<T extends object>(store: ReadableStore<T>, serverState: () => T): T;
+export function useStoreSlice<T extends object, S>(
   store: ReadableStore<T>,
   serverState: () => T,
   selector: ((state: T) => S) | undefined,
+): T | S;
+export function useStoreSlice<T extends object, S>(
+  store: ReadableStore<T>,
+  serverState: () => T,
+  selector?: ((state: T) => S) | undefined,
 ): T | S {
   const ref = useRef<SliceState<T, S> | null>(null);
   const ensure = (): SliceState<T, S> => {

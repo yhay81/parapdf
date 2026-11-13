@@ -3,6 +3,7 @@ import {
   getViewState,
   type PageColors,
   PdfDocument,
+  PdfForms,
   PdfPageRect,
   type PdfRect,
   PdfView,
@@ -720,7 +721,6 @@ export function FormSyncShowcase() {
           </div>
           <PdfViewer
             viewer={viewer}
-            forms
             className="example-viewport"
             label="Form 1040 synced with React state"
             renderOverlay={(pageIndex) =>
@@ -735,7 +735,9 @@ export function FormSyncShowcase() {
                 </>
               ) : null
             }
-          />
+          >
+            <PdfForms />
+          </PdfViewer>
         </div>
       </PdfDocument>
       <SampleNote

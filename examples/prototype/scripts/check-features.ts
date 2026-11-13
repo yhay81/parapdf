@@ -996,7 +996,7 @@ try {
       JSON.stringify(turned),
     );
     // Turned off live, the links it added go; the file's stay.
-    await page.evaluate(() => window.__setViewerProps?.({ autoLinks: false }));
+    await page.evaluate(() => window.__setFeatures?.({ autoLinks: false }));
     await page
       .waitForFunction(
         () => document.querySelectorAll('[data-annotation-id^="inferred_link"]').length === 0,
@@ -1010,7 +1010,7 @@ try {
       removed.length === 0,
       JSON.stringify(removed),
     );
-    await page.evaluate(() => window.__setViewerProps?.({ autoLinks: true }));
+    await page.evaluate(() => window.__setFeatures?.({ autoLinks: true }));
     const restored = await inferredOn(page, 2, 1);
     check(
       "turning autoLinks back on restores each link once",

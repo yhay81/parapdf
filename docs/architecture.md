@@ -35,7 +35,8 @@ Dependencies point down only. The core (`pdfjs/` to `render/`) imports no
 feature, and React is used only in `react/`.
 
 ```
-react/      PdfDocument, PdfView, PdfViewer, PdfThumbnails, hooks; overlays through portals
+react/      PdfDocument, PdfView, PdfViewer, PdfForms, PdfAnnotationEditor,
+            PdfAutoLinks, PdfPermissions, PdfThumbnails, hooks; overlays through portals
 features/   search, history, view state, initial view, permissions, forms,
             annotations, autoLinks, print, download, thumbnails, layers,
             attachments, selection, text
@@ -218,10 +219,12 @@ A feature attaches to a viewer or a session through `viewer.extend()` and
 the viewer's methods, keeps any state in a store of its own, and detaching
 it undoes what it added. The core imports no feature.
 
-- Forms (with `formScripts`), annotation editing, and `autoLinks` change
-  how pages are drawn: they are options of `PdfViewer`, which imports their
-  module when set. Search, print, and the others are imported by their
-  hooks or functions, and absent from builds that use neither.
+- Forms (with `scripts`), annotation editing, auto-linked addresses,
+  permission enforcement, search, print, and the other features are imported
+  only by the components, hooks, or functions that use them (`PdfForms`,
+  `PdfAnnotationEditor`, `PdfAutoLinks`, `PdfPermissions`, `useSearch()`,
+  `print()`, and so on), so bundlers exclude unused features statically with
+  zero dead feature chunks emitted on disk (decision 0034).
 - Form scripts are off by default and load only for a document that has
   some: pdf.js's QuickJS sandbox, one per session, started after the first
   paint (decision 0016), sending pdf.js's viewer's document events around
@@ -272,7 +275,19 @@ the DOM declares `"use client"`.
   `scrollMode`, `tool`) is controlled or uncontrolled; the current page is
   reported (`onPageChange`) and set with `viewer.goToPage()`. Every other
   prop is a live option: changing it needs no remount, and an option set to
-  its default is the option left out. `renderOverlay` renders through a
+  its default is the option left out. `children` renders inside the viewport
+  container so declarative feature components (`PdfForms`,
+  `PdfAnnotationEditor`, `PdfAutoLinks`, `PdfPermissions`) mount synchronously
+  with `useLayoutEffect` before the browser paints, without async layout
+  deferrals (`viewer.defer()`). `PdfAnnotationEditor` renders its `<style
+  precedence="parapdf">` directly, controls or initializes the active tool
+  (`tool`, `defaultTool`, `onToolChange`), and preserves kept snapshots when
+  hidden with its viewport (`<Activity>` or unmounting `PdfViewer`) while
+  detaching immediately when removed from an attached viewport (decision
+  0034). Cleanup waits until the commit finishes so a sibling editor can
+  mount after the viewport and reclaim its kept annotations. `useAnnotations()` returns a non-null, getter-tracked
+  `AnnotationControls` object whose action methods stay referentially stable.
+  `renderOverlay` renders through a
   portal into the page's host; React renders nothing else there.
 - `PdfThumbnails` and `PdfThumbnail` draw the viewer's document at a lower
   priority; `PdfPageRect` places content in PDF points.

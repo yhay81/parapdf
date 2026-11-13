@@ -54,11 +54,57 @@ remount (see [Options](/reference/options/)).
 | `ref` | Receives the `Viewer` shown. |
 | View state | `zoom`, `rotation`, `spread`, `scrollMode`, and `tool`, each controlled with its `on…Change` callback or left to the viewer with its `default…`; `defaultPage` and `onPageChange` (see [Options](/reference/options/#view-state)). |
 | The opening | `initialView` and `initialViewState` (see [Options](/reference/options/#the-opening)). |
-| Live options | The layers, forms, annotation editing, links, permissions, layout, zoom limits, and budgets (see [Options](/reference/options/)). |
+| Live options | The layers, links, layout, zoom limits, and budgets (see [Options](/reference/options/)). |
 | `className`, `style` | For the scroll container. |
 | `label` | Its accessible name, "PDF document" by default. |
 | `pageLabel` | Each page's accessible name, `(pageNumber, pageCount) => string`, "Page 3 of 12" by default. |
 | `renderOverlay` | `(pageIndex) => ReactNode`, drawn over each mounted page through a portal into a layer above its drawing and text, and placed with `PdfPageRect` (see [Text, selections, and overlays](/guides/text/)). |
+| `children` | Feature components (`PdfForms`, `PdfAnnotationEditor`, `PdfAutoLinks`, `PdfPermissions`) and overlays mounted for this viewer. |
+
+### `PdfForms`
+
+Shows form fields as interactive HTML that the reader can fill in, and
+optionally runs the document's form scripts in pdf.js's QuickJS WebAssembly
+sandbox (see [Forms, printing, and saving](/guides/forms/)). Needs
+`annotationLayer` on `PdfViewer`.
+
+| Prop | |
+|---|---|
+| `viewer` | The viewer whose form fields become interactive; by default, `useViewer()`. |
+| `scripts` | `false` by default; `true` runs calculations, validation, formatting, and button actions. |
+| `onChange` | `(change: FormChange) => void`, called with `{ name, value }` as the reader types or a script changes a field. |
+
+### `PdfAnnotationEditor`
+
+Enables annotation editing on the viewer's pages (`useAnnotations()`), and
+renders the editor's stylesheet synchronously (`<style precedence="parapdf">`;
+see [Annotations](/guides/annotations/)).
+
+| Prop | |
+|---|---|
+| `viewer` | The viewer whose pages edit annotations; by default, `useViewer()`. |
+| `labels` | Accessible names of the editor's controls (`Partial<AnnotationLabels>`), English by default. |
+| `tool`, `defaultTool`, `onToolChange` | Controlled or initial annotation tool (`"none"`, `"highlight"`, `"freetext"`, `"ink"`, `"stamp"`, `"signature"`). |
+
+### `PdfAutoLinks`
+
+Turns URLs and e-mail addresses in the viewer's pages' text into links of
+their annotation layers, leaving out those the file already links (see
+[Addresses in the text](/guides/navigation/#addresses-in-the-text)). Needs
+`textLayer` and `annotationLayer` on `PdfViewer`, and follows `externalLinks`.
+
+| Prop | |
+|---|---|
+| `viewer` | The viewer whose text addresses become links; by default, `useViewer()`. |
+
+### `PdfPermissions`
+
+Follows what the viewer's document permits: copying, printing, annotating,
+and filling form fields (see [Permissions](/guides/permissions/)).
+
+| Prop | |
+|---|---|
+| `viewer` | The viewer whose document permissions are enforced; by default, `useViewer()`. |
 
 ### `PdfThumbnails`
 
@@ -128,9 +174,9 @@ outside them when given one; those that take none read the nearest
 | `useInitialView()` | How the document asks to be shown: its /OpenAction destination, /PageLayout, and /PageMode; null when it cannot be read (see [Keeping the view](/guides/view-state/)). |
 | `useSearch(viewer?)` | The viewer's search state with `search(query, options)`, `next()`, `previous()`, and `clear()` (see [Search](/guides/search/)). |
 | `useHistory(viewer?)` | `back()`, `forward()`, `canGoBack`, and `canGoForward` for the viewer's link and outline jumps (see [Navigation](/guides/navigation/)). |
-| `useAnnotations(viewer?)` | With `annotationEditing`, the annotation tool, state, and styles with the methods that change them; null until the editing code loads, and without the option (see [Annotations](/guides/annotations/)). |
-| `useAnnotationEditing(viewer?)` | The annotation editing feature itself, with its `store`; null as for `useAnnotations()`. |
-| `useFormChange(listener, viewer?)` | Nothing: calls `listener` with `{ name, value }` for each value the reader enters into a form field, as they type. Needs `forms`. |
+| `useAnnotations(viewer?)` | The annotation tool, state, and styles with the methods that change them (`AnnotationControls`). Always non-null (`state` and `styles` are null until `PdfAnnotationEditor` starts editing), tracking read fields so components reading only methods never re-render on annotation changes (see [Annotations](/guides/annotations/)). |
+| `useAnnotationEditing(viewer?)` | The annotation editing feature handle itself, with its `store`; null without `PdfAnnotationEditor`. |
+| `useFormChange(listener, viewer?)` | Nothing: calls `listener` with `{ name, value }` for each value the reader enters into a form field, as they type. Needs `PdfForms`. |
 | `useSelection(viewer?)` | The selection in the viewer, its text and its rectangles in PDF points, or null; it follows a drag at most once a frame (see [Text, selections, and overlays](/guides/text/)). |
 
 The seven hooks of the document's data suspend until it is read: render
@@ -165,7 +211,7 @@ Each takes the viewer it acts through.
 | `setLayerVisible(viewer, id, visible)` | Shows or hides a layer, in every viewer of the document. |
 | `getAttachmentContent(viewer, id)` | Resolves to an embedded file's bytes, or null. |
 | `openAttachment(viewer, attachment)` | Opens an embedded file as the viewer's `openAttachment` option says, by default as a download. |
-| `enforcePermissions(viewer)` | Follows what the viewer's documents permit, as the `enforcePermissions` prop does; returns the function that stops. |
+| `enforcePermissions(viewer)` | Follows what the viewer's documents permit, as `<PdfPermissions />` does; returns the function that stops. |
 | `permits(viewer, what)` | Whether the document permits `"print"`, `"copy"`, `"annotate"`, or `"fillForms"`; always true while the viewer does not follow permissions. |
 | `searchOf(viewer)`, `historyOf(viewer)` | The viewer's own search and history, which `useSearch()` and `useHistory()` show, attached on first use. |
 | `attachSearch(viewer)`, `attachHistory(viewer)` | A search or history of its own for the viewer; its `detach()` takes it off. |

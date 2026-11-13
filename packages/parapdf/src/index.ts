@@ -1,6 +1,7 @@
 export type { PdfSession } from "./document/pdf-session.ts";
 export type { DocumentState, LoadProgress } from "./document/registry.ts";
 export type {
+  DocumentPermissions,
   OutlineNode,
   PasswordReason,
   PdfAttachment,
@@ -10,7 +11,6 @@ export type {
   PdfPageLayout,
   PdfPageMode,
   PdfPageSelection,
-  PdfPermissions,
   PdfSource,
 } from "./document/session.ts";
 export type {
@@ -101,8 +101,15 @@ export {
 } from "./react/data.ts";
 export { useFormChange, useFormFields } from "./react/forms.ts";
 export { type HistoryControls, useHistory } from "./react/history.ts";
+export {
+  PdfAnnotationEditor,
+  type PdfAnnotationEditorProps,
+} from "./react/PdfAnnotationEditor.tsx";
+export { PdfAutoLinks, type PdfAutoLinksProps } from "./react/PdfAutoLinks.tsx";
 export { PdfDocument, type PdfDocumentProps } from "./react/PdfDocument.tsx";
+export { PdfForms, type PdfFormsProps } from "./react/PdfForms.tsx";
 export { PdfPageRect, type PdfPageRectProps } from "./react/PdfPageRect.tsx";
+export { PdfPermissions, type PdfPermissionsProps } from "./react/PdfPermissions.tsx";
 export { PdfThumbnail, type PdfThumbnailProps } from "./react/PdfThumbnail.tsx";
 export { PdfThumbnails, type PdfThumbnailsProps } from "./react/PdfThumbnails.tsx";
 export { PdfView, type PdfViewProps } from "./react/PdfView.tsx";

@@ -112,6 +112,7 @@ invalid ZIP**.
 import {
   download,
   PdfDocument,
+  PdfForms,
   PdfViewer,
   setFormValues,
   useFormChange,
@@ -143,7 +144,9 @@ function TaxForm() {
       <button type="button" onClick={() => void download(viewer, { filename: "filled.pdf" })}>
         Download filled PDF
       </button>
-      <PdfViewer viewer={viewer} forms style={{ height: "85vh" }} />
+      <PdfViewer viewer={viewer} style={{ height: "85vh" }}>
+        <PdfForms />
+      </PdfViewer>
     </PdfDocument>
   );
 }
@@ -195,7 +198,8 @@ memory.
 the DOM viewport. When `<PdfViewer />` unmounts, in-flight drawing stops and
 its canvases are released; when it mounts again, it restores the exact page,
 scroll offset, zoom, search query, and edits. And options such as
-`pageColors`, `spread`, `scrollMode`, and `forms` are plain React props—no
+`pageColors`, `spread`, and `scrollMode` are plain React props, while
+`<PdfForms />` enables interactive forms—no
 query-string serialization or frame reloads.
 
 Scroll, zoom, or search below, then click **Unmount `<PdfViewer />`** and

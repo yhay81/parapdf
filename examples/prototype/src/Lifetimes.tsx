@@ -11,6 +11,7 @@ import {
   type Viewer,
 } from "parapdf";
 import { Activity, type ReactNode, Suspense, useEffect, useState, useTransition } from "react";
+import { type DemoFeatures, ViewerFeatures } from "./ViewerFeatures.tsx";
 
 declare global {
   interface Window {
@@ -34,6 +35,7 @@ export type Lifetime = "above" | "transition" | "activity";
 interface TreeProps {
   file: string;
   viewerProps: PdfViewerProps;
+  features: DemoFeatures;
 }
 
 /**
@@ -80,6 +82,7 @@ function Shown({
   viewer,
   file,
   viewerProps,
+  features,
   children,
 }: TreeProps & { viewer?: Viewer; children: ReactNode }) {
   return (
@@ -89,6 +92,8 @@ function Shown({
         {children}
       </div>
       <PdfViewer {...viewerProps} className="viewport" />
+      {/* Exercise features whose layout effects run after the viewport's. */}
+      <ViewerFeatures features={features} />
     </PdfDocument>
   );
 }
@@ -119,14 +124,14 @@ const OutlineOnceRead = () => (
   </Suspense>
 );
 
-function Switching({ file, viewerProps }: TreeProps) {
+function Switching({ file, viewerProps, features }: TreeProps) {
   const [shown, setShown] = useState(file);
   const [pending, startTransition] = useTransition();
   useEffect(() => {
     hooks().open = (next) => startTransition(() => setShown(next));
   }, []);
   return (
-    <Shown file={shown} viewerProps={viewerProps}>
+    <Shown file={shown} viewerProps={viewerProps} features={features}>
       <OutlineOnceRead />
       <span className="message" data-pending={pending}>
         {pending ? "Opening…" : shown}

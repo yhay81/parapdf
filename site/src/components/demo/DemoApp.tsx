@@ -1,13 +1,28 @@
 import {
   download,
   PdfDocument,
+  PdfForms,
   type PdfSource,
   PdfViewer,
   useAnnotations,
   useFormChange,
   type Viewer,
 } from "parapdf";
-import { Suspense, useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
+const LazyAnnotationEditor = lazy(async () => ({
+  default: (await import("parapdf")).PdfAnnotationEditor,
+}));
+
 import { type Sample, samples, sampleUrl } from "../../samples.ts";
 import { AnnotationBar } from "./AnnotationBar.tsx";
 import { DropHint, ErrorNotice, LoadingBar, PasswordDialog } from "./Overlays.tsx";
@@ -45,7 +60,7 @@ async function readPdf(file: File | undefined): Promise<Opened | null> {
 /** Calls `onEdit` once the reader fills in a form field or creates, changes, or deletes an annotation. */
 function EditWatcher({ onEdit }: { onEdit: () => void }) {
   useFormChange(onEdit);
-  const state = useAnnotations()?.state;
+  const { state } = useAnnotations();
   useEffect(() => {
     if (state?.canUndo || state?.canRedo) onEdit();
   }, [state, onEdit]);
@@ -224,13 +239,14 @@ export default function DemoApp() {
             </>
           ) : null}
           <div className="demo-stage">
-            <PdfViewer
-              ref={viewerRef}
-              className="demo-viewport"
-              label={title}
-              forms
-              annotationEditing={session.editing}
-            />
+            <PdfViewer ref={viewerRef} className="demo-viewport" label={title}>
+              <PdfForms />
+              {session.editing ? (
+                <Suspense fallback={null}>
+                  <LazyAnnotationEditor />
+                </Suspense>
+              ) : null}
+            </PdfViewer>
             <LoadingBar />
             <ErrorNotice
               onRetry={() => setSession((current) => ({ ...current, id: current.id + 1 }))}

@@ -20,9 +20,10 @@ A fast PDF viewer for React, built on [pdf.js](https://github.com/mozilla/pdf.js
   pdf.js's viewer does, CJK text included; links, the outline, and history;
   forms, annotations, printing, saving, layers, attachments, thumbnails,
   spreads, scroll modes, and encrypted documents.
-- **You load what you use.** Forms and annotation editing load their code
-  when their prop is set; search, printing, and the other features are in
-  your bundle only when you import them.
+- **You load what you use.** Forms (`<PdfForms />`), annotation editing
+  (`<PdfAnnotationEditor />`), auto-linked addresses (`<PdfAutoLinks />`),
+  search, printing, and the other features are in your bundle only when you
+  import them.
 - **pdf.js included.** ParaPDF ships pdf.js's worker and the files it loads
   on demand, and your bundler serves them: there is nothing to set up.
 

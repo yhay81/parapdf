@@ -4,10 +4,11 @@
  * the package's modules each entry loads: the code of its own chunk and of
  * the chunks it imports statically, which the browser loads with it. The
  * minimal demo (minimal.html), which uses neither search, forms,
- * annotation editing, nor print, must load none of their modules; the full
- * demo (index.html) loads search and print with it, and form layers,
- * editing, and links found in the text from chunks of their own, which only
- * its `forms`, `annotationEditing`, and `autoLinks` options load. A build that never sets them still emits those chunks.
+ * annotation editing, print, nor autoLinks, must load none of their modules —
+ * and when built as an application of its own, must emit none of their
+ * chunks on disk at all. The full demo (index.html) loads search and print
+ * with it, and `<PdfForms>`, `<PdfAnnotationEditor>`, and `<PdfAutoLinks>`
+ * from lazy chunks of their own.
  *
  * Usage: pnpm --filter @parapdf/prototype check:modules
  */
@@ -40,18 +41,11 @@ const FEATURES: Record<string, RegExp> = {
   autoLinks: /packages\/parapdf\/src\/features\/auto-links\.ts$/,
 };
 
-const outDir = mkdtempSync(join(tmpdir(), "parapdf-modules-"));
-try {
-  await build({
-    configFile: join(exampleDir, "vite.config.ts"),
-    logLevel: "warn",
-    build: { outDir, emptyOutDir: true, sourcemap: true, manifest: true },
-  });
-  const manifest = JSON.parse(readFileSync(join(outDir, ".vite/manifest.json"), "utf8")) as Record<
+function readManifest(dir: string) {
+  const manifest = JSON.parse(readFileSync(join(dir, ".vite/manifest.json"), "utf8")) as Record<
     string,
     Chunk
   >;
-
   /** The chunks `entry` loads with it: its own and those it imports statically. */
   const loaded = (entry: string): Set<string> => {
     const chunks = new Set<string>();
@@ -68,8 +62,8 @@ try {
     [...chunks].flatMap((key) => {
       const file = manifest[key]?.file;
       // Vite's own helpers, such as its preload polyfill, come without a map.
-      if (!file?.endsWith(".js") || !existsSync(join(outDir, `${file}.map`))) return [];
-      const map = JSON.parse(readFileSync(join(outDir, `${file}.map`), "utf8")) as {
+      if (!file?.endsWith(".js") || !existsSync(join(dir, `${file}.map`))) return [];
+      const map = JSON.parse(readFileSync(join(dir, `${file}.map`), "utf8")) as {
         sources: string[];
       };
       return map.sources;
@@ -78,6 +72,18 @@ try {
     Object.entries(FEATURES)
       .filter(([, pattern]) => sources.some((source) => pattern.test(source)))
       .map(([name]) => name);
+  return { manifest, loaded, modules, featuresIn };
+}
+
+const outDir = mkdtempSync(join(tmpdir(), "parapdf-modules-"));
+const minimalOutDir = mkdtempSync(join(tmpdir(), "parapdf-minimal-modules-"));
+try {
+  await build({
+    configFile: join(exampleDir, "vite.config.ts"),
+    logLevel: "warn",
+    build: { outDir, emptyOutDir: true, sourcemap: true, manifest: true },
+  });
+  const { manifest, loaded, modules, featuresIn } = readManifest(outDir);
 
   const minimal = featuresIn(modules(loaded("minimal.html")));
   check(
@@ -87,8 +93,8 @@ try {
   );
   const fullModules = modules(loaded("index.html"));
   const full = featuresIn(fullModules);
-  // The demo hands every function of the package to the checks, the form
-  // fields' too; the part that shows them as fields loads with `forms`.
+  // The demo hands `getFormFields` and `setFormValues` to the checks; `<PdfForms>`
+  // loads `features/forms/layers.ts` in its own chunk.
   const formLayers = fullModules.some((source) => source.endsWith("features/forms/layers.ts"));
   check(
     "the full demo loads search and print with it, and neither form layers, editing, nor autoLinks",
@@ -107,8 +113,32 @@ try {
     lazy.includes("forms") && lazy.includes("annotations") && lazy.includes("autoLinks"),
     lazy.join(", "),
   );
+
+  // Built as an application of its own, minimal.html must statically tree-shake
+  // every unused feature with zero dead feature chunks emitted on disk.
+  await build({
+    configFile: join(exampleDir, "vite.config.ts"),
+    logLevel: "warn",
+    build: {
+      outDir: minimalOutDir,
+      emptyOutDir: true,
+      sourcemap: true,
+      manifest: true,
+      rolldownOptions: { input: join(exampleDir, "minimal.html") },
+    },
+  });
+  const standalone = readManifest(minimalOutDir);
+  const standaloneFeatures = standalone.featuresIn(
+    standalone.modules(Object.keys(standalone.manifest)),
+  );
+  check(
+    "a standalone minimal build emits zero chunks for search, forms, annotation editing, print, or autoLinks",
+    standaloneFeatures.length === 0,
+    standaloneFeatures.join(", "),
+  );
 } finally {
   rmSync(outDir, { recursive: true, force: true });
+  rmSync(minimalOutDir, { recursive: true, force: true });
 }
 
 if (failures > 0) {
