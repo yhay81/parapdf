@@ -1,4 +1,8 @@
-import { openDocumentOf, type PdfSession, readSessionData } from "../../document/pdf-session.ts";
+import {
+  type PdfSession,
+  type PdfSessionController,
+  sessionControllerOf,
+} from "../../document/pdf-session.ts";
 import type { DocumentSession } from "../../document/session.ts";
 import { createFormAccess, type FormField, type FormValue } from "./fields.ts";
 
@@ -18,8 +22,8 @@ export function formsOf(session: DocumentSession): ReturnType<typeof createFormA
 }
 
 /** The fields as first read by this provider, or an empty list when opening failed. */
-export function initialFormFields(provider: PdfSession): Promise<readonly FormField[]> {
-  return readSessionData(provider, "formFields", (session) => formsOf(session).getFormFields(), []);
+export function initialFormFields(provider: PdfSessionController): Promise<readonly FormField[]> {
+  return provider.read("formFields", (session) => formsOf(session).getFormFields(), []);
 }
 
 /**
@@ -28,7 +32,7 @@ export function initialFormFields(provider: PdfSession): Promise<readonly FormFi
  * has none or no document is open.
  */
 export async function getFormFields(session: PdfSession): Promise<readonly FormField[]> {
-  const doc = openDocumentOf(session);
+  const doc = sessionControllerOf(session).openDocument();
   return doc ? formsOf(doc).getFormFields() : [];
 }
 
@@ -44,8 +48,9 @@ export async function setFormValues(
   session: PdfSession,
   values: Readonly<Record<string, FormValue | boolean>>,
 ): Promise<string[]> {
-  const doc = openDocumentOf(session);
-  const signal = session.signal;
+  const controller = sessionControllerOf(session);
+  const doc = controller.openDocument();
+  const signal = controller.signal;
   if (!doc || signal.aborted) return [];
   const set = await formsOf(doc).setFormValues(values);
   // Form layers read the values as they are built.

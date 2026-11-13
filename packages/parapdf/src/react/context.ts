@@ -2,13 +2,17 @@
 
 import { createContext, use, useContext, useRef, useSyncExternalStore } from "react";
 import { browser } from "react-dom";
-import { type PdfSession, readsOf } from "../document/pdf-session.ts";
+import {
+  type PdfSession,
+  type PdfSessionController,
+  sessionControllerOf,
+} from "../document/pdf-session.ts";
 import { type DocumentState, OPENING } from "../document/registry.ts";
 import type { ReadableStore } from "../document/store.ts";
 import type { ViewerState } from "../view/state.ts";
 import { controllerOf, type Viewer, type ViewerController } from "../view/viewer.ts";
 
-export const SessionContext = createContext<PdfSession | null>(null);
+export const SessionContext = createContext<PdfSessionController | null>(null);
 
 /** The viewer of the nearest `<PdfView>` or `<PdfDocument>`. */
 export const ViewerContext = createContext<ViewerController | null>(null);
@@ -246,8 +250,8 @@ export function useStoreSlice<T extends object, S>(
 }
 
 /**
- * The session of the nearest `<PdfDocument>`: its document state, the
- * answer to its password request, pdf.js's document, and its secondary data.
+ * The session of the nearest `<PdfDocument>`: its document state snapshot,
+ * the answer to its password request, pdf.js's document, and its signal.
  */
 export function useSession(): PdfSession {
   const session = useContext(SessionContext);
@@ -256,29 +260,30 @@ export function useSession(): PdfSession {
 }
 
 /** `session` when given, otherwise the session of the nearest `<PdfDocument>`. */
-export function useOptionalSession(session?: PdfSession): PdfSession {
+export function useOptionalSession(session?: PdfSession): PdfSessionController {
   const contextSession = useContext(SessionContext);
-  const resolved = session ?? contextSession;
-  if (!resolved) {
+  if (session) return sessionControllerOf(session);
+  if (!contextSession) {
     throw new Error("useSession must be used inside <PdfDocument>, or pass a PdfSession");
   }
-  return resolved;
+  return contextSession;
 }
 
 /**
- * The session, for a hook that reads the document's secondary data. The
- * server opens no document, so `browser()` throws there instead of the hook
+ * The session controller, for a hook that reads the document's secondary data.
+ * The server opens no document, so `browser()` throws there instead of the hook
  * suspending on a read that never settles: the nearest Suspense boundary
  * renders its fallback, and React renders the hook's component in the
  * browser without reporting an error.
  */
-export function useSessionData(hook: string): PdfSession {
-  const session = useSession();
+export function useSessionData(hook: string): PdfSessionController {
+  const session = useContext(SessionContext);
+  if (!session) throw new Error("useSession must be used inside <PdfDocument>");
   use(browser(() => `${hook} reads the document, which only the browser opens`));
   // What settled empty while the document waited for a password is read
   // anew once it is answered, and so is everything once the provider holds
   // the document opened again: render again to read it.
-  useSelected(session.state, () => readsOf(session));
+  useSelected(session.stateStore, () => session.reads);
   return session;
 }
 
@@ -292,10 +297,11 @@ export function useSessionData(hook: string): PdfSession {
 export function useDocumentState(): DocumentState;
 export function useDocumentState<T>(selector: (state: DocumentState) => T): T;
 export function useDocumentState<T>(selector?: (state: DocumentState) => T): DocumentState | T {
-  const { state } = useSession();
+  const session = useContext(SessionContext);
+  if (!session) throw new Error("useSession must be used inside <PdfDocument>");
   // The server opened no document. A later root may hydrate after another
   // root already opened the same source; its first snapshot must match the HTML.
-  return useStoreSlice(state, () => OPENING, selector);
+  return useStoreSlice(session.stateStore, () => OPENING, selector);
 }
 
 /**

@@ -20,22 +20,26 @@ import { useSessionData } from "./context.ts";
  * fallback until the browser renders what it holds.
  */
 export function useOutline(): readonly OutlineNode[] {
-  return use(useSessionData("useOutline").outline());
+  return use(useSessionData("useOutline").read("outline", (session) => session.outline(), []));
 }
 
 /** Each page's label, such as "iv" or "A-3"; null when the document defines none. Suspends as `useOutline()` does. */
 export function usePageLabels(): readonly string[] | null {
-  return use(useSessionData("usePageLabels").pageLabels());
+  return use(
+    useSessionData("usePageLabels").read("pageLabels", (session) => session.pageLabels(), null),
+  );
 }
 
 /** The document's title, author, dates, and so on; null when they cannot be read. Suspends as `useOutline()` does. */
 export function useMetadata(): PdfMetadata | null {
-  return use(useSessionData("useMetadata").metadata());
+  return use(useSessionData("useMetadata").read("metadata", (session) => session.metadata(), null));
 }
 
 /** Files embedded in the document; empty when it has none. Suspends as `useOutline()` does. */
 export function useAttachments(): readonly PdfAttachment[] {
-  return use(useSessionData("useAttachments").attachments());
+  return use(
+    useSessionData("useAttachments").read("attachments", (session) => session.attachments(), []),
+  );
 }
 
 /**
@@ -45,7 +49,7 @@ export function useAttachments(): readonly PdfAttachment[] {
  * as `useOutline()` does.
  */
 export function useComments(): readonly PdfComment[] {
-  return use(useSessionData("useComments").comments());
+  return use(useSessionData("useComments").read("comments", (session) => session.comments(), []));
 }
 
 /**
@@ -55,7 +59,9 @@ export function useComments(): readonly PdfComment[] {
  * `useOutline()` does.
  */
 export function useInitialView(): PdfInitialView | null {
-  return use(useSessionData("useInitialView").initialView());
+  return use(
+    useSessionData("useInitialView").read("initialView", (session) => session.initialView(), null),
+  );
 }
 
 /** The layers a session's read gave, as a store: null until read. */
@@ -102,7 +108,9 @@ function layerStore(reading: Promise<LayerState | null>): LayerStore {
  * the document; empty when it has none. Suspends as `useOutline()` does.
  */
 export function useLayers(): readonly PdfLayer[] {
-  const store = layerStore(useSessionData("useLayers").layers());
+  const store = layerStore(
+    useSessionData("useLayers").read("layers", (session) => session.layers(), null),
+  );
   const layers = useSyncExternalStore(store.subscribe, store.get, store.get);
   // Read at every render, so that React finds the same promise at the same
   // place each time it renders this again; it suspends until the first read.

@@ -282,6 +282,7 @@ function Toolbar() {
     const selection = useSelection();
     void selection?.anchor;
   const proxy = session.proxy;
+  const sessionStatus: string = session.state.status;
   const snapshotPage: number = viewer.state.currentPage;
   // @ts-expect-error Viewer hides internal store
   void viewer.store;
@@ -291,6 +292,16 @@ function Toolbar() {
   void viewer.renderer;
   // @ts-expect-error Viewer hides internal session
   void viewer.session;
+  // @ts-expect-error PdfSession hides internal stateStore
+  void session.stateStore;
+  // @ts-expect-error PdfSession.state is a synchronous snapshot, not a store
+  void session.state.get;
+  // @ts-expect-error PdfSession.state is a synchronous snapshot, not a store
+  void session.state.subscribe;
+  // @ts-expect-error PdfSession removed duplicate promise methods
+  void session.outline;
+  // @ts-expect-error PdfSession removed duplicate promise methods
+  void session.layers;
   return (
     <button
       type="button"
@@ -307,7 +318,7 @@ function Toolbar() {
         void annotations.setTool("highlight");
       }}
     >
-      {currentPage + 1} / {pageCount} ({snapshotPage}, {slice.scale}, {status}, {pages}, {annotations.tool}, {String(saving)}, {progress?.done ?? 0}) {proxy?.numPages}
+      {currentPage + 1} / {pageCount} ({snapshotPage}, {slice.scale}, {status}, {sessionStatus}, {pages}, {annotations.tool}, {String(saving)}, {progress?.done ?? 0}) {proxy?.numPages}
     </button>
   );
 }
@@ -405,6 +416,7 @@ for (const removed of [
   "getViewState",
   "setViewState",
   "Viewer",
+  "PdfSession",
   "ViewerExtension",
   "Opening",
 ]) {

@@ -208,9 +208,8 @@ const newPage = async (query: string, width = 1000): Promise<Page> => {
   await page.goto(`${baseUrl}?engine=${engine}&${query}`);
   await page.waitForFunction(
     () =>
-      (
-        window as unknown as { __session?: { state: { get(): { status: string } } } }
-      ).__session?.state.get().status === "ready",
+      (window as unknown as { __session?: { state: { status: string } } }).__session?.state
+        .status === "ready",
     null,
     { timeout: 30_000 },
   );

@@ -45,6 +45,7 @@ it. A new choice gets a new record, numbered next.
 | [0036](0036-overlays-coordinates-and-preload.md) | Declarative overlays, selection popovers, PDF coordinates, and route preloading | adopted |
 | [0037](0037-virtualized-thumbnails-and-outline.md) | Window-virtualized thumbnails and headless document outline | adopted |
 | [0038](0038-react-viewer-surface.md) | Narrow React-only Viewer interface and settled onViewStateChange | adopted |
+| [0039](0039-react-pdf-session.md) | Narrow React-only PdfSession interface and drop duplicate promise readers | adopted |
 
 ## Template
 

@@ -108,20 +108,24 @@ search and `getText()`.
 - A session owns an `AbortController`: everything started for it (drawing,
   text, searches, background passes, the editor, form scripts) takes its
   signal, and closing aborts it all. No generation counters.
-- Applications see a `PdfSession` (`pdf-session.ts`), one per
-  `PdfDocument`: its source, state, `submitPassword()`, pdf.js's `proxy`
-  once ready, a `signal`, and promises of the document's data, each
-  settling empty when the read or the document fails and while the document
-  waits for a password, to be read anew once it is answered. It opens,
-  closes, and releases nothing itself: `PdfDocument` starts its session as
-  it renders, and holds and returns its lease. It follows the registry's
-  session its render started and then the one its provider holds, which is
-  another once the first closed. `PdfDocument`'s `onOpenAttachment` sets how
-  embedded files opened from the session are handled, while `PdfSession`
-  itself stays free of DOM imports so tree-shaking drops unused document
-  actions. `DocumentSession` also publishes content changes (`onContentChange`,
-  `invalidateContent()`) when session-scoped mutations (`setFormValues()`,
-  `setLayerVisible()`) update shared document state across viewers.
+- Applications see a narrow `PdfSession` interface (`pdf-session.ts`), one per
+  `PdfDocument`: its `source`, synchronous `state` (`DocumentState` snapshot),
+  `submitPassword()`, pdf.js's `proxy` once ready, and its `signal`, while
+  `react/` and `features/` resolve the backing `PdfSessionController` via
+  `sessionControllerOf(session)` (decision 0039). `PdfSessionController` holds
+  the reactive `stateStore` (`useDocumentState()`) and `read()`, whose promises
+  for `useOutline()` and the other Suspense hooks settle empty when the read or
+  the document fails and while the document waits for a password, to be read
+  anew once it is answered. It opens, closes, and releases nothing itself:
+  `PdfDocument` starts its session as it renders, and holds and returns its
+  lease. It follows the registry's session its render started and then the one
+  its provider holds, which is another once the first closed. `PdfDocument`'s
+  `onOpenAttachment` sets how embedded files opened from the session are
+  handled, while `PdfSessionController` stays free of DOM imports so
+  tree-shaking drops unused document actions. `DocumentSession` also publishes
+  content changes (`onContentChange`, `invalidateContent()`) when
+  session-scoped mutations (`setFormValues()`, `setLayerVisible()`) update
+  shared document state across viewers.
 
 Viewers that edit annotations share the session's one annotation storage,
 each with an editor of its own under ids unique to the session. Saving the

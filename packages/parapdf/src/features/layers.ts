@@ -1,4 +1,4 @@
-import { openDocumentOf, type PdfSession } from "../document/pdf-session.ts";
+import { type PdfSession, sessionControllerOf } from "../document/pdf-session.ts";
 
 /**
  * Show or hide one of the layers of `session`'s document (its `layers`), in
@@ -6,8 +6,9 @@ import { openDocumentOf, type PdfSession } from "../document/pdf-session.ts";
  * hides the others. Pages keep their pixels until they are drawn again.
  */
 export function setLayerVisible(session: PdfSession, id: string, visible: boolean): void {
-  const doc = openDocumentOf(session);
-  const work = session.signal;
+  const controller = sessionControllerOf(session);
+  const doc = controller.openDocument();
+  const work = controller.signal;
   if (!doc || work.aborted) return;
   if (doc.loadedLayers) {
     doc.loadedLayers.setVisible(id, visible);

@@ -747,10 +747,10 @@ try {
       equal.page.evaluate(() => {
         const demo = window as {
           __viewer?: { store: { get(): { rotation: number } } };
-          __session?: { state: { get(): { status: string } } };
+          __session?: { state: { status: string } };
         };
         const state = demo.__viewer?.store.get();
-        const status = demo.__session?.state.get().status;
+        const status = demo.__session?.state.status;
         return state ? { rotation: state.rotation, status } : null;
       });
     await equal.page.evaluate(() => {

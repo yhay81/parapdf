@@ -4,7 +4,7 @@
  * `window.__annotations`, `getSelection`, `showWith`, `attachViewport`): not
  * part of the package's public surface, which is React-first.
  */
-import { connectSession, PdfSession } from "../../../packages/parapdf/src/document/pdf-session.ts";
+import { PdfSessionController } from "../../../packages/parapdf/src/document/pdf-session.ts";
 import type { PdfjsLoader } from "../../../packages/parapdf/src/document/registry.ts";
 import type { PdfSource } from "../../../packages/parapdf/src/document/session.ts";
 import type { AnnotationEditing } from "../../../packages/parapdf/src/features/annotations.ts";
@@ -41,8 +41,8 @@ export function showWith(
   source: PdfSource,
   pdfjs: PdfjsLoader,
 ): () => void {
-  const session = new PdfSession(source, { pdfjs });
-  const close = connectSession(session);
+  const session = new PdfSessionController(source, { pdfjs });
+  const close = session.connect();
   viewer.open(session);
   return close;
 }

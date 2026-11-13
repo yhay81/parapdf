@@ -1,15 +1,7 @@
 "use client";
 
 import { type ReactNode, useEffect, useLayoutEffect, useState } from "react";
-import {
-  type AttachmentHandler,
-  connectSession,
-  PdfSession,
-  setFragment,
-  setOpenAttachment,
-  setPasswordPrompt,
-  startSession,
-} from "../document/pdf-session.ts";
+import { type AttachmentHandler, PdfSessionController } from "../document/pdf-session.ts";
 import { sourceKey, splitFragment } from "../document/registry.ts";
 import type { PdfSource } from "../document/session.ts";
 import { preloadPdfjs } from "../pdfjs/loader.ts";
@@ -54,7 +46,7 @@ export interface PdfDocumentProps {
 interface Held {
   readonly key: unknown;
   readonly password: string | undefined;
-  readonly session: PdfSession;
+  readonly session: PdfSessionController;
 }
 
 /**
@@ -86,7 +78,7 @@ export function PdfDocument({
   const create = (): Held => ({
     key,
     password,
-    session: new PdfSession(resolved, { passwordPrompt }),
+    session: new PdfSessionController(resolved, { passwordPrompt }),
   });
   const [held, setHeld] = useState(create);
   let current = held;
@@ -109,22 +101,22 @@ export function PdfDocument({
   // like) arrives while a transition or a Suspense boundary above the
   // provider still waits for them, and neither mounts the provider before
   // they do. The server opens no document.
-  if (typeof window !== "undefined") startSession(session);
+  if (typeof window !== "undefined") session.start();
   // The session is held while the provider is mounted and shown. StrictMode's
   // mount-unmount-mount cycle and quick remounts reuse the open document
   // instead of opening it again, and a provider React rendered but never
   // mounted leaves its document to close (document/registry.ts).
-  useEffect(() => connectSession(session), [session]);
+  useEffect(() => session.connect(), [session]);
   useEffect(
     () => (externalViewer || !ownViewer ? undefined : ownViewer.hold()),
     [externalViewer, ownViewer],
   );
   // The prompt changes what the session shows, not the document.
-  useEffect(() => setPasswordPrompt(session, passwordPrompt), [session, passwordPrompt]);
-  useLayoutEffect(() => setOpenAttachment(session, onOpenAttachment), [session, onOpenAttachment]);
+  useEffect(() => session.setPasswordPrompt(passwordPrompt), [session, passwordPrompt]);
+  useLayoutEffect(() => session.setOpenAttachment(onOpenAttachment), [session, onOpenAttachment]);
   // A new fragment moves the viewers where it points, as a link would.
   const fragment = "url" in resolved ? splitFragment(resolved.url)[1] : "";
-  useEffect(() => setFragment(session, fragment), [session, fragment]);
+  useEffect(() => session.setFragment(fragment), [session, fragment]);
   return (
     <SessionContext value={session}>
       <ViewerContext value={activeViewer}>{children}</ViewerContext>

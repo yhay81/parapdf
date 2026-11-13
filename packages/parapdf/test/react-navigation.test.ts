@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { createElement, Suspense } from "react";
 import { renderToString } from "react-dom/server";
 import { prerender } from "react-dom/static";
-import { connectSession, PdfSession } from "../src/document/pdf-session.ts";
+import { PdfSessionController } from "../src/document/pdf-session.ts";
 import { SessionContext, ViewerContext } from "../src/react/context.ts";
 import { OutlineTree, outlineItemStyle, PdfOutline } from "../src/react/outline.ts";
 import {
@@ -133,9 +133,12 @@ describe("createPageLabelsStore", () => {
       },
     });
     const { loader: pdfjs } = fakePdfjs(async () => doc.proxy);
-    const session = new PdfSession({ url: "https://example.test/broken-labels.pdf" }, { pdfjs });
+    const session = new PdfSessionController(
+      { url: "https://example.test/broken-labels.pdf" },
+      { pdfjs },
+    );
     const viewer = new ViewerController();
-    const releaseSession = connectSession(session);
+    const releaseSession = session.connect();
     const releaseViewer = viewer.hold();
     viewer.open(session);
     const store = createPageLabelsStore(viewer, null);
@@ -159,9 +162,9 @@ describe("createPageLabelsStore", () => {
       },
     });
     const { loader: pdfjs } = fakePdfjs(async () => doc.proxy);
-    const session = new PdfSession({ url: "https://example.test/labels.pdf" }, { pdfjs });
+    const session = new PdfSessionController({ url: "https://example.test/labels.pdf" }, { pdfjs });
     const viewer = new ViewerController();
-    const releaseSession = connectSession(session);
+    const releaseSession = session.connect();
     const releaseViewer = viewer.hold();
     viewer.open(session);
 
@@ -216,7 +219,7 @@ describe("viewer.externalLinks and PdfOutline", () => {
     const { prelude } = await prerender(
       createElement(
         SessionContext,
-        { value: new PdfSession({ url: "https://example.test/outline.pdf" }) },
+        { value: new PdfSessionController({ url: "https://example.test/outline.pdf" }) },
         createElement(
           ViewerContext,
           { value: new ViewerController() },

@@ -5,7 +5,7 @@
  * is ParaPDF's own, sessions included; only pdf.js is replaced.
  */
 import type * as Pdfjs from "pdfjs-dist";
-import { connectSession, PdfSession } from "../src/document/pdf-session.ts";
+import { PdfSessionController } from "../src/document/pdf-session.ts";
 import type { PdfjsLoader } from "../src/document/registry.ts";
 import { DocumentSession, type PageSize, type PdfSource } from "../src/document/session.ts";
 import type { LoadedPdfjs } from "../src/pdfjs/loader.ts";
@@ -438,9 +438,9 @@ export function show(
   source: PdfSource,
   loader: PdfjsLoader,
   options: { passwordPrompt?: boolean } = {},
-): { session: PdfSession; close: () => void } {
-  const session = new PdfSession(source, { ...options, pdfjs: loader });
-  const close = connectSession(session);
+): { session: PdfSessionController; close: () => void } {
+  const session = new PdfSessionController(source, { ...options, pdfjs: loader });
+  const close = session.connect();
   viewer.open(session);
   return { session, close };
 }

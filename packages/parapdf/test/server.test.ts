@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createElement, Suspense } from "react";
 import { prerender } from "react-dom/static";
-import { PdfSession } from "../src/document/pdf-session.ts";
+import { PdfSessionController } from "../src/document/pdf-session.ts";
 import { SessionContext } from "../src/react/context.ts";
 import {
   useAttachments,
@@ -41,7 +41,7 @@ describe("server rendering", () => {
       const { prelude } = await prerender(
         createElement(
           SessionContext,
-          { value: new PdfSession({ url: "/manual.pdf" }) },
+          { value: new PdfSessionController({ url: "/manual.pdf" }) },
           createElement(
             Suspense,
             { fallback: createElement("p", null, "reading") },
