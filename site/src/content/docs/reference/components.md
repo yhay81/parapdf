@@ -59,8 +59,8 @@ remount (see [Options](/reference/options/)).
 | `className`, `style` | For the scroll container. |
 | `label` | Its accessible name, "PDF document" by default. |
 | `pageLabel` | Each page's accessible name, `(pageNumber, pageCount) => string`, "Page 3 of 12" by default. |
-| `renderOverlay` | `(pageIndex) => ReactNode`, drawn over each mounted page through a portal into a layer above its drawing and text, and placed with `PdfPageRect` (see [Text, selections, and overlays](/guides/text/)). |
-| `children` | Feature components (`PdfForms`, `PdfAnnotationEditor`, `PdfAutoLinks`, `PdfPermissions`) and overlays mounted for this viewer. |
+| `onPageClick` | `(point: PdfPagePoint, event) => void`, called when the reader clicks a shown page (ignoring drags, non-collapsed text selections, interactive controls, and claimed pointers) with `{ pageIndex, x, y }` in unturned PDF points (see [Text, selections, and overlays](/guides/text/)). |
+| `children` | Feature components (`PdfForms`, `PdfAnnotationEditor`, `PdfAutoLinks`, `PdfPermissions`), overlays (`PdfPageOverlay`, `PdfPageOverlays`), and selection popovers (`PdfSelectionPopover`) mounted for this viewer. |
 
 ### `PdfForms`
 
@@ -138,18 +138,62 @@ link labelled with the page, as `PdfThumbnails` does.
 | `width` | Width in CSS pixels; the height follows the page's shape as the view turns it. |
 | `className`, `style` | For the canvas. |
 
+### `PdfPageOverlay`
+
+Renders `children` through a portal into page `page`'s overlay layer above its
+canvas and text while that page is in the viewer's mounted window, and unmounts
+them cleanly while off screen (see [Text, selections, and overlays](/guides/text/)).
+Because it takes plain `ReactNode` `children` rather than a render callback,
+Server Components can pass streamed JSX directly through it.
+
+| Prop | |
+|---|---|
+| `page` | Zero-based page index this overlay renders onto while mounted. |
+| `viewer` | The viewer whose page hosts the overlay; by default, `useViewer()`. |
+| `children` | Overlay elements positioned with `PdfPageRect`. |
+
+### `PdfPageOverlays`
+
+Renders dynamic overlays across every mounted page of a viewer, evaluating
+`children(pageIndex)` inside each page's memoized subtree so scrolling the
+mounted window never re-evaluates overlays on pages that remain mounted.
+Overlays stay visible under StrictMode and Activity; changing `viewer` moves
+only that component's overlays and preserves others already in the target viewer.
+
+| Prop | |
+|---|---|
+| `viewer` | The viewer whose mounted pages render these overlays; by default, `useViewer()`. |
+| `children` | `(pageIndex: number) => ReactNode`, placed with `PdfPageRect`. |
+
 ### `PdfPageRect`
 
-Positions its children over the page of the overlay it is rendered in,
-inside `renderOverlay`. Coordinates become percentages of the page box, so
-zooming resizes the overlay through layout alone and never renders it
+Positions its children over the page of the `PdfPageOverlay` or
+`PdfPageOverlays` it is rendered in. Coordinates become percentages of the page
+box, so zooming resizes the overlay through layout alone and never renders it
 again. A point is 1/72 inch, including on pages that set a different PDF
 user-space unit (`/UserUnit`). Rendered anywhere else, it throws.
 
 | Prop | |
 |---|---|
 | `x`, `y`, `width`, `height` | The rectangle in PDF points from the page's top-left corner, unturned by the view. |
-| `style`, `children` | |
+| `ref` | Receives the positioned `HTMLDivElement`, for anchoring popovers or tooltips. |
+| `className`, `style`, `children` | |
+
+### `PdfSelectionPopover`
+
+Portals floating selection UI (such as a copy or highlight toolbar) to
+`document.body` outside page `contain: "strict"` clipping, following scroll,
+zoom previews, layout changes, and rotation imperatively without per-frame React
+state commits, and keeping the browser's text selection intact when clicking
+non-editable toolbar buttons inside it.
+
+| Prop | |
+|---|---|
+| `viewer` | The viewer whose selection anchors the popover; by default, `useViewer()`. |
+| `placement` | Preferred side, `"top"` (default) or `"bottom"`; flips automatically when viewport space is tighter on that side. |
+| `offset` | Distance in CSS pixels from the selection, `8` by default. |
+| `className`, `style` | For the popover container. |
+| `children` | `(selection: PdfSelection) => ReactNode`; returning `null`, `undefined`, or `false` hides the popover. |
 
 ## Hooks
 
@@ -179,7 +223,7 @@ outside them when given one; those that take none read the nearest
 | `useHistory(viewer?)`, `useHistory(selector, viewer?)` | Referentially stable `back()` and `forward()` with `canGoBack` and `canGoForward` for the viewer's link and outline jumps, tracking read fields or comparing `selector`'s result shallowly (see [Navigation](/guides/navigation/)). |
 | `useAnnotations(viewer?)` | The annotation tool, state, and styles with the methods that change them (`AnnotationControls`). Always non-null (`state` and `styles` are null until `PdfAnnotationEditor` starts editing), tracking read fields so components reading only methods never re-render on annotation changes (see [Annotations](/guides/annotations/)). |
 | `useFormChange(listener, viewer?)` | Nothing: calls `listener` with `{ name, value }` for each value the reader enters into a form field, as they type. Needs `PdfForms`. |
-| `useSelection(viewer?)` | The selection in the viewer, its text and its rectangles in PDF points, or null; it follows a drag at most once a frame (see [Text, selections, and overlays](/guides/text/)). |
+| `useSelection(viewer?)` | The selection in the viewer (`text`, `pages`, `start`, `end`, and a virtual `anchor` whose `getBoundingClientRect()` follows scroll, zoom, and rotation), or null; it follows a drag at most once a frame (see [Text, selections, and overlays](/guides/text/)). |
 
 The seven hooks of the document's data suspend until it is read: render
 them under a `<Suspense>` boundary of your own, apart from the viewer. A
@@ -220,7 +264,8 @@ tree-shaken out of your bundle.
 | Export | |
 |---|---|
 | `configurePdfjs(config)` | Changes how pdf.js loads, before the first `PdfDocument` renders (see [Configuring pdf.js](/setup/pdfjs/)). |
-| `preloadPdfjs()` | Starts loading pdf.js and its worker early. |
+| `preloadDocument(source)` | Starts loading pdf.js, preloading `source`'s URL (outside WebKit and header-carrying requests), and opening `source` in the shared document registry ahead of `PdfDocument` mounting (for example on route hover). |
+| `preloadPdfjs()` | Starts loading pdf.js and its worker early without opening a document. |
 | `pdfjsVersion` | The version of pdf.js the package ships. |
 | `legacyBuild` | From `parapdf/legacy`: pdf.js's legacy build, for `configurePdfjs({ build })`. |
 

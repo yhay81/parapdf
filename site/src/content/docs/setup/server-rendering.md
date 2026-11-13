@@ -14,12 +14,16 @@ suspends.
 
 ```tsx
 // app/manual/page.tsx: a Server Component.
-import { PdfDocument, PdfViewer } from "parapdf";
+import { PdfDocument, PdfPageOverlay, PdfPageRect, PdfViewer } from "parapdf";
 
 export default function Page() {
   return (
     <PdfDocument source="/manual.pdf">
-      <PdfViewer style={{ height: "100vh" }} />
+      <PdfViewer style={{ height: "100vh" }}>
+        <PdfPageOverlay page={0}>
+          <PdfPageRect x={72} y={36} width={200} height={24} />
+        </PdfPageOverlay>
+      </PdfViewer>
     </PdfDocument>
   );
 }

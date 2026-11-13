@@ -33,7 +33,7 @@ live.
 
 ## Components on the page
 
-Because each mounted page is part of your React tree, `renderOverlay` portals
+Because each mounted page is part of your React tree, `PdfPageOverlays` portals
 ordinary React components into a layer of that page, and `<PdfPageRect>`
 positions them in PDF points from the page's top-left corner. Coordinates
 become CSS percentages of the page box: zooming and rotating resize and move
@@ -50,6 +50,7 @@ cards stay locked to the text.
 import {
   PdfDocument,
   PdfPageRect,
+  PdfPageOverlays,
   PdfViewer,
   useSelection,
   useCreateViewer,
@@ -69,7 +70,8 @@ function ReviewWorkspace() {
       <PdfViewer
         viewer={viewer}
         style={{ height: "85vh" }}
-        renderOverlay={(pageIndex) =>
+      >
+        <PdfPageOverlays>{(pageIndex) =>
           pageIndex === 1 ? (
             <PdfPageRect x={123} y={300} width={348} height={39}>
               <button
@@ -80,8 +82,8 @@ function ReviewWorkspace() {
               </button>
             </PdfPageRect>
           ) : null
-        }
-      />
+        }</PdfPageOverlays>
+      </PdfViewer>
     </PdfDocument>
   );
 }
@@ -251,7 +253,7 @@ re-renders will stall scrolling. ParaPDF keeps React out of the hot path:
   through a page commits React zero times; crossing into a new page commits
   once.
 - **Imperative canvases and kept pixels**: React renders only each mounted
-  page's `<section>` host and your `renderOverlay` portal. Canvases are drawn
+  page's `<section>` host and your overlay portal. Canvases are drawn
   by the renderer, bounded by explicit pixel budgets (`maxCanvasPixels`), and
   kept across unmounts (`maxKeptPixels`) so pages you scroll back to show at
   once without redrawing.

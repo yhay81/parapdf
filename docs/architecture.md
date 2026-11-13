@@ -303,8 +303,22 @@ the DOM declares `"use client"`.
   0034). Cleanup waits until the commit finishes so a sibling editor can
   mount after the viewport and reclaim its kept annotations. `useAnnotations()` returns a non-null, getter-tracked
   `AnnotationControls` object whose action methods stay referentially stable.
-  `renderOverlay` renders through a
-  portal into the page's host; React renders nothing else there.
+  `PdfPageOverlay` (single-page, RSC-compatible plain `children`) and
+  `PdfPageOverlays` (evaluated inside each page's `memo(PdfPage)` so mounted
+  pages stay memoized as the window shifts) render through portals into a
+  lazily created `.parapdf-overlay-layer` in the page's host; React renders
+  nothing else there. Dynamic portals retain their render-time container through
+  effect replay, and renderer identities are unique across viewers so changing
+  an overlay's viewer cannot overwrite another overlay (decision 0036). `PdfViewer`'s `onPageClick` and
+  `viewer.pointAt()` map client coordinates back to unturned PDF points
+  (`PdfPageRect`'s coordinates) across rotations, zoom previews, and
+  `/UserUnit` pages. `PdfSelectionPopover` portals floating selection UI to
+  `document.body` outside page `contain: "strict"` clipping and tracks scroll
+  and zoom previews imperatively without per-frame React state commits;
+  `useSelection()` also provides a virtual `selection.anchor` for external
+  popover libraries. `preloadDocument(source)` starts loading pdf.js,
+  preloading `source`'s URL, and opening `source` in the shared registry ahead
+  of `PdfDocument` mounting.
 - `PdfThumbnails` and `PdfThumbnail` draw the viewer's document at a lower
   priority; `PdfPageRect` places content in PDF points.
 - `useViewState()`, `useDocumentState()`, `useSearch()`, and `useHistory()`

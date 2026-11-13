@@ -3,6 +3,7 @@ import {
   type PageColors,
   PdfDocument,
   PdfForms,
+  PdfPageOverlays,
   PdfPageRect,
   type PdfRect,
   PdfView,
@@ -284,108 +285,113 @@ export function CitationsShowcase() {
             defaultPage={1}
             className="example-viewport"
             label="LaTeX2e for authors with React review overlays"
-            renderOverlay={(pageIndex) => {
-              const pageNotes = notes.flatMap((note) => {
-                const match = note.pages.find((entry) => entry.pageIndex === pageIndex);
-                return match ? [{ note, rects: match.rects, isLead: note.pages[0] === match }] : [];
-              });
-              const draftRects =
-                draft?.pages.find((entry) => entry.pageIndex === pageIndex)?.rects ?? [];
-              if (pageNotes.length === 0 && draftRects.length === 0) return null;
-              return (
-                <>
-                  {draftRects.map((rect, index) => (
-                    <PdfPageRect
-                      // biome-ignore lint/suspicious/noArrayIndexKey: selection rectangles are transient per drag.
-                      key={`draft-${index}`}
-                      x={rect.x}
-                      y={rect.y}
-                      width={rect.width}
-                      height={rect.height}
-                    >
-                      <span className="pdf-highlight pdf-highlight-draft" />
-                    </PdfPageRect>
-                  ))}
-                  {pageNotes.map(({ note, rects, isLead }) => {
-                    const first = rects[0];
-                    const last = rects[rects.length - 1];
-                    const active = note.id === activeId;
-                    const cardBelow = (last?.y ?? 0) + (last?.height ?? 0) < 690;
-                    return (
-                      <div key={note.id}>
-                        {rects.map((rect, index) => (
-                          <PdfPageRect
-                            // biome-ignore lint/suspicious/noArrayIndexKey: rectangles of a pinned note never reorder.
-                            key={index}
-                            x={rect.x}
-                            y={rect.y}
-                            width={rect.width}
-                            height={rect.height}
-                          >
-                            <span
-                              className="pdf-highlight"
-                              data-active={active || undefined}
-                              data-resolved={note.resolved || undefined}
-                            />
-                          </PdfPageRect>
-                        ))}
-                        {isLead && first ? (
-                          <PdfPageRect
-                            x={Math.max(12, first.x - 30)}
-                            y={Math.max(8, first.y - 2)}
-                            width={24}
-                            height={18}
-                          >
-                            <button
-                              type="button"
-                              className="pdf-pin"
-                              data-resolved={note.resolved || undefined}
-                              aria-pressed={active}
-                              aria-label={`#${note.id}: ${note.comment}`}
-                              onClick={() => setActiveId(active ? null : note.id)}
+          >
+            <PdfPageOverlays>
+              {(pageIndex) => {
+                const pageNotes = notes.flatMap((note) => {
+                  const match = note.pages.find((entry) => entry.pageIndex === pageIndex);
+                  return match
+                    ? [{ note, rects: match.rects, isLead: note.pages[0] === match }]
+                    : [];
+                });
+                const draftRects =
+                  draft?.pages.find((entry) => entry.pageIndex === pageIndex)?.rects ?? [];
+                if (pageNotes.length === 0 && draftRects.length === 0) return null;
+                return (
+                  <>
+                    {draftRects.map((rect, index) => (
+                      <PdfPageRect
+                        // biome-ignore lint/suspicious/noArrayIndexKey: selection rectangles are transient per drag.
+                        key={`draft-${index}`}
+                        x={rect.x}
+                        y={rect.y}
+                        width={rect.width}
+                        height={rect.height}
+                      >
+                        <span className="pdf-highlight pdf-highlight-draft" />
+                      </PdfPageRect>
+                    ))}
+                    {pageNotes.map(({ note, rects, isLead }) => {
+                      const first = rects[0];
+                      const last = rects[rects.length - 1];
+                      const active = note.id === activeId;
+                      const cardBelow = (last?.y ?? 0) + (last?.height ?? 0) < 690;
+                      return (
+                        <div key={note.id}>
+                          {rects.map((rect, index) => (
+                            <PdfPageRect
+                              // biome-ignore lint/suspicious/noArrayIndexKey: rectangles of a pinned note never reorder.
+                              key={index}
+                              x={rect.x}
+                              y={rect.y}
+                              width={rect.width}
+                              height={rect.height}
                             >
-                              #{note.id}
-                            </button>
-                          </PdfPageRect>
-                        ) : null}
-                        {isLead && active && first && last ? (
-                          <PdfPageRect
-                            x={Math.max(24, Math.min(first.x, 305))}
-                            y={cardBelow ? last.y + last.height + 6 : Math.max(12, first.y - 76)}
-                            width={260}
-                            height={64}
-                          >
-                            <div className="pdf-note-card">
-                              <p className="pdf-note-card-text">
-                                <strong>#{note.id}</strong> {note.comment}
-                              </p>
-                              <div className="pdf-note-card-actions">
-                                <button
-                                  type="button"
-                                  aria-pressed={note.resolved}
-                                  aria-label={`Resolved, note ${note.id}`}
-                                  onClick={() => toggleResolved(note.id)}
-                                >
-                                  Resolved
-                                </button>
-                                <button
-                                  type="button"
-                                  aria-label={`Hide card, note ${note.id}`}
-                                  onClick={() => setActiveId(null)}
-                                >
-                                  Hide card
-                                </button>
+                              <span
+                                className="pdf-highlight"
+                                data-active={active || undefined}
+                                data-resolved={note.resolved || undefined}
+                              />
+                            </PdfPageRect>
+                          ))}
+                          {isLead && first ? (
+                            <PdfPageRect
+                              x={Math.max(12, first.x - 30)}
+                              y={Math.max(8, first.y - 2)}
+                              width={24}
+                              height={18}
+                            >
+                              <button
+                                type="button"
+                                className="pdf-pin"
+                                data-resolved={note.resolved || undefined}
+                                aria-pressed={active}
+                                aria-label={`#${note.id}: ${note.comment}`}
+                                onClick={() => setActiveId(active ? null : note.id)}
+                              >
+                                #{note.id}
+                              </button>
+                            </PdfPageRect>
+                          ) : null}
+                          {isLead && active && first && last ? (
+                            <PdfPageRect
+                              x={Math.max(24, Math.min(first.x, 305))}
+                              y={cardBelow ? last.y + last.height + 6 : Math.max(12, first.y - 76)}
+                              width={260}
+                              height={64}
+                            >
+                              <div className="pdf-note-card">
+                                <p className="pdf-note-card-text">
+                                  <strong>#{note.id}</strong> {note.comment}
+                                </p>
+                                <div className="pdf-note-card-actions">
+                                  <button
+                                    type="button"
+                                    aria-pressed={note.resolved}
+                                    aria-label={`Resolved, note ${note.id}`}
+                                    onClick={() => toggleResolved(note.id)}
+                                  >
+                                    Resolved
+                                  </button>
+                                  <button
+                                    type="button"
+                                    aria-label={`Hide card, note ${note.id}`}
+                                    onClick={() => setActiveId(null)}
+                                  >
+                                    Hide card
+                                  </button>
+                                </div>
                               </div>
-                            </div>
-                          </PdfPageRect>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                </>
-              );
-            }}
-          />
+                            </PdfPageRect>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </>
+                );
+              }}
+            </PdfPageOverlays>
+          </PdfViewer>
         </div>
       </PdfDocument>
       <SampleNote
@@ -732,20 +738,22 @@ function FormSyncContent() {
           viewer={viewer}
           className="example-viewport"
           label="Form 1040 synced with React state"
-          renderOverlay={(pageIndex) =>
-            pageIndex === 0 && zipInvalid ? (
-              <>
-                <PdfPageRect x={395} y={164} width={74} height={18}>
-                  <span className="pdf-field-ring" />
-                </PdfPageRect>
-                <PdfPageRect x={395} y={162} width={74} height={1}>
-                  <span className="pdf-field-flag">5-digit ZIP needed</span>
-                </PdfPageRect>
-              </>
-            ) : null
-          }
         >
           <PdfForms />
+          <PdfPageOverlays>
+            {(pageIndex) =>
+              pageIndex === 0 && zipInvalid ? (
+                <>
+                  <PdfPageRect x={395} y={164} width={74} height={18}>
+                    <span className="pdf-field-ring" />
+                  </PdfPageRect>
+                  <PdfPageRect x={395} y={162} width={74} height={1}>
+                    <span className="pdf-field-flag">5-digit ZIP needed</span>
+                  </PdfPageRect>
+                </>
+              ) : null
+            }
+          </PdfPageOverlays>
         </PdfViewer>
       </div>
       <SampleNote

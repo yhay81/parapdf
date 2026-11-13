@@ -34,7 +34,7 @@ export { type Permission, permits } from "./features/permissions.ts";
 export { type PrintOptions, print } from "./features/print/index.ts";
 export type { SearchState } from "./features/search/index.ts";
 export type { SearchMatch, SearchOptions, TextPosition } from "./features/search/text-search.ts";
-export type { PdfRect, PdfSelection } from "./features/selection.ts";
+export type { PdfRect, PdfSelection, SelectionAnchor } from "./features/selection.ts";
 export {
   type DocumentText,
   getText,
@@ -79,6 +79,12 @@ export {
 export { useFormChange, useFormFields } from "./react/forms.ts";
 export { type HistoryControls, useHistory } from "./react/history.ts";
 export {
+  PdfPageOverlay,
+  type PdfPageOverlayProps,
+  PdfPageOverlays,
+  type PdfPageOverlaysProps,
+} from "./react/overlays.ts";
+export {
   PdfAnnotationEditor,
   type PdfAnnotationEditorProps,
 } from "./react/PdfAnnotationEditor.tsx";
@@ -87,10 +93,16 @@ export { PdfDocument, type PdfDocumentProps } from "./react/PdfDocument.tsx";
 export { PdfForms, type PdfFormsProps } from "./react/PdfForms.tsx";
 export { PdfPageRect, type PdfPageRectProps } from "./react/PdfPageRect.tsx";
 export { PdfPermissions, type PdfPermissionsProps } from "./react/PdfPermissions.tsx";
+export {
+  PdfSelectionPopover,
+  type PdfSelectionPopoverProps,
+  type PopoverPlacement,
+} from "./react/PdfSelectionPopover.tsx";
 export { PdfThumbnail, type PdfThumbnailProps } from "./react/PdfThumbnail.tsx";
 export { PdfThumbnails, type PdfThumbnailsProps } from "./react/PdfThumbnails.tsx";
 export { PdfView, type PdfViewProps } from "./react/PdfView.tsx";
 export { PdfViewer, type PdfViewerProps, type Zoom } from "./react/PdfViewer.tsx";
+export { preloadDocument } from "./react/preload.ts";
 export { type PrintControls, type PrintProgress, usePrint } from "./react/print.ts";
 export { type SaveControls, useSave } from "./react/save.ts";
 export { type SearchControls, useSearch } from "./react/search.ts";
@@ -98,7 +110,13 @@ export { useSelection } from "./react/selection.ts";
 export { useCreateViewer, useViewer } from "./react/viewer.ts";
 export type { RenderStats } from "./render/renderer.ts";
 export type { ViewerExtension } from "./view/extensions.ts";
-export type { Direction, Layout, ScrollMode, SpreadMode } from "./view/layout.ts";
+export type {
+  Direction,
+  Layout,
+  PdfPagePoint,
+  ScrollMode,
+  SpreadMode,
+} from "./view/layout.ts";
 export type { ViewerPosition } from "./view/navigation.ts";
 export type { Opening, ShownView } from "./view/options.ts";
 export type { FitMode, PointerTool, ViewerState, ZoomMode } from "./view/state.ts";

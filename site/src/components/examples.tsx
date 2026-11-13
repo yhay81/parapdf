@@ -5,8 +5,10 @@ import {
   PdfAnnotationEditor,
   PdfDocument,
   PdfForms,
+  PdfPageOverlays,
   PdfPageRect,
   type PdfRect,
+  PdfSelectionPopover,
   PdfThumbnails,
   PdfViewer,
   type PdfViewerProps,
@@ -40,7 +42,6 @@ function Example({
   toolbar,
   side,
   note,
-  overlay,
 }: {
   file: string;
   viewerProps?: PdfViewerProps;
@@ -48,7 +49,6 @@ function Example({
   toolbar?: ReactNode;
   side?: ReactNode;
   note?: ReactNode;
-  overlay?: (pageIndex: number) => ReactNode;
 }) {
   const sample = samples.find((candidate) => candidate.file === file);
   return (
@@ -63,7 +63,7 @@ function Example({
         ) : null}
         <div className="example-body">
           {side}
-          <PdfViewer {...viewerProps} className="example-viewport" renderOverlay={overlay}>
+          <PdfViewer {...viewerProps} className="example-viewport">
             {viewerChildren}
           </PdfViewer>
         </div>
@@ -257,36 +257,66 @@ function SelectionTools({
 /** Selections kept as overlays, and the text of the whole document. */
 export function TextExample() {
   const [kept, setKept] = useState<readonly { pageIndex: number; rect: PdfRect }[]>([]);
+  const keepRects = (rects: readonly { pageIndex: number; rect: PdfRect }[]) =>
+    setKept((previous) => [...previous, ...rects]);
   return (
     <Example
       file="usrguide.pdf"
-      toolbar={
-        <SelectionTools
-          onKeep={(rects) => setKept((previous) => [...previous, ...rects])}
-          onClear={() => setKept([])}
-        />
-      }
-      overlay={(pageIndex) =>
-        kept
-          .filter((entry) => entry.pageIndex === pageIndex)
-          .map(({ rect }, index) => (
-            <PdfPageRect
-              // biome-ignore lint/suspicious/noArrayIndexKey: kept rectangles never move.
-              key={index}
-              x={rect.x}
-              y={rect.y}
-              width={rect.width}
-              height={rect.height}
-            >
-              <span
+      toolbar={<SelectionTools onKeep={keepRects} onClear={() => setKept([])} />}
+      viewerChildren={
+        <>
+          <PdfPageOverlays>
+            {(pageIndex) =>
+              kept
+                .filter((entry) => entry.pageIndex === pageIndex)
+                .map(({ rect }, index) => (
+                  <PdfPageRect
+                    // biome-ignore lint/suspicious/noArrayIndexKey: kept rectangles never move.
+                    key={index}
+                    x={rect.x}
+                    y={rect.y}
+                    width={rect.width}
+                    height={rect.height}
+                  >
+                    <span
+                      style={{
+                        display: "block",
+                        height: "100%",
+                        background: "rgb(92 118 255 / 0.35)",
+                      }}
+                    />
+                  </PdfPageRect>
+                ))
+            }
+          </PdfPageOverlays>
+          <PdfSelectionPopover>
+            {(selection) => (
+              <button
+                type="button"
                 style={{
-                  display: "block",
-                  height: "100%",
-                  background: "rgb(92 118 255 / 0.35)",
+                  padding: "4px 8px",
+                  borderRadius: 6,
+                  border: "1px solid rgb(0 0 0 / 0.2)",
+                  background: "Canvas",
+                  color: "CanvasText",
+                  boxShadow: "0 2px 8px rgb(0 0 0 / 0.2)",
+                  cursor: "pointer",
+                  fontSize: 12,
                 }}
-              />
-            </PdfPageRect>
-          ))
+                onClick={() => {
+                  keepRects(
+                    selection.pages.flatMap(({ pageIndex, rects }) =>
+                      rects.map((rect) => ({ pageIndex, rect })),
+                    ),
+                  );
+                  window.getSelection()?.removeAllRanges();
+                }}
+              >
+                Keep highlight
+              </button>
+            )}
+          </PdfSelectionPopover>
+        </>
       }
       note="Highlights are your own elements over the pages, in PDF points: zoom and they follow."
     />

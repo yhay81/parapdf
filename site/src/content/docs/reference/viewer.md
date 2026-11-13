@@ -56,6 +56,7 @@ its callback and returns to its value unless you take the change up (see
 | `viewState()` | Where and how the document is shown, as a plain `ViewState` object to store or put in a URL, or null without a layout (see [Keeping the view](/guides/view-state/)). |
 | `setViewState(view)` | Shows a `Partial<ViewState>` again; fields left out stay as they are, and values out of range are clamped or ignored. |
 | `revealRect(pageIndex, rect)` | Scrolls so that `rect` (`x`, `y`, `width`, `height` in PDF points from the page's unturned top-left corner) sits in the upper third of the viewport; the page becomes current. Search shows its matches this way. |
+| `pointAt(point)` | Maps a client coordinate (`{ clientX, clientY }`, such as a `MouseEvent` or `PointerEvent`) to `{ pageIndex, x, y }` in unturned PDF points from the page's top-left corner (`PdfPageRect`'s coordinates); returns `null` when outside the viewport or in the space between or beside pages. |
 | `position()` | Where the viewer shows its document, as `{ pageIndex, x, y, current, scale, zoomMode }`: the page at the viewport's top-left corner and where that corner is as a share of the page, which survive zoom changes, with the current page and zoom; null without a layout. |
 | `restorePosition(position)` | Shows a `position()` again, with its zoom; a fitted zoom fits the viewport as it is now. |
 

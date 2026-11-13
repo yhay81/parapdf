@@ -8,11 +8,15 @@ import {
   PdfDocument,
   type PdfjsDocumentOptions,
   type PdfPageMode,
+  PdfPageOverlay,
+  PdfPageOverlays,
   PdfPageRect,
+  PdfSelectionPopover,
   type PdfSession,
   type PdfSource,
   PdfViewer,
   type PdfViewerProps,
+  preloadDocument,
   print,
   type ScrollMode,
   type SpreadMode,
@@ -42,6 +46,7 @@ import {
   type ProfilerOnRenderCallback,
   Suspense,
   use,
+  useCallback,
   useEffect,
   useState,
 } from "react";
@@ -294,18 +299,6 @@ const benchLabel = {
   speed: settings.autoscroll,
 };
 
-/** One highlight in PDF points, to show overlays follow zoom without re-rendering. */
-const renderOverlay = (pageIndex: number) =>
-  pageIndex === 0 ? (
-    <PdfPageRect
-      x={72}
-      y={36}
-      width={220}
-      height={30}
-      style={{ background: "rgb(255 213 0 / 0.3)", outline: "2px solid rgb(255 170 0)" }}
-    />
-  ) : null;
-
 const SplitView = lazy(() => import("./SplitView.tsx"));
 /** What React puts a document and its viewer through (`?lifetimes=`), for check-lifecycle.ts. */
 const Lifetimes = lazy(() => import("./Lifetimes.tsx"));
@@ -313,13 +306,20 @@ const lifetime = (["above", "transition", "activity"] as const).find(
   (name) => name === params.get("lifetimes"),
 );
 
+export interface OverlayTestConfig {
+  dynamicBadge?: string | null;
+  selectionPopover?: boolean;
+}
+
 export function App() {
   const [fragment, setFragment] = useState(params.get("fragment") ?? "");
+  const [customUrl, setCustomUrl] = useState<string | null>(null);
   useEffect(() => {
     window.__setFragment = setFragment;
+    window.__setSourceUrl = setCustomUrl;
   }, []);
   // A new key mounts a new viewer with a new runtime for the same source.
-  const [mounted, setMounted] = useState(true);
+  const [mounted, setMounted] = useState(params.get("unmounted") !== "1");
   const [generation, setGeneration] = useState(0);
   const [renders, setRenders] = useState(0);
   useEffect(() => {
@@ -333,11 +333,12 @@ export function App() {
       unhandled,
     };
   }, []);
+  const activeUrl = customUrl ?? url;
   return (
     <Suspense fallback={<div className="status">Loading…</div>}>
       {params.get("split") === "1" ? (
         <SplitView
-          source={{ url: fragment ? `${url}#${fragment}` : url }}
+          source={{ url: fragment ? `${activeUrl}#${fragment}` : activeUrl }}
           passwordPrompt={settings.passwordPrompt}
           viewerProps={viewerProps}
           features={initialFeatures}
@@ -351,14 +352,14 @@ export function App() {
           features={initialFeatures}
         />
       ) : mounted ? (
-        <Viewer key={generation} renders={renders} fragment={fragment} />
+        <Viewer key={generation} renders={renders} fragment={fragment} baseUrl={activeUrl} />
       ) : null}
     </Suspense>
   );
 }
 
 /** A new `renders` only renders the viewer again (see `__lifecycle.rerender`). */
-function Viewer({ fragment }: { renders: number; fragment: string }) {
+function Viewer({ fragment, baseUrl }: { renders: number; fragment: string; baseUrl: string }) {
   // Only a data source waits for its bytes: suspending for a URL would delay
   // PdfDocument's render, which starts loading pdf.js and the PDF.
   const data = settings.source === "data" ? use(bytesPromise) : null;
@@ -370,7 +371,7 @@ function Viewer({ fragment }: { renders: number; fragment: string }) {
     ? { data, ...password }
     : range
       ? { range, ...password }
-      : { url: fragment ? `${url}#${fragment}` : url, ...password };
+      : { url: fragment ? `${baseUrl}#${fragment}` : baseUrl, ...password };
   return (
     <Profiler id="viewer" onRender={countCommit}>
       <PdfDocument source={source} passwordPrompt={settings.passwordPrompt}>
@@ -386,10 +387,24 @@ function DocumentShell() {
   // Props and feature components a check sets on the viewer while it shows the document.
   const [changed, setChanged] = useState<Partial<PdfViewerProps>>({});
   const [features, setFeatures] = useState<DemoFeatures>(initialFeatures);
+  const [overlayTest, setOverlayTest] = useState<OverlayTestConfig>({});
   useEffect(() => {
     window.__setViewerProps = (props) => setChanged((previous) => ({ ...previous, ...props }));
     window.__setFeatures = (patch) => setFeatures((previous) => ({ ...previous, ...patch }));
+    window.__setOverlayTest = (patch) => setOverlayTest((previous) => ({ ...previous, ...patch }));
   }, []);
+  const dynamicBadge = overlayTest.dynamicBadge ?? null;
+  const renderDynamicOverlays = useCallback(
+    (pageIndex: number) => {
+      window.__overlayEvaluations?.push(pageIndex);
+      return dynamicBadge ? (
+        <PdfPageRect x={24} y={24} width={80} height={18} className="test-dynamic-overlay">
+          {dynamicBadge}-{pageIndex + 1}
+        </PdfPageRect>
+      ) : null;
+    },
+    [dynamicBadge],
+  );
   return (
     <>
       <Toolbar
@@ -416,8 +431,33 @@ function DocumentShell() {
             .filter(Boolean)
             .join(" ")}
           {...(japanese ? { label: "PDF 文書", pageLabel } : {})}
-          renderOverlay={renderOverlay}
         >
+          {/* One highlight in PDF points on page 1, turning and zooming with the page. */}
+          <PdfPageOverlay page={0}>
+            <PdfPageRect
+              x={72}
+              y={36}
+              width={220}
+              height={30}
+              style={{ background: "rgb(255 213 0 / 0.3)", outline: "2px solid rgb(255 170 0)" }}
+            />
+          </PdfPageOverlay>
+          {dynamicBadge ? <PdfPageOverlays>{renderDynamicOverlays}</PdfPageOverlays> : null}
+          {overlayTest.selectionPopover ? (
+            <PdfSelectionPopover className="test-selection-popover">
+              {(selection) => (
+                <button
+                  type="button"
+                  className="test-popover-action"
+                  onClick={() => {
+                    window.__popoverClickedText = selection.text;
+                  }}
+                >
+                  Copy ({selection.text.length})
+                </button>
+              )}
+            </PdfSelectionPopover>
+          ) : null}
           <ViewerFeatures features={features} />
         </PdfViewer>
         {presentation.presenting ? <PresentationControls /> : null}
@@ -442,6 +482,7 @@ const demoApi = {
   getSelection,
   getText,
   openAttachment,
+  preloadDocument,
   print,
   save,
   setFormValues,
@@ -471,8 +512,15 @@ declare global {
     __setViewerProps?: (props: Partial<PdfViewerProps>) => void;
     /** Mounts or updates the viewer's declarative feature components (`<PdfForms>`, `<PdfAnnotationEditor>`, `<PdfAutoLinks>`, `<PdfPermissions>`). */
     __setFeatures?: (patch: Partial<DemoFeatures>) => void;
+    /** Mounts or updates overlay and selection-popover test harnesses. */
+    __setOverlayTest?: (patch: Partial<OverlayTestConfig>) => void;
+    __overlayEvaluations?: number[];
+    __popoverClickedText?: string;
     /** Changes the fragment of the source's URL, for check-document.ts. */
     __setFragment?: (fragment: string) => void;
+    /** Changes the base URL of `<PdfDocument>`, for check-document.ts. */
+    __setSourceUrl?: (url: string | null) => void;
+    __commits?: () => number;
   }
 }
 
@@ -480,6 +528,7 @@ declare global {
 window.__parapdf = demoApi;
 window.__showWith = showWith;
 window.__attachViewport = attachViewport;
+window.__commits = () => commits.count;
 
 /** Exposes the viewer and its features to the checks: the same the toolbars use. */
 function Probes() {
