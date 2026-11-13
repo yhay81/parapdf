@@ -96,6 +96,30 @@ before:
 
 No timing difference beyond run-to-run variation is claimed.
 
+## Review: overlay identity and effect replay
+
+React keeps portal children when StrictMode replays layout effects. Removing
+their container and allocating a replacement in effect setup left the children
+inside a detached element. Page hosts now reconnect the container chosen during
+render. Renderer IDs are also unique across viewers: an overlay retains its ID
+when its `viewer` prop changes, so per-viewer counters could overwrite an
+existing overlay in the target viewer. The store regression and real React
+fixture in `check:lifecycle` failed before these changes and pass in Chromium,
+WebKit, and Firefox; the fixture also checks Activity hide/show.
+
+A same-run scroll comparison isolated these overlay changes from the reviewed
+parent changes: `bill-hr815.pdf`, 3600 px/s, two seconds, median of three runs
+on AC power. Reports:
+[`Chromium`](../../examples/prototype/results/overlays-review-chromium.md),
+[`WebKit`](../../examples/prototype/results/overlays-review-webkit.md),
+[`Firefox`](../../examples/prototype/results/overlays-review-firefox.md).
+Main-thread blocked time (after, before) was 1, 0 ms; 25, 29 ms; and 38, 46 ms.
+First paint was 136, 137 ms; 155, 157 ms; and 236, 235 ms. All jobs had zero
+blank area and dropped frames and 118 MiB canvas memory. Commits remained one
+more than window/current-page updates, as before, when page 1's static portal
+unmounts. Chromium waited for another browser before measuring; no jobs
+overlapped it. No speed improvement is claimed.
+
 ## Reopen if
 
 - An overlay pattern needs page-coordinate clamping or collision detection inside
