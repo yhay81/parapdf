@@ -156,7 +156,9 @@ diagnostic metrics), while `react/` and `features/` resolve the backing
 - `state.ts`: the viewer's store, view state only. Hot state changes while
   the reader scrolls or zooms (layout, mounted window, current page, scale,
   zoom mode); cold state does not (page count, rotation, spreads, scroll
-  mode, tool, direction). They are subscribed to apart.
+  mode, tool, direction); `sizes` publishes unrotated page dimensions only
+  when they change (document open, non-uniform `#measurePages`, and close).
+  They are subscribed to apart (decision 0040).
 - `options.ts`: the viewer's options. Those the renderer is built with
   (layers, colors, budgets, concurrency) rebuild it as a detach and
   reattach would, keeping position and edits; the others apply at once.
@@ -303,8 +305,12 @@ the DOM declares `"use client"`.
   or per-frame scroll emissions, flushing pending scrolls on `pagehide` and
   viewport detach (decision 0038). Every other
   prop is a live option: changing it needs no remount, and an option set to
-  its default is the option left out. `children` renders inside the viewport
-  container so declarative feature components (`PdfForms`,
+  its default is the option left out. A child `memo(ViewerPages)` owns the
+  `viewer.store.hot` page-window subscription (`layout`, `first`, `last`), so
+  scrolling across page windows and committing zooms leave `<PdfViewer>`'s
+  option construction, `{children}` reconciliation, and `configure` /
+  controlled-prop layout effects idle (decision 0040). `children` renders
+  inside the viewport container so declarative feature components (`PdfForms`,
   `PdfAnnotationEditor`, `PdfAutoLinks`, `PdfPermissions`) mount synchronously
   with `useLayoutEffect` before the browser paints, without async layout
   deferrals. `PdfAnnotationEditor` renders its `<style
@@ -319,7 +325,11 @@ the DOM declares `"use client"`.
   `PdfPageOverlays` (evaluated inside each page's `memo(PdfPage)` so mounted
   pages stay memoized as the window shifts) render through portals into a
   lazily created `.parapdf-overlay-layer` in the page's host; React renders
-  nothing else there. Dynamic portals retain their render-time container through
+  nothing else there. `OverlayStore` tracks per-page overlay activity so pages
+  without an active renderer or portal claim mount no `<PdfPageOverlaySlot>`
+  and run no overlay subscriptions or host effects, and `<PdfPageOverlaySlot>`
+  renders as a sibling after `<section>` so `hostRef` attaches before its
+  layout effect runs (decision 0040). Dynamic portals retain their render-time container through
   effect replay, and renderer identities are unique across viewers so changing
   an overlay's viewer cannot overwrite another overlay (decision 0036). `PdfViewer`'s `onPageClick` and
   `viewer.pointAt()` map client coordinates back to unturned PDF points
@@ -332,7 +342,8 @@ the DOM declares `"use client"`.
   preloading `source`'s URL, and opening `source` in the shared registry ahead
   of `PdfDocument` mounting.
 - `PdfThumbnails` and `PdfThumbnail` draw the viewer's document at a lower
-  priority. `PdfThumbnails` virtualizes its `<ol>` window over a prefix-sum
+  priority, reading unrotated page dimensions from `viewer.store.sizes` outside
+  `viewer.store.hot` (decision 0040). `PdfThumbnails` virtualizes its `<ol>` window over a prefix-sum
   `Float64Array` of turned page heights (with `borderTop` / `borderBottom`
   transparent spacers preserving stylesheet padding and flex `rowGap`,
   `aria-setsize` / `aria-posinset` on mounted `<li>` items, non-suspending

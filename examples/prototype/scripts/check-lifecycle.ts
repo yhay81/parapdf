@@ -241,6 +241,18 @@ async function checkReaders(browser: Browser, dev: ViteDevServer, base: string):
       const fixture: typeof import("./lifecycle-overlays.tsx") = await import(url);
       return fixture.checkOverlayLifetimes();
     }, new URL("/scripts/lifecycle-overlays.tsx", base).href);
+    check(
+      "viewers without overlays skip per-page overlay host registration and layers",
+      overlays.idleSkipped,
+    );
+    check(
+      "scrolling the mounted page window does not re-render PdfViewer children",
+      overlays.isolatedWindowCommit,
+    );
+    check(
+      "mounting and unmounting overlays on live pages activates and cleans up overlay layers",
+      overlays.liveActivated && overlays.liveDeactivated,
+    );
     check("dynamic overlays remain visible after StrictMode replays effects", overlays.strict);
     check("dynamic overlays reconnect after Activity hides their page", overlays.restored);
     check("moving an overlay to another viewer preserves its existing overlays", overlays.moved);

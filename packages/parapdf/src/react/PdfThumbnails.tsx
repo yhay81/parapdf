@@ -77,7 +77,7 @@ export function PdfThumbnails({
   const viewer = useOptionalViewer(externalViewer);
   const pageCount = useSelected(viewer.store.cold, (state) => state.pageCount);
   const rotation = useSelected(viewer.store.cold, (state) => state.rotation);
-  const sizes = useSelected(viewer.store.hot, (state) => state.layout?.sizes);
+  const sizes = useSelected(viewer.store.sizes, (state) => state.sizes);
   const currentPage = useSelected(viewer.store.hot, (state) => state.currentPage);
   const pageLabels = useOptionalPageLabels(viewer);
 

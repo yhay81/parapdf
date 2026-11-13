@@ -338,6 +338,59 @@ describe("OverlayStore, PdfPageOverlay, PdfPageOverlays, and PdfPageRect", () =>
     unsub();
   });
 
+  it("tracks per-page portalPages and allPages activity without redundant notifications", () => {
+    const viewer = new ViewerController();
+    const store = overlayStoreOf(viewer);
+    const snapshots: { allPages: boolean; portals: number[] }[] = [];
+    const unsub = store.subscribeActive(() => {
+      const activity = store.getActivity();
+      snapshots.push({ allPages: activity.allPages, portals: [...activity.portalPages] });
+    });
+
+    assert.equal(store.isActive(), false);
+    assert.equal(store.getActivity().allPages, false);
+    assert.equal(store.getActivity().portalPages.size, 0);
+    assert.equal(store.hasHost(0), false);
+
+    // First portal claim on page 0 activates only page 0; a second claim on page 0 does not re-notify.
+    const release0A = store.claimPortal(0);
+    const release0B = store.claimPortal(0);
+    assert.equal(store.isActive(), true);
+    assert.deepEqual(snapshots, [{ allPages: false, portals: [0] }]);
+
+    // Claiming page 1 adds page 1 to portalPages.
+    const release1 = store.claimPortal(1);
+    assert.deepEqual(snapshots, [
+      { allPages: false, portals: [0] },
+      { allPages: false, portals: [0, 1] },
+    ]);
+
+    // Adding a dynamic renderer sets allPages: true; replacing its callback keeps the same activity snapshot.
+    store.setRenderer("r1", () => "badge-a");
+    const activeAll = store.getActivity();
+    store.setRenderer("r1", () => "badge-b");
+    assert.equal(store.getActivity(), activeAll);
+    assert.deepEqual(snapshots, [
+      { allPages: false, portals: [0] },
+      { allPages: false, portals: [0, 1] },
+      { allPages: true, portals: [0, 1] },
+    ]);
+
+    // Releasing one of two claims on page 0 leaves page 0 claimed without notifying; releasing the second drops page 0.
+    release0A();
+    assert.equal(snapshots.length, 3);
+    release0B();
+    release1();
+    assert.deepEqual(snapshots.at(-1), { allPages: true, portals: [] });
+
+    // Removing the last renderer restores the inactive singleton.
+    store.removeRenderer("r1");
+    assert.equal(store.isActive(), false);
+    assert.deepEqual(snapshots.at(-1), { allPages: false, portals: [] });
+
+    unsub();
+  });
+
   it("renders PdfPageOverlay and PdfPageOverlays cleanly on SSR without touching DOM", () => {
     const viewer = new ViewerController();
     const ssrHtml = renderToString(

@@ -30,8 +30,19 @@ interface PageOverlayHost {
   hasRendered: boolean;
 }
 
+export interface OverlayActivity {
+  readonly allPages: boolean;
+  readonly portalPages: ReadonlySet<number>;
+}
+
 const EMPTY_RENDERERS: readonly OverlayRenderer[] = [];
+const EMPTY_PORTAL_PAGES: ReadonlySet<number> = new Set<number>();
+const INACTIVE_OVERLAYS: OverlayActivity = {
+  allPages: false,
+  portalPages: EMPTY_PORTAL_PAGES,
+};
 const getEmptyRenderers = (): readonly OverlayRenderer[] => EMPTY_RENDERERS;
+const getInactiveOverlays = (): OverlayActivity => INACTIVE_OVERLAYS;
 const getNullLayer = (): HTMLDivElement | null => null;
 let nextRendererId = 0;
 
@@ -63,11 +74,49 @@ class OverlayStore {
   readonly #portalCounts = new Map<number, number>();
   readonly #portalListeners = new Map<number, Set<() => void>>();
   readonly #rendererListeners = new Set<() => void>();
+  readonly #activeListeners = new Set<() => void>();
   #renderers: readonly OverlayRenderer[] = EMPTY_RENDERERS;
+  #activity: OverlayActivity = INACTIVE_OVERLAYS;
 
   nextRendererId(): string {
     // An overlay keeps its identity when its viewer prop changes.
     return `overlay-${++nextRendererId}`;
+  }
+
+  readonly isActive = (): boolean => this.#activity !== INACTIVE_OVERLAYS;
+
+  readonly getActivity = (): OverlayActivity => this.#activity;
+
+  readonly subscribeActive = (listener: () => void): (() => void) => {
+    this.#activeListeners.add(listener);
+    return () => {
+      this.#activeListeners.delete(listener);
+    };
+  };
+
+  #syncActivity(portalMembershipChanged: boolean): void {
+    const allPages = this.#renderers.length > 0;
+    const hasPortals = this.#portalCounts.size > 0;
+    if (!allPages && !hasPortals) {
+      if (this.#activity === INACTIVE_OVERLAYS) return;
+      this.#activity = INACTIVE_OVERLAYS;
+    } else if (
+      !portalMembershipChanged &&
+      this.#activity !== INACTIVE_OVERLAYS &&
+      this.#activity.allPages === allPages
+    ) {
+      return;
+    } else {
+      this.#activity = {
+        allPages,
+        portalPages: hasPortals ? new Set(this.#portalCounts.keys()) : EMPTY_PORTAL_PAGES,
+      };
+    }
+    for (const listener of [...this.#activeListeners]) listener();
+  }
+
+  hasHost(pageIndex: number): boolean {
+    return this.#hosts.has(pageIndex);
   }
 
   readonly getRenderers = (): readonly OverlayRenderer[] => this.#renderers;
@@ -90,6 +139,7 @@ class OverlayStore {
       this.#renderers = [...this.#renderers, { id, render }];
     }
     this.#notifyRenderers();
+    this.#syncActivity(false);
   }
 
   removeRenderer(id: string): void {
@@ -97,6 +147,7 @@ class OverlayStore {
     if (next.length === this.#renderers.length) return;
     this.#renderers = next.length === 0 ? EMPTY_RENDERERS : next;
     this.#notifyRenderers();
+    this.#syncActivity(false);
   }
 
   #notifyRenderers(): void {
@@ -130,18 +181,21 @@ class OverlayStore {
   }
 
   claimPortal(pageIndex: number): () => void {
-    this.#portalCounts.set(pageIndex, (this.#portalCounts.get(pageIndex) ?? 0) + 1);
+    const prevCount = this.#portalCounts.get(pageIndex) ?? 0;
+    this.#portalCounts.set(pageIndex, prevCount + 1);
     const before = this.#hosts.get(pageIndex)?.layer ?? null;
     this.#syncHostLayer(pageIndex);
     if ((this.#hosts.get(pageIndex)?.layer ?? null) !== before || before !== null) {
       this.#notifyPortal(pageIndex);
     }
+    if (prevCount === 0) this.#syncActivity(true);
     return () => {
       const remaining = (this.#portalCounts.get(pageIndex) ?? 0) - 1;
       if (remaining > 0) this.#portalCounts.set(pageIndex, remaining);
       else this.#portalCounts.delete(pageIndex);
       this.#syncHostLayer(pageIndex);
       this.#notifyPortal(pageIndex);
+      if (remaining <= 0) this.#syncActivity(true);
     };
   }
 
@@ -389,4 +443,32 @@ export function usePageOverlays(
   return layer && hasRendered
     ? createPortal(createElement(PageContext, { value: pageContext }, rendered), layer)
     : null;
+}
+
+/** Subscribe to which pages of `viewer` need an overlay slot (`<PdfPageOverlays>` or `<PdfPageOverlay>`). */
+export function useOverlayActivity(viewer: ViewerController): OverlayActivity {
+  const store = overlayStoreOf(viewer);
+  return useSyncExternalStore(store.subscribeActive, store.getActivity, getInactiveOverlays);
+}
+
+export interface PdfPageOverlaySlotProps {
+  viewer: ViewerController;
+  index: number;
+  hostRef: RefObject<HTMLElement | null>;
+  rotation: Rotation;
+  width: number;
+  height: number;
+}
+
+/** Mounted inside `PdfPage` only while the viewer's `OverlayStore` has an active claim or renderer. */
+export function PdfPageOverlaySlot({
+  viewer,
+  index,
+  hostRef,
+  rotation,
+  width,
+  height,
+}: PdfPageOverlaySlotProps) {
+  const pageContext = useMemo(() => ({ viewer, pageIndex: index }), [viewer, index]);
+  return usePageOverlays(viewer, index, hostRef, pageContext, rotation, width, height);
 }
