@@ -38,8 +38,13 @@ export async function checkNavigationControls() {
     return Boolean(nav && active && active.top >= nav.top - 2 && active.bottom <= nav.bottom + 2);
   };
   try {
+    const started = performance.now();
     flushSync(() => root.render(thumbnails(120)));
-    await tick();
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+    const openedMs = performance.now() - started;
+    const mountedItems = element.querySelectorAll("li").length;
     const opened = activeInView();
     flushSync(() => viewer.store.set({ rotation: 90 }));
     await tick();
@@ -65,7 +70,7 @@ export async function checkNavigationControls() {
     const toggle = element.querySelector<HTMLButtonElement>('button[aria-expanded="false"]');
     flushSync(() => toggle?.click());
     const expanded = element.textContent?.includes("Child") === true;
-    return { opened, rotated, resized, browsed, expanded };
+    return { opened, rotated, resized, browsed, expanded, openedMs, mountedItems };
   } finally {
     flushSync(() => root.unmount());
     element.remove();

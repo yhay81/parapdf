@@ -1,0 +1,150 @@
+{
+  "date": "2026-11-13T15:08:50.730Z",
+  "browser": "WebKit 27.2",
+  "machine": "darwin 27.2.0 arm64, Apple M2 Pro",
+  "power": {
+    "source": "ac",
+    "lowPowerMode": false
+  },
+  "versions": {
+    "pdfjs": "6.5.438",
+    "react": "19.3.1"
+  },
+  "turnTaking": {
+    "waits": 0,
+    "waitedMs": 0,
+    "repeatedJobs": 0
+  },
+  "jobs": [
+    {
+      "run": 1,
+      "variant": "after",
+      "result": {
+        "opened": true,
+        "rotated": true,
+        "resized": true,
+        "browsed": true,
+        "expanded": true,
+        "openedMs": 53.74000000000001,
+        "mountedItems": 15
+      }
+    },
+    {
+      "run": 1,
+      "variant": "before",
+      "result": {
+        "opened": false,
+        "rotated": false,
+        "resized": false,
+        "browsed": true,
+        "expanded": false,
+        "openedMs": 27.840000000000003,
+        "mountedItems": 15
+      }
+    },
+    {
+      "run": 2,
+      "variant": "after",
+      "result": {
+        "opened": true,
+        "rotated": true,
+        "resized": true,
+        "browsed": true,
+        "expanded": true,
+        "openedMs": 37.81999999999999,
+        "mountedItems": 15
+      }
+    },
+    {
+      "run": 2,
+      "variant": "before",
+      "result": {
+        "opened": false,
+        "rotated": false,
+        "resized": false,
+        "browsed": true,
+        "expanded": false,
+        "openedMs": 22.340000000000003,
+        "mountedItems": 15
+      }
+    },
+    {
+      "run": 3,
+      "variant": "after",
+      "result": {
+        "opened": true,
+        "rotated": true,
+        "resized": true,
+        "browsed": true,
+        "expanded": true,
+        "openedMs": 36.26000000000002,
+        "mountedItems": 15
+      }
+    },
+    {
+      "run": 3,
+      "variant": "before",
+      "result": {
+        "opened": false,
+        "rotated": false,
+        "resized": false,
+        "browsed": true,
+        "expanded": false,
+        "openedMs": 18.799999999999983,
+        "mountedItems": 15
+      }
+    },
+    {
+      "run": 4,
+      "variant": "after",
+      "result": {
+        "opened": true,
+        "rotated": true,
+        "resized": true,
+        "browsed": true,
+        "expanded": true,
+        "openedMs": 31.140000000000015,
+        "mountedItems": 15
+      }
+    },
+    {
+      "run": 4,
+      "variant": "before",
+      "result": {
+        "opened": false,
+        "rotated": false,
+        "resized": false,
+        "browsed": true,
+        "expanded": false,
+        "openedMs": 22.960000000000008,
+        "mountedItems": 15
+      }
+    },
+    {
+      "run": 5,
+      "variant": "after",
+      "result": {
+        "opened": true,
+        "rotated": true,
+        "resized": true,
+        "browsed": true,
+        "expanded": true,
+        "openedMs": 20.860000000000014,
+        "mountedItems": 15
+      }
+    },
+    {
+      "run": 5,
+      "variant": "before",
+      "result": {
+        "opened": false,
+        "rotated": false,
+        "resized": false,
+        "browsed": true,
+        "expanded": false,
+        "openedMs": 19.860000000000014,
+        "mountedItems": 15
+      }
+    }
+  ]
+}

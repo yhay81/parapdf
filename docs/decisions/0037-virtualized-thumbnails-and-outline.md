@@ -99,6 +99,44 @@ scrolling, in ms, after and before:
 
 No main-viewport scroll timing difference beyond run-to-run variation is claimed.
 
+## Review: measured geometry, failed labels, and collapsed outlines
+
+The initial thumbnail estimate can differ from measured item chrome. Opening a
+sidebar at page 501 then scrolled to the estimate but never corrected it, leaving
+the active thumbnail outside the mounted window. Active-page alignment now runs
+again when global geometry changes (measured chrome, gap, page sizes, width, or
+rotation), without following individual custom-item measurements during manual
+browsing. Failed page-label reads now retain numeric labels instead of producing
+an unhandled rejection. The default outline renderer provides expand/collapse
+buttons; previously `defaultExpanded={false}` made nested entries unreachable
+without a custom renderer.
+
+The label failure unit regression failed before the catch. A real React/browser
+fixture (`navigation-controls.tsx`) also reproduced the incorrect initial,
+rotated, and resized thumbnail position and the unreachable collapsed outline.
+All five behaviors, including manual thumbnail browsing, pass after the fix in
+Chromium, WebKit, and Firefox. `check:features` covers reopening thumbnails at a
+deep page and rotating them; `check:links` covers the default outline controls.
+
+`navigation-bench.ts` compares production builds with and without these three
+review fixes in the same run, five fresh contexts per variant, 1280×900 at DPR 2,
+on AC power. It measures React mount to two animation frames for the 1,000-item
+list at page 501 with deterministic CSS, without drawing PDF pixels. Raw reports:
+[`Chromium`](../../examples/prototype/results/navigation-review-chromium.json),
+[`WebKit`](../../examples/prototype/results/navigation-review-webkit.json),
+[`Firefox`](../../examples/prototype/results/navigation-review-firefox.json).
+
+| Browser | Open latency median, ms (after, before) | Mounted items (after, before) |
+|---|---:|---:|
+| Chromium 158.0.8127.18 | 23.5, 23.5 | 16, 15 |
+| WebKit 27.2 (Playwright) | 36.3, 22.3 | 15, 15 |
+| Firefox 159.0 | 24.3, 22.6 | 16, 15 |
+
+WebKit pays about one frame for the correction in this run. The baseline failed
+to show the active thumbnail in every sample, whereas the corrected build showed
+it in every sample; no speed win is claimed against that incorrect result. Both
+builds keep the list virtualized, and no measurement overlapped another browser.
+
 ## Reopen if
 
 - Horizontal or multi-column grid thumbnail layouts become common enough that

@@ -181,11 +181,8 @@ try {
   const outline = page.getByRole("navigation", { name: "Document outline" });
   const entries = await outline.getByRole("button").count();
   check("the outline lists its entries", entries >= 20, `${entries} entries`);
-  const branch = outline
-    .locator("li")
-    .filter({ has: outline.locator("button[aria-expanded]") })
-    .first();
-  const toggle = branch.locator("button[aria-expanded]").first();
+  const toggle = outline.locator("button[aria-expanded]").first();
+  const branch = toggle.locator("..");
   await toggle.click();
   check(
     "outline branches collapse with the default controls",
