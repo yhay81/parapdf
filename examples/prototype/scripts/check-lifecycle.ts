@@ -225,6 +225,25 @@ async function checkReaders(browser: Browser, dev: ViteDevServer, base: string):
       unlocked,
       (await page.locator("#encrypted").textContent()) ?? "",
     );
+    const actions = await page.evaluate(
+      async ({ url, engine }) => {
+        const fixture: typeof import("./lifecycle-actions.tsx") = await import(url);
+        return fixture.checkActionLifetimes(engine);
+      },
+      { url: new URL("/scripts/lifecycle-actions.tsx", base).href, engine },
+    );
+    check(
+      "saving resets after a save finishes while its controls are hidden",
+      actions.save === true,
+    );
+    check("printing resets after its controls hide and cancel preparation", actions.print === true);
+    const overlays = await page.evaluate(async (url) => {
+      const fixture: typeof import("./lifecycle-overlays.tsx") = await import(url);
+      return fixture.checkOverlayLifetimes();
+    }, new URL("/scripts/lifecycle-overlays.tsx", base).href);
+    check("dynamic overlays remain visible after StrictMode replays effects", overlays.strict);
+    check("dynamic overlays reconnect after Activity hides their page", overlays.restored);
+    check("moving an overlay to another viewer preserves its existing overlays", overlays.moved);
   } finally {
     await page.context().close();
   }

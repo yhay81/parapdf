@@ -50,6 +50,10 @@ const bytes = await save(session, {
 await download(session, { filename: "excerpt.pdf", pages: [{ excludePages: [3] }] });
 ```
 
+When React Activity hides action controls, saving can finish in the background
+and print preparation is cancelled. When shown again, the hooks report the
+current idle or pending state.
+
 ## Reading and filling the form
 
 ```tsx

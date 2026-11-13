@@ -1132,30 +1132,58 @@ try {
     );
     await page.evaluate(() => window.__viewer?.goToPage(500));
     await page.waitForTimeout(300);
-    const afterJump = await page.evaluate(() => {
-      const scroller = document.querySelector<HTMLElement>("#sidebar");
-      const active = document.querySelector<HTMLElement>(
-        '.parapdf-thumbnails button[aria-current="page"]',
-      );
-      const items = document.querySelectorAll(".parapdf-thumbnails li").length;
-      const scrollerRect = scroller?.getBoundingClientRect();
-      const activeRect = active?.getBoundingClientRect();
-      const inView =
-        Boolean(scrollerRect && activeRect) &&
-        (activeRect?.top ?? 0) >= (scrollerRect?.top ?? 0) - 2 &&
-        (activeRect?.bottom ?? 0) <= (scrollerRect?.bottom ?? 0) + 2;
-      return {
-        activeLabel: active?.getAttribute("aria-label") ?? null,
-        mountedItems: items,
-        inView,
-      };
-    });
+    const thumbnailPosition = () =>
+      page.evaluate(() => {
+        const scroller = document.querySelector<HTMLElement>("#sidebar");
+        const active = document.querySelector<HTMLElement>(
+          '.parapdf-thumbnails button[aria-current="page"]',
+        );
+        const items = document.querySelectorAll(".parapdf-thumbnails li").length;
+        const scrollerRect = scroller?.getBoundingClientRect();
+        const activeRect = active?.getBoundingClientRect();
+        const inView =
+          Boolean(scrollerRect && activeRect) &&
+          (activeRect?.top ?? 0) >= (scrollerRect?.top ?? 0) - 2 &&
+          (activeRect?.bottom ?? 0) <= (scrollerRect?.bottom ?? 0) + 2;
+        return {
+          activeLabel: active?.getAttribute("aria-label") ?? null,
+          mountedItems: items,
+          inView,
+        };
+      });
+    const afterJump = await thumbnailPosition();
     check(
       "jumping to a deep page scrolls its virtualized thumbnail into view",
       afterJump.activeLabel === "Page 501 of 1000" &&
         afterJump.mountedItems < 30 &&
         afterJump.inView,
       JSON.stringify(afterJump),
+    );
+    await page.getByRole("button", { name: "Thumbnails", exact: true }).click();
+    await page.getByRole("button", { name: "Thumbnails", exact: true }).click();
+    await page.waitForTimeout(300);
+    const reopened = await thumbnailPosition();
+    check(
+      "opening thumbnails at a deep page aligns after measuring item height",
+      reopened.inView,
+      JSON.stringify(reopened),
+    );
+    await page.evaluate(() => window.__viewer?.setRotation(90));
+    await page.waitForTimeout(300);
+    const rotated = await thumbnailPosition();
+    check(
+      "rotating pages keeps the active thumbnail visible",
+      rotated.inView,
+      JSON.stringify(rotated),
+    );
+    await page.evaluate(() => {
+      const sidebar = document.querySelector<HTMLElement>("#sidebar");
+      if (sidebar) sidebar.scrollTop = 0;
+    });
+    await page.waitForTimeout(300);
+    check(
+      "manual thumbnail browsing stays at the chosen scroll position",
+      await page.evaluate(() => document.querySelector<HTMLElement>("#sidebar")?.scrollTop === 0),
     );
     await page.context().close();
   }

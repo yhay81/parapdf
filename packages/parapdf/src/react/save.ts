@@ -32,6 +32,8 @@ export function useSave(session?: PdfSession): SaveControls {
 
   useEffect(() => {
     mountedRef.current = true;
+    // A save may finish while Activity has disconnected this hook's effects.
+    setSaving(pendingRef.current > 0);
     return () => {
       mountedRef.current = false;
     };

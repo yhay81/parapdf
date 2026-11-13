@@ -234,6 +234,25 @@ describe("unturnPoint and viewer.pointAt", () => {
 });
 
 describe("OverlayStore, PdfPageOverlay, PdfPageOverlays, and PdfPageRect", () => {
+  it("keeps two overlay renderers when one moves into the other's viewer", () => {
+    const first = overlayStoreOf(new Viewer());
+    const second = overlayStoreOf(new Viewer());
+    const firstId = first.nextRendererId();
+    const secondId = second.nextRendererId();
+    const renderFirst = () => "first";
+    const renderSecond = () => "second";
+    first.setRenderer(firstId, renderFirst);
+    second.setRenderer(secondId, renderSecond);
+    first.removeRenderer(firstId);
+    second.setRenderer(firstId, renderFirst);
+    assert.deepEqual(
+      second.getRenderers().map((entry) => entry.render(0)),
+      ["second", "first"],
+    );
+    second.removeRenderer(firstId);
+    assert.equal(second.getRenderers()[0]?.render(0), "second");
+  });
+
   it("allocates .parapdf-overlay-layer lazily and coordinates multiple portal claims across window shifts", () =>
     withBrowserGlobals(() => {
       const viewer = new Viewer();

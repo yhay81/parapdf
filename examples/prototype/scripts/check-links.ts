@@ -181,6 +181,22 @@ try {
   const outline = page.getByRole("navigation", { name: "Document outline" });
   const entries = await outline.getByRole("button").count();
   check("the outline lists its entries", entries >= 20, `${entries} entries`);
+  const branch = outline
+    .locator("li")
+    .filter({ has: outline.locator("button[aria-expanded]") })
+    .first();
+  const toggle = branch.locator("button[aria-expanded]").first();
+  await toggle.click();
+  check(
+    "outline branches collapse with the default controls",
+    (await toggle.getAttribute("aria-expanded")) === "false",
+  );
+  await toggle.click();
+  check(
+    "collapsed outline branches can be expanded again",
+    (await toggle.getAttribute("aria-expanded")) === "true" &&
+      (await branch.locator("ol").count()) > 0,
+  );
   await outline.getByRole("button", { name: SECTION, exact: true }).click();
   await page.waitForTimeout(600);
   const afterOutline = await probe(page);

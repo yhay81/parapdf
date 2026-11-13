@@ -300,13 +300,16 @@ the DOM declares `"use client"`.
   (`tool`, `defaultTool`, `onToolChange`), and preserves kept snapshots when
   hidden with its viewport (`<Activity>` or unmounting `PdfViewer`) while
   detaching immediately when removed from an attached viewport (decision
-  0034). `useAnnotations()` returns a non-null, getter-tracked
+  0034). Cleanup waits until the commit finishes so a sibling editor can
+  mount after the viewport and reclaim its kept annotations. `useAnnotations()` returns a non-null, getter-tracked
   `AnnotationControls` object whose action methods stay referentially stable.
   `PdfPageOverlay` (single-page, RSC-compatible plain `children`) and
   `PdfPageOverlays` (evaluated inside each page's `memo(PdfPage)` so mounted
   pages stay memoized as the window shifts) render through portals into a
   lazily created `.parapdf-overlay-layer` in the page's host; React renders
-  nothing else there (decision 0036). `PdfViewer`'s `onPageClick` and
+  nothing else there. Dynamic portals retain their render-time container through
+  effect replay, and renderer identities are unique across viewers so changing
+  an overlay's viewer cannot overwrite another overlay (decision 0036). `PdfViewer`'s `onPageClick` and
   `viewer.pointAt()` map client coordinates back to unturned PDF points
   (`PdfPageRect`'s coordinates) across rotations, zoom previews, and
   `/UserUnit` pages. `PdfSelectionPopover` portals floating selection UI to
@@ -322,9 +325,12 @@ the DOM declares `"use client"`.
   transparent spacers preserving stylesheet padding and flex `rowGap`,
   `aria-setsize` / `aria-posinset` on mounted `<li>` items, non-suspending
   `pageLabels` resolution, custom `children?: (item: ThumbnailItem) => ReactNode`,
-  and `block: "nearest"` auto-scroll of `currentPage` even when unmounted);
+  and `block: "nearest"` auto-scroll of `currentPage` even when unmounted).
+  Active-page alignment follows measured item chrome, width, and rotation;
+  failed label reads retain numeric labels.
   `PdfOutline` renders `<nav><ol>…</ol></nav>` over `useOutline()`, following
-  the viewer's live `externalLinks` store (`viewer.externalLinks`) and optional
+  the viewer's live `externalLinks` store (`viewer.externalLinks`), providing
+  expand/collapse controls for nested entries, and honoring optional
   `renderItem` customization (decision 0037). `PdfPageRect` places content in
   PDF points.
 - `useViewState()`, `useDocumentState()`, `useSearch()`, and `useHistory()`
@@ -336,7 +342,8 @@ the DOM declares `"use client"`.
   array elements, or own properties of plain objects) (decisions 0033 and 0035).
   `useSearch()` and `useHistory()` keep their action methods referentially
   stable per feature instance, and `useSave()` and `usePrint()` expose reactive
-  saving and print-progress state with clean abort/unmount cancellation. The
+  saving and print-progress state with clean abort/unmount cancellation. They
+  reconcile that state when React reconnects their effects after Activity hides. The
   document's data is read with `use()` under the application's Suspense
   boundaries.
 - On the server the viewer renders an empty viewport, a URL source's

@@ -128,6 +128,10 @@ a lower priority than the viewer's pages and following the viewer's rotation
 | `children` | `(item: ThumbnailItem) => ReactNode`, rendering custom contents inside each mounted `<li>` while keeping virtualization, page labels, and current-page auto-scroll. |
 | `className`, `style` | For the list's `<nav>` element. |
 
+The active thumbnail stays visible after the list measures its items, when
+`width` changes, and when pages rotate. If PDF page labels cannot be read,
+page numbers remain available.
+
 ### `PdfThumbnail`
 
 One thumbnail, for lists of your own: a canvas drawn once it comes near
@@ -149,7 +153,9 @@ The document's outline (bookmarks) as a nested `<nav><ol>…</ol></nav>`, readin
 jumping internal destinations through `viewer.goToDestination(item.dest)`,
 applying the PDF's `bold` and `italic` flags, following `viewer.externalLinks`
 (`"new-tab"` or `"disabled"`), and returning `null` when the document has no
-outline (see [Links, outline, and navigation](/guides/navigation/)).
+outline (see [Links, outline, and navigation](/guides/navigation/)). The default
+renderer provides expand/collapse buttons for nested branches, including
+when `defaultExpanded={false}`.
 
 | Prop | |
 |---|---|
@@ -180,6 +186,8 @@ Server Components can pass streamed JSX directly through it.
 Renders dynamic overlays across every mounted page of a viewer, evaluating
 `children(pageIndex)` inside each page's memoized subtree so scrolling the
 mounted window never re-evaluates overlays on pages that remain mounted.
+Overlays stay visible under StrictMode and Activity; changing `viewer` moves
+only that component's overlays and preserves others already in the target viewer.
 
 | Prop | |
 |---|---|

@@ -150,6 +150,30 @@ function SsrProbe({ out }: { out: { tool: string; hasEditing: boolean } }) {
 }
 
 describe("annotationSlot and useAnnotations", () => {
+  it("keeps editing when a sibling mounts after the viewport in the same commit", () =>
+    withViewportGlobals(async () => {
+      const viewer = new Viewer();
+      const slot = annotationSlot(viewer);
+      const fake = fakeEditing();
+      const { scroller, content } = fakeViewport();
+      const detach = attachViewport(viewer, scroller, content);
+      const unmount = slot.mount(() => fake.editing, undefined);
+      fake.open();
+      detach();
+      unmount();
+      await settle();
+
+      const reattach = attachViewport(viewer, scroller, content);
+      const remount = slot.mount(() => fake.editing, undefined);
+      await settle();
+      assert.equal(fake.detached, 0, "the same React commit restores the editor's owner");
+      assert.equal(slot.editing, fake.editing);
+      remount();
+      await settle();
+      assert.equal(fake.detached, 1, "removing the editor alone still detaches it");
+      reattach();
+    }));
+
   it("returns non-null controls before mounting and keeps method references stable across tool updates", () => {
     const viewer = new Viewer();
     const slot = annotationSlot(viewer);
@@ -231,15 +255,10 @@ describe("annotationSlot and useAnnotations", () => {
       assert.equal(fake.detached, 0);
       assert.equal(slot.editing, fake.editing);
 
-      // Reattaching a viewport WITHOUT <PdfAnnotationEditor> mounted detaches kept edits before viewport() runs.
-      let detachedBeforeViewportHook = false;
-      viewer.extend({
-        viewport() {
-          detachedBeforeViewportHook = fake.detached === 1;
-        },
-      });
+      // Without an editor owner by the end of the commit, kept edits detach.
       const detachViewport2 = attachViewport(viewer, scroller, content);
-      assert.equal(detachedBeforeViewportHook, true);
+      await settle();
+      assert.equal(fake.detached, 1);
       assert.equal(slot.editing, null);
 
       // Mounting again on the live viewport, then unmounting <PdfAnnotationEditor> while viewport stays mounted:
