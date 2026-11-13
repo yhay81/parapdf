@@ -33,6 +33,7 @@ interface PageOverlayHost {
 const EMPTY_RENDERERS: readonly OverlayRenderer[] = [];
 const getEmptyRenderers = (): readonly OverlayRenderer[] => EMPTY_RENDERERS;
 const getNullLayer = (): HTMLDivElement | null => null;
+let nextRendererId = 0;
 
 const hasOverlayNode = (node: ReactNode): boolean =>
   node !== null && node !== undefined && node !== false;
@@ -63,10 +64,10 @@ class OverlayStore {
   readonly #portalListeners = new Map<number, Set<() => void>>();
   readonly #rendererListeners = new Set<() => void>();
   #renderers: readonly OverlayRenderer[] = EMPTY_RENDERERS;
-  #nextId = 0;
 
   nextRendererId(): string {
-    return `overlay-${++this.#nextId}`;
+    // An overlay keeps its identity when its viewer prop changes.
+    return `overlay-${++nextRendererId}`;
   }
 
   readonly getRenderers = (): readonly OverlayRenderer[] => this.#renderers;
@@ -160,7 +161,11 @@ class OverlayStore {
     width: number,
     height: number,
     hasRendered: boolean,
+    renderedLayer: HTMLDivElement | null = null,
   ): () => void {
+    // React retains portal children while StrictMode replays effects. Reattach
+    // the container chosen during render instead of creating an empty one.
+    if (renderedLayer) this.#layers.set(pageIndex, renderedLayer);
     this.#hosts.set(pageIndex, {
       host,
       layer: null,
@@ -353,8 +358,8 @@ export function usePageOverlays(
   }
 
   const layer = hasRendered ? store.ensureLayer(index) : null;
-  const latestGeometry = useRef({ rotation, width, height, hasRendered });
-  latestGeometry.current = { rotation, width, height, hasRendered };
+  const latestGeometry = useRef({ rotation, width, height, hasRendered, layer });
+  latestGeometry.current = { rotation, width, height, hasRendered, layer };
 
   useLayoutEffect(() => {
     const host = hostRef.current;
@@ -364,6 +369,7 @@ export function usePageOverlays(
       width: initialWidth,
       height: initialHeight,
       hasRendered: initialHasRendered,
+      layer: initialLayer,
     } = latestGeometry.current;
     return store.attachHost(
       index,
@@ -372,6 +378,7 @@ export function usePageOverlays(
       initialWidth,
       initialHeight,
       initialHasRendered,
+      initialLayer,
     );
   }, [store, index, hostRef]);
 
