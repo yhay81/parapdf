@@ -6,6 +6,7 @@ import {
   useAttachments,
   useLayers,
   usePageLabels,
+  useViewer,
   type Viewer,
 } from "parapdf";
 import { Suspense } from "react";
@@ -14,39 +15,37 @@ import { OutlinePanel } from "./OutlinePanel.tsx";
 export type SidebarView = "outline" | "thumbnails" | "layers" | "attachments";
 
 /** The panel beside the pages: the outline, page thumbnails, layers, or attachments. */
-export function Sidebar({ viewer, view, id }: { viewer: Viewer; view: SidebarView; id: string }) {
+export function Sidebar({ view, id }: { view: SidebarView; id: string }) {
   // The document's data loads apart from the pages, which never wait for it.
-  return <Suspense fallback={null}>{panel(viewer, view, id)}</Suspense>;
+  return <Suspense fallback={null}>{panel(view, id)}</Suspense>;
 }
 
-function panel(viewer: Viewer, view: SidebarView, id: string) {
+function panel(view: SidebarView, id: string) {
   switch (view) {
     case "outline":
-      return <OutlinePanel viewer={viewer} id={id} />;
+      return <OutlinePanel id={id} />;
     case "thumbnails":
-      return <ThumbnailsPanel viewer={viewer} id={id} />;
+      return <ThumbnailsPanel id={id} />;
     case "layers":
-      return <LayersPanel viewer={viewer} id={id} />;
+      return <LayersPanel id={id} />;
     case "attachments":
-      return <AttachmentsPanel viewer={viewer} id={id} />;
+      return <AttachmentsPanel id={id} />;
   }
 }
 
 /** Every page as a thumbnail, named by its label; each is drawn only near the panel's visible part. */
-function ThumbnailsPanel({ viewer, id }: { viewer: Viewer; id: string }) {
+function ThumbnailsPanel({ id }: { id: string }) {
   const labels = usePageLabels();
   return (
     <div id={id} className="sidebar thumbnails">
-      <PdfThumbnails
-        viewer={viewer}
-        pageLabel={(pageNumber) => `Page ${labels?.[pageNumber - 1] ?? pageNumber}`}
-      />
+      <PdfThumbnails pageLabel={(pageNumber) => `Page ${labels?.[pageNumber - 1] ?? pageNumber}`} />
     </div>
   );
 }
 
 /** The document's layers as check boxes, nested as the document orders them. */
-function LayersPanel({ viewer, id }: { viewer: Viewer; id: string }) {
+function LayersPanel({ id }: { id: string }) {
+  const viewer = useViewer();
   const layers = useLayers();
   if (layers.length === 0) return null;
   return (
@@ -83,7 +82,8 @@ function LayerList({ viewer, layers }: { viewer: Viewer; layers: readonly PdfLay
 }
 
 /** Files embedded in the document; activating one downloads it. */
-function AttachmentsPanel({ viewer, id }: { viewer: Viewer; id: string }) {
+function AttachmentsPanel({ id }: { id: string }) {
+  const viewer = useViewer();
   const attachments = useAttachments();
   if (attachments.length === 0) return null;
   return (

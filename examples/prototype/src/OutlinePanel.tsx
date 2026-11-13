@@ -1,7 +1,8 @@
-import { type OutlineNode, useOutline, type Viewer } from "parapdf";
+import { type OutlineNode, useOutline, useViewer, type Viewer } from "parapdf";
 
 /** The document outline as nested lists of links, a navigation landmark. */
-export function OutlinePanel({ viewer, id }: { viewer: Viewer; id: string }) {
+export function OutlinePanel({ id }: { id: string }) {
+  const viewer = useViewer();
   const outline = useOutline();
   if (outline.length === 0) return null;
   return (

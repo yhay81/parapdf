@@ -1,4 +1,4 @@
-import type { ScrollMode, Viewer, Zoom } from "parapdf";
+import { type ScrollMode, useViewer, type Zoom } from "parapdf";
 import { useEffect, useRef, useState } from "react";
 
 /**
@@ -6,7 +6,8 @@ import { useEffect, useRef, useState } from "react";
  * returns goes full screen, and while it is, the viewer shows its document a
  * page at a time, fitted, and goes back to its scroll mode and zoom after.
  */
-export function usePresentation(viewer: Viewer) {
+export function usePresentation() {
+  const viewer = useViewer();
   const stage = useRef<HTMLDivElement>(null);
   const [presenting, setPresenting] = useState(false);
   useEffect(() => {
@@ -36,7 +37,8 @@ export function usePresentation(viewer: Viewer) {
 }
 
 /** The controls shown over the pages while they are presented. */
-export function PresentationControls({ viewer }: { viewer: Viewer }) {
+export function PresentationControls() {
+  const viewer = useViewer();
   return (
     // A click leaves the focus in the viewport, whose keys turn the pages.
     <div

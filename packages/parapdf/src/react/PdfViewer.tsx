@@ -5,8 +5,10 @@ import {
   lazy,
   memo,
   type ReactNode,
+  type Ref,
   Suspense,
   useEffect,
+  useImperativeHandle,
   useLayoutEffect,
   useMemo,
   useReducer,
@@ -33,10 +35,15 @@ import {
   setViewerOptions,
   type Viewer,
 } from "../view/viewer.ts";
-import { PageContext, useSelected, useSession } from "./context.ts";
+import {
+  PageContext,
+  useOptionalViewer,
+  useSelected,
+  useSession,
+  ViewerContext,
+} from "./context.ts";
 import { setFeatureOptions } from "./features.ts";
 import { VIEWER_CSS } from "./styles.ts";
-import { useViewer } from "./viewer.ts";
 
 /** A zoom: CSS pixels per PDF point, or a fit that keeps fitting as the viewport resizes. */
 export type Zoom = number | FitMode;
@@ -52,11 +59,13 @@ interface ViewValues {
 
 export interface PdfViewerProps extends InitialViewOptions {
   /**
-   * The viewer to show the document with, from `useViewer()`, for the
-   * hooks and functions that act through it; without it, the component
-   * uses one of its own.
+   * The viewer to show the document with, from `useCreateViewer()`; without
+   * it, `<PdfViewer>` uses the viewer of the nearest `<PdfView>` or
+   * `<PdfDocument>` (`useViewer()`).
    */
   viewer?: Viewer;
+  /** Receives the `Viewer` this viewport shows while mounted. */
+  ref?: Ref<Viewer>;
 
   /**
    * The zoom, controlled: a scale in CSS pixels per point, "fit-width" to
@@ -272,16 +281,11 @@ function applyControlled(viewer: Viewer, controlled: Partial<ViewValues>): void 
  * Scrolling renders this component again only when that window changes.
  * It is focusable, so the browser's own keys scroll it.
  */
-export function PdfViewer(props: PdfViewerProps) {
-  return props.viewer ? (
-    <ViewerViewport {...props} viewer={props.viewer} />
-  ) : (
-    <OwnViewer {...props} />
-  );
-}
-
-function OwnViewer(props: PdfViewerProps) {
-  return <ViewerViewport {...props} viewer={useViewer()} />;
+export function PdfViewer({ viewer: externalViewer, ref, ...props }: PdfViewerProps) {
+  const viewer = useOptionalViewer(externalViewer);
+  useImperativeHandle(ref, () => viewer, [viewer]);
+  const viewport = <ViewerViewport {...props} viewer={viewer} />;
+  return externalViewer ? <ViewerContext value={viewer}>{viewport}</ViewerContext> : viewport;
 }
 
 function ViewerViewport({

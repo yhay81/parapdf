@@ -139,14 +139,19 @@ try {
   // An application's use of the API, type-checked against the declarations.
   writeFileSync(
     join(project, "consumer.tsx"),
-    `import {
+    `import { useRef } from "react";
+import {
   configurePdfjs,
   PdfDocument,
   PdfPageRect,
+  PdfThumbnails,
+  PdfView,
   PdfViewer,
   type PdfViewerProps,
   preloadPdfjs,
+  useCreateViewer,
   useDocumentState,
+  useFormChange,
   useSearch,
   useSession,
   useViewer,
@@ -159,13 +164,14 @@ preloadPdfjs();
 const options: PdfViewerProps = { defaultZoom: "fit-width", maxCanvasPixels: 50_000_000 };
 
 export function Reader() {
-  const viewer = useViewer();
+  const viewerRef = useRef<Viewer>(null);
   return (
     <PdfDocument source="/manual.pdf">
-      <Toolbar viewer={viewer} />
+      <Toolbar />
+      <PdfThumbnails />
       <PdfViewer
         {...options}
-        viewer={viewer}
+        ref={viewerRef}
         style={{ height: 600 }}
         pageLabel={(pageNumber, pageCount) => \`\${pageNumber} / \${pageCount}\`}
         renderOverlay={(pageIndex) =>
@@ -176,14 +182,33 @@ export function Reader() {
   );
 }
 
-function Toolbar({ viewer }: { viewer: Viewer }) {
-  const search = useSearch(viewer);
-  const page: number = useViewState(viewer, (state) => state.currentPage);
+export function SplitReader() {
+  const external = useCreateViewer();
+  return (
+    <PdfDocument source="/manual.pdf">
+      <PdfView>
+        <Toolbar />
+        <PdfViewer />
+      </PdfView>
+      <PdfView viewer={external}>
+        <PdfViewer />
+      </PdfView>
+    </PdfDocument>
+  );
+}
+
+function Toolbar() {
+  const viewer = useViewer();
+  const search = useSearch();
+  const { currentPage, pageCount } = useViewState();
+  const slice = useViewState((state) => ({ page: state.currentPage, scale: state.scale }));
+  const { status } = useDocumentState();
   const pages: number = useDocumentState((state) => state.pageCount);
+  useFormChange(() => {});
   const proxy = useSession().proxy;
   return (
     <button type="button" onClick={() => { viewer.setScale("fit-width"); search.search("pdf"); }}>
-      {page + 1} / {pages} {proxy?.numPages}
+      {currentPage + 1} / {pageCount} ({slice.scale}, {status}, {pages}) {proxy?.numPages}
     </button>
   );
 }
@@ -242,11 +267,25 @@ export const misuse = <PdfViewer pageLabel={5} />;
     join(project, "ssr.js"),
     `import { createElement } from "react";
 import { renderToString } from "react-dom/server";
-import { PdfDocument, PdfViewer } from "parapdf";
+import { PdfDocument, PdfThumbnails, PdfView, PdfViewer, useDocumentState, useViewer, useViewState } from "parapdf";
+
+function Toolbar() {
+  useViewer();
+  const { currentPage, pageCount } = useViewState();
+  const { status } = useDocumentState();
+  return createElement("output", null, \`\${status}:\${currentPage}/\${pageCount}\`);
+}
 
 process.stdout.write(
   renderToString(
-    createElement(PdfDocument, { source: "/manual.pdf" }, createElement(PdfViewer, { label: "Manual" })),
+    createElement(
+      PdfDocument,
+      { source: "/manual.pdf" },
+      createElement(Toolbar),
+      createElement(PdfThumbnails),
+      createElement(PdfViewer, { label: "Manual" }),
+      createElement(PdfView, null, createElement(Toolbar), createElement(PdfViewer, { label: "Secondary" })),
+    ),
   ),
 );
 `,
@@ -257,7 +296,11 @@ process.stdout.write(
   } catch (error) {
     html = String(error);
   }
-  const rendered = html.includes('role="document"') && html.includes('aria-label="Manual"');
+  const rendered =
+    html.includes('role="document"') &&
+    html.includes('aria-label="Manual"') &&
+    html.includes('aria-label="Secondary"') &&
+    html.includes("<output>loading:0/0</output>");
   check("the components render on the server", rendered, rendered ? "" : html.slice(0, 200));
   check(
     "the server's page starts downloading the PDF",

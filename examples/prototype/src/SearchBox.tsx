@@ -1,4 +1,4 @@
-import { type SearchOptions, useDocumentState, useSearch, type Viewer } from "parapdf";
+import { type SearchOptions, useDocumentState, useSearch } from "parapdf";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon.tsx";
 
@@ -7,9 +7,9 @@ import { Icon } from "./Icon.tsx";
  * move between matches; Escape clears; Ctrl/Cmd+F focuses the field because
  * the browser's own find cannot see pages that are not mounted.
  */
-export function SearchBox({ viewer }: { viewer: Viewer }) {
-  const search = useSearch(viewer);
-  const pageCount = useDocumentState((state) => state.pageCount);
+export function SearchBox() {
+  const search = useSearch();
+  const { pageCount } = useDocumentState();
   const [value, setValue] = useState("");
   const [options, setOptions] = useState<SearchOptions>({});
   const inputRef = useRef<HTMLInputElement>(null);

@@ -88,9 +88,10 @@ that matters for performance or direction gets a decision record.
   the text selection tracker the viewer keeps drags in text layers with
   (`src/render/`); the features, each attaching to a
   viewer or a session and imported by nothing in the core (`src/features/`);
-  React bindings: `PdfDocument`, `PdfViewer`, which sets its viewer's live
-  options and loads the features they ask for, `PdfThumbnails`,
-  `useViewer()`, and the hooks (`src/react/`, `"use client"`); unit tests in Node, which stand in for pdf.js with
+  React bindings: `PdfDocument`, `PdfView`, `PdfViewer`, which sets its
+  viewer's live options and loads the features they ask for,
+  `PdfThumbnails`, `useViewer()`, `useCreateViewer()`, and the hooks
+  (`src/react/`, `"use client"`); unit tests in Node, which stand in for pdf.js with
   `test/fake-pdfjs.ts` and for the elements of a page the renderer builds
   with `test/fake-dom.ts` (`test/`).
   `scripts/pdfjs-files.ts`, run by `pnpm install` and `build`, copies

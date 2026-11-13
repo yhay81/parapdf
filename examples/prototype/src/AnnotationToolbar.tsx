@@ -4,8 +4,8 @@ import {
   getText,
   type SelectedAnnotation,
   useAnnotations,
+  useViewer,
   useViewState,
-  type Viewer,
 } from "parapdf";
 import { useRef, useState } from "react";
 
@@ -28,12 +28,13 @@ const storageKey = (file: string) => `parapdf-annotations:${file}`;
  * whole document's text, and the comment and alternative text of the
  * annotation selected.
  */
-export function AnnotationToolbar({ viewer, file }: { viewer: Viewer; file: string }) {
-  const annotations = useAnnotations(viewer);
+export function AnnotationToolbar({ file }: { file: string }) {
+  const viewer = useViewer();
+  const annotations = useAnnotations();
   const tool = annotations?.tool ?? "none";
   const editing = annotations?.state ?? null;
   const styles = annotations?.styles ?? null;
-  const ready = useViewState(viewer, (state) => state.layout !== null) && editing !== null;
+  const ready = useViewState((state) => state.layout !== null) && editing !== null;
   const imageRef = useRef<HTMLInputElement>(null);
   const [message, setMessage] = useState("");
 

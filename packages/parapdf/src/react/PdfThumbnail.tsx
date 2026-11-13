@@ -4,11 +4,15 @@ import { type CSSProperties, useLayoutEffect, useRef } from "react";
 import { attachThumbnail } from "../features/thumbnails/index.ts";
 import { turnedSize } from "../view/layout.ts";
 import type { Viewer } from "../view/viewer.ts";
-import { useSelected } from "./context.ts";
+import { useOptionalViewer, useSelected } from "./context.ts";
 
 export interface PdfThumbnailProps {
-  /** The viewer whose document, rotation, and drawing slots the thumbnail uses. */
-  viewer: Viewer;
+  /**
+   * The viewer whose document, rotation, and drawing slots the thumbnail
+   * uses; without it, `<PdfThumbnail>` uses the viewer of the nearest
+   * `<PdfView>` or `<PdfDocument>`.
+   */
+  viewer?: Viewer;
   /** The zero-based page to show. */
   pageIndex: number;
   /** Width in CSS pixels; the height follows the page's shape as the view turns it. */
@@ -27,7 +31,14 @@ const LETTER_RATIO = 11 / 8.5;
  * only: wrap it in a button or link labelled with the page, as
  * `<PdfThumbnails>` does.
  */
-export function PdfThumbnail({ viewer, pageIndex, width, className, style }: PdfThumbnailProps) {
+export function PdfThumbnail({
+  viewer: externalViewer,
+  pageIndex,
+  width,
+  className,
+  style,
+}: PdfThumbnailProps) {
+  const viewer = useOptionalViewer(externalViewer);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const size = useSelected(viewer.store.hot, (state) => state.layout?.sizes[pageIndex]);
   const rotation = useSelected(viewer.store.cold, (state) => state.rotation);

@@ -9,6 +9,8 @@ import type { Direction, Layout, ScrollMode, SpreadMode } from "./layout.ts";
 export interface ViewerState {
   /** The pages laid out at the current zoom; null until a document shows. */
   layout: Layout | null;
+  /** Pages in the laid-out document; 0 until a document shows. */
+  pageCount: number;
   /** Mounted page window: visible pages plus overscan. */
   first: number;
   last: number;
@@ -63,7 +65,7 @@ export type HotViewState = Pick<
 >;
 export type ColdViewState = Pick<
   ViewerState,
-  "rotation" | "spread" | "scrollMode" | "tool" | "direction"
+  "pageCount" | "rotation" | "spread" | "scrollMode" | "tool" | "direction"
 >;
 
 /**
@@ -81,6 +83,7 @@ export class ViewerStore implements ReadableStore<ViewerState> {
     this.#all = new Store(initial);
     const {
       layout,
+      pageCount,
       first,
       last,
       currentPage,
@@ -93,19 +96,30 @@ export class ViewerStore implements ReadableStore<ViewerState> {
       direction,
     } = initial;
     this.hot = this.#hot = new Store({ layout, first, last, currentPage, scale, zoomMode });
-    this.cold = this.#cold = new Store({ rotation, spread, scrollMode, tool, direction });
+    this.cold = this.#cold = new Store({
+      pageCount,
+      rotation,
+      spread,
+      scrollMode,
+      tool,
+      direction,
+    });
   }
 
   get = (): ViewerState => this.#all.get();
   subscribe = (listener: () => void): (() => void) => this.#all.subscribe(listener);
 
   set(patch: Partial<ViewerState>): void {
-    if (!this.#all.update(patch)) return;
+    const full =
+      "layout" in patch && patch.pageCount === undefined
+        ? { ...patch, pageCount: patch.layout?.sizes.length ?? 0 }
+        : patch;
+    if (!this.#all.update(full)) return;
     const hot: Partial<HotViewState> = {};
     const cold: Partial<ColdViewState> = {};
-    for (const key of Object.keys(patch) as (keyof ViewerState)[]) {
-      if (key in this.#hot.get()) Object.assign(hot, { [key]: patch[key] });
-      else if (key in this.#cold.get()) Object.assign(cold, { [key]: patch[key] });
+    for (const key of Object.keys(full) as (keyof ViewerState)[]) {
+      if (key in this.#hot.get()) Object.assign(hot, { [key]: full[key] });
+      else if (key in this.#cold.get()) Object.assign(cold, { [key]: full[key] });
     }
     const hotChanged = this.#hot.update(hot);
     const coldChanged = this.#cold.update(cold);

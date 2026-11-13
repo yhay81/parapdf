@@ -4,6 +4,7 @@ import {
   type PdfViewerProps,
   searchOf,
   useAnnotationEditing,
+  useCreateViewer,
   useOutline,
   useSession,
   useViewer,
@@ -57,9 +58,9 @@ export default function Lifetimes({
   if (lifetime === "above") {
     return (
       <Suspense fallback={<div className="status">Reading the document…</div>}>
-        <Reader {...tree}>
+        <Shown {...tree}>
           <Outline />
-        </Reader>
+        </Shown>
       </Suspense>
     );
   }
@@ -68,19 +69,10 @@ export default function Lifetimes({
     <OwnedOutside {...tree} />
   ) : (
     <Hideable>
-      <Reader {...tree}>
+      <Shown {...tree}>
         <OutlineOnceRead />
-      </Reader>
+      </Shown>
     </Hideable>
-  );
-}
-
-/** A document and the viewer that shows it, as an application's reader has them. */
-function Reader({ children, ...tree }: TreeProps & { children: ReactNode }) {
-  return (
-    <Shown viewer={useViewer()} {...tree}>
-      {children}
-    </Shown>
   );
 }
 
@@ -89,24 +81,25 @@ function Shown({
   file,
   viewerProps,
   children,
-}: TreeProps & { viewer: Viewer; children: ReactNode }) {
+}: TreeProps & { viewer?: Viewer; children: ReactNode }) {
   return (
-    <PdfDocument source={`/corpus/${file}`}>
-      <Probes viewer={viewer} />
+    <PdfDocument source={`/corpus/${file}`} viewer={viewer}>
+      <Probes />
       <div className="toolbar" data-file={file}>
         {children}
       </div>
-      <PdfViewer {...viewerProps} viewer={viewer} className="viewport" />
+      <PdfViewer {...viewerProps} className="viewport" />
     </PdfDocument>
   );
 }
 
 /** Exposes the viewer, its session, and its features to the checks, as the demo does. */
-function Probes({ viewer }: { viewer: Viewer }) {
+function Probes() {
+  const viewer = useViewer();
   window.__viewer = viewer;
   window.__session = useSession();
   window.__search = searchOf(viewer);
-  window.__annotations = useAnnotationEditing(viewer);
+  window.__annotations = useAnnotationEditing();
   return null;
 }
 
@@ -127,14 +120,13 @@ const OutlineOnceRead = () => (
 );
 
 function Switching({ file, viewerProps }: TreeProps) {
-  const viewer = useViewer();
   const [shown, setShown] = useState(file);
   const [pending, startTransition] = useTransition();
   useEffect(() => {
     hooks().open = (next) => startTransition(() => setShown(next));
   }, []);
   return (
-    <Shown viewer={viewer} file={shown} viewerProps={viewerProps}>
+    <Shown file={shown} viewerProps={viewerProps}>
       <OutlineOnceRead />
       <span className="message" data-pending={pending}>
         {pending ? "Opening…" : shown}
@@ -153,7 +145,7 @@ function Hideable({ children }: { children: ReactNode }) {
 
 /** The viewer's owner stays shown while React hides the provider and the viewport. */
 function OwnedOutside(tree: TreeProps) {
-  const viewer = useViewer();
+  const viewer = useCreateViewer();
   return (
     <Hideable>
       <Shown viewer={viewer} {...tree}>

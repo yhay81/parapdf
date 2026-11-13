@@ -12,7 +12,6 @@ position and the annotations; the others apply at once.
 
 ```tsx
 <PdfViewer
-  viewer={viewer}
   defaultZoom="fit-width"
   scrollMode={scrollMode}
   onScrollModeChange={setScrollMode}
@@ -102,7 +101,7 @@ works](/about/how-it-works/#memory).
 
 ## Other props
 
-`className`, `style`, `label`, `pageLabel`, and `renderOverlay` are listed
-with [`PdfViewer`](/reference/components/#pdfviewer). `PdfDocument` takes
-only `source`, `passwordPrompt`, and `children`: everything about how the
-document is shown belongs to its viewers.
+`className`, `style`, `label`, `pageLabel`, `renderOverlay`, `viewer`, and
+`ref` are listed with [`PdfViewer`](/reference/components/#pdfviewer).
+`PdfDocument` takes only `source`, `viewer`, `passwordPrompt`, and `children`:
+everything about how the document is shown belongs to its viewers.

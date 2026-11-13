@@ -13,9 +13,10 @@ Suspense boundary of your own, apart from the viewer, which never waits for
 them.
 
 ```tsx
-import { setLayerVisible, useLayers, type Viewer } from "parapdf";
+import { setLayerVisible, useLayers, useViewer } from "parapdf";
 
-function Layers({ viewer }: { viewer: Viewer }) {
+function Layers() {
+  const viewer = useViewer();
   const layers = useLayers();
   return (
     <ul>
@@ -38,7 +39,7 @@ function Layers({ viewer }: { viewer: Viewer }) {
 }
 
 <Suspense fallback={null}>
-  <Layers viewer={viewer} />
+  <Layers />
 </Suspense>;
 ```
 

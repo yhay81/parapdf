@@ -7,9 +7,10 @@ Links inside the document and its outline jump through the viewer, and its
 history remembers where each jump started:
 
 ```tsx
-import { type OutlineNode, useHistory, useOutline, type Viewer } from "parapdf";
+import { type OutlineNode, useHistory, useOutline, useViewer } from "parapdf";
 
-function Outline({ viewer }: { viewer: Viewer }) {
+function Outline() {
+  const viewer = useViewer();
   const outline = useOutline();
   const list = (items: readonly OutlineNode[]) => (
     <ul>
@@ -26,8 +27,8 @@ function Outline({ viewer }: { viewer: Viewer }) {
   return outline.length > 0 ? <nav aria-label="Outline">{list(outline)}</nav> : null;
 }
 
-function BackForward({ viewer }: { viewer: Viewer }) {
-  const history = useHistory(viewer);
+function BackForward() {
+  const history = useHistory();
   return (
     <>
       <button type="button" disabled={!history.canGoBack} onClick={history.back}>Back</button>
@@ -38,7 +39,7 @@ function BackForward({ viewer }: { viewer: Viewer }) {
 
 // useOutline() suspends until the outline is read: keep it apart from the viewer.
 <Suspense fallback={null}>
-  <Outline viewer={viewer} />
+  <Outline />
 </Suspense>;
 ```
 
@@ -67,7 +68,7 @@ it; an entry without one (`dest` null) resolves to false.
 
 ## Back and forward
 
-`useHistory(viewer)` gives the viewer's history, which keeps the jumps from
+`useHistory(viewer?)` gives the viewer's history, which keeps the jumps from
 its first use on: mount it with the viewer, not only when a button shows.
 `back()` returns to the position and zoom before the last link or outline
 jump, and `forward()` to where `back()` left; a new jump forgets the

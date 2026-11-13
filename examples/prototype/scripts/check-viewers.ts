@@ -82,7 +82,11 @@ async function checkViews(url: string) {
       }),
       { rotation: 0, tool: "select" },
     );
-    // Native scrolling and keyboard zoom target only the focused viewport.
+    // Native scrolling and keyboard zoom target only the focused viewport,
+    // and getter-tracked cold readers do not re-render on scroll or zoom.
+    const coldBefore = await page
+      .locator('[data-viewer="1"] [data-cold-renders]')
+      .getAttribute("data-cold-renders");
     await page.evaluate(() => {
       window.__split!.viewers[1]!.scroller!.scrollTop += 900;
     });
@@ -94,6 +98,11 @@ async function checkViews(url: string) {
     assert.equal(
       await page.evaluate(() => window.__split!.viewers[0]!.store.get().scale),
       leftScale,
+    );
+    assert.equal(
+      await page.locator('[data-viewer="1"] [data-cold-renders]').getAttribute("data-cold-renders"),
+      coldBefore,
+      "getter-tracked cold fields do not re-render during scroll or zoom",
     );
     console.log("PASS scroll, navigation, zoom, rotation, tool, and keyboard are independent");
 

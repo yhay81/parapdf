@@ -29,11 +29,11 @@ Neither adds a back entry, and values out of range are clamped or ignored,
 so a view read from a URL needs no checking:
 
 ```tsx
-import { getViewState, PdfDocument, PdfViewer, useViewer } from "parapdf";
+import { getViewState, PdfDocument, PdfViewer, useCreateViewer } from "parapdf";
 import { useEffect, useState } from "react";
 
 function Reader({ url }: { url: string }) {
-  const viewer = useViewer();
+  const viewer = useCreateViewer();
   // Read once: the opening view applies only as the document opens.
   const [saved] = useState(() => localStorage.getItem(`view:${url}`));
   useEffect(() => {
@@ -50,8 +50,8 @@ function Reader({ url }: { url: string }) {
     };
   }, [viewer, url]);
   return (
-    <PdfDocument source={url}>
-      <PdfViewer viewer={viewer} initialViewState={saved ? JSON.parse(saved) : undefined} />
+    <PdfDocument source={url} viewer={viewer}>
+      <PdfViewer initialViewState={saved ? JSON.parse(saved) : undefined} />
     </PdfDocument>
   );
 }

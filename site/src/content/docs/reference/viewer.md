@@ -3,25 +3,26 @@ title: Viewer
 description: The methods and properties of the Viewer that useViewer returns.
 ---
 
-`useViewer()` returns a `Viewer`: one viewport's controller and state, for
-the life of the component that called it. Give it to a `PdfViewer` to show
-the nearest `PdfDocument`'s document with it, and to the hooks and
-functions that act through it. Its view state is in `viewer.store` and
+`useViewer()` returns the `Viewer` of the nearest `PdfView` or
+`PdfDocument`: one viewport's controller and state. To hold a viewer from
+above `PdfDocument` or across several `PdfView`s, pass a `ref` to
+`PdfViewer` or `PdfView`, or create one with `useCreateViewer()` and pass it
+as `viewer` to `PdfDocument`, `PdfView`, `PdfViewer`, and the hooks that
+take an optional `viewer`. Its view state is in `viewer.store` and
 [`useViewState()`](/reference/state/#view-state).
 
 A viewer keeps its view and annotations while its `PdfViewer` unmounts, as
 when a tab hides it, and shows the document again where it was when a
 `PdfViewer` shows it again. It shows a `PdfDocument`'s document until that
 `PdfDocument` unmounts or opens another source, until it is given to a
-`PdfViewer` of another document, or until the component that created it
-unmounts.
+`PdfViewer` of another document, or until its owner (`PdfDocument`,
+`PdfView`, or the component that called `useCreateViewer()`) unmounts.
 
-While React hides the `PdfDocument` or the component that created the
-viewer and keeps their state (`<Activity>`), the viewer lets go of the
-document and shows nothing: `session`, `sourceName`, and the layout are
-null. It keeps the view, the history, a finished search, and the
-annotations, and shows them again with the document once React shows
-both.
+While React hides the `PdfDocument` or the viewer's owner and keeps their
+state (`<Activity>`), the viewer lets go of the document and shows nothing:
+`session`, `sourceName`, and the layout are null. It keeps the view, the
+history, a finished search, and the annotations, and shows them again with
+the document once React shows both.
 
 The methods below act on a document laid out in an attached viewport;
 before that, they do nothing. The view a document opens with is
@@ -56,7 +57,7 @@ its callback and returns to its value unless you take the change up (see
 | `position()` | Where the viewer shows its document, as `{ pageIndex, x, y, current, scale, zoomMode }`: the page at the viewport's top-left corner and where that corner is as a share of the page, which survive zoom changes, with the current page and zoom; null without a layout. |
 | `restorePosition(position)` | Shows a `position()` again, with its zoom; a fitted zoom fits the viewport as it is now. |
 
-Back and forward are the history's: [`useHistory(viewer)`](/guides/navigation/).
+Back and forward are the history's: [`useHistory()`](/guides/navigation/).
 Search, printing, saving, text, and the rest are functions that take the
 viewer (see [Components and hooks](/reference/components/#functions)).
 

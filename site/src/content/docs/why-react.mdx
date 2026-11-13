@@ -53,11 +53,11 @@ import {
   PdfViewer,
   setViewState,
   useSelection,
-  useViewer,
+  useCreateViewer,
 } from "parapdf";
 
 function ReviewWorkspace() {
-  const viewer = useViewer();
+  const viewer = useCreateViewer();
   const selection = useSelection(viewer);
 
   return (
@@ -115,19 +115,19 @@ import {
   PdfViewer,
   setFormValues,
   useFormChange,
-  useViewer,
+  useCreateViewer,
 } from "parapdf";
 import { useState } from "react";
 
 function TaxForm() {
-  const viewer = useViewer();
+  const viewer = useCreateViewer();
   const [firstName, setFirstName] = useState("Ada");
 
-  useFormChange(viewer, ({ name, value }) => {
+  useFormChange(({ name, value }) => {
     if (name === "topmostSubform[0].Page1[0].f1_14[0]" && typeof value === "string") {
       setFirstName(value);
     }
-  });
+  }, viewer);
 
   return (
     <PdfDocument source="/f1040.pdf">
@@ -164,11 +164,11 @@ levels, and rotations.
 <SplitSessionShowcase client:visible />
 
 ```tsx
-import { PdfDocument, PdfThumbnails, PdfViewer, useViewer } from "parapdf";
+import { PdfDocument, PdfThumbnails, PdfViewer, useCreateViewer } from "parapdf";
 
 export function SplitReader() {
-  const reference = useViewer();
-  const reading = useViewer();
+  const reference = useCreateViewer();
+  const reading = useCreateViewer();
 
   return (
     <PdfDocument source="/manual.pdf">
@@ -191,7 +191,7 @@ resizable panes, and `<Activity>`. Unmounting an `<iframe>` destroys its
 Hiding the `<iframe>` with CSS instead keeps all of its canvases and timers in
 memory.
 
-`useViewer()` holds a `Viewer` in React state while `<PdfViewer />` owns only
+`useCreateViewer()` holds a `Viewer` in React state while `<PdfViewer />` owns only
 the DOM viewport. When `<PdfViewer />` unmounts, in-flight drawing stops and
 its canvases are released; when it mounts again, it restores the exact page,
 scroll offset, zoom, search query, and edits. And options such as
@@ -204,11 +204,11 @@ mount it again.
 <LifecycleShowcase client:visible />
 
 ```tsx
-import { PdfDocument, PdfViewer, useViewer } from "parapdf";
+import { PdfDocument, PdfViewer, useCreateViewer } from "parapdf";
 import { useState } from "react";
 
 export function CollapsiblePreview() {
-  const viewer = useViewer();
+  const viewer = useCreateViewer();
   const [open, setOpen] = useState(true);
   const [dark, setDark] = useState(false);
 

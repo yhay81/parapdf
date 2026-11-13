@@ -38,11 +38,11 @@ covers only mounted pages; to copy a range longer than those, read it with
 `getSelection(viewer)` returns the text selected in the viewer and the
 rectangles it covers, page by page, in the PDF points `PdfPageRect` takes, so
 you can keep a selection as a highlight; null when nothing is selected
-there. `useSelection(viewer)` follows it, at most once a frame while the
+there. `useSelection(viewer?)` follows it, at most once a frame while the
 reader drags:
 
 ```tsx
-const selection = useSelection(viewer);
+const selection = useSelection();
 // { text: "…", pages: [{ pageIndex: 0, rects: [{ x, y, width, height }] }], start, end } or null
 ```
 
@@ -62,7 +62,6 @@ re-rendering:
 
 ```tsx
 <PdfViewer
-  viewer={viewer}
   style={{ height: "100vh" }}
   renderOverlay={(pageIndex) =>
     pageIndex === 0 ? (

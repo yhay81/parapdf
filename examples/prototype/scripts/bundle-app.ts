@@ -184,18 +184,22 @@ export const CONFIGURE_BUILD_JS = `function configureBuild(build, params) {
 /** The viewer as the package's README shows it, without JSX to stay plugin-free. */
 export const APP_JS = `import { createElement as h } from "react";
 import { createRoot } from "react-dom/client";
-import { configurePdfjs, PdfDocument, PdfViewer, useViewer } from "parapdf";
+import { configurePdfjs, PdfDocument, PdfViewer } from "parapdf";
 
 ${CONFIGURE_BUILD_JS}
 
 function App({ file, scripts }) {
-  const viewer = useViewer();
-  window.__viewer = viewer;
   const options = scripts ? { forms: true, formScripts: true } : {};
   return h(
     PdfDocument,
     { source: "/" + file },
-    h(PdfViewer, { viewer, style: { height: "100vh" }, ...options }),
+    h(PdfViewer, {
+      ref: (viewer) => {
+        if (viewer) window.__viewer = viewer;
+      },
+      style: { height: "100vh" },
+      ...options,
+    }),
   );
 }
 

@@ -6,6 +6,34 @@ change the API.
 
 ## Unreleased
 
+- `PdfDocument` provides a default `Viewer` through React context, `PdfView`
+  scopes an independent `Viewer` for split panes, and `useViewState()` and
+  `useDocumentState()` track read fields or compare selected values shallowly:
+  - `PdfDocument` creates and holds a default `Viewer` (or provides its
+    optional `viewer` prop) so `<PdfViewer>`, `<PdfThumbnails>`,
+    `<PdfThumbnail>`, and every viewer hook inside it share one viewer
+    without prop plumbing, including when `<PdfDocument>` is rendered in a
+    Server Component.
+  - `PdfView` (`viewer?`, `ref?`) creates an independent `Viewer` scope
+    inside `PdfDocument` for split views. `PdfViewer` and `PdfView` accept a
+    React 19 `ref` to their `Viewer`.
+  - **Breaking:** `useViewer()` now reads the nearest `PdfView` or
+    `PdfDocument` context (throwing outside both). Call `useCreateViewer()`
+    to create a standalone `Viewer` above `PdfDocument` or across panes.
+  - **Breaking:** `useViewState` now takes `(viewer?)` or
+    `(selector, viewer?)` instead of `(viewer, selector)`, and
+    `useFormChange` takes `(listener, viewer?)` instead of
+    `(viewer, listener)`. `useSearch(viewer?)`, `useHistory(viewer?)`,
+    `useAnnotations(viewer?)`, `useAnnotationEditing(viewer?)`,
+    `useSelection(viewer?)`, `PdfThumbnails`, and `PdfThumbnail` make
+    `viewer` optional.
+  - `useViewState()` and `useDocumentState()` called with no selector track
+    which properties are read during rendering and re-render only when one
+    of them changes; called with a selector, they compare array and
+    plain-object results shallowly.
+  - `ViewerState` (and `ColdViewState`) includes `pageCount`, derived from
+    the viewer's laid-out document (`0` while none shows).
+
 - A document and its viewer follow React's lifetimes. `PdfDocument` starts
   opening its document as it renders instead of once it has mounted: a
   Suspense boundary above it, and a `source` changed in a transition, wait

@@ -5,14 +5,15 @@ import {
   PdfDocument,
   PdfPageRect,
   type PdfRect,
+  PdfView,
   PdfViewer,
   type SpreadMode,
   setFormValues,
   setViewState,
+  useCreateViewer,
   useDocumentState,
   useFormChange,
   useSelection,
-  useViewer,
   useViewState,
   type Viewer,
 } from "parapdf";
@@ -94,7 +95,7 @@ function SelectionBridge({
   viewer: Viewer;
   onCapture: (draft: SelectionDraft) => void;
 }) {
-  const ready = useViewState(viewer, (state) => state.layout !== null);
+  const ready = useViewState((state) => state.layout !== null, viewer);
   const centered = useRef(false);
   const selection = useSelection(viewer);
 
@@ -117,7 +118,7 @@ function SelectionBridge({
  * review notes and user-selected passages stay anchored through zoom and rotation.
  */
 export function CitationsShowcase() {
-  const viewer = useViewer();
+  const viewer = useCreateViewer();
   const [notes, setNotes] = useState<readonly ReviewNote[]>(INITIAL_NOTES);
   const [activeId, setActiveId] = useState<number | null>(1);
   const [draft, setDraft] = useState<SelectionDraft | null>(null);
@@ -170,11 +171,11 @@ export function CitationsShowcase() {
 
   return (
     <div className="example showcase not-content">
-      <PdfDocument source={sampleUrl("usrguide.pdf")}>
+      <PdfDocument source={sampleUrl("usrguide.pdf")} viewer={viewer}>
         <SelectionBridge viewer={viewer} onCapture={setDraft} />
         <div className="example-toolbar" role="toolbar" aria-label="Citation viewer controls">
-          <PageControls viewer={viewer} />
-          <ZoomControls viewer={viewer} />
+          <PageControls />
+          <ZoomControls />
           <button type="button" onClick={() => viewer.rotate(90)}>
             Rotate 90°
           </button>
@@ -471,7 +472,7 @@ function FormSyncBridge({
   initial: TaxpayerRecord;
   onPdfEdit: (patch: Partial<TaxpayerRecord>, label: string, validateZip?: boolean) => void;
 }) {
-  const ready = useViewState(viewer, (state) => state.layout !== null);
+  const ready = useViewState((state) => state.layout !== null, viewer);
   const seeded = useRef(false);
   const initialRef = useRef(initial);
 
@@ -481,7 +482,7 @@ function FormSyncBridge({
     void setFormValues(viewer, toPdfFormValues(initialRef.current));
   }, [ready, viewer]);
 
-  useFormChange(viewer, ({ name, value }) => {
+  useFormChange(({ name, value }) => {
     const text = typeof value === "string" ? value : (value[0] ?? "");
     switch (name) {
       case F1040_FIELDS.firstName:
@@ -513,7 +514,7 @@ function FormSyncBridge({
       default:
         onPdfEdit({}, name.split(".").pop() ?? "Field");
     }
-  });
+  }, viewer);
 
   return null;
 }
@@ -523,7 +524,7 @@ function FormSyncBridge({
  * PDF form, plus React validation rendered directly over a PDF form widget.
  */
 export function FormSyncShowcase() {
-  const viewer = useViewer();
+  const viewer = useCreateViewer();
   const [record, setRecord] = useState<TaxpayerRecord>(ADA_RECORD);
   const [zipChecked, setZipChecked] = useState(false);
   const [syncNotice, setSyncNotice] = useState("Prefilled Form 1040 from React state");
@@ -563,7 +564,7 @@ export function FormSyncShowcase() {
 
   return (
     <div className="example showcase not-content">
-      <PdfDocument source={sampleUrl("f1040.pdf")}>
+      <PdfDocument source={sampleUrl("f1040.pdf")} viewer={viewer}>
         <FormSyncBridge
           viewer={viewer}
           initial={ADA_RECORD}
@@ -588,7 +589,7 @@ export function FormSyncShowcase() {
           <button type="button" onClick={() => applyPreset(EMPTY_RECORD, "blank form", false)}>
             Clear
           </button>
-          <ZoomControls viewer={viewer} fit={false} />
+          <ZoomControls fit={false} />
           <span className="spacer" />
           <button
             type="button"
@@ -757,8 +758,8 @@ const CHAPTER_JUMPS: readonly [string, string][] = [
  * independent `<PdfViewer>` viewports with separate scroll positions and zoom.
  */
 export function SplitSessionShowcase() {
-  const left = useViewer();
-  const right = useViewer();
+  const left = useCreateViewer();
+  const right = useCreateViewer();
   return (
     <div className="example showcase not-content">
       <PdfDocument source={sampleUrl("usrguide.pdf")}>
@@ -782,34 +783,42 @@ export function SplitSessionShowcase() {
           <DocumentStatus className="example-status" />
         </div>
         <div className="showcase-dual">
-          <div className="showcase-pane">
-            <div className="showcase-pane-bar" role="toolbar" aria-label="Left viewport controls">
-              <strong>Contents</strong>
-              <span className="spacer" />
-              <PageControls viewer={left} />
-              <ZoomControls viewer={left} fit={false} />
+          <PdfView viewer={left}>
+            <div className="showcase-pane">
+              <div className="showcase-pane-bar" role="toolbar" aria-label="Left viewport controls">
+                <strong>Contents</strong>
+                <span className="spacer" />
+                <PageControls />
+                <ZoomControls fit={false} />
+              </div>
+              <PdfViewer
+                viewer={left}
+                defaultPage={0}
+                className="example-viewport showcase-dual-viewport"
+                label="Reference viewport"
+              />
             </div>
-            <PdfViewer
-              viewer={left}
-              defaultPage={0}
-              className="example-viewport showcase-dual-viewport"
-              label="Reference viewport"
-            />
-          </div>
-          <div className="showcase-pane">
-            <div className="showcase-pane-bar" role="toolbar" aria-label="Right viewport controls">
-              <strong>Reading pane</strong>
-              <span className="spacer" />
-              <PageControls viewer={right} />
-              <ZoomControls viewer={right} fit={false} />
+          </PdfView>
+          <PdfView viewer={right}>
+            <div className="showcase-pane">
+              <div
+                className="showcase-pane-bar"
+                role="toolbar"
+                aria-label="Right viewport controls"
+              >
+                <strong>Reading pane</strong>
+                <span className="spacer" />
+                <PageControls />
+                <ZoomControls fit={false} />
+              </div>
+              <PdfViewer
+                viewer={right}
+                defaultPage={18}
+                className="example-viewport showcase-dual-viewport"
+                label="Reading viewport"
+              />
             </div>
-            <PdfViewer
-              viewer={right}
-              defaultPage={18}
-              className="example-viewport showcase-dual-viewport"
-              label="Reading viewport"
-            />
-          </div>
+          </PdfView>
         </div>
       </PdfDocument>
       <SampleNote
@@ -829,8 +838,8 @@ const PALETTES: Record<ThemeName, PageColors | undefined> = {
 };
 
 function UnmountedReadout({ viewer, onMount }: { viewer: Viewer; onMount: () => void }) {
-  const page = useViewState(viewer, (state) => state.currentPage);
-  const scale = useViewState(viewer, (state) => state.scale);
+  const page = useViewState((state) => state.currentPage, viewer);
+  const scale = useViewState((state) => state.scale, viewer);
   const pageCount = useDocumentState((state) => state.pageCount);
   return (
     <div className="showcase-unmounted">
@@ -840,8 +849,8 @@ function UnmountedReadout({ viewer, onMount }: { viewer: Viewer; onMount: () => 
         </strong>
         <p>
           An unmounted <code>&lt;iframe&gt;</code> destroys its browsing context and reloads{" "}
-          <code>viewer.html</code> at page 1. Here, <code>useViewer()</code> stopped drawing and
-          released its canvases while keeping your place in React state:
+          <code>viewer.html</code> at page 1. Here, <code>useCreateViewer()</code> stopped drawing
+          and released its canvases while keeping your place in React state:
         </p>
         <dl className="showcase-stat-grid">
           <div>
@@ -870,7 +879,7 @@ function UnmountedReadout({ viewer, onMount }: { viewer: Viewer; onMount: () => 
  * position, zoom, or search matches, plus changing live props like `pageColors`.
  */
 export function LifecycleShowcase() {
-  const viewer = useViewer();
+  const viewer = useCreateViewer();
   const [mounted, setMounted] = useState(true);
   const [theme, setTheme] = useState<ThemeName>("paper");
   const [spread, setSpread] = useState<SpreadMode>("none");
@@ -878,7 +887,7 @@ export function LifecycleShowcase() {
 
   return (
     <div className="example showcase not-content">
-      <PdfDocument source={sampleUrl("usrguide.pdf")}>
+      <PdfDocument source={sampleUrl("usrguide.pdf")} viewer={viewer}>
         <div
           className="example-toolbar"
           role="toolbar"
@@ -887,9 +896,9 @@ export function LifecycleShowcase() {
           <button type="button" onClick={() => setMounted((current) => !current)}>
             {mounted ? "Unmount <PdfViewer />" : "Mount <PdfViewer /> again"}
           </button>
-          <PageControls viewer={viewer} />
-          <ZoomControls viewer={viewer} fit={false} />
-          <SearchField viewer={viewer} />
+          <PageControls />
+          <ZoomControls fit={false} />
+          <SearchField />
           <label htmlFor={paletteId}>
             Palette{" "}
             <select
@@ -943,11 +952,11 @@ const STRESS_FILES = [
 ];
 
 function RuntimeTelemetry({ viewer, file }: { viewer: Viewer; file: string }) {
-  const first = useViewState(viewer, (state) => state.first);
-  const last = useViewState(viewer, (state) => state.last);
-  const page = useViewState(viewer, (state) => state.currentPage);
-  const scale = useViewState(viewer, (state) => state.scale);
-  const laidOut = useViewState(viewer, (state) => state.layout !== null);
+  const first = useViewState((state) => state.first, viewer);
+  const last = useViewState((state) => state.last, viewer);
+  const page = useViewState((state) => state.currentPage, viewer);
+  const scale = useViewState((state) => state.scale, viewer);
+  const laidOut = useViewState((state) => state.layout !== null, viewer);
   const pageCount = useDocumentState((state) => state.pageCount);
   const [, refresh] = useReducer((count: number) => count + 1, 0);
   const tracker = useRef({ file, key: "", commits: 0 });
@@ -992,12 +1001,12 @@ function RuntimeTelemetry({ viewer, file }: { viewer: Viewer; file: string }) {
 export function StressShowcase() {
   const [file, setFile] = useState("synthetic-text-1000.pdf");
   const sample = samples.find((candidate) => candidate.file === file);
-  const viewer = useViewer();
+  const viewer = useCreateViewer();
   const selectId = useId();
 
   return (
     <div className="example showcase not-content">
-      <PdfDocument source={sampleUrl(file)}>
+      <PdfDocument source={sampleUrl(file)} viewer={viewer}>
         <div className="example-toolbar" role="toolbar" aria-label="Stress corpus controls">
           <label htmlFor={selectId}>
             <span className="sr-only">Document</span>
@@ -1011,7 +1020,7 @@ export function StressShowcase() {
                 ))}
             </select>
           </label>
-          <PageControls viewer={viewer} />
+          <PageControls />
           {file === "synthetic-text-1000.pdf" ? (
             <>
               <button type="button" onClick={() => viewer.goToPage(0)}>
@@ -1025,7 +1034,7 @@ export function StressShowcase() {
               </button>
             </>
           ) : null}
-          <ZoomControls viewer={viewer} fit={false} />
+          <ZoomControls fit={false} />
           <span className="spacer" />
           <RuntimeTelemetry viewer={viewer} file={file} />
           <DocumentStatus className="example-status" />
@@ -1234,7 +1243,7 @@ const COMPARISON_ROWS: readonly {
     pdfjsIframe:
       "Unmounting destroys the window and loses scroll position, zoom, search, and edits.",
     parapdf:
-      "useViewer() stops work while unmounted and restores position, zoom, search, and edits on remount.",
+      "useCreateViewer() stops work while unmounted and restores position, zoom, search, and edits on remount.",
   },
   {
     topic: "Auth headers, byte buffers & SSR",

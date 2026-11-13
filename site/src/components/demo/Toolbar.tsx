@@ -6,6 +6,7 @@ import {
   useDocumentState,
   useHistory,
   usePageLabels,
+  useViewer,
   useViewState,
 } from "parapdf";
 import { type ReactNode, Suspense, useEffect, useRef, useState } from "react";
@@ -14,7 +15,6 @@ import type { Opened } from "./DemoApp.tsx";
 import { FindBar } from "./FindBar.tsx";
 import { Icon, IconButton, type IconName, modifier } from "./icons.tsx";
 import { closePopover, MenuItem, menuItemRole, Popover } from "./popover.tsx";
-import { useDemoViewer } from "./viewer.ts";
 
 const SCROLL_MODES: readonly [ScrollMode, string, IconName][] = [
   ["vertical", "Vertical", "scrollVertical"],
@@ -55,8 +55,7 @@ export interface ToolbarProps {
 
 /** Shows or hides the annotation tools; hiding them puts the pointer back to its default. */
 function useAnnotatingToggle({ annotating, onAnnotatingChange }: ToolbarProps) {
-  const viewer = useDemoViewer();
-  const editing = useAnnotationEditing(viewer);
+  const editing = useAnnotationEditing();
   return () => {
     if (annotating) void editing?.setTool("none");
     onAnnotatingChange(!annotating);
@@ -71,7 +70,7 @@ function useAnnotatingToggle({ annotating, onAnnotatingChange }: ToolbarProps) {
  */
 export function Toolbar(props: ToolbarProps) {
   const { sidebar, onSidebarChange, finding, onFindingChange, annotating } = props;
-  const viewer = useDemoViewer();
+  const viewer = useViewer();
   const toggleAnnotating = useAnnotatingToggle(props);
   const ready = useDocumentState((state) => state.status === "ready");
   const findButton = useRef<HTMLButtonElement>(null);
@@ -202,8 +201,7 @@ function DocumentMenu({ opened, onOpen, onOpenFile }: ToolbarProps) {
 
 /** Back and forward through the places links and the outline jumped from. */
 function History() {
-  const viewer = useDemoViewer();
-  const { canGoBack: canBack, canGoForward: canForward, back, forward } = useHistory(viewer);
+  const { canGoBack: canBack, canGoForward: canForward, back, forward } = useHistory();
   return (
     <div className="demo-group demo-from-xl">
       <IconButton icon="back" label="Back" disabled={!canBack} onClick={back} />
@@ -226,9 +224,8 @@ function PageLabel({ page }: { page: number }) {
 
 /** The page as a number to type, after the previous and next buttons. */
 function PageNavigation() {
-  const viewer = useDemoViewer();
-  const page = useViewState(viewer, (state) => state.currentPage);
-  const pageCount = useDocumentState((state) => state.pageCount);
+  const viewer = useViewer();
+  const { currentPage: page, pageCount } = useViewState();
   const [value, setValue] = useState(String(page + 1));
   useEffect(() => setValue(String(page + 1)), [page]);
   return (
@@ -275,9 +272,11 @@ function PageNavigation() {
 
 /** Zoom out and in, and the zoom, whose menu fits the page or picks a share of the printed size. */
 function ZoomControls() {
-  const viewer = useDemoViewer();
-  const percent = useViewState(viewer, (state) => Math.round((state.scale * 72 * 100) / 96));
-  const zoomMode = useViewState(viewer, (state) => state.zoomMode);
+  const viewer = useViewer();
+  const { percent, zoomMode } = useViewState((state) => ({
+    percent: Math.round((state.scale * 72 * 100) / 96),
+    zoomMode: state.zoomMode,
+  }));
   return (
     <div className="demo-group">
       <IconButton
@@ -358,14 +357,11 @@ function Tile({
  */
 function MoreMenu(props: ToolbarProps) {
   const { annotating, onOpenFile, onShowInfo, onDownload } = props;
-  const viewer = useDemoViewer();
+  const viewer = useViewer();
   const toggleAnnotating = useAnnotatingToggle(props);
   const ready = useDocumentState((state) => state.status === "ready");
-  const pageCount = useDocumentState((state) => state.pageCount);
-  const scrollMode = useViewState(viewer, (state) => state.scrollMode);
-  const spread = useViewState(viewer, (state) => state.spread);
-  const tool = useViewState(viewer, (state) => state.tool);
-  const { canGoBack: canBack, canGoForward: canForward, back, forward } = useHistory(viewer);
+  const { pageCount, scrollMode, spread, tool } = useViewState();
+  const { canGoBack: canBack, canGoForward: canForward, back, forward } = useHistory();
   return (
     <Popover
       id="demo-more"

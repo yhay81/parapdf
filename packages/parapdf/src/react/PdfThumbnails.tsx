@@ -2,12 +2,16 @@
 
 import { type CSSProperties, memo, useCallback } from "react";
 import type { Viewer } from "../view/viewer.ts";
-import { useSelected } from "./context.ts";
+import { useOptionalViewer, useSelected } from "./context.ts";
 import { PdfThumbnail } from "./PdfThumbnail.tsx";
 
 export interface PdfThumbnailsProps {
-  /** The viewer whose document the thumbnails show, and whose current page they mark. */
-  viewer: Viewer;
+  /**
+   * The viewer whose document the thumbnails show, and whose current page
+   * they mark; without it, `<PdfThumbnails>` uses the viewer of the nearest
+   * `<PdfView>` or `<PdfDocument>`.
+   */
+  viewer?: Viewer;
   /** Each thumbnail's width in CSS pixels (default 120). */
   width?: number;
   /** Called with the zero-based page chosen; by default the viewer goes to it. */
@@ -33,7 +37,7 @@ const defaultPageLabel = (pageNumber: number, pageCount: number) =>
  * the visible part of the list's scroll container.
  */
 export function PdfThumbnails({
-  viewer,
+  viewer: externalViewer,
   width = 120,
   onSelect,
   label = "Page thumbnails",
@@ -41,7 +45,8 @@ export function PdfThumbnails({
   className,
   style,
 }: PdfThumbnailsProps) {
-  const pageCount = useSelected(viewer.store.hot, (state) => state.layout?.sizes.length ?? 0);
+  const viewer = useOptionalViewer(externalViewer);
+  const pageCount = useSelected(viewer.store.cold, (state) => state.pageCount);
   const currentPage = useSelected(viewer.store.hot, (state) => state.currentPage);
   // Stable while the props are, so that a new current page renders two items again, not all.
   const select = useCallback(
