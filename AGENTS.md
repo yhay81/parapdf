@@ -90,9 +90,11 @@ that matters for performance or direction gets a decision record.
   the text selection tracker the viewer keeps drags in text layers with
   (`src/render/`); the features, each attaching to a
   viewer or a session and imported by nothing in the core (`src/features/`);
-  React bindings: `PdfDocument`, `PdfView`, `PdfViewer` (which sets its
-  viewer's live options), declarative feature components (`PdfForms`,
-  `PdfAnnotationEditor`, `PdfAutoLinks`, `PdfPermissions`),
+  React bindings: `PdfDocument`, `preloadDocument()`, `PdfView`, `PdfViewer`
+  (which sets its viewer's live options and `onPageClick`), declarative
+  feature components (`PdfForms`, `PdfAnnotationEditor`, `PdfAutoLinks`,
+  `PdfPermissions`), declarative page overlays (`PdfPageOverlay`,
+  `PdfPageOverlays`, `PdfPageRect`), `PdfSelectionPopover`,
   `PdfThumbnails`, `useViewer()`, `useCreateViewer()`, `useSave()`,
   `usePrint()`, and the hooks (`src/react/`, `"use client"`); unit tests in Node, which stand in for pdf.js with
   `test/fake-pdfjs.ts` and for the elements of a page the renderer builds

@@ -6,6 +6,30 @@ change the API.
 
 ## Unreleased
 
+- Declarative page overlays (`<PdfPageOverlay>`, `<PdfPageOverlays>`),
+  unclipped selection popovers (`<PdfSelectionPopover>`, `selection.anchor`),
+  PDF-coordinate pointer queries (`viewer.pointAt()`, `onPageClick`), and
+  intent-driven document preloading (`preloadDocument()`):
+  - **Breaking:** Replaced `PdfViewer`'s `renderOverlay` prop with declarative
+    `<PdfPageOverlay page={number}>{children}</PdfPageOverlay>` (plain
+    `ReactNode` children usable directly from Server Components) and
+    `<PdfPageOverlays>{(pageIndex) => ReactNode}</PdfPageOverlays>` (evaluated
+    inside each page's memoized component so scrolling the mounted window never
+    re-evaluates kept pages, allocating `.parapdf-overlay-layer` lazily).
+  - `<PdfPageRect>` now forwards `ref` and `className` to its positioned
+    element for anchoring tooltips and popovers.
+  - Added `selection.anchor` (`SelectionAnchor`, returning the live union
+    client `DOMRect` across scroll, zoom, and rotation) to `useSelection()`,
+    and `<PdfSelectionPopover>` to render floating selection toolbars outside
+    page `contain: "strict"` clipping with zero per-frame React state commits.
+  - Added `viewer.pointAt(point)` and `<PdfViewer onPageClick={(point, event) => ...}>`,
+    mapping client coordinates to `{ pageIndex, x, y }` in unturned PDF points
+    (`<PdfPageRect>`'s coordinates) across rotations (`0`, `90`, `180`, `270`),
+    zoom previews, and `/UserUnit` pages.
+  - Added `preloadDocument(source)` to warm pdf.js, React's URL preload, and
+    the shared document registry ahead of `<PdfDocument>` mounting (such as on
+    route hover).
+
 - Document-level operations now take `PdfSession` instead of `Viewer`, React
   action hooks (`useSave`, `usePrint`) cover saving and printing state, and
   vanilla-only feature plumbing is no longer part of the public surface:

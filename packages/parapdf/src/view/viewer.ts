@@ -30,7 +30,10 @@ import {
   type Layout,
   type LayoutOptions,
   type PageArea,
+  type PdfPagePoint,
   pageAtPoint,
+  pageLeft,
+  pageTop,
   rowEnd,
   rowStart,
   type ScrollMode,
@@ -38,6 +41,7 @@ import {
   sameRows,
   showPage,
   toRotation,
+  unturnPoint,
   visibleArea,
   visibleRange,
   zoomTarget,
@@ -117,6 +121,8 @@ let configure: (viewer: Viewer, options: ViewerOptions) => void;
 let bindViewport: (viewer: Viewer, scroller: HTMLElement, content: HTMLElement) => () => void;
 /** Registers a page's host; see `attachPage()`. */
 let bindPage: (viewer: Viewer, index: number, host: HTMLElement) => () => void;
+/** Whether a feature claimed pointer drags on `viewer`; see `isPointerClaimed()`. */
+let readPointerClaimed: (viewer: Viewer) => boolean;
 
 /**
  * One viewport onto a shared document session: layout, gestures,
@@ -136,6 +142,7 @@ export class Viewer {
     configure = (viewer, options) => viewer.#configure(options);
     bindViewport = (viewer, scroller, content) => viewer.#attachViewport(scroller, content);
     bindPage = (viewer, index, host) => viewer.#attachPage(index, host);
+    readPointerClaimed = (viewer) => viewer.#pointerClaimed;
   }
 
   readonly store = new ViewerStore({
@@ -1125,6 +1132,96 @@ export class Viewer {
   }
 
   /**
+   * Where a client point (`{ clientX, clientY }`, such as a `MouseEvent` or
+   * `PointerEvent`) lands on a shown page, in PDF points from the unturned
+   * page's top-left corner (`<PdfPageRect>`'s coordinates); null when no
+   * viewport or layout is attached, when the point is outside the viewport's
+   * client box, or when it falls in the space between or beside pages.
+   */
+  pointAt(point: { clientX: number; clientY: number }): PdfPagePoint | null {
+    const layout = this.store.get().layout;
+    const scroller = this.#scroller;
+    if (!layout || !scroller || layout.sizes.length === 0) return null;
+    const { clientX, clientY } = point;
+    if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return null;
+    const scrollerBox = scroller.getBoundingClientRect();
+    const clientLeft = scrollerBox.left + scroller.clientLeft;
+    const clientTop = scrollerBox.top + scroller.clientTop;
+    const clientWidth = scroller.clientWidth || scrollerBox.width;
+    const clientHeight = scroller.clientHeight || scrollerBox.height;
+    if (
+      clientWidth <= 0 ||
+      clientHeight <= 0 ||
+      clientX < clientLeft ||
+      clientX > clientLeft + clientWidth ||
+      clientY < clientTop ||
+      clientY > clientTop + clientHeight
+    ) {
+      return null;
+    }
+    const { shown } = layout;
+    const isHidden = (index: number) =>
+      shown !== null && (index < shown.first || index > shown.last);
+    // Prefer the live screen boxes of mounted pages so CSS zoom previews and
+    // container-query centering are reflected directly.
+    let measured = false;
+    for (const [index, host] of this.#pageHosts) {
+      if (isHidden(index)) continue;
+      const box = host.getBoundingClientRect();
+      if (box.width <= 0 || box.height <= 0) continue;
+      measured = true;
+      if (
+        clientX >= box.left &&
+        clientX <= box.right &&
+        clientY >= box.top &&
+        clientY <= box.bottom
+      ) {
+        const size = layout.sizes[index];
+        if (!size || size.width <= 0 || size.height <= 0) return null;
+        const { x, y } = unturnPoint(
+          clamp((clientX - box.left) / box.width, 0, 1),
+          clamp((clientY - box.top) / box.height, 0, 1),
+          size,
+          layout.rotation,
+        );
+        return { pageIndex: index, x, y };
+      }
+    }
+    if (measured) return null;
+    // Fallback when page hosts have no laid-out screen boxes yet (such as in
+    // headless layout tests): map through the viewport and layout geometry.
+    const viewport = this.#gestures.shownViewport(scroller);
+    const invFactor = clientHeight > 0 ? viewport.height / clientHeight : 1;
+    const contentX = viewport.left + (clientX - clientLeft) * invFactor;
+    const contentY = viewport.top + (clientY - clientTop) * invFactor;
+    const index = pageAtPoint(layout, contentX, contentY, viewport.scrollerWidth);
+    if (isHidden(index)) return null;
+    const left = pageLeft(layout, index, viewport.scrollerWidth);
+    const top = pageTop(layout, index, viewport.scrollerHeight);
+    const width = layout.widths[index] ?? 0;
+    const height = layout.heights[index] ?? 0;
+    if (
+      width <= 0 ||
+      height <= 0 ||
+      contentX < left ||
+      contentX > left + width ||
+      contentY < top ||
+      contentY > top + height
+    ) {
+      return null;
+    }
+    const size = layout.sizes[index];
+    if (!size || size.width <= 0 || size.height <= 0) return null;
+    const { x, y } = unturnPoint(
+      clamp((contentX - left) / width, 0, 1),
+      clamp((contentY - top) / height, 0, 1),
+      size,
+      layout.rotation,
+    );
+    return { pageIndex: index, x, y };
+  }
+
+  /**
    * Where the viewer shows its document now, as a page and a share of it,
    * which survive zoom changes, and the current page and zoom; null without
    * a layout or a viewport.
@@ -1666,4 +1763,9 @@ export function attachViewport(
  */
 export function attachPage(viewer: Viewer, index: number, host: HTMLElement): () => void {
   return bindPage(viewer, index, host);
+}
+
+/** Whether a feature (such as an active annotation drawing tool) claimed pointer drags. */
+export function isPointerClaimed(viewer: Viewer): boolean {
+  return readPointerClaimed(viewer);
 }

@@ -440,6 +440,36 @@ export const toRotation = (degrees: number): Rotation =>
 export const turnedSize = (size: PageSize, rotation: Rotation): PageSize =>
   rotation % 180 === 0 ? size : { width: size.height, height: size.width };
 
+/** A point on a page in PDF points from the top-left corner of the unturned page. */
+export interface PdfPagePoint {
+  pageIndex: number;
+  x: number;
+  y: number;
+}
+
+/**
+ * Where a point given as `[0, 1]` fractions `(withinX, withinY)` of a page
+ * turned clockwise by `rotation` sits on the unturned page of `size`, in PDF
+ * points from its top-left corner.
+ */
+export function unturnPoint(
+  withinX: number,
+  withinY: number,
+  size: PageSize,
+  rotation: Rotation,
+): { x: number; y: number } {
+  switch (rotation) {
+    case 90:
+      return { x: withinY * size.width, y: (1 - withinX) * size.height };
+    case 180:
+      return { x: (1 - withinX) * size.width, y: (1 - withinY) * size.height };
+    case 270:
+      return { x: (1 - withinY) * size.width, y: withinX * size.height };
+    default:
+      return { x: withinX * size.width, y: withinY * size.height };
+  }
+}
+
 /**
  * Where a box given in PDF points from the top-left corner of an unturned
  * page of `size` lands once the view turns it clockwise by `rotation`.

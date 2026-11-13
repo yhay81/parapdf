@@ -33,45 +33,85 @@ second read, or a search, parses nothing again. The browser's selection
 covers only mounted pages; to copy a range longer than those, read it with
 `getText()` between the points where it starts and ends.
 
-## Selections
+## Selections and popovers
 
-`useSelection(viewer?)` returns the text selected in the viewer and the
-rectangles it covers, page by page, in the PDF points `PdfPageRect` takes, so
-you can keep a selection as a highlight; null when nothing is selected
-there. It follows the selection at most once a frame while the reader drags:
+`useSelection(viewer?)` returns the text selected in the viewer, the rectangles
+it covers in the PDF points `PdfPageRect` takes, and a virtual `anchor` whose
+`getBoundingClientRect()` follows scroll, zoom, and rotation; null when nothing
+is selected there. It follows the selection at most once a frame while the
+reader drags:
 
 ```tsx
 const selection = useSelection();
-// { text: "…", pages: [{ pageIndex: 0, rects: [{ x, y, width, height }] }], start, end } or null
+// { text: "…", pages: [{ pageIndex: 0, rects: [{ x, y, width, height }] }], start, end, anchor } or null
 ```
 
 `start` and `end` are where the selection begins and ends in the document's
-text, for `getText()`; null for an end outside the pages' text.
+text, for `getText()`; null for an end outside the pages' text. `selection.anchor`
+satisfies Floating UI, Radix Popover, and Base UI's virtual-reference contract.
 
 Rectangles are in PDF points of the page unturned by the view, from its
 top-left corner, so they stay right whatever the zoom and rotation.
 
-## Overlays
+To show floating actions (such as a copy or highlight toolbar) anchored to the
+selection without clipping at a page's `contain: "strict"` boundary or
+committing React state on scroll, render `PdfSelectionPopover` inside
+`PdfViewer`:
 
-`PdfViewer`'s `renderOverlay` draws your own elements over pages, placed
-with `PdfPageRect` in PDF points from the page's top-left corner. React
-renders them through a portal into a layer of the page, above its drawing
-and text, and they follow zoom and rotation through layout alone, without
+```tsx
+<PdfSelectionPopover placement="top" offset={8}>
+  {(selection) => (
+    <button type="button" onClick={() => navigator.clipboard.writeText(selection.text)}>
+      Copy
+    </button>
+  )}
+</PdfSelectionPopover>
+```
+
+Pressing non-editable buttons inside `PdfSelectionPopover` keeps the browser's
+text selection intact until your `onClick` handler clears or acts on it.
+
+## Overlays and page coordinates
+
+`PdfPageOverlay` and `PdfPageOverlays` draw your own elements over pages, placed
+with `PdfPageRect` in PDF points from the page's unturned top-left corner. React
+renders them through a portal into a layer of the page, above its drawing and
+text, and they follow zoom and rotation through layout alone, without
 re-rendering:
 
 ```tsx
 <PdfViewer
   style={{ height: "100vh" }}
-  renderOverlay={(pageIndex) =>
-    pageIndex === 0 ? (
-      <PdfPageRect x={72} y={72} width={200} height={24}>
-        <mark style={{ display: "block", height: "100%", opacity: 0.4 }} />
-      </PdfPageRect>
-    ) : null
-  }
-/>
+  onPageClick={({ pageIndex, x, y }) => {
+    // Clicked coordinates are in the same unturned PDF points PdfPageRect takes.
+  }}
+>
+  <PdfPageOverlay page={0}>
+    <PdfPageRect x={72} y={72} width={200} height={24}>
+      <mark style={{ display: "block", height: "100%", opacity: 0.4 }} />
+    </PdfPageRect>
+  </PdfPageOverlay>
+  <PdfPageOverlays>
+    {(pageIndex) =>
+      pinsByPage.get(pageIndex)?.map((pin) => (
+        <PdfPageRect key={pin.id} x={pin.x} y={pin.y} width={16} height={16}>
+          <PinMarker pin={pin} />
+        </PdfPageRect>
+      ))
+    }
+  </PdfPageOverlays>
+</PdfViewer>
 ```
 
-`PdfPageRect` takes its page from the overlay it is rendered in.
-`renderOverlay` is called for mounted pages only, so an overlay of every
-page costs only what the pages near the viewport show.
+- `PdfPageOverlay` takes a zero-based `page` prop and plain `children` (no
+  function prop), so Server Components can pass streamed JSX directly through it
+  while unmounted pages mount nothing.
+- `PdfPageOverlays` evaluates `children(pageIndex)` inside each mounted page's
+  memoized subtree, so scrolling the mounted window never re-evaluates overlays
+  on pages that stay mounted.
+- `PdfPageRect` forwards `ref` and `className` to its positioned element for
+  anchoring tooltips or popovers.
+- `PdfViewer`'s `onPageClick(point, event)` and `viewer.pointAt(event)` map
+  client coordinates to `{ pageIndex, x, y }` in the same unturned PDF points
+  across view rotations (`0`, `90`, `180`, `270`), zoom previews, and `/UserUnit`
+  pages (`null` in gaps or outside the viewport).

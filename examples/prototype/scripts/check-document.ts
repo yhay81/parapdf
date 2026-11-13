@@ -1350,6 +1350,64 @@ try {
     check("no errors with the preload", errors.length === 0, errors.join(" | "));
     await page.context().close();
   }
+
+  // --- preloadDocument() warms the session ahead of <PdfDocument> mounting ---
+  {
+    const context = await launched.browser.newContext({
+      viewport: { width: 1280, height: 900 },
+      deviceScaleFactor: 2,
+    });
+    const page = await context.newPage();
+    await restoreScaleFactor(page, `${baseUrl}calibrate.html`);
+    const preloadErrors: string[] = [];
+    page.on("pageerror", (error) => preloadErrors.push(error.message));
+    await page.goto(demo("file=bill-hr815.pdf&unmounted=1&count=1"));
+    await page.waitForFunction(() => Boolean(window.__parapdf && window.__lifecycle));
+    await page.evaluate(() => {
+      window.__parapdf?.preloadDocument("/corpus/bill-hr815.pdf#page=3");
+    });
+    await page.waitForFunction(
+      () =>
+        window.__lifecycle?.stats.opens === 1 &&
+        performance
+          .getEntriesByType("resource")
+          .some((entry) => entry.name.endsWith("bill-hr815.pdf")),
+      undefined,
+      { timeout: 15_000 },
+    );
+    const opensBeforeMount = await page.evaluate(() => window.__lifecycle?.stats.opens ?? 0);
+    await page.evaluate(() => {
+      window.__lifecycle?.mount();
+    });
+    await page.waitForFunction(() => window.__session?.state.get().status === "ready", undefined, {
+      timeout: 15_000,
+    });
+    const joined = await page.evaluate(() => {
+      const status = window.__session?.state.get().status ?? null;
+      const pageCount = window.__session?.state.get().pageCount ?? 0;
+      const stats = window.__lifecycle?.stats ?? { opens: -1, destroys: -1 };
+      const downloads = performance
+        .getEntriesByType("resource")
+        .filter((entry) => entry.name.endsWith("bill-hr815.pdf")).length;
+      return { status, pageCount, stats, downloads };
+    });
+    check(
+      "preloadDocument() warms the shared session ahead of <PdfDocument> mount with one download",
+      opensBeforeMount === 1 &&
+        joined.status === "ready" &&
+        joined.pageCount === 110 &&
+        joined.stats.opens === 1 &&
+        joined.stats.destroys === 0 &&
+        (launched.name === "webkit" || launched.name === "safari" || joined.downloads === 1),
+      JSON.stringify({ opensBeforeMount, ...joined }),
+    );
+    check(
+      "no errors with preloadDocument()",
+      preloadErrors.length === 0,
+      preloadErrors.join(" | "),
+    );
+    await context.close();
+  }
 } finally {
   await launched.close();
   await server.close();

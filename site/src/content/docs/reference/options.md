@@ -97,7 +97,7 @@ works](/about/how-it-works/#memory).
 
 ## Other props
 
-`className`, `style`, `label`, `pageLabel`, `renderOverlay`, `children`,
+`className`, `style`, `label`, `pageLabel`, `onPageClick`, `children`,
 `viewer`, and `ref` are listed with [`PdfViewer`](/reference/components/#pdfviewer).
 `PdfDocument` takes `source`, `viewer`, `passwordPrompt`, `onOpenAttachment`,
 and `children`: everything about how the document is shown belongs to its viewers.

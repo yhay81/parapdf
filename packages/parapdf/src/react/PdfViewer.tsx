@@ -3,7 +3,9 @@
 import {
   type CSSProperties,
   memo,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
+  type PointerEvent as ReactPointerEvent,
   type Ref,
   useEffect,
   useImperativeHandle,
@@ -11,9 +13,7 @@ import {
   useMemo,
   useReducer,
   useRef,
-  useState,
 } from "react";
-import { createPortal } from "react-dom";
 import { fragmentOf } from "../document/pdf-session.ts";
 import {
   followFragments,
@@ -22,23 +22,19 @@ import {
   openingFragment,
 } from "../features/initial-view.ts";
 import type { PageColors, Rotation } from "../pdfjs/draw.ts";
-import type { Direction, ScrollMode, SpreadMode } from "../view/layout.ts";
+import type { Direction, PdfPagePoint, ScrollMode, SpreadMode } from "../view/layout.ts";
 import type { ViewerOptions } from "../view/options.ts";
 import type { FitMode, PointerTool, ViewerState } from "../view/state.ts";
 import {
   attachPage,
   attachViewport,
+  isPointerClaimed,
   openViewer,
   setViewerOptions,
   type Viewer,
 } from "../view/viewer.ts";
-import {
-  PageContext,
-  useOptionalViewer,
-  useSelected,
-  useSession,
-  ViewerContext,
-} from "./context.ts";
+import { useOptionalViewer, useSelected, useSession, ViewerContext } from "./context.ts";
+import { usePageOverlays } from "./overlays.ts";
 import { VIEWER_CSS } from "./styles.ts";
 
 /** A zoom: CSS pixels per PDF point, or a fit that keeps fitting as the viewport resizes. */
@@ -176,17 +172,23 @@ export interface PdfViewerProps extends InitialViewOptions {
    */
   pageLabel?: (pageNumber: number, pageCount: number) => string;
   /**
-   * Content drawn over a page, rendered through a portal into a layer of
-   * the page above its drawing and text; position it with `<PdfPageRect>`.
+   * Called when the reader clicks a shown page (ignoring drags, non-collapsed
+   * text selections, links, form controls, and active annotation drawing
+   * tools), with the clicked point in unturned PDF points (`<PdfPageRect>`'s
+   * coordinates) and the React mouse event.
    */
-  renderOverlay?: (pageIndex: number) => ReactNode;
+  onPageClick?: (point: PdfPagePoint, event: ReactMouseEvent<HTMLDivElement>) => void;
   /**
    * Feature components (`<PdfForms>`, `<PdfAnnotationEditor>`,
-   * `<PdfAutoLinks>`, `<PdfPermissions>`) and overlays mounted for this
-   * viewer.
+   * `<PdfAutoLinks>`, `<PdfPermissions>`), page overlays (`<PdfPageOverlay>`,
+   * `<PdfPageOverlays>`), and selection popovers (`<PdfSelectionPopover>`)
+   * mounted for this viewer.
    */
   children?: ReactNode;
 }
+
+const INTERACTIVE_CLICK_TARGETS =
+  "a, button, input, select, textarea, label, summary, [role='button'], [role='link'], [contenteditable], .parapdf-annotation-layer section, .parapdf-editor-layer .annotationEditor, .parapdf-editor-layer .editToolbar";
 
 const defaultPageLabel = (pageNumber: number, pageCount: number) =>
   `Page ${pageNumber} of ${pageCount}`;
@@ -273,7 +275,7 @@ function ViewerViewport({
   style,
   label = "PDF document",
   pageLabel = defaultPageLabel,
-  renderOverlay,
+  onPageClick,
   children,
 }: PdfViewerProps & { viewer: Viewer }) {
   const session = useSession();
@@ -394,6 +396,35 @@ function ViewerViewport({
     return followFragments(viewer, fragment);
   }, [viewer, fragment]);
 
+  const pointerDownRef = useRef<{ x: number; y: number } | null>(null);
+  const handlePointerDown = onPageClick
+    ? (event: ReactPointerEvent<HTMLDivElement>) => {
+        pointerDownRef.current = event.button === 0 ? { x: event.clientX, y: event.clientY } : null;
+      }
+    : undefined;
+  const handleClick = onPageClick
+    ? (event: ReactMouseEvent<HTMLDivElement>) => {
+        const down = pointerDownRef.current;
+        pointerDownRef.current = null;
+        if (event.defaultPrevented || event.button !== 0 || isPointerClaimed(viewer)) return;
+        if (down && Math.hypot(event.clientX - down.x, event.clientY - down.y) > 4) return;
+        const target = event.target instanceof Element ? event.target : null;
+        if (target?.closest(INTERACTIVE_CLICK_TARGETS)) return;
+        const selection = (event.currentTarget.ownerDocument ?? document).getSelection();
+        if (
+          selection &&
+          !selection.isCollapsed &&
+          viewer.content &&
+          selection.anchorNode &&
+          viewer.content.contains(selection.anchorNode)
+        ) {
+          return;
+        }
+        const point = viewer.pointAt(event);
+        if (point) onPageClick(point, event);
+      }
+    : undefined;
+
   const pages: ReactNode[] = [];
   if (layout) {
     const { shown } = layout;
@@ -416,16 +447,18 @@ function ViewerViewport({
           height={layout.heights[index] ?? 0}
           scale={layout.scale}
           rotation={layout.rotation}
-          overlay={renderOverlay?.(index)}
         />,
       );
     }
   }
 
   return (
+    // biome-ignore lint/a11y/useKeyWithClickEvents: onPageClick is a pointer coordinate hook for page surfaces; interactive items inside pages keep their own accessible controls.
     <div
       ref={scrollerRef}
       className={className ? `parapdf-viewport ${className}` : "parapdf-viewport"}
+      onPointerDown={handlePointerDown}
+      onClick={handleClick}
       // The scroller is the query container whose size `cqw` and `cqh`
       // measure for page placement. A stable gutter keeps its width from
       // changing as the scrollbar comes and goes, which would refit
@@ -478,16 +511,7 @@ interface PdfPageProps {
   /** CSS pixels per PDF point; the DOM layers apply the page's user-space unit to it. */
   scale: number;
   rotation: Rotation;
-  overlay: ReactNode;
 }
-
-/** The layer an overlay's portal renders into; none on the server, which mounts no pages. */
-const createOverlayLayer = (): HTMLDivElement | null => {
-  if (typeof document === "undefined") return null;
-  const layer = document.createElement("div");
-  layer.className = "parapdf-overlay-layer";
-  return layer;
-};
 
 const PdfPage = memo(function PdfPage({
   viewer,
@@ -503,12 +527,9 @@ const PdfPage = memo(function PdfPage({
   height,
   scale,
   rotation,
-  overlay,
 }: PdfPageProps) {
   const hostRef = useRef<HTMLElement>(null);
-  const [overlayLayer] = useState(createOverlayLayer);
   const page = useMemo(() => ({ viewer, pageIndex: index }), [viewer, index]);
-  const hasOverlay = overlay !== null && overlay !== undefined && overlay !== false;
 
   // The renderer builds the page's canvases and layers at the start of the
   // section; the overlay's layer follows them.
@@ -517,22 +538,8 @@ const PdfPage = memo(function PdfPage({
     if (!host) return;
     return attachPage(viewer, index, host);
   }, [viewer, index]);
-  useLayoutEffect(() => {
-    const host = hostRef.current;
-    if (!host || !overlayLayer || !hasOverlay) return;
-    host.append(overlayLayer);
-    return () => overlayLayer.remove();
-  }, [overlayLayer, hasOverlay]);
 
-  // Overlays are placed on the unturned page, like the text layer, and
-  // turn with it through the viewer CSS.
-  useLayoutEffect(() => {
-    if (!overlayLayer) return;
-    overlayLayer.dataset.mainRotation = String(rotation);
-    const turned = rotation % 180 !== 0;
-    overlayLayer.style.width = `${turned ? height : width}px`;
-    overlayLayer.style.height = `${turned ? width : height}px`;
-  }, [overlayLayer, rotation, width, height]);
+  const overlayPortal = usePageOverlays(viewer, index, hostRef, page, rotation, width, height);
 
   return (
     // A labelled section is a region landmark, the role pdf.js gives its pages.
@@ -565,9 +572,7 @@ const PdfPage = memo(function PdfPage({
         } as CSSProperties
       }
     >
-      {overlayLayer && hasOverlay
-        ? createPortal(<PageContext value={page}>{overlay}</PageContext>, overlayLayer)
-        : null}
+      {overlayPortal}
     </section>
   );
 });

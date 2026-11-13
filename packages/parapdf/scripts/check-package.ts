@@ -147,13 +147,19 @@ import {
   PdfAutoLinks,
   PdfDocument,
   PdfForms,
+  PdfPageOverlay,
+  PdfPageOverlays,
+  type PdfPagePoint,
   PdfPageRect,
   PdfPermissions,
+  PdfSelectionPopover,
   PdfThumbnails,
   PdfView,
   PdfViewer,
   type PdfViewerProps,
+  preloadDocument,
   preloadPdfjs,
+  type SelectionAnchor,
   useAnnotations,
   useCreateViewer,
   useDocumentState,
@@ -162,6 +168,7 @@ import {
   usePrint,
   useSave,
   useSearch,
+  useSelection,
   useSession,
   useViewer,
   useViewState,
@@ -171,10 +178,12 @@ import {
 
 configurePdfjs({ enableHWA: true, documentOptions: { withCredentials: true } });
 preloadPdfjs();
+preloadDocument("/manual.pdf");
 const options: PdfViewerProps = { defaultZoom: "fit-width", maxCanvasPixels: 50_000_000 };
 
 export function Reader() {
   const viewerRef = useRef<Viewer>(null);
+  const rectRef = useRef<HTMLDivElement>(null);
   return (
     <PdfDocument source="/manual.pdf" onOpenAttachment={(file) => void file.filename}>
       <Toolbar />
@@ -184,10 +193,26 @@ export function Reader() {
         ref={viewerRef}
         style={{ height: 600 }}
         pageLabel={(pageNumber, pageCount) => \`\${pageNumber} / \${pageCount}\`}
-        renderOverlay={(pageIndex) =>
-          pageIndex === 0 ? <PdfPageRect x={72} y={72} width={100} height={20} /> : null
-        }
+        onPageClick={(point: PdfPagePoint, event) => {
+          void point.pageIndex;
+          void viewerRef.current?.pointAt(event);
+        }}
       >
+        <PdfPageOverlay page={0}>
+          <PdfPageRect ref={rectRef} x={72} y={72} width={100} height={20} />
+        </PdfPageOverlay>
+        <PdfPageOverlays>
+          {(pageIndex) =>
+            pageIndex === 1 ? <PdfPageRect x={36} y={36} width={80} height={16} /> : null
+          }
+        </PdfPageOverlays>
+        <PdfSelectionPopover placement="top" offset={8}>
+          {(selection) => {
+            const anchor: SelectionAnchor = selection.anchor;
+            void anchor.getBoundingClientRect();
+            return <span>{selection.text}</span>;
+          }}
+        </PdfSelectionPopover>
         <PdfForms scripts onChange={(change) => void change.name} />
         <PdfAnnotationEditor
           defaultTool="none"
@@ -229,6 +254,8 @@ function Toolbar() {
   const { status } = useDocumentState();
   const pages: number = useDocumentState((state) => state.pageCount);
   useFormChange(() => {});
+    const selection = useSelection();
+    void selection?.anchor;
   const proxy = session.proxy;
   return (
     <button
@@ -258,7 +285,7 @@ function Toolbar() {
     join(project, "misuse.tsx"),
     `import { PdfViewer } from "parapdf";
 
-export const misuse = <PdfViewer pageLabel={5} />;
+export const misuse = <PdfViewer pageLabel={5} renderOverlay={() => null} />;
 `,
   );
   const tsc = join(dirname(require.resolve("typescript/package.json")), "bin", "tsc");
@@ -310,16 +337,22 @@ import {
   PdfAutoLinks,
   PdfDocument,
   PdfForms,
+  PdfPageOverlay,
+  PdfPageOverlays,
+  PdfPageRect,
   PdfPermissions,
+  PdfSelectionPopover,
   PdfThumbnails,
   PdfView,
   PdfViewer,
+  preloadDocument,
   useAnnotations,
   useDocumentState,
   useHistory,
   usePrint,
   useSave,
   useSearch,
+  useSelection,
   useViewer,
   useViewState,
 } from "parapdf";
@@ -340,10 +373,20 @@ for (const removed of [
   if (removed in parapdfExports) throw new Error(\`\${removed} is still exported\`);
 }
 
+let rectRejected = false;
+try {
+  renderToString(createElement(PdfPageRect, { x: 0, y: 0, width: 10, height: 10 }));
+} catch (err) {
+  rectRejected = /PdfPageOverlay/.test(String(err));
+}
+if (!rectRejected) throw new Error("PdfPageRect did not reject outside PageContext");
+
 function Toolbar() {
   useViewer();
   useSearch();
   useHistory();
+  useSelection();
+  preloadDocument("/warm.pdf");
   const { saving } = useSave();
   const { printing } = usePrint();
   const { tool } = useAnnotations();
@@ -361,7 +404,10 @@ process.stdout.write(
       createElement(PdfThumbnails),
       createElement(
         PdfViewer,
-        { label: "Manual" },
+        { label: "Manual", onPageClick: () => {} },
+        createElement(PdfPageOverlay, { page: 0 }, createElement(PdfPageRect, { x: 0, y: 0, width: 10, height: 10 })),
+        createElement(PdfPageOverlays, null, (i) => (i === 0 ? createElement("span", null, "p0") : null)),
+        createElement(PdfSelectionPopover, null, (sel) => createElement("span", null, sel.text)),
         createElement(PdfForms, { scripts: true }),
         createElement(PdfAnnotationEditor, { defaultTool: "highlight" }),
         createElement(PdfAutoLinks),

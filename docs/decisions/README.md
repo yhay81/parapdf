@@ -42,6 +42,7 @@ it. A new choice gets a new record, numbered next.
 | [0033](0033-viewer-context-and-state.md) | Viewer context, React 19 refs, and tracked state hooks | adopted |
 | [0034](0034-declarative-feature-components.md) | Declarative feature components and synchronous annotation controls | adopted |
 | [0035](0035-document-actions-and-react-surface.md) | Document-owned actions and a React-only public surface | adopted |
+| [0036](0036-overlays-coordinates-and-preload.md) | Declarative overlays, selection popovers, PDF coordinates, and route preloading | adopted |
 
 ## Template
 

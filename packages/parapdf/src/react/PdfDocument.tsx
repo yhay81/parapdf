@@ -1,7 +1,6 @@
 "use client";
 
 import { type ReactNode, useEffect, useLayoutEffect, useState } from "react";
-import { preload } from "react-dom";
 import {
   type AttachmentHandler,
   connectSession,
@@ -13,9 +12,10 @@ import {
 } from "../document/pdf-session.ts";
 import { sourceKey, splitFragment } from "../document/registry.ts";
 import type { PdfSource } from "../document/session.ts";
-import { documentRequestMode, preloadPdfjs } from "../pdfjs/loader.ts";
+import { preloadPdfjs } from "../pdfjs/loader.ts";
 import { holdViewer, Viewer } from "../view/viewer.ts";
 import { SessionContext, ViewerContext } from "./context.ts";
+import { preloadSourceFetch } from "./preload.ts";
 
 export interface PdfDocumentProps {
   /**
@@ -75,14 +75,7 @@ export function PdfDocument({
   children,
 }: PdfDocumentProps) {
   const resolved: PdfSource = typeof source === "string" ? { url: source } : source;
-  if ("url" in resolved) {
-    // The download starts now, and with server rendering as soon as the
-    // browser reads the page's head, not once pdf.js has loaded: pdf.js's
-    // request has this CORS mode and takes the preloaded response. A source
-    // with headers has no preload: none can carry them.
-    const mode = documentRequestMode(resolved);
-    if (mode) preload(splitFragment(resolved.url)[0], { as: "fetch", crossOrigin: mode });
-  }
+  preloadSourceFetch(resolved);
   // pdf.js and its worker load while React renders and commits.
   preloadPdfjs();
   // The key identifies the source, so an inline `{ url }` does not open it

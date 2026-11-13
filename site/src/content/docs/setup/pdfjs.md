@@ -39,10 +39,16 @@ configurePdfjs({ documentOptions: { enableWebGPU: true } });
 
 ## Loading early
 
-`preloadPdfjs()` starts loading pdf.js and its worker before any
-`PdfDocument` renders, for example when the pointer moves over a link to a
-document. The first `PdfDocument` starts it anyway, with the worker's
-download beside pdf.js's module rather than after it.
+`preloadDocument(source)` starts loading pdf.js, preloading `source`'s URL
+(outside WebKit and header-carrying requests), and opening `source` in the
+shared document registry before `PdfDocument` renders — for example when the
+pointer hovers over a link to a document. When `<PdfDocument source={source}>`
+mounts within the registry's ten-second grace window, it joins the warm session
+at once; if nothing mounts, the registry closes it automatically.
+
+When you do not know which document will open yet, `preloadPdfjs()` starts
+loading pdf.js and its worker alone. The first `PdfDocument` starts it anyway,
+with the worker's download beside pdf.js's module rather than after it.
 
 ## The legacy build
 

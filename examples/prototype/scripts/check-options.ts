@@ -951,6 +951,46 @@ try {
     controlledZoom.scale === 1.5 && controlledZoom.zoomMode === "custom" && zoomBack.scale === 1.5,
     JSON.stringify({ controlledZoom, zoomBack }),
   );
+  const dynamicOverlays = await live.evaluate(async () => {
+    const win = window as unknown as {
+      __overlayEvaluations?: number[];
+      __setOverlayTest?: (patch: { dynamicBadge?: string | null }) => void;
+      __viewer: Viewer;
+    };
+    win.__viewer.goToPage(4);
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    win.__overlayEvaluations = [];
+    win.__setOverlayTest?.({ dynamicBadge: "tag" });
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const initialText =
+      document.querySelector('section[data-page="5"] .test-dynamic-overlay')?.textContent ?? null;
+    const beforeRange = {
+      first: win.__viewer.store.get().first,
+      last: win.__viewer.store.get().last,
+    };
+    win.__overlayEvaluations = [];
+    // Shift the mounted window down by one page while page 5 remains mounted.
+    win.__viewer.goToPage(5);
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const afterRange = {
+      first: win.__viewer.store.get().first,
+      last: win.__viewer.store.get().last,
+    };
+    return {
+      initialText,
+      beforeRange,
+      afterRange,
+      reevaluated: [...(win.__overlayEvaluations ?? [])],
+    };
+  });
+  check(
+    "PdfPageOverlays renders per-page overlays and keeps mounted pages memoized as the window shifts",
+    dynamicOverlays.initialText === "tag-5" &&
+      dynamicOverlays.afterRange.last > dynamicOverlays.beforeRange.last &&
+      !dynamicOverlays.reevaluated.includes(4) &&
+      dynamicOverlays.reevaluated.includes(dynamicOverlays.afterRange.last),
+    JSON.stringify(dynamicOverlays),
+  );
   await live.context().close();
 
   check("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));

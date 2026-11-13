@@ -196,6 +196,67 @@ try {
       close(overlay.height, expected.height),
     `${JSON.stringify(overlay)} vs ${JSON.stringify(expected)}`,
   );
+  const overlayCenter = await page.evaluate(() => {
+    const demo = window as unknown as {
+      __clickedPoints?: { pageIndex: number; x: number; y: number }[];
+      __setViewerProps?: (props: {
+        onPageClick?: (point: { pageIndex: number; x: number; y: number }) => void;
+      }) => void;
+      __viewer?: {
+        pointAt(point: {
+          clientX: number;
+          clientY: number;
+        }): { pageIndex: number; x: number; y: number } | null;
+      };
+    };
+    demo.__clickedPoints = [];
+    demo.__setViewerProps?.({
+      onPageClick: (point) => demo.__clickedPoints?.push(point),
+    });
+    const element = document.querySelector('section[data-page="1"] [style*="outline"]');
+    const scroller = document.querySelector<HTMLElement>(".parapdf-viewport");
+    element?.scrollIntoView({ block: "nearest", inline: "center" });
+    const rect = element?.getBoundingClientRect();
+    const scrollerRect = scroller?.getBoundingClientRect();
+    if (!rect || !scrollerRect || !demo.__viewer) return null;
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const gapX = scrollerRect.left + 4;
+    const gapY = scrollerRect.top + 4;
+    return {
+      cx,
+      cy,
+      gapX,
+      gapY,
+      direct: demo.__viewer.pointAt({ clientX: cx, clientY: cy }),
+      inGap: demo.__viewer.pointAt({ clientX: gapX, clientY: gapY }),
+    };
+  });
+  await page.waitForTimeout(50);
+  if (overlayCenter) {
+    await page.mouse.click(overlayCenter.cx, overlayCenter.cy);
+    await page.mouse.click(overlayCenter.gapX, overlayCenter.gapY);
+  }
+  const clickedPoints = await page.evaluate(() => {
+    const scroller = document.querySelector<HTMLElement>(".parapdf-viewport");
+    if (scroller) scroller.scrollLeft = 0;
+    return (
+      (window as unknown as { __clickedPoints?: { pageIndex: number; x: number; y: number }[] })
+        .__clickedPoints ?? []
+    );
+  });
+  check(
+    "pointAt() and onPageClick map rotated screen clicks back to unturned PDF points and ignore gaps",
+    overlayCenter?.direct?.pageIndex === 0 &&
+      close(overlayCenter.direct.x, 182, 2) &&
+      close(overlayCenter.direct.y, 51, 2) &&
+      overlayCenter.inGap === null &&
+      clickedPoints.length === 1 &&
+      clickedPoints[0]?.pageIndex === 0 &&
+      close(clickedPoints[0].x, 182, 2) &&
+      close(clickedPoints[0].y, 51, 2),
+    JSON.stringify({ overlayCenter, clickedPoints }),
+  );
   await page.evaluate(() => {
     window.__search?.search("israel");
   });
@@ -294,6 +355,32 @@ try {
       JSON.stringify(bounds),
     );
   }
+  const userUnitPoint = await mixed.evaluate(() => {
+    const host = document.querySelector('section[data-page="5"]');
+    const field = host?.querySelector(".textWidgetAnnotation")?.getBoundingClientRect();
+    const viewer = (
+      window as unknown as {
+        __viewer?: {
+          pointAt(point: {
+            clientX: number;
+            clientY: number;
+          }): { pageIndex: number; x: number; y: number } | null;
+        };
+      }
+    ).__viewer;
+    if (!field || !viewer) return null;
+    return viewer.pointAt({
+      clientX: field.left + field.width / 2,
+      clientY: field.top + field.height / 2,
+    });
+  });
+  check(
+    "pointAt() honors intrinsic page rotation and /UserUnit",
+    userUnitPoint?.pageIndex === 4 &&
+      close(userUnitPoint.x, 212, 3) &&
+      close(userUnitPoint.y, 140, 3),
+    JSON.stringify(userUnitPoint),
+  );
   const searchBox = await mixed.evaluate(async () => {
     const text = await window.__viewer?.session?.text(4);
     return Array.from(text?.boxes.slice(0, 4) ?? []);

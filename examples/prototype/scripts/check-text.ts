@@ -1051,6 +1051,88 @@ try {
     JSON.stringify(matched),
   );
 
+  // Selection anchor & <PdfSelectionPopover>: renders outside page containment,
+  // follows scroll without React commits, and preserves selection when clicked.
+  await page.evaluate(() => {
+    window.__viewer?.goToPage(0);
+    window.__setOverlayTest?.({ selectionPopover: true });
+  });
+  await page.waitForSelector('section[data-page="1"] .parapdf-text-layer span', {
+    timeout: 10_000,
+  });
+  const popoverBefore = await page.evaluate(async () => {
+    const span = [
+      ...document.querySelectorAll<HTMLElement>('section[data-page="1"] .parapdf-text-layer span'),
+    ].find((el) => (el.textContent?.trim().length ?? 0) >= 6);
+    const textNode = span?.firstChild;
+    if (!textNode || !window.__viewer || !window.__parapdf) return null;
+    const range = document.createRange();
+    range.setStart(textNode, 0);
+    range.setEnd(textNode, Math.min(6, textNode.textContent?.length ?? 0));
+    const sel = document.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    document.dispatchEvent(new Event("selectionchange"));
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const pop = document.querySelector<HTMLElement>(".test-selection-popover");
+    const popRect = pop?.getBoundingClientRect();
+    const parsed = window.__parapdf.getSelection(window.__viewer);
+    const anchorRect = parsed?.anchor.getBoundingClientRect();
+    return {
+      text: parsed?.text ?? null,
+      inBody: pop?.parentElement === document.body,
+      visible: pop ? getComputedStyle(pop).visibility === "visible" : false,
+      popTop: popRect?.top ?? null,
+      anchorTop: anchorRect?.top ?? null,
+      commits: window.__commits?.() ?? 0,
+    };
+  });
+  check(
+    "PdfSelectionPopover portals to document.body and anchors to the live selection",
+    popoverBefore?.inBody === true &&
+      popoverBefore.visible === true &&
+      popoverBefore.popTop !== null &&
+      popoverBefore.anchorTop !== null,
+    JSON.stringify(popoverBefore),
+  );
+  const popoverScrolled = await page.evaluate(async () => {
+    const scroller = window.__viewer?.scroller;
+    if (!scroller) return null;
+    const beforeCommits = window.__commits?.() ?? 0;
+    scroller.scrollTop += 30;
+    scroller.dispatchEvent(new Event("scroll"));
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const pop = document.querySelector<HTMLElement>(".test-selection-popover");
+    return {
+      popTop: pop?.getBoundingClientRect().top ?? null,
+      commitsDelta: (window.__commits?.() ?? 0) - beforeCommits,
+    };
+  });
+  check(
+    "PdfSelectionPopover follows scroll imperatively with zero React state commits",
+    popoverBefore !== null &&
+      popoverBefore.popTop !== null &&
+      popoverScrolled !== null &&
+      popoverScrolled.popTop !== null &&
+      Math.abs(popoverBefore.popTop - popoverScrolled.popTop - 30) <= 3 &&
+      popoverScrolled.commitsDelta === 0,
+    JSON.stringify({ before: popoverBefore?.popTop, after: popoverScrolled }),
+  );
+  await page.locator(".test-popover-action").click();
+  const afterPopoverClick = await page.evaluate(() => ({
+    clickedText: window.__popoverClickedText ?? null,
+    collapsed: document.getSelection()?.isCollapsed ?? true,
+  }));
+  check(
+    "clicking a button inside PdfSelectionPopover fires onClick while keeping the text selected",
+    afterPopoverClick.clickedText === popoverBefore?.text && afterPopoverClick.collapsed === false,
+    JSON.stringify(afterPopoverClick),
+  );
+  await page.evaluate(() => {
+    document.getSelection()?.removeAllRanges();
+    window.__setOverlayTest?.({ selectionPopover: false });
+  });
+
   check("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));
 } finally {
   await launched.close();
