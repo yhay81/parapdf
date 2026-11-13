@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  openAttachmentHandlerOf,
-  openDocumentOf,
-  type PdfSession,
-} from "../document/pdf-session.ts";
+import { type PdfSession, sessionControllerOf } from "../document/pdf-session.ts";
 import type { PdfAttachment } from "../document/session.ts";
 import { downloadBytes } from "../view/files.ts";
 
@@ -13,7 +9,9 @@ export async function getAttachmentContent(
   session: PdfSession,
   id: string,
 ): Promise<Uint8Array | null> {
-  return (await openDocumentOf(session)?.proxy.getAttachmentContent(id)) ?? null;
+  return (
+    (await sessionControllerOf(session).openDocument()?.proxy.getAttachmentContent(id)) ?? null
+  );
 }
 
 /**
@@ -24,11 +22,12 @@ export async function openAttachment(
   session: PdfSession,
   attachment: PdfAttachment,
 ): Promise<void> {
-  const work = session.signal;
-  const content = await getAttachmentContent(session, attachment.id);
+  const controller = sessionControllerOf(session);
+  const work = controller.signal;
+  const content = await getAttachmentContent(controller, attachment.id);
   if (!content || work.aborted) return;
   const file = { filename: attachment.filename, content };
-  const handler = openAttachmentHandlerOf(session);
+  const handler = controller.openAttachmentHandler;
   if (handler) handler(file);
   else downloadBytes(file.content, file.filename);
 }

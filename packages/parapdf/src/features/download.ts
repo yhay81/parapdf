@@ -1,6 +1,6 @@
 "use client";
 
-import { openDocumentOf, type PdfSession } from "../document/pdf-session.ts";
+import { type PdfSession, sessionControllerOf } from "../document/pdf-session.ts";
 import type { PdfPageSelection } from "../document/session.ts";
 import { downloadBytes, filenameFromUrl } from "../view/files.ts";
 
@@ -32,7 +32,7 @@ export async function save(
   session: PdfSession,
   { pages }: SaveOptions = {},
 ): Promise<Uint8Array | null> {
-  const doc = openDocumentOf(session);
+  const doc = sessionControllerOf(session).openDocument();
   if (!doc) return null;
   // The text being typed counts, in every viewer, as it would once the
   // reader clicks away.
@@ -52,9 +52,10 @@ export async function download(
   session: PdfSession,
   { filename, pages }: DownloadOptions = {},
 ): Promise<void> {
-  const doc = openDocumentOf(session);
-  const sourceName = "url" in session.source ? filenameFromUrl(session.source.url) : null;
-  const bytes = await save(session, { pages });
+  const controller = sessionControllerOf(session);
+  const doc = controller.openDocument();
+  const sourceName = "url" in controller.source ? filenameFromUrl(controller.source.url) : null;
+  const bytes = await save(controller, { pages });
   if (!bytes) return;
   // A document whose metadata fails to read still downloads, under its URL.
   // An empty name is none.

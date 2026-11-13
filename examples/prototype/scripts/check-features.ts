@@ -49,18 +49,18 @@ function check(name: string, ok: boolean, detail = ""): void {
 
 const state = (page: Page) => page.evaluate(() => window.__viewer?.store.get());
 /** The document's state, which its session publishes. */
-const documentState = (page: Page) => page.evaluate(() => window.__session?.state.get());
-/** The document's secondary data, as the session reads it for `use()`. */
+const documentState = (page: Page) => page.evaluate(() => window.__session?.state);
+/** The document's secondary data, read from the open document session. */
 const documentData = (page: Page) =>
   page.evaluate(async () => {
-    const session = window.__session;
-    if (!session) return null;
+    const doc = window.__viewer?.session;
+    if (!doc) return null;
     const [pageLabels, metadata, attachments, layers, comments] = await Promise.all([
-      session.pageLabels(),
-      session.metadata(),
-      session.attachments(),
-      session.layers(),
-      session.comments(),
+      doc.pageLabels().catch(() => null),
+      doc.metadata().catch(() => null),
+      doc.attachments().catch(() => []),
+      doc.layers().catch(() => null),
+      doc.comments().catch(() => []),
     ]);
     return {
       pageLabels,
@@ -173,7 +173,7 @@ try {
     const { page, errors } = await open(launched.browser, demo("file=synthetic-encrypted.pdf"), {
       ready: false,
     });
-    await page.waitForFunction(() => window.__session?.state.get().status === "password");
+    await page.waitForFunction(() => window.__session?.state.status === "password");
     check(
       "an encrypted document asks for its password",
       (await documentState(page))?.passwordReason === "required",
@@ -181,7 +181,7 @@ try {
     const input = page.getByRole("form", { name: "Password" }).locator("input[type=password]");
     await input.fill("wrong");
     await input.press("Enter");
-    await page.waitForFunction(() => window.__session?.state.get().passwordReason === "incorrect");
+    await page.waitForFunction(() => window.__session?.state.passwordReason === "incorrect");
     check("a wrong password asks again, saying it was wrong", true);
     await input.fill("parapdf");
     await input.press("Enter");
@@ -259,7 +259,7 @@ try {
         { ready: false },
       );
       await failed.page.waitForFunction(() =>
-        ["error", "ready"].includes(window.__session?.state.get().status ?? ""),
+        ["error", "ready"].includes(window.__session?.state.status ?? ""),
       );
       const result = await documentState(failed.page);
       check(
@@ -277,7 +277,7 @@ try {
       demo("file=synthetic-encrypted.pdf&passwordPrompt=0"),
       { ready: false },
     );
-    await answered.page.waitForFunction(() => window.__session?.state.get().status === "error");
+    await answered.page.waitForFunction(() => window.__session?.state.status === "error");
     await answered.page.evaluate(() => window.__session?.submitPassword("parapdf"));
     const titled = await answered.page
       .waitForFunction(() => document.querySelector("strong[title='Encrypted sampler']"), null, {

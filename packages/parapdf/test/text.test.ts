@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it, mock } from "node:test";
-import { connectSession, PdfSession } from "../src/document/pdf-session.ts";
+import { PdfSessionController } from "../src/document/pdf-session.ts";
 import { getText, type TextOptions } from "../src/features/text/index.ts";
 import { fakeDocument, fakePdfjs, LETTER, settle } from "./fake-pdfjs.ts";
 
@@ -25,11 +25,11 @@ describe("getText", () => {
       texts: lines.map((page) => page.map((str) => ({ str, hasEOL: true }))),
       ...(ready ? { textsReady: ready } : {}),
     });
-    const session = new PdfSession(
+    const session = new PdfSessionController(
       { url: "/a.pdf" },
       { pdfjs: fakePdfjs(async () => document.proxy).loader },
     );
-    close.push(connectSession(session));
+    close.push(session.connect());
     await settle();
     return { session, textsRead: document.textsRead };
   }
@@ -85,7 +85,10 @@ describe("getText", () => {
   });
 
   it("rejects while no document is open, and with the reason its signal aborts with", async () => {
-    await assert.rejects(getText(new PdfSession({ url: "/none.pdf" })), /No document is open/);
+    await assert.rejects(
+      getText(new PdfSessionController({ url: "/none.pdf" })),
+      /No document is open/,
+    );
     const { ready, release } = gate();
     const { session } = await open([["One"], ["Two"]], ready);
     const reason = new Error("stopped");

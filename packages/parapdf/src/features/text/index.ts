@@ -1,4 +1,4 @@
-import { openDocumentOf, type PdfSession } from "../../document/pdf-session.ts";
+import { type PdfSession, sessionControllerOf } from "../../document/pdf-session.ts";
 import type { PageText } from "../../pdfjs/text.ts";
 import { clamp } from "../../view/layout.ts";
 import {
@@ -33,8 +33,9 @@ export async function getText(
   session: PdfSession,
   options: TextOptions = {},
 ): Promise<DocumentText> {
-  const doc = openDocumentOf(session);
-  const work = session.signal;
+  const controller = sessionControllerOf(session);
+  const doc = controller.openDocument();
+  const work = controller.signal;
   if (!doc || work.aborted) throw new Error("No document is open");
   const { from, to, lineBreaks = "keep", signal } = options;
   signal?.throwIfAborted();

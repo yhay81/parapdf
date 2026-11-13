@@ -3,12 +3,7 @@ import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, it, mock, type TestContext } from "node:test";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
-import {
-  connectSession,
-  openDocumentOf,
-  PdfSession,
-  setOpenAttachment,
-} from "../src/document/pdf-session.ts";
+import { PdfSessionController } from "../src/document/pdf-session.ts";
 import { getAttachmentContent, openAttachment } from "../src/features/attachments.ts";
 import { getFormFields, setFormValues } from "../src/features/forms/index.ts";
 import { historyOf } from "../src/features/history.ts";
@@ -254,11 +249,11 @@ describe("PdfSession document actions without a Viewer", () => {
         },
       },
     });
-    const session = new PdfSession(
+    const session = new PdfSessionController(
       { url: "/form.pdf" },
       { pdfjs: fakePdfjs(async () => doc.proxy).loader },
     );
-    close.push(connectSession(session));
+    close.push(session.connect());
     await settle();
 
     // Works with zero Viewers mounted.
@@ -268,7 +263,7 @@ describe("PdfSession document actions without a Viewer", () => {
     assert.equal((await getFormFields(session))[0]?.value, "Updated");
 
     // Notifies every listener / viewer sharing the DocumentSession.
-    const openDoc = openDocumentOf(session);
+    const openDoc = session.openDocument();
     assert.ok(openDoc);
     let notifications = 0;
     const stop = new AbortController();
@@ -296,19 +291,19 @@ describe("PdfSession document actions without a Viewer", () => {
         }),
       },
     });
-    const session = new PdfSession(
+    const session = new PdfSessionController(
       { url: "/layers.pdf" },
       { pdfjs: fakePdfjs(async () => doc.proxy).loader },
     );
-    close.push(connectSession(session));
+    close.push(session.connect());
     await settle();
 
     // Before layers() was called by any viewer, setLayerVisible loads and updates them.
-    assert.equal(openDocumentOf(session)?.loadedLayers, null);
+    assert.equal(session.openDocument()?.loadedLayers, null);
     setLayerVisible(session, "grid", false);
     await settle();
     assert.equal(visibility.grid, false);
-    assert.notEqual(openDocumentOf(session)?.loadedLayers, null);
+    assert.notEqual(session.openDocument()?.loadedLayers, null);
 
     // Subsequent calls update loadedLayers synchronously.
     setLayerVisible(session, "grid", true);
@@ -322,18 +317,18 @@ describe("PdfSession document actions without a Viewer", () => {
         getAttachmentContent: async (id: string) => (id === "readme.txt" ? bytes : null),
       },
     });
-    const session = new PdfSession(
+    const session = new PdfSessionController(
       { url: "/attachments.pdf" },
       { pdfjs: fakePdfjs(async () => doc.proxy).loader },
     );
-    close.push(connectSession(session));
+    close.push(session.connect());
     await settle();
 
     assert.deepEqual(await getAttachmentContent(session, "readme.txt"), bytes);
     assert.equal(await getAttachmentContent(session, "missing.txt"), null);
 
     const opened: { filename: string; content: Uint8Array }[] = [];
-    setOpenAttachment(session, (file) => opened.push(file));
+    session.setOpenAttachment((file) => opened.push(file));
     await openAttachment(session, {
       id: "readme.txt",
       filename: "readme.txt",
@@ -352,11 +347,11 @@ describe("viewer.viewState() and viewer.setViewState()", () => {
 
       const { scroller, content } = fakeViewport();
       const detach = viewer.attachViewport(scroller, content);
-      const session = new PdfSession(
+      const session = new PdfSessionController(
         { url: "/book.pdf" },
         { pdfjs: fakePdfjs(async () => doc.proxy).loader },
       );
-      const release = connectSession(session);
+      const release = session.connect();
       viewer.open(session);
       await settle();
 
@@ -385,7 +380,7 @@ describe("viewer.viewState() and viewer.setViewState()", () => {
 
 describe("useSave, usePrint, useSearch, and useHistory", () => {
   it("resolves context or explicit instances on the server and throws without context", () => {
-    const session = new PdfSession({ url: "/doc.pdf" });
+    const session = new PdfSessionController({ url: "/doc.pdf" });
     const viewer = new ViewerController();
 
     assert.throws(

@@ -1,7 +1,7 @@
 "use client";
 
 import { type ReactNode, useContext, useMemo, useSyncExternalStore } from "react";
-import type { PdfSession } from "../document/pdf-session.ts";
+import type { PdfSessionController } from "../document/pdf-session.ts";
 import type { PageSize } from "../document/session.ts";
 import type { ReadableStore } from "../document/store.ts";
 import type { Rotation } from "../pdfjs/draw.ts";
@@ -219,7 +219,7 @@ export function findThumbnailScroller(nav: HTMLElement): HTMLElement | null {
  */
 export function createPageLabelsStore(
   viewer: ViewerController,
-  pdfSession: PdfSession | null,
+  pdfSession: PdfSessionController | null,
 ): ReadableStore<readonly string[] | null> {
   let labels: readonly string[] | null = null;
   const listeners = new Set<() => void>();
@@ -259,19 +259,21 @@ export function createPageLabelsStore(
     if (pdfSession) {
       const readFromContext = () => {
         if (viewer.session) return;
-        const { status } = pdfSession.state.get();
+        const { status } = pdfSession.state;
         if (status !== "ready") {
           set(null);
           return;
         }
         const current = ++token;
-        void pdfSession.pageLabels().then((resolved) => {
-          if (current === token && pdfSession.state.get().status === "ready") {
-            set(resolved);
-          }
-        });
+        void pdfSession
+          .read("pageLabels", (session) => session.pageLabels(), null)
+          .then((resolved) => {
+            if (current === token && pdfSession.state.status === "ready") {
+              set(resolved);
+            }
+          });
       };
-      unsubSession = pdfSession.state.subscribe(readFromContext);
+      unsubSession = pdfSession.stateStore.subscribe(readFromContext);
       readFromContext();
     }
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it, mock } from "node:test";
-import { connectSession, openDocumentOf, PdfSession } from "../src/document/pdf-session.ts";
+import { PdfSessionController } from "../src/document/pdf-session.ts";
 import type { PdfSource } from "../src/document/session.ts";
 import { download, save } from "../src/features/download.ts";
 import { fakeDocument, fakePdfjs, settle } from "./fake-pdfjs.ts";
@@ -46,17 +46,17 @@ describe("save and download", () => {
 
   async function openSession(source: PdfSource, proxy: Record<string, unknown> = {}) {
     const doc = fakeDocument({ proxy });
-    const session = new PdfSession(source, {
+    const session = new PdfSessionController(source, {
       pdfjs: fakePdfjs(async () => doc.proxy).loader,
     });
-    const release = connectSession(session);
+    const release = session.connect();
     close.push(release);
     await settle();
     return { session, release };
   }
 
   it("returns null before a session opens or after its provider releases it", async () => {
-    const unopened = new PdfSession({ url: "/unopened.pdf" });
+    const unopened = new PdfSessionController({ url: "/unopened.pdf" });
     assert.equal(await save(unopened), null);
 
     const { session, release } = await openSession({ url: "/open.pdf" });
@@ -95,7 +95,7 @@ describe("save and download", () => {
         },
       },
     );
-    const doc = openDocumentOf(session);
+    const doc = session.openDocument();
     assert.ok(doc);
     const stop = new AbortController();
     doc.onCommit(() => {

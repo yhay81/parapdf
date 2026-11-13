@@ -4,7 +4,7 @@
 // Mozilla Foundation, Apache License 2.0, and changed for ParaPDF; see
 // NOTICE.md.
 
-import { documentOf, openAttachmentHandlerOf, type PdfSession } from "../document/pdf-session.ts";
+import type { PdfSessionController } from "../document/pdf-session.ts";
 import type { DocumentPermissions, DocumentSession, PageSize } from "../document/session.ts";
 import { type ReadableStore, Store } from "../document/store.ts";
 import type {
@@ -90,7 +90,7 @@ const whole = (area: PageArea | null): boolean =>
  */
 interface Showing {
   /** React holds the provider. A longer-lived viewer must not keep its source after unmount. */
-  readonly pdf: WeakRef<PdfSession>;
+  readonly pdf: WeakRef<PdfSessionController>;
   /** The file ID and modification ID of the last document shown. */
   fingerprints: readonly (string | null)[] | null;
   /**
@@ -229,8 +229,7 @@ export class ViewerController implements Viewer {
     },
     externalLinks: "new-tab",
     openAttachment: (file) => {
-      const pdf = this.pdfSession;
-      const handler = pdf ? openAttachmentHandlerOf(pdf) : undefined;
+      const handler = this.pdfSession?.openAttachmentHandler;
       if (handler) handler(file);
       else downloadBytes(file.content, file.filename);
     },
@@ -533,8 +532,8 @@ export class ViewerController implements Viewer {
     return this.#options.pageColors;
   }
 
-  /** The provider's `PdfSession` while this viewer is connected to it; null otherwise. */
-  get pdfSession(): PdfSession | null {
+  /** The provider's `PdfSessionController` while this viewer is connected to it; null otherwise. */
+  get pdfSession(): PdfSessionController | null {
     const shown = this.#shown;
     return shown?.connection ? (shown.pdf.deref() ?? null) : null;
   }
@@ -636,7 +635,7 @@ export class ViewerController implements Viewer {
    * view of it; opened again with the same session, it shows the document
    * where it showed it, in the pdf.js document the session then has.
    */
-  open(pdf: PdfSession): void {
+  open(pdf: PdfSessionController): void {
     const showing = this.#shown;
     if (showing?.pdf.deref() === pdf) {
       this.#connect(showing);
@@ -732,7 +731,7 @@ export class ViewerController implements Viewer {
     const { signal } = shown.work;
     this.#load(shown, pdf, signal).catch((error: unknown) => {
       // A document that fails to open says so in its session's state.
-      if (!signal.aborted && pdf.state.get().status === "ready") {
+      if (!signal.aborted && pdf.state.status === "ready") {
         console.error("showing the document failed", error);
       }
     });
@@ -743,8 +742,8 @@ export class ViewerController implements Viewer {
    * background: as it opens (`opening`), or, in a viewport that reattached
    * after it showed, where the last one showed it.
    */
-  async #load(shown: Showing, pdf: PdfSession, signal: AbortSignal): Promise<void> {
-    const session = await documentOf(pdf);
+  async #load(shown: Showing, pdf: PdfSessionController, signal: AbortSignal): Promise<void> {
+    const session = await pdf.document();
     signal.throwIfAborted();
     const previous = shown.fingerprints;
     const ids = session.proxy.fingerprints;

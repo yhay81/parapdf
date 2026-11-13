@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { prerender } from "react-dom/static";
-import { connectSession, PdfSession, startSession } from "../src/document/pdf-session.ts";
+import { PdfSessionController } from "../src/document/pdf-session.ts";
 import { createSelectionAnchor, type PdfSelection } from "../src/features/selection.ts";
 import type { Rotation } from "../src/pdfjs/draw.ts";
 import { SessionContext, ViewerContext } from "../src/react/context.ts";
@@ -343,7 +343,7 @@ describe("OverlayStore, PdfPageOverlay, PdfPageOverlays, and PdfPageRect", () =>
     const ssrHtml = renderToString(
       createElement(
         SessionContext,
-        { value: new PdfSession({ url: "/manual.pdf" }) },
+        { value: new PdfSessionController({ url: "/manual.pdf" }) },
         createElement(
           ViewerContext,
           { value: viewer },
@@ -518,11 +518,11 @@ describe("preloadDocument", () => {
       assert.equal(opened, 1);
 
       // Mounting a PdfSession for the same URL joins the already-ready SharedSession immediately!
-      const session = new PdfSession({ url: "/preloaded.pdf#page=4" }, { pdfjs: loader });
-      startSession(session);
-      assert.equal(session.state.get().status, "ready");
-      assert.equal(session.state.get().pageCount, 4);
-      const disconnect = connectSession(session);
+      const session = new PdfSessionController({ url: "/preloaded.pdf#page=4" }, { pdfjs: loader });
+      session.start();
+      assert.equal(session.state.status, "ready");
+      assert.equal(session.state.pageCount, 4);
+      const disconnect = session.connect();
       assert.equal(opened, 1);
 
       disconnect();

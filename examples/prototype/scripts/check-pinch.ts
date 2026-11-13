@@ -728,9 +728,8 @@ const newPage = async (): Promise<Page> => {
   await page.goto(`${baseUrl}?engine=${engine}&file=bill-hr815.pdf`);
   await page.waitForFunction(
     () =>
-      (
-        window as unknown as { __session?: { state: { get(): { status: string } } } }
-      ).__session?.state.get().status === "ready",
+      (window as unknown as { __session?: { state: { status: string } } }).__session?.state
+        .status === "ready",
     null,
     { timeout: 30_000 },
   );

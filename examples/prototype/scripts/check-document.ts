@@ -93,14 +93,17 @@ interface Parapdf {
 interface Demo {
   __setViewerProps(props: Record<string, unknown>): void;
   __setFeatures(props: Record<string, unknown>): void;
-  __viewer?: Viewer;
+  __viewer?: Viewer & {
+    session?: {
+      initialView(): Promise<{
+        destination: { pageIndex: number } | null;
+        pageLayout: string | null;
+        pageMode: string | null;
+      } | null>;
+    } | null;
+  };
   __session?: {
-    state: { get(): { status: string; permissions: Record<string, boolean> | null } };
-    initialView(): Promise<{
-      destination: { pageIndex: number } | null;
-      pageLayout: string | null;
-      pageMode: string | null;
-    } | null>;
+    state: { status: string; permissions: Record<string, boolean> | null };
   };
   __parapdf?: Parapdf;
   __history?: {
@@ -132,8 +135,8 @@ const state = (page: Page) =>
     const history = demo.__history?.store.get();
     return {
       ...viewer,
-      permissions: demo.__session?.state.get().permissions ?? null,
-      documentView: (await demo.__session?.initialView()) ?? null,
+      permissions: demo.__session?.state.permissions ?? null,
+      documentView: (await demo.__viewer?.session?.initialView().catch(() => null)) ?? null,
       canGoBack: history?.canGoBack ?? false,
       canGoForward: history?.canGoForward ?? false,
       annotationState: demo.__annotations?.store.get().state ?? null,
@@ -154,7 +157,7 @@ async function open(browser: Browser, url: string) {
   });
   await page.goto(url);
   await page.waitForFunction(
-    () => (window as unknown as Demo).__session?.state.get().status === "ready",
+    () => (window as unknown as Demo).__session?.state.status === "ready",
     undefined,
     {
       timeout: 30_000,
@@ -1089,7 +1092,7 @@ try {
       demo(`file=usrguide.pdf&page=1&viewState=${encodeURIComponent(JSON.stringify(kept))}`),
     );
     await reopened.waitForFunction(
-      () => (window as unknown as Demo).__session?.state.get().status === "ready",
+      () => (window as unknown as Demo).__session?.state.status === "ready",
       undefined,
       { timeout: 30_000 },
     );
@@ -1379,12 +1382,12 @@ try {
     await page.evaluate(() => {
       window.__lifecycle?.mount();
     });
-    await page.waitForFunction(() => window.__session?.state.get().status === "ready", undefined, {
+    await page.waitForFunction(() => window.__session?.state.status === "ready", undefined, {
       timeout: 15_000,
     });
     const joined = await page.evaluate(() => {
-      const status = window.__session?.state.get().status ?? null;
-      const pageCount = window.__session?.state.get().pageCount ?? 0;
+      const status = window.__session?.state.status ?? null;
+      const pageCount = window.__session?.state.pageCount ?? 0;
       const stats = window.__lifecycle?.stats ?? { opens: -1, destroys: -1 };
       const downloads = performance
         .getEntriesByType("resource")

@@ -6,6 +6,19 @@ change the API.
 
 ## Unreleased
 
+- Narrow `PdfSession` to a React-only handle interface:
+  - **Breaking:** `PdfSession` is now a narrow TypeScript interface exposing
+    `source`, `state: DocumentState` (synchronous snapshot, matching
+    `viewer.state`), `proxy`, `signal`, and `submitPassword()`.
+    `session.state.get()` and `session.state.subscribe()` are removed (use
+    `useDocumentState()` for reactive subscriptions and `session.state` for
+    synchronous reads in event handlers), and the duplicate promise methods
+    `session.outline()`, `session.pageLabels()`, `session.metadata()`,
+    `session.attachments()`, `session.comments()`, `session.layers()`, and
+    `session.initialView()` are removed (use `useOutline()`, `usePageLabels()`,
+    `useMetadata()`, `useAttachments()`, `useComments()`, `useLayers()`, and
+    `useInitialView()`).
+
 - Narrow `Viewer` to a React-only handle interface and add `<PdfViewer onViewStateChange>`:
   - **Breaking:** `Viewer` is now a TypeScript interface rather than a
     constructible class (`new Viewer()` is removed; obtain a `Viewer` via

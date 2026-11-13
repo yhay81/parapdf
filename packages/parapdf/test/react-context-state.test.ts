@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
-import { PdfSession } from "../src/document/pdf-session.ts";
+import {
+  type PdfSession,
+  PdfSessionController,
+  sessionControllerOf,
+} from "../src/document/pdf-session.ts";
 import { useAnnotations } from "../src/react/annotations.ts";
 import {
   activeTracked,
@@ -206,10 +210,15 @@ describe("ViewerContext, useCreateViewer, and optional viewer hooks", () => {
     assert.equal(defaultViewer.state.tool, "hand");
     const seen: Viewer[] = [];
 
+    const session = new PdfSessionController({ url: "/manual.pdf" });
+    assert.equal(session.state.status, "loading");
+    assert.equal(sessionControllerOf(session), session);
+    assert.throws(() => sessionControllerOf({} as PdfSession), TypeError);
+
     const html = renderToString(
       createElement(
         SessionContext,
-        { value: new PdfSession({ url: "/manual.pdf" }) },
+        { value: session },
         createElement(
           ViewerContext,
           { value: defaultViewer },

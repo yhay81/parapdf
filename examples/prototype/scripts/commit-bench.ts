@@ -471,11 +471,14 @@ async function measure(
     await page.waitForFunction(
       () => {
         const demo = window as unknown as {
-          __session?: { state: { get(): { status: string } } };
+          __session?: { state: { status?: string; get?(): { status: string } } };
           __viewer?: { store: { get(): { status?: string } } };
         };
         // The session publishes the status; in builds before 0.5.0, the viewer.
-        const status = demo.__session?.state.get().status ?? demo.__viewer?.store.get().status;
+        const sessionState = demo.__session?.state;
+        const status =
+          (sessionState?.get ? sessionState.get().status : sessionState?.status) ??
+          demo.__viewer?.store.get().status;
         return status === "ready";
       },
       null,

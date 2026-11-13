@@ -14,7 +14,6 @@ import {
   useReducer,
   useRef,
 } from "react";
-import { fragmentOf } from "../document/pdf-session.ts";
 import {
   followFragments,
   type InitialViewOptions,
@@ -27,7 +26,7 @@ import type { ViewerOptions } from "../view/options.ts";
 import type { FitMode, PointerTool, ViewerState } from "../view/state.ts";
 import type { ViewState } from "../view/view-state.ts";
 import type { Viewer, ViewerController } from "../view/viewer.ts";
-import { useOptionalViewer, useSelected, useSession, ViewerContext } from "./context.ts";
+import { useOptionalSession, useOptionalViewer, useSelected, ViewerContext } from "./context.ts";
 import { usePageOverlays } from "./overlays.ts";
 import { VIEWER_CSS } from "./styles.ts";
 
@@ -281,7 +280,7 @@ function ViewerViewport({
   onPageClick,
   children,
 }: PdfViewerProps & { viewer: ViewerController }) {
-  const session = useSession();
+  const session = useOptionalSession();
   const scrollerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const layout = useSelected(viewer.store.hot, (state) => state.layout);
@@ -299,7 +298,7 @@ function ViewerViewport({
     ...(initialScrollMode !== undefined ? { initialScrollMode } : {}),
     ...(defaultPage !== undefined ? { initialPage: defaultPage } : {}),
   };
-  const fragment = fragmentOf(session);
+  const { fragment } = session;
   const options: ViewerOptions = {
     ...explicit,
     ...(initialRotation !== undefined ? { initialRotation } : {}),
