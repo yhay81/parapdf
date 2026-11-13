@@ -21,6 +21,7 @@ more, and one React hides (`<Activity>`) and shows again opens it again.
 | `source` | The document: its URL, `{ url }`, `{ data }` with its bytes, or `{ range }` with a pdf.js transport (see [Sources](/reference/sources/)). It reopens when its URL, request headers, credentials mode, or password change or, for data and transports, when they are another object or the password changes; a new object for the same URL keeps the open document. A URL's fragment, such as `#page=3`, opens it where it points, and a new fragment moves its viewers there (see [Sources](/reference/sources/#sessions)). |
 | `viewer` | A `Viewer` from `useCreateViewer()` to provide instead of creating one of its own. |
 | `passwordPrompt` | `true` by default: an encrypted document waits for a password (status `"password"`), which `useSession().submitPassword()` gives. `false` fails it at once (status `"error"`) when the source has no password or a wrong one, for this `PdfDocument` only: others of the same document may still answer. Changing it does not open the document again. |
+| `onOpenAttachment` | `({ filename, content }) => void`, called when the reader opens a file attachment annotation, a link to an embedded file, or `openAttachment(session, attachment)`. By default the browser downloads the file (see [Layers and attachments](/guides/layers-attachments/#attachments)). |
 | `children` | Viewers, thumbnails, and your controls. |
 
 ### `PdfView`
@@ -172,10 +173,11 @@ outside them when given one; those that take none read the nearest
 | `useLayers()` | The layers (optional content) and which show, following `setLayerVisible()` in any viewer of the document. |
 | `useFormFields()` | The form fields with their values as first read; `getFormFields()` reads them again (see [Forms](/guides/forms/)). |
 | `useInitialView()` | How the document asks to be shown: its /OpenAction destination, /PageLayout, and /PageMode; null when it cannot be read (see [Keeping the view](/guides/view-state/)). |
-| `useSearch(viewer?)` | The viewer's search state with `search(query, options)`, `next()`, `previous()`, and `clear()` (see [Search](/guides/search/)). |
-| `useHistory(viewer?)` | `back()`, `forward()`, `canGoBack`, and `canGoForward` for the viewer's link and outline jumps (see [Navigation](/guides/navigation/)). |
+| `useSave(session?)` | `{ save, download, saving }` for the nearest `PdfDocument`'s `PdfSession` (or `session`), with `saving` true while a save or download is running (see [Forms, printing, and saving](/guides/forms/)). |
+| `usePrint(viewer?)` | `{ print, printing, progress, cancel }` for the viewer, tracking `{ done, total }` while pages render for printing and cancelling cleanly via `cancel()` or unmount (see [Forms, printing, and saving](/guides/forms/)). |
+| `useSearch(viewer?)`, `useSearch(selector, viewer?)` | The viewer's search state with referentially stable `search(query, options)`, `next()`, `previous()`, and `clear()`, tracking read fields when called without `selector` and comparing `selector`'s result shallowly otherwise (see [Search](/guides/search/)). |
+| `useHistory(viewer?)`, `useHistory(selector, viewer?)` | Referentially stable `back()` and `forward()` with `canGoBack` and `canGoForward` for the viewer's link and outline jumps, tracking read fields or comparing `selector`'s result shallowly (see [Navigation](/guides/navigation/)). |
 | `useAnnotations(viewer?)` | The annotation tool, state, and styles with the methods that change them (`AnnotationControls`). Always non-null (`state` and `styles` are null until `PdfAnnotationEditor` starts editing), tracking read fields so components reading only methods never re-render on annotation changes (see [Annotations](/guides/annotations/)). |
-| `useAnnotationEditing(viewer?)` | The annotation editing feature handle itself, with its `store`; null without `PdfAnnotationEditor`. |
 | `useFormChange(listener, viewer?)` | Nothing: calls `listener` with `{ name, value }` for each value the reader enters into a form field, as they type. Needs `PdfForms`. |
 | `useSelection(viewer?)` | The selection in the viewer, its text and its rectangles in PDF points, or null; it follows a drag at most once a frame (see [Text, selections, and overlays](/guides/text/)). |
 
@@ -195,27 +197,23 @@ another, closes ten seconds after it loaded.
 
 ## Functions
 
-Each takes the viewer it acts through.
+Document operations take the `PdfSession` from `useSession()` and work even
+without a mounted `PdfViewer`; viewport operations take the `Viewer` from
+`useViewer()`. Because the package has no side effects, unused functions are
+tree-shaken out of your bundle.
 
 | Function | |
 |---|---|
-| `print(viewer, options?)` | Draws every page for printing and opens the browser's print dialog; `options` are `resolution` (150 dpi by default), `autoRotate` (true by default: a page whose orientation differs from the first page's prints turned to the sheet), `onProgress(done, total)`, and `signal`. Fails when the viewer follows permissions and the document forbids printing (see [Forms, printing, and saving](/guides/forms/)). |
-| `save(viewer, options?)` | Resolves to the PDF's bytes with form values and every viewer's annotations written in; null while no document is open. `pages` saves the pages chosen instead, as pdf.js's `extractPages()` takes them: of this document, of other documents' bytes, and images (see [Forms, printing, and saving](/guides/forms/)). |
-| `download(viewer, options?)` | Saves as `save()` does, with `pages`, and hands the bytes to the browser as a download, named by default as the server names the file (`Content-Disposition`), or else after the document's URL, unless `filename` names it. |
-| `getText(viewer, options?)` | Resolves to the document's text, all of it or between pages or points (`from`, `to`, `lineBreaks`, `signal`; see [Text](/guides/text/)). |
-| `getSelection(viewer)` | The selection, as `useSelection()` gives it, or null. |
-| `getViewState(viewer)` | Where and how the document is shown, as a plain object, or null before it is (see [Keeping the view](/guides/view-state/)). |
-| `setViewState(viewer, view)` | Shows such a view again; the fields it leaves out stay as they are. |
-| `getFormFields(viewer)` | Resolves to every form field and its current value. |
-| `setFormValues(viewer, values)` | Sets fields by name; resolves to the names it set. |
-| `setLayerVisible(viewer, id, visible)` | Shows or hides a layer, in every viewer of the document. |
-| `getAttachmentContent(viewer, id)` | Resolves to an embedded file's bytes, or null. |
-| `openAttachment(viewer, attachment)` | Opens an embedded file as the viewer's `openAttachment` option says, by default as a download. |
-| `enforcePermissions(viewer)` | Follows what the viewer's documents permit, as `<PdfPermissions />` does; returns the function that stops. |
-| `permits(viewer, what)` | Whether the document permits `"print"`, `"copy"`, `"annotate"`, or `"fillForms"`; always true while the viewer does not follow permissions. |
-| `searchOf(viewer)`, `historyOf(viewer)` | The viewer's own search and history, which `useSearch()` and `useHistory()` show, attached on first use. |
-| `attachSearch(viewer)`, `attachHistory(viewer)` | A search or history of its own for the viewer; its `detach()` takes it off. |
-| `attachThumbnail(viewer, pageIndex, canvas, width)` | Draws a thumbnail into a canvas of yours, as `PdfThumbnail` does; returns the function that releases it. |
+| `save(session, options?)` | Resolves to the PDF's bytes with form values and every viewer's annotations written in; null while no document is ready. `pages` saves the pages chosen instead, as pdf.js's `extractPages()` takes them: of this document, of other documents' bytes, and images (see [Forms, printing, and saving](/guides/forms/)). |
+| `download(session, options?)` | Saves as `save()` does, with `pages`, and hands the bytes to the browser as a download, named by default as the server names the file (`Content-Disposition`), or else after the document's URL, unless `filename` names it. |
+| `getText(session, options?)` | Resolves to the document's text, all of it or between pages or points (`from`, `to`, `lineBreaks`, `signal`; see [Text](/guides/text/)). |
+| `getFormFields(session)` | Resolves to every form field and its current value. |
+| `setFormValues(session, values)` | Sets fields by name; resolves to the names it set. |
+| `setLayerVisible(session, id, visible)` | Shows or hides a layer, in every viewer of the document. |
+| `getAttachmentContent(session, id)` | Resolves to an embedded file's bytes, or null. |
+| `openAttachment(session, attachment)` | Opens an embedded file as `PdfDocument`'s `onOpenAttachment` prop says, by default as a download. |
+| `print(viewer, options?)` | Draws every page for printing and opens the browser's print dialog; `options` are `resolution` (150 dpi by default), `autoRotate` (true by default: a page whose orientation differs from the first page's prints turned to the sheet), `onProgress(done, total)`, and `signal`. Fails when `<PdfPermissions />` is mounted and the document forbids printing (see [Forms, printing, and saving](/guides/forms/)). |
+| `permits(viewer, what)` | Whether the document permits `"print"`, `"copy"`, `"annotate"`, or `"fillForms"`; always true while `<PdfPermissions />` is not mounted. |
 
 ## pdf.js
 

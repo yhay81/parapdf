@@ -1,13 +1,13 @@
 import {
   openAttachment,
   type PdfLayer,
+  type PdfSession,
   PdfThumbnails,
   setLayerVisible,
   useAttachments,
   useLayers,
   usePageLabels,
-  useViewer,
-  type Viewer,
+  useSession,
 } from "parapdf";
 import { Suspense } from "react";
 import { OutlinePanel } from "./OutlinePanel.tsx";
@@ -45,17 +45,17 @@ function ThumbnailsPanel({ id }: { id: string }) {
 
 /** The document's layers as check boxes, nested as the document orders them. */
 function LayersPanel({ id }: { id: string }) {
-  const viewer = useViewer();
+  const session = useSession();
   const layers = useLayers();
   if (layers.length === 0) return null;
   return (
     <section id={id} className="sidebar layers" aria-label="Layers">
-      <LayerList viewer={viewer} layers={layers} />
+      <LayerList session={session} layers={layers} />
     </section>
   );
 }
 
-function LayerList({ viewer, layers }: { viewer: Viewer; layers: readonly PdfLayer[] }) {
+function LayerList({ session, layers }: { session: PdfSession; layers: readonly PdfLayer[] }) {
   return (
     <ul>
       {layers.map((layer, index) => (
@@ -68,13 +68,15 @@ function LayerList({ viewer, layers }: { viewer: Viewer; layers: readonly PdfLay
                 type="checkbox"
                 checked={layer.visible}
                 onChange={(event) => {
-                  if (layer.id) setLayerVisible(viewer, layer.id, event.target.checked);
+                  if (layer.id) setLayerVisible(session, layer.id, event.target.checked);
                 }}
               />
               {layer.name}
             </label>
           )}
-          {layer.children.length > 0 ? <LayerList viewer={viewer} layers={layer.children} /> : null}
+          {layer.children.length > 0 ? (
+            <LayerList session={session} layers={layer.children} />
+          ) : null}
         </li>
       ))}
     </ul>
@@ -83,7 +85,7 @@ function LayerList({ viewer, layers }: { viewer: Viewer; layers: readonly PdfLay
 
 /** Files embedded in the document; activating one downloads it. */
 function AttachmentsPanel({ id }: { id: string }) {
-  const viewer = useViewer();
+  const session = useSession();
   const attachments = useAttachments();
   if (attachments.length === 0) return null;
   return (
@@ -94,7 +96,7 @@ function AttachmentsPanel({ id }: { id: string }) {
             <button
               type="button"
               title={attachment.description ?? undefined}
-              onClick={() => void openAttachment(viewer, attachment)}
+              onClick={() => void openAttachment(session, attachment)}
             >
               {attachment.filename}
             </button>

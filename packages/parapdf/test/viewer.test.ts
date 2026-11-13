@@ -279,14 +279,14 @@ describe("closing a viewer's document", () => {
     return { ...fake, read, textsRead: document.textsRead };
   }
 
-  it("stops what the viewer started for the document", async () => {
+  it("stops what the viewer and session started for the document", async () => {
     const { loader, read } = slowTexts();
     const viewer = new Viewer();
-    const { close: closeDocument } = show(viewer, { url: "/a.pdf" }, loader);
+    const { session: pdfSession, close: closeDocument } = show(viewer, { url: "/a.pdf" }, loader);
     await settle();
     assert.ok(viewer.store.get().layout);
     const session = viewer.session;
-    const reading = getText(viewer);
+    const reading = getText(pdfSession);
     const search = attachSearch(viewer);
     search.search("hello");
     assert.equal(search.store.get().status, "searching");
@@ -309,11 +309,15 @@ describe("closing a viewer's document", () => {
   it("drops what the viewer held of the document", async () => {
     const { loader } = fakePdfjs();
     const viewer = new Viewer();
-    const { close: closeDocument } = show(viewer, { url: "/files/a.pdf" }, loader);
+    const { session: pdfSession, close: closeDocument } = show(
+      viewer,
+      { url: "/files/a.pdf" },
+      loader,
+    );
     await settle();
     const work = viewer.workSignal;
     assert.ok(viewer.session && viewer.permissions && viewer.renderer && viewer.layers && work);
-    assert.equal(viewer.sourceName, "a.pdf");
+    assert.equal(viewer.pdfSession, pdfSession);
     closeDocument();
     assert.equal(work.aborted, true);
     assert.deepEqual(
@@ -323,7 +327,7 @@ describe("closing a viewer's document", () => {
         viewer.renderer,
         viewer.layers,
         viewer.workSignal,
-        viewer.sourceName,
+        viewer.pdfSession,
         viewer.store.get().layout,
       ],
       [null, null, null, null, null, null, null],
@@ -377,12 +381,13 @@ describe("closing a viewer's document", () => {
     const first = new Viewer();
     const second = new Viewer();
     const { close: closeFirst } = show(first, { url: "/a.pdf" }, loader);
-    close.push(show(second, { url: "/a.pdf" }, loader).close);
+    const { session: secondSession, close: closeSecond } = show(second, { url: "/a.pdf" }, loader);
+    close.push(closeSecond);
     await settle();
     const session = second.session;
     assert.ok(session);
     assert.equal(first.session, session, "one session for both");
-    const reading = getText(second);
+    const reading = getText(secondSession);
     closeFirst();
     read();
     assert.equal((await reading).text, "hello\n\nhello");
@@ -875,7 +880,7 @@ describe("a viewer's viewport", () => {
 
       hide();
       assert.deepEqual(
-        [viewer.session, viewer.renderer, viewer.sourceName, viewer.store.get().layout],
+        [viewer.session, viewer.renderer, viewer.pdfSession, viewer.store.get().layout],
         [null, null, null, null],
       );
       mock.timers.tick(away);
@@ -885,7 +890,7 @@ describe("a viewer's viewport", () => {
       mount(viewer, scroller, session);
       await settle();
       assert.equal(viewer.session === shown, away < 1000, "the document that stayed open");
-      assert.equal(viewer.sourceName, "a.pdf");
+      assert.equal(viewer.pdfSession, session);
       assert.deepEqual(view(), before, `away for ${away} ms`);
       assert.equal(calls.opens, away < 1000 ? 1 : 2);
     }

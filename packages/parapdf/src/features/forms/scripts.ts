@@ -7,6 +7,7 @@
 import type { DocumentSession } from "../../document/session.ts";
 import type { AnnotationLayerScripting } from "../../pdfjs/annotation-layer.ts";
 import { type DocumentScripting, startScripting } from "../../pdfjs/scripting.ts";
+import { filenameFromUrl } from "../../view/files.ts";
 import { ZOOM_STEP } from "../../view/input.ts";
 import type { FitMode } from "../../view/state.ts";
 import type { Viewer } from "../../view/viewer.ts";
@@ -117,13 +118,16 @@ function command(run: Running, session: DocumentSession, name: string, value: un
           console.error("printing for the document's scripts failed", error),
         );
       break;
-    case "SaveAs":
+    case "SaveAs": {
+      const pdf = viewer.pdfSession;
+      if (!pdf) break;
       import("../download.ts")
-        .then(({ download }) => download(viewer))
+        .then(({ download }) => download(pdf))
         .catch((error: unknown) =>
           console.error("saving for the document's scripts failed", error),
         );
       break;
+    }
     // `layout` (the page layout) is left out, and `WillPrintFinished` needs
     // nothing: the WillPrint event's dispatch has already finished.
   }
@@ -178,8 +182,10 @@ export function sameFieldValue(a: unknown, b: unknown): boolean {
 export function joinScripting(session: DocumentSession, member: ScriptingViewer): JoinedScripting {
   let run = running.get(session);
   if (!run) {
+    const pdf = member.viewer.pdfSession;
+    const sourceName = pdf && "url" in pdf.source ? filenameFromUrl(pdf.source.url) : null;
     const started: Running = {
-      scripting: startScripting(session.pdfjs, session.proxy, member.viewer.sourceName, {
+      scripting: startScripting(session.pdfjs, session.proxy, sourceName, {
         field: (id, update) => updateField(started, session, id, update),
         command: (name, value) => command(started, session, name, value),
       }),

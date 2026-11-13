@@ -81,8 +81,8 @@ and opens again after its document was closed.
   a transition React abandoned, closes ten seconds after it loaded.
 - Under one `PdfDocument`, any number of `PdfViewer`s and `PdfThumbnails`
   show the document, each viewer with its own view. Viewers that edit
-  annotations share the document too: `save()` and `print()` from any of
-  them include what every one created, while each shows the annotations it
+  annotations share the document too: `save(session)` and `print(viewer)`
+  include what every one created, while each shows the annotations it
   created itself.
 
 ## pdf.js's own API

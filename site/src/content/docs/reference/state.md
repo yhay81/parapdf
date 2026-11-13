@@ -92,8 +92,10 @@ mounted and shown.
 
 ## Features' state
 
-| Store | Fields |
+| Hook | Fields |
 |---|---|
-| `searchOf(viewer).store`, `useSearch(viewer?)` | `query`, `options`, `status` (`"idle"`, `"searching"`, or `"done"`), `matches` in page order, `current` (the selected match's index, -1 for none), and `pagesSearched` (see [Search](/guides/search/)). |
-| `historyOf(viewer).store`, `useHistory(viewer?)` | `canGoBack` and `canGoForward` (see [Navigation](/guides/navigation/)). |
-| `useAnnotationEditing(viewer?)?.store`, `useAnnotations(viewer?)` | `tool`; `state`, with `canUndo`, `canRedo`, `hasSelection`, `isEmpty`, and `selected`; and `styles`, each tool's style; `state` and `styles` are null until `PdfAnnotationEditor` starts editing, and `useAnnotations()` tracks read fields (see [Annotations](/guides/annotations/)). |
+| `useSearch(viewer?)`, `useSearch(selector, viewer?)` | `query`, `options`, `status` (`"idle"`, `"searching"`, or `"done"`), `matches` in page order, `current` (the selected match's index, -1 for none), and `pagesSearched`, with referentially stable `search()`, `next()`, `previous()`, and `clear()` (see [Search](/guides/search/)). |
+| `useHistory(viewer?)`, `useHistory(selector, viewer?)` | `canGoBack` and `canGoForward`, with referentially stable `back()` and `forward()` (see [Navigation](/guides/navigation/)). |
+| `useAnnotations(viewer?)` | `tool`; `state`, with `canUndo`, `canRedo`, `hasSelection`, `isEmpty`, and `selected`; and `styles`, each tool's style; `state` and `styles` are null until `PdfAnnotationEditor` starts editing, and `useAnnotations()` tracks read fields (see [Annotations](/guides/annotations/)). |
+| `useSave(session?)` | `saving`, with `save(options?)` and `download(options?)` (see [Forms, printing, and saving](/guides/forms/)). |
+| `usePrint(viewer?)` | `printing` and `progress` (`{ done, total } | null`), with `print(options?)` and `cancel()` (see [Forms, printing, and saving](/guides/forms/)). |

@@ -954,14 +954,15 @@ try {
   await openViewer(page, baseUrl, "bill-hr815.pdf");
   const documentText = await page.evaluate(async () => {
     const viewer = window.__viewer;
+    const session = window.__session;
     const parapdf = window.__parapdf;
-    if (!viewer || !parapdf) return null;
-    const { text, pages } = await parapdf.getText(viewer);
+    if (!viewer || !session || !parapdf) return null;
+    const { text, pages } = await parapdf.getText(session);
     const layer = document.querySelector('section[data-page="1"] .parapdf-text-layer');
     const runs = [...(layer?.querySelectorAll(":scope span:not(.markedContent)") ?? [])]
       .map((span) => span.textContent)
       .join("");
-    const joined = await parapdf.getText(viewer, { lineBreaks: "join" });
+    const joined = await parapdf.getText(session, { lineBreaks: "join" });
     const last = pages.at(-1);
     // A selection of page 1's first two runs, as the reader would drag it.
     const spans = [
@@ -981,10 +982,10 @@ try {
     const selection = parapdf.getSelection(viewer);
     const selected =
       selection?.start && selection.end
-        ? await parapdf.getText(viewer, { from: selection.start, to: selection.end })
+        ? await parapdf.getText(session, { from: selection.start, to: selection.end })
         : null;
     getSelection()?.removeAllRanges();
-    const aborted = await parapdf.getText(viewer, { signal: AbortSignal.abort() }).then(
+    const aborted = await parapdf.getText(session, { signal: AbortSignal.abort() }).then(
       () => false,
       (error: Error) => error.name === "AbortError",
     );
@@ -1025,10 +1026,10 @@ try {
   );
   check("an aborted read rejects", documentText?.aborted === true);
   const matched = await page.evaluate(async () => {
-    const viewer = window.__viewer;
+    const session = window.__session;
     const parapdf = window.__parapdf;
     const search = window.__search;
-    if (!viewer || !parapdf || !search) return null;
+    if (!session || !parapdf || !search) return null;
     search.search("appropriations");
     while (search.store.get().status !== "done") {
       await new Promise((resolve) => setTimeout(resolve, 50));
@@ -1036,7 +1037,7 @@ try {
     const { matches } = search.store.get();
     const match = matches.at(-1);
     if (!match) return null;
-    const { text } = await parapdf.getText(viewer, {
+    const { text } = await parapdf.getText(session, {
       from: { pageIndex: match.pageIndex, ...match.start },
       to: { pageIndex: match.pageIndex, ...match.end },
       // Joined as search joins lines: a match may span a hyphenated word.

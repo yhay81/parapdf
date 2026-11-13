@@ -1,14 +1,9 @@
 import {
-  type AnnotationEditing,
   download,
   type FormChange,
   getAttachmentContent,
   getFormFields,
-  getSelection,
   getText,
-  getViewState,
-  type History,
-  historyOf,
   openAttachment,
   PdfDocument,
   type PdfjsDocumentOptions,
@@ -20,14 +15,10 @@ import {
   type PdfViewerProps,
   print,
   type ScrollMode,
-  type Search,
   type SpreadMode,
   save,
-  searchOf,
   setFormValues,
   setLayerVisible,
-  setViewState,
-  useAnnotationEditing,
   useAttachments,
   useDocumentState,
   useFormChange,
@@ -37,6 +28,8 @@ import {
   useMetadata,
   useOutline,
   usePageLabels,
+  usePrint,
+  useSave,
   useSession,
   useViewer,
   useViewState,
@@ -56,7 +49,17 @@ import { AnnotationToolbar } from "./AnnotationToolbar.tsx";
 import { BenchDriver } from "./BenchDriver.tsx";
 import { configureEngine, type Pdfjs } from "./engines.ts";
 import { Icon, type IconName } from "./Icon.tsx";
-import { attachViewport, showWith } from "./internals.ts";
+import {
+  type AnnotationEditing,
+  attachViewport,
+  getSelection,
+  type History,
+  historyOf,
+  type Search,
+  searchOf,
+  showWith,
+  useAnnotationEditing,
+} from "./internals.ts";
 import { PasswordPrompt } from "./PasswordPrompt.tsx";
 import { PresentationControls, usePresentation } from "./Presentation.tsx";
 import { SearchBox } from "./SearchBox.tsx";
@@ -126,7 +129,7 @@ const settings = {
   destinationZoom: params.get("destinationZoom") !== "0",
   /** "1" follows what the document permits. */
   enforcePermissions: params.get("permissions") === "1",
-  /** A view kept from `getViewState()`, as JSON, to open with. */
+  /** A view kept from `viewer.viewState()`, as JSON, to open with. */
   viewState: params.has("viewState")
     ? (JSON.parse(params.get("viewState") ?? "{}") as PdfViewerProps["initialViewState"])
     : undefined,
@@ -438,13 +441,11 @@ const demoApi = {
   getFormFields,
   getSelection,
   getText,
-  getViewState,
   openAttachment,
   print,
   save,
   setFormValues,
   setLayerVisible,
-  setViewState,
 };
 
 declare global {
@@ -519,6 +520,8 @@ function Toolbar({
   onPresent: () => void;
 }) {
   const viewer = useViewer();
+  const { print: startPrint, printing } = usePrint();
+  const { download: startDownload, saving } = useSave();
   const navigation = useHistory();
   const { back, forward } = navigation;
 
@@ -647,14 +650,14 @@ function Toolbar({
         <IconButton
           icon="print"
           label="Print"
-          onClick={() => void print(viewer)}
-          disabled={status !== "ready" || (enforcePermissions && !canPrint)}
+          onClick={() => void startPrint()}
+          disabled={status !== "ready" || printing || (enforcePermissions && !canPrint)}
         />
         <IconButton
           icon="download"
           label="Download"
-          onClick={() => void download(viewer)}
-          disabled={status !== "ready"}
+          onClick={() => void startDownload()}
+          disabled={status !== "ready" || saving}
         />
         {document.fullscreenEnabled ? (
           <button type="button" onClick={onPresent} disabled={status !== "ready"}>

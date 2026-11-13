@@ -37,12 +37,12 @@ feature, and React is used only in `react/`.
 ```
 react/      PdfDocument, PdfView, PdfViewer, PdfForms, PdfAnnotationEditor,
             PdfAutoLinks, PdfPermissions, PdfThumbnails, hooks; overlays through portals
-features/   search, history, view state, initial view, permissions, forms,
+features/   search, history, initial view, permissions, forms,
             annotations, autoLinks, print, download, thumbnails, layers,
             attachments, selection, text
 render/     planner (pure), renderer (page DOM, canvases, kept canvases),
             DOM layers (text, links and forms, editor, structure), selection tracker
-view/       Viewer: layout, scrolling, zoom, gestures, keys, navigation, state
+view/       Viewer: layout, scrolling, zoom, gestures, keys, navigation, state, view snapshots
 document/   DocumentSession, one per open document, shared through a registry
 pdfjs/      loading pdf.js with its worker and files; drawing and layers with it
 ```
@@ -116,11 +116,16 @@ search and `getText()`.
   closes, and releases nothing itself: `PdfDocument` starts its session as
   it renders, and holds and returns its lease. It follows the registry's
   session its render started and then the one its provider holds, which is
-  another once the first closed.
+  another once the first closed. `PdfDocument`'s `onOpenAttachment` sets how
+  embedded files opened from the session are handled, while `PdfSession`
+  itself stays free of DOM imports so tree-shaking drops unused document
+  actions. `DocumentSession` also publishes content changes (`onContentChange`,
+  `invalidateContent()`) when session-scoped mutations (`setFormValues()`,
+  `setLayerVisible()`) update shared document state across viewers.
 
 Viewers that edit annotations share the session's one annotation storage,
-each with an editor of its own under ids unique to the session. Saving and
-printing, from any viewer, include what every viewer created; a viewer
+each with an editor of its own under ids unique to the session. Saving the
+session and printing from any viewer include what every viewer created; a viewer
 shows the annotations it created, not the others'. Editing also reaches the
 file's own annotations of the kinds pdf.js's editor edits (text, ink,
 highlights, unlocked images): while a tool is chosen they become editors,
@@ -148,6 +153,8 @@ several may show one session.
 - `options.ts`: the viewer's options. Those the renderer is built with
   (layers, colors, budgets, concurrency) rebuild it as a detach and
   reattach would, keeping position and edits; the others apply at once.
+- `view-state.ts`: plain serializable `ViewState` snapshots (`viewer.viewState()`
+  and `viewer.setViewState()`), shared with `initialViewState`.
 - `extensions.ts`: `viewer.extend()`, the hooks features attach with.
   `metrics.ts`: what the checks and benchmarks read. `files.ts`: bytes
   handed to the browser as a download. `signals.ts`: linked abort signals.
@@ -221,10 +228,19 @@ it undoes what it added. The core imports no feature.
 
 - Forms (with `scripts`), annotation editing, auto-linked addresses,
   permission enforcement, search, print, and the other features are imported
-  only by the components, hooks, or functions that use them (`PdfForms`,
-  `PdfAnnotationEditor`, `PdfAutoLinks`, `PdfPermissions`, `useSearch()`,
-  `print()`, and so on), so bundlers exclude unused features statically with
-  zero dead feature chunks emitted on disk (decision 0034).
+  only by the components, hooks, or standalone functions that use them
+  (`PdfForms`, `PdfAnnotationEditor`, `PdfAutoLinks`, `PdfPermissions`,
+  `useSearch()`, `useSave()`, `usePrint()`, `save()`, `getText()`, and so on),
+  so bundlers exclude unused features statically with zero dead feature chunks
+  emitted on disk (decisions 0034 and 0035). Document-level operations (`save`,
+  `download`, `getText`, `getFormFields`, `setFormValues`, `setLayerVisible`,
+  `getAttachmentContent`, `openAttachment`) take `PdfSession` as standalone
+  functions rather than methods on `PdfSession`, keeping `PdfDocument` free of
+  optional feature code while working without a mounted `PdfViewer`. Vanilla-only
+  plumbing (`searchOf`, `attachSearch`, `historyOf`, `attachHistory`,
+  `attachThumbnail`, `enforcePermissions`, `useAnnotationEditing`,
+  `getSelection`, `getViewState`, `setViewState`) stays internal to the package
+  (decision 0035).
 - Form scripts are off by default and load only for a document that has
   some: pdf.js's QuickJS sandbox, one per session, started after the first
   paint (decision 0016), sending pdf.js's viewer's document events around
@@ -291,13 +307,17 @@ the DOM declares `"use client"`.
   portal into the page's host; React renders nothing else there.
 - `PdfThumbnails` and `PdfThumbnail` draw the viewer's document at a lower
   priority; `PdfPageRect` places content in PDF points.
-- `useViewState()` and `useDocumentState()` read stores through
-  `useSyncExternalStore`: called without a selector, they track the fields
-  read during rendering (dropping fields no longer read in inactive
-  branches, while keeping a pre-render fallback set until the next render
-  reads the proxy) so unread updates cause no re-render; called with a
-  selector, they compare the selected value shallowly (`Object.is`, array
-  elements, or own properties of plain objects) (decision 0033). The
+- `useViewState()`, `useDocumentState()`, `useSearch()`, and `useHistory()`
+  read stores through `useSyncExternalStore` (`useStoreSlice`): called without
+  a selector, they track the fields read during rendering (dropping fields no
+  longer read in inactive branches, while keeping a pre-render fallback set
+  until the next render reads the proxy) so unread updates cause no re-render;
+  called with a selector, they compare the selected value shallowly (`Object.is`,
+  array elements, or own properties of plain objects) (decisions 0033 and 0035).
+  `useSearch()` and `useHistory()` keep their action methods referentially
+  stable per feature instance, and `useSave()` and `usePrint()` expose reactive
+  saving and print-progress state with clean abort/unmount cancellation. They
+  reconcile that state when React reconnects their effects after Activity hides. The
   document's data is read with `use()` under the application's Suspense
   boundaries.
 - On the server the viewer renders an empty viewport, a URL source's

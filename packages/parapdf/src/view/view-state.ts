@@ -1,7 +1,6 @@
-"use client";
-
 import type { Rotation } from "../pdfjs/draw.ts";
 import {
+  type Layout,
   pageAtPoint,
   pageLeft,
   pageTop,
@@ -10,14 +9,13 @@ import {
   toRotation,
   turnBox,
   turnedSize,
-} from "../view/layout.ts";
-import type { ShownView } from "../view/options.ts";
-import type { FitMode } from "../view/state.ts";
-import type { Viewer } from "../view/viewer.ts";
+} from "./layout.ts";
+import type { ShownView } from "./options.ts";
+import type { FitMode, ViewerState } from "./state.ts";
 
 /**
  * Where and how a viewer shows its document, to keep and show again: a
- * plain, JSON-compatible object (see `getViewState()`).
+ * plain, JSON-compatible object (see `viewer.viewState()`).
  */
 export interface ViewState {
   /** The zero-based page at the viewport's top-left corner. */
@@ -69,16 +67,14 @@ export function toShownView(view: Partial<ViewState>): ShownView {
 }
 
 /**
- * Where and how `viewer` shows its document now, to show again with
- * `setViewState()` or `initialViewState`, in this viewer or another, such
- * as when the reader opens the document again or follows a shared link.
- * Null until the document is ready.
+ * Where and how a viewer shows its document now, from its layout, scroll
+ * container, and state.
  */
-export function getViewState(viewer: Viewer): ViewState | null {
-  const state = viewer.store.get();
-  const layout = state.layout;
-  const scroller = viewer.scroller;
-  if (!layout || !scroller) return null;
+export function viewStateAt(
+  layout: Layout,
+  scroller: Pick<HTMLElement, "scrollLeft" | "scrollTop" | "clientWidth" | "clientHeight">,
+  state: Pick<ViewerState, "zoomMode" | "spread" | "scrollMode">,
+): ViewState {
   const { scrollLeft, scrollTop, clientWidth, clientHeight } = scroller;
   // The gap above a row belongs to it: a page shown from its top, as
   // `goToPage()` shows it, is the page of the view, not the one above.
@@ -105,15 +101,4 @@ export function getViewState(viewer: Viewer): ViewState | null {
     spread: state.spread,
     scrollMode: state.scrollMode,
   };
-}
-
-/**
- * Show a view kept from `getViewState()`: its arrangement, rotation, and
- * zoom, and the same point of the same page at the viewport's top-left
- * corner. Fields left out keep the view's; without `x` and `y`, the page
- * shows from its top. Values out of range are clamped or ignored, so a
- * view read from a URL needs no checking.
- */
-export function setViewState(viewer: Viewer, view: Partial<ViewState>): void {
-  viewer.show(toShownView(view));
 }

@@ -1,4 +1,4 @@
-export type { PdfSession } from "./document/pdf-session.ts";
+export type { AttachmentHandler, PdfSession } from "./document/pdf-session.ts";
 export type { DocumentState, LoadProgress } from "./document/registry.ts";
 export type {
   DocumentPermissions,
@@ -13,11 +13,6 @@ export type {
   PdfPageSelection,
   PdfSource,
 } from "./document/session.ts";
-export type {
-  AnnotationEditing,
-  AnnotationEditingOptions,
-  AnnotationEditingStore,
-} from "./features/annotations.ts";
 export { getAttachmentContent, openAttachment } from "./features/attachments.ts";
 export {
   type DownloadOptions,
@@ -33,25 +28,13 @@ export {
   getFormFields,
   setFormValues,
 } from "./features/forms/index.ts";
-export type { FormLayers } from "./features/forms/layers.ts";
-export {
-  attachHistory,
-  type History,
-  type HistoryState,
-  historyOf,
-} from "./features/history.ts";
 export type { InitialViewOptions } from "./features/initial-view.ts";
 export { setLayerVisible } from "./features/layers.ts";
-export { enforcePermissions, type Permission, permits } from "./features/permissions.ts";
+export { type Permission, permits } from "./features/permissions.ts";
 export { type PrintOptions, print } from "./features/print/index.ts";
-export {
-  attachSearch,
-  type Search,
-  type SearchState,
-  searchOf,
-} from "./features/search/index.ts";
+export type { SearchState } from "./features/search/index.ts";
 export type { SearchMatch, SearchOptions, TextPosition } from "./features/search/text-search.ts";
-export { getSelection, type PdfRect, type PdfSelection } from "./features/selection.ts";
+export type { PdfRect, PdfSelection } from "./features/selection.ts";
 export {
   type DocumentText,
   getText,
@@ -60,8 +43,6 @@ export {
   type TextOptions,
   type TextPoint,
 } from "./features/text/index.ts";
-export { attachThumbnail } from "./features/thumbnails/index.ts";
-export { getViewState, setViewState, type ViewState } from "./features/view-state.ts";
 export type { Destination } from "./pdfjs/destinations.ts";
 export type { PageColors, Rotation } from "./pdfjs/draw.ts";
 export type {
@@ -84,11 +65,7 @@ export {
   type PdfjsDocumentOptions,
   preloadPdfjs,
 } from "./pdfjs/loader.ts";
-export {
-  type AnnotationControls,
-  useAnnotationEditing,
-  useAnnotations,
-} from "./react/annotations.ts";
+export { type AnnotationControls, useAnnotations } from "./react/annotations.ts";
 export { useDocumentState, useSession, useViewState } from "./react/context.ts";
 export {
   useAttachments,
@@ -114,6 +91,8 @@ export { PdfThumbnail, type PdfThumbnailProps } from "./react/PdfThumbnail.tsx";
 export { PdfThumbnails, type PdfThumbnailsProps } from "./react/PdfThumbnails.tsx";
 export { PdfView, type PdfViewProps } from "./react/PdfView.tsx";
 export { PdfViewer, type PdfViewerProps, type Zoom } from "./react/PdfViewer.tsx";
+export { type PrintControls, type PrintProgress, usePrint } from "./react/print.ts";
+export { type SaveControls, useSave } from "./react/save.ts";
 export { type SearchControls, useSearch } from "./react/search.ts";
 export { useSelection } from "./react/selection.ts";
 export { useCreateViewer, useViewer } from "./react/viewer.ts";
@@ -123,4 +102,5 @@ export type { Direction, Layout, ScrollMode, SpreadMode } from "./view/layout.ts
 export type { ViewerPosition } from "./view/navigation.ts";
 export type { Opening, ShownView } from "./view/options.ts";
 export type { FitMode, PointerTool, ViewerState, ZoomMode } from "./view/state.ts";
+export type { ViewState } from "./view/view-state.ts";
 export type { Viewer } from "./view/viewer.ts";

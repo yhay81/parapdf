@@ -9,19 +9,19 @@ import { TextExample } from "../../../components/examples.tsx";
 
 ## The document's text
 
-`getText(viewer, options)` reads the document's text from every page, mounted
+`getText(session, options)` reads the document's text from every page, mounted
 or not, as search reads it: the text runs in content order, `"\n"` where a
 line ends, and an empty line between pages.
 
 ```ts
-const { text, pages } = await getText(viewer);
+const { text, pages } = await getText(session);
 // pages: [{ pageIndex: 0, text: "…", offset: 0 }, …], where offset is the page's start in text
 ```
 
 - `from` and `to` narrow it to pages (`{ from: 2, to: 4 }` reads pages 3 to
   5) or to points in the text: a search match's ends,
   `{ pageIndex: match.pageIndex, ...match.start }` and `...match.end`, or a
-  selection's, `getSelection(viewer).start` and `.end`. A point is included
+  selection's, `selection.start` and `selection.end`. A point is included
   as a start and excluded as an end.
 - `lineBreaks: "join"` joins lines as search does: without a space inside a
   word hyphenated across lines and in Japanese and Chinese text, with one
@@ -35,11 +35,10 @@ covers only mounted pages; to copy a range longer than those, read it with
 
 ## Selections
 
-`getSelection(viewer)` returns the text selected in the viewer and the
+`useSelection(viewer?)` returns the text selected in the viewer and the
 rectangles it covers, page by page, in the PDF points `PdfPageRect` takes, so
 you can keep a selection as a highlight; null when nothing is selected
-there. `useSelection(viewer?)` follows it, at most once a frame while the
-reader drags:
+there. It follows the selection at most once a frame while the reader drags:
 
 ```tsx
 const selection = useSelection();

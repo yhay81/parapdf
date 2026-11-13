@@ -1,6 +1,5 @@
 import {
   download,
-  getViewState,
   type PageColors,
   PdfDocument,
   PdfForms,
@@ -10,11 +9,12 @@ import {
   PdfViewer,
   type SpreadMode,
   setFormValues,
-  setViewState,
   useCreateViewer,
   useDocumentState,
   useFormChange,
   useSelection,
+  useSession,
+  useViewer,
   useViewState,
   type Viewer,
 } from "parapdf";
@@ -103,7 +103,7 @@ function SelectionBridge({
   useEffect(() => {
     if (!ready || centered.current) return;
     centered.current = true;
-    setViewState(viewer, { page: 1, y: 236 });
+    viewer.setViewState({ page: 1, y: 236 });
   }, [ready, viewer]);
 
   useEffect(() => {
@@ -133,7 +133,7 @@ export function CitationsShowcase() {
     const firstPage = note.pages[0];
     const firstRect = firstPage?.rects[0];
     if (!firstPage) return;
-    setViewState(viewer, {
+    viewer.setViewState({
       page: firstPage.pageIndex,
       ...(firstRect ? { y: Math.max(0, firstRect.y - 56) } : {}),
     });
@@ -473,6 +473,7 @@ function FormSyncBridge({
   initial: TaxpayerRecord;
   onPdfEdit: (patch: Partial<TaxpayerRecord>, label: string, validateZip?: boolean) => void;
 }) {
+  const session = useSession();
   const ready = useViewState((state) => state.layout !== null, viewer);
   const seeded = useRef(false);
   const initialRef = useRef(initial);
@@ -480,8 +481,8 @@ function FormSyncBridge({
   useEffect(() => {
     if (!ready || seeded.current) return;
     seeded.current = true;
-    void setFormValues(viewer, toPdfFormValues(initialRef.current));
-  }, [ready, viewer]);
+    void setFormValues(session, toPdfFormValues(initialRef.current));
+  }, [ready, session]);
 
   useFormChange(({ name, value }) => {
     const text = typeof value === "string" ? value : (value[0] ?? "");
@@ -506,11 +507,11 @@ function FormSyncBridge({
         break;
       case F1040_FIELDS.single:
         onPdfEdit({ status: text !== "Off" ? "single" : "none" }, "Filing status");
-        if (text !== "Off") void setFormValues(viewer, { [F1040_FIELDS.joint]: "Off" });
+        if (text !== "Off") void setFormValues(session, { [F1040_FIELDS.joint]: "Off" });
         break;
       case F1040_FIELDS.joint:
         onPdfEdit({ status: text !== "Off" ? "joint" : "none" }, "Filing status");
-        if (text !== "Off") void setFormValues(viewer, { [F1040_FIELDS.single]: "Off" });
+        if (text !== "Off") void setFormValues(session, { [F1040_FIELDS.single]: "Off" });
         break;
       default:
         onPdfEdit({}, name.split(".").pop() ?? "Field");
@@ -525,7 +526,16 @@ function FormSyncBridge({
  * PDF form, plus React validation rendered directly over a PDF form widget.
  */
 export function FormSyncShowcase() {
-  const viewer = useCreateViewer();
+  return (
+    <PdfDocument source={sampleUrl("f1040.pdf")}>
+      <FormSyncContent />
+    </PdfDocument>
+  );
+}
+
+function FormSyncContent() {
+  const viewer = useViewer();
+  const session = useSession();
   const [record, setRecord] = useState<TaxpayerRecord>(ADA_RECORD);
   const [zipChecked, setZipChecked] = useState(false);
   const [syncNotice, setSyncNotice] = useState("Prefilled Form 1040 from React state");
@@ -537,8 +547,8 @@ export function FormSyncShowcase() {
     setRecord(next);
     setZipChecked(checkZip);
     setSyncNotice(`React → PDF: loaded ${label}`);
-    void setFormValues(viewer, toPdfFormValues(next));
-    setViewState(viewer, { page: 0, y: 28 });
+    void setFormValues(session, toPdfFormValues(next));
+    viewer.setViewState({ page: 0, y: 28 });
   };
 
   const updateText = (
@@ -551,13 +561,13 @@ export function FormSyncShowcase() {
       setZipChecked(false);
     }
     setSyncNotice(`React → PDF: ${label}`);
-    void setFormValues(viewer, { [F1040_FIELDS[key]]: value });
+    void setFormValues(session, { [F1040_FIELDS[key]]: value });
   };
 
   const updateStatus = (status: FilingStatus) => {
     setRecord((current) => ({ ...current, status }));
     setSyncNotice("React → PDF: Filing status");
-    void setFormValues(viewer, {
+    void setFormValues(session, {
       [F1040_FIELDS.single]: status === "single" ? "1" : "Off",
       [F1040_FIELDS.joint]: status === "joint" ? "2" : "Off",
     });
@@ -565,181 +575,179 @@ export function FormSyncShowcase() {
 
   return (
     <div className="example showcase not-content">
-      <PdfDocument source={sampleUrl("f1040.pdf")} viewer={viewer}>
-        <FormSyncBridge
-          viewer={viewer}
-          initial={ADA_RECORD}
-          onPdfEdit={(patch, label, flagZip) => {
-            if (Object.keys(patch).length > 0) {
-              setRecord((current) => ({ ...current, ...patch }));
-            }
-            if (flagZip !== undefined) setZipChecked(flagZip);
-            setSyncNotice(`PDF → React: ${label}`);
-          }}
-        />
-        <div className="example-toolbar" role="toolbar" aria-label="Form sync controls">
-          <button type="button" onClick={() => applyPreset(ADA_RECORD, "Ada Lovelace", false)}>
-            Prefill Ada
-          </button>
-          <button
-            type="button"
-            onClick={() => applyPreset(INCOMPLETE_ZIP_RECORD, "incomplete ZIP", true)}
-          >
-            Try invalid ZIP
-          </button>
-          <button type="button" onClick={() => applyPreset(EMPTY_RECORD, "blank form", false)}>
-            Clear
-          </button>
-          <ZoomControls fit={false} />
-          <span className="spacer" />
-          <button
-            type="button"
-            onClick={() => void download(viewer, { filename: "f1040-filled.pdf" })}
-          >
-            Download filled PDF
-          </button>
-          <DocumentStatus className="example-status" />
-        </div>
-        <div className="showcase-split">
-          <div className="showcase-panel">
-            <div className="showcase-panel-head">
-              <strong>App state: taxpayer record</strong>
-              <output className="showcase-sync-pill" aria-live="polite">
-                {syncNotice}
-              </output>
-            </div>
-            <div className="showcase-form-grid">
-              <div className="showcase-field">
-                <label htmlFor={`${baseId}-first`}>First name</label>
-                <input
-                  id={`${baseId}-first`}
-                  name="firstName"
-                  type="text"
-                  autoComplete="given-name"
-                  value={record.firstName}
-                  onChange={(event) => updateText("firstName", "First name", event.target.value)}
-                />
-              </div>
-              <div className="showcase-field">
-                <label htmlFor={`${baseId}-last`}>Last name</label>
-                <input
-                  id={`${baseId}-last`}
-                  name="lastName"
-                  type="text"
-                  autoComplete="family-name"
-                  value={record.lastName}
-                  onChange={(event) => updateText("lastName", "Last name", event.target.value)}
-                />
-              </div>
-              <div className="showcase-field showcase-field-wide">
-                <label htmlFor={`${baseId}-street`}>Street address</label>
-                <input
-                  id={`${baseId}-street`}
-                  name="street"
-                  type="text"
-                  autoComplete="street-address"
-                  value={record.street}
-                  onChange={(event) => updateText("street", "Street address", event.target.value)}
-                />
-              </div>
-              <div className="showcase-field">
-                <label htmlFor={`${baseId}-city`}>City</label>
-                <input
-                  id={`${baseId}-city`}
-                  name="city"
-                  type="text"
-                  autoComplete="address-level2"
-                  value={record.city}
-                  onChange={(event) => updateText("city", "City", event.target.value)}
-                />
-              </div>
-              <div className="showcase-field showcase-field-short">
-                <label htmlFor={`${baseId}-state`}>State</label>
-                <input
-                  id={`${baseId}-state`}
-                  name="state"
-                  type="text"
-                  autoComplete="address-level1"
-                  maxLength={2}
-                  autoCorrect="off"
-                  autoCapitalize="characters"
-                  spellCheck={false}
-                  value={record.state}
-                  onChange={(event) => updateText("state", "State", event.target.value)}
-                />
-              </div>
-              <div className="showcase-field">
-                <label htmlFor={`${baseId}-zip`}>ZIP code</label>
-                <input
-                  id={`${baseId}-zip`}
-                  name="zip"
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="postal-code"
-                  maxLength={10}
-                  aria-invalid={zipInvalid || undefined}
-                  aria-describedby={zipInvalid ? `${baseId}-zip-err` : undefined}
-                  value={record.zip}
-                  onChange={(event) => updateText("zip", "ZIP code", event.target.value)}
-                  onBlur={() => {
-                    if (record.zip.length > 0) setZipChecked(true);
-                  }}
-                />
-              </div>
-            </div>
-            {zipInvalid ? (
-              <div className="showcase-validation" role="alert">
-                <span id={`${baseId}-zip-err`}>Enter a 5-digit US ZIP code (such as 02116).</span>
-                <button type="button" onClick={() => setViewState(viewer, { page: 0, y: 120 })}>
-                  Show on PDF
-                </button>
-              </div>
-            ) : null}
-            <fieldset className="showcase-fieldset">
-              <legend>Filing status</legend>
-              <div className="showcase-radio-row">
-                <input
-                  id={`${baseId}-single`}
-                  type="radio"
-                  name={`${baseId}-status`}
-                  checked={record.status === "single"}
-                  onChange={() => updateStatus("single")}
-                />
-                <label htmlFor={`${baseId}-single`}>Single</label>
-              </div>
-              <div className="showcase-radio-row">
-                <input
-                  id={`${baseId}-joint`}
-                  type="radio"
-                  name={`${baseId}-status`}
-                  checked={record.status === "joint"}
-                  onChange={() => updateStatus("joint")}
-                />
-                <label htmlFor={`${baseId}-joint`}>Married filing jointly</label>
-              </div>
-            </fieldset>
+      <FormSyncBridge
+        viewer={viewer}
+        initial={ADA_RECORD}
+        onPdfEdit={(patch, label, flagZip) => {
+          if (Object.keys(patch).length > 0) {
+            setRecord((current) => ({ ...current, ...patch }));
+          }
+          if (flagZip !== undefined) setZipChecked(flagZip);
+          setSyncNotice(`PDF → React: ${label}`);
+        }}
+      />
+      <div className="example-toolbar" role="toolbar" aria-label="Form sync controls">
+        <button type="button" onClick={() => applyPreset(ADA_RECORD, "Ada Lovelace", false)}>
+          Prefill Ada
+        </button>
+        <button
+          type="button"
+          onClick={() => applyPreset(INCOMPLETE_ZIP_RECORD, "incomplete ZIP", true)}
+        >
+          Try invalid ZIP
+        </button>
+        <button type="button" onClick={() => applyPreset(EMPTY_RECORD, "blank form", false)}>
+          Clear
+        </button>
+        <ZoomControls fit={false} />
+        <span className="spacer" />
+        <button
+          type="button"
+          onClick={() => void download(session, { filename: "f1040-filled.pdf" })}
+        >
+          Download filled PDF
+        </button>
+        <DocumentStatus className="example-status" />
+      </div>
+      <div className="showcase-split">
+        <div className="showcase-panel">
+          <div className="showcase-panel-head">
+            <strong>App state: taxpayer record</strong>
+            <output className="showcase-sync-pill" aria-live="polite">
+              {syncNotice}
+            </output>
           </div>
-          <PdfViewer
-            viewer={viewer}
-            className="example-viewport"
-            label="Form 1040 synced with React state"
-            renderOverlay={(pageIndex) =>
-              pageIndex === 0 && zipInvalid ? (
-                <>
-                  <PdfPageRect x={395} y={164} width={74} height={18}>
-                    <span className="pdf-field-ring" />
-                  </PdfPageRect>
-                  <PdfPageRect x={395} y={162} width={74} height={1}>
-                    <span className="pdf-field-flag">5-digit ZIP needed</span>
-                  </PdfPageRect>
-                </>
-              ) : null
-            }
-          >
-            <PdfForms />
-          </PdfViewer>
+          <div className="showcase-form-grid">
+            <div className="showcase-field">
+              <label htmlFor={`${baseId}-first`}>First name</label>
+              <input
+                id={`${baseId}-first`}
+                name="firstName"
+                type="text"
+                autoComplete="given-name"
+                value={record.firstName}
+                onChange={(event) => updateText("firstName", "First name", event.target.value)}
+              />
+            </div>
+            <div className="showcase-field">
+              <label htmlFor={`${baseId}-last`}>Last name</label>
+              <input
+                id={`${baseId}-last`}
+                name="lastName"
+                type="text"
+                autoComplete="family-name"
+                value={record.lastName}
+                onChange={(event) => updateText("lastName", "Last name", event.target.value)}
+              />
+            </div>
+            <div className="showcase-field showcase-field-wide">
+              <label htmlFor={`${baseId}-street`}>Street address</label>
+              <input
+                id={`${baseId}-street`}
+                name="street"
+                type="text"
+                autoComplete="street-address"
+                value={record.street}
+                onChange={(event) => updateText("street", "Street address", event.target.value)}
+              />
+            </div>
+            <div className="showcase-field">
+              <label htmlFor={`${baseId}-city`}>City</label>
+              <input
+                id={`${baseId}-city`}
+                name="city"
+                type="text"
+                autoComplete="address-level2"
+                value={record.city}
+                onChange={(event) => updateText("city", "City", event.target.value)}
+              />
+            </div>
+            <div className="showcase-field showcase-field-short">
+              <label htmlFor={`${baseId}-state`}>State</label>
+              <input
+                id={`${baseId}-state`}
+                name="state"
+                type="text"
+                autoComplete="address-level1"
+                maxLength={2}
+                autoCorrect="off"
+                autoCapitalize="characters"
+                spellCheck={false}
+                value={record.state}
+                onChange={(event) => updateText("state", "State", event.target.value)}
+              />
+            </div>
+            <div className="showcase-field">
+              <label htmlFor={`${baseId}-zip`}>ZIP code</label>
+              <input
+                id={`${baseId}-zip`}
+                name="zip"
+                type="text"
+                inputMode="numeric"
+                autoComplete="postal-code"
+                maxLength={10}
+                aria-invalid={zipInvalid || undefined}
+                aria-describedby={zipInvalid ? `${baseId}-zip-err` : undefined}
+                value={record.zip}
+                onChange={(event) => updateText("zip", "ZIP code", event.target.value)}
+                onBlur={() => {
+                  if (record.zip.length > 0) setZipChecked(true);
+                }}
+              />
+            </div>
+          </div>
+          {zipInvalid ? (
+            <div className="showcase-validation" role="alert">
+              <span id={`${baseId}-zip-err`}>Enter a 5-digit US ZIP code (such as 02116).</span>
+              <button type="button" onClick={() => viewer.setViewState({ page: 0, y: 120 })}>
+                Show on PDF
+              </button>
+            </div>
+          ) : null}
+          <fieldset className="showcase-fieldset">
+            <legend>Filing status</legend>
+            <div className="showcase-radio-row">
+              <input
+                id={`${baseId}-single`}
+                type="radio"
+                name={`${baseId}-status`}
+                checked={record.status === "single"}
+                onChange={() => updateStatus("single")}
+              />
+              <label htmlFor={`${baseId}-single`}>Single</label>
+            </div>
+            <div className="showcase-radio-row">
+              <input
+                id={`${baseId}-joint`}
+                type="radio"
+                name={`${baseId}-status`}
+                checked={record.status === "joint"}
+                onChange={() => updateStatus("joint")}
+              />
+              <label htmlFor={`${baseId}-joint`}>Married filing jointly</label>
+            </div>
+          </fieldset>
         </div>
-      </PdfDocument>
+        <PdfViewer
+          viewer={viewer}
+          className="example-viewport"
+          label="Form 1040 synced with React state"
+          renderOverlay={(pageIndex) =>
+            pageIndex === 0 && zipInvalid ? (
+              <>
+                <PdfPageRect x={395} y={164} width={74} height={18}>
+                  <span className="pdf-field-ring" />
+                </PdfPageRect>
+                <PdfPageRect x={395} y={162} width={74} height={1}>
+                  <span className="pdf-field-flag">5-digit ZIP needed</span>
+                </PdfPageRect>
+              </>
+            ) : null
+          }
+        >
+          <PdfForms />
+        </PdfViewer>
+      </div>
       <SampleNote
         file="f1040.pdf"
         lead="Type on either side: React inputs write to pdf.js's form storage, typing in the PDF updates React state, and Download saves the filled bytes in your browser."
@@ -775,8 +783,8 @@ export function SplitSessionShowcase() {
           <button
             type="button"
             onClick={() => {
-              const view = getViewState(left);
-              if (view) setViewState(right, view);
+              const view = left.viewState();
+              if (view) right.setViewState(view);
             }}
           >
             Sync right to left

@@ -8,8 +8,8 @@ import type { Destination, ResolvedDestination } from "../pdfjs/destinations.ts"
 import type { ScrollMode, SpreadMode } from "../view/layout.ts";
 import type { Opening, ViewerOptions } from "../view/options.ts";
 import { linked } from "../view/signals.ts";
+import { toShownView, type ViewState } from "../view/view-state.ts";
 import type { Viewer } from "../view/viewer.ts";
-import { toShownView, type ViewState } from "./view-state.ts";
 
 export interface InitialViewOptions {
   /**
@@ -22,7 +22,7 @@ export interface InitialViewOptions {
    */
   initialView?: "options" | "document";
   /**
-   * The view to open with, kept from `getViewState()`, such as the reader's
+   * The view to open with, kept from `viewer.viewState()`, such as the reader's
    * last position or one shared in a URL. Its fields win over the page, the
    * zoom, the spread, and the scroll mode the application sets, and over
    * `initialView`; those it leaves out still apply.

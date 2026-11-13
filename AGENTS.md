@@ -76,11 +76,13 @@ that matters for performance or direction gets a decision record.
   of it, which applications see (`src/document/`); one
   `Viewer` per viewport, its options (`options.ts`), layout, scrolling,
   gestures, keys and the hand tool (`input.ts`), hot/cold state
-  (`state.ts`), the pure rules of its zoom (`zoom.ts`) and navigation
-  (`navigation.ts`), which the viewer asks outside the frame and gesture
-  paths, the measures the checks and benchmarks read (`metrics.ts`), the
-  hooks features extend it with (`viewer.extend()`, `extensions.ts`), and
-  handing bytes to the browser as a download (`files.ts`) (`src/view/`); rendering: the planner, a pure
+  (`state.ts`), serializable view snapshots (`view-state.ts`,
+  `viewer.viewState()` and `viewer.setViewState()`), the pure rules of its
+  zoom (`zoom.ts`) and navigation (`navigation.ts`), which the viewer asks
+  outside the frame and gesture paths, the measures the checks and benchmarks
+  read (`metrics.ts`), the hooks features extend it with (`viewer.extend()`,
+  `extensions.ts`), and handing bytes to the browser as a download
+  (`files.ts`) (`src/view/`); rendering: the planner, a pure
   function that decides what each page draws (`planner.ts`), and the
   renderer, which builds each page's canvases and layer containers inside
   the host React places, carries out the plans, keeps the canvases of pages
@@ -91,8 +93,8 @@ that matters for performance or direction gets a decision record.
   React bindings: `PdfDocument`, `PdfView`, `PdfViewer` (which sets its
   viewer's live options), declarative feature components (`PdfForms`,
   `PdfAnnotationEditor`, `PdfAutoLinks`, `PdfPermissions`),
-  `PdfThumbnails`, `useViewer()`, `useCreateViewer()`, and the hooks
-  (`src/react/`, `"use client"`); unit tests in Node, which stand in for pdf.js with
+  `PdfThumbnails`, `useViewer()`, `useCreateViewer()`, `useSave()`,
+  `usePrint()`, and the hooks (`src/react/`, `"use client"`); unit tests in Node, which stand in for pdf.js with
   `test/fake-pdfjs.ts` and for the elements of a page the renderer builds
   with `test/fake-dom.ts` (`test/`).
   `scripts/pdfjs-files.ts`, run by `pnpm install` and `build`, copies

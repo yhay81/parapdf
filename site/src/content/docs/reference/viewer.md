@@ -20,7 +20,7 @@ when a tab hides it, and shows the document again where it was when a
 
 While React hides the `PdfDocument` or the viewer's owner and keeps their
 state (`<Activity>`), the viewer lets go of the document and shows nothing:
-`session`, `sourceName`, and the layout are null. It keeps the view, the
+`session`, `pdfSession`, and the layout are null. It keeps the view, the
 history, a finished search, and the annotations, and shows them again with
 the document once React shows both.
 
@@ -53,23 +53,25 @@ its callback and returns to its value unless you take the change up (see
 |---|---|
 | `goToDestination(dest, signal?)` | Shows a named or explicit destination (pdf.js's `Destination`), with the zoom it asks for unless `destinationZoom` is false; resolves to false when it is invalid or null, or the optional `AbortSignal` aborts before it is resolved. The history feature keeps the position before a completed jump. |
 | `show(view)` | Shows a `ShownView`: `rotation`, `spread`, `scrollMode`, `scale`, and a `target`, a page and a point of it in PDF points to put at the viewport's top-left corner. Fields left out keep the viewer's; a page out of range and a scale beyond the limits are clamped. `setViewState()` is built on it. |
+| `viewState()` | Where and how the document is shown, as a plain `ViewState` object to store or put in a URL, or null without a layout (see [Keeping the view](/guides/view-state/)). |
+| `setViewState(view)` | Shows a `Partial<ViewState>` again; fields left out stay as they are, and values out of range are clamped or ignored. |
 | `revealRect(pageIndex, rect)` | Scrolls so that `rect` (`x`, `y`, `width`, `height` in PDF points from the page's unturned top-left corner) sits in the upper third of the viewport; the page becomes current. Search shows its matches this way. |
 | `position()` | Where the viewer shows its document, as `{ pageIndex, x, y, current, scale, zoomMode }`: the page at the viewport's top-left corner and where that corner is as a share of the page, which survive zoom changes, with the current page and zoom; null without a layout. |
 | `restorePosition(position)` | Shows a `position()` again, with its zoom; a fitted zoom fits the viewport as it is now. |
 
 Back and forward are the history's: [`useHistory()`](/guides/navigation/).
-Search, printing, saving, text, and the rest are functions that take the
-viewer (see [Components and hooks](/reference/components/#functions)).
+Search, printing, saving, text, and the rest are hooks and functions (see
+[Components and hooks](/reference/components/)).
 
 ## State and the document
 
 | Property | |
 |---|---|
 | `store` | The view state: `get()`, `subscribe(listener)`, and `store.hot` and `store.cold`, the parts that change while the reader scrolls or zooms and those that do not, published apart (see [State](/reference/state/#view-state)). |
+| `pdfSession` | The `PdfSession` of the `<PdfDocument>` the viewer is attached to, or null while none is attached. |
 | `session` | The open document's session, once it has loaded, else null: pdf.js's `proxy`, `pageCount`, the pages, and what features read from the document. |
 | `permissions` | What the open document permits, everything when it is not encrypted; null until it has loaded. |
 | `layers` | Which of the open document's layers show, once known. |
-| `sourceName` | The file name the document's URL gives, which `download()` uses when the server names none; null for bytes, and while the viewer shows no document. |
 | `scroller`, `content` | The scroll container and the element that holds the pages, while a viewport is attached. |
 | `signal` | Aborted while no viewport is attached. |
 | `workSignal` | What the viewer does for its open document stops with it: aborts when the document closes or the viewport detaches; null while no document is open. |
@@ -103,4 +105,3 @@ viewer knows none of them by name.
 | `setAnnotationEditor(editor)` | Gives the pages an annotation editor's layers, or, with null, takes them down. |
 | `claimPointer(claimed)` | While claimed, a mouse drag is a feature's, such as an annotation tool's, not the hand tool's. |
 | `invalidateContent()` | What the pages show changed, such as form values: every page is drawn again. |
-| `openFile({ filename, content })` | Opens an embedded file as activating its annotation does, by the `openAttachment` option or as a download. |

@@ -2,6 +2,7 @@ import {
   type OutlineNode,
   openAttachment,
   type PdfLayer,
+  type PdfSession,
   PdfThumbnail,
   setLayerVisible,
   useAttachments,
@@ -10,6 +11,7 @@ import {
   useMetadata,
   useOutline,
   usePageLabels,
+  useSession,
   useViewer,
   useViewState,
 } from "parapdf";
@@ -206,11 +208,10 @@ function OutlineEntry({ item, depth }: { item: OutlineNode; depth: number }) {
 }
 
 function Layers() {
-  return <LayerList layers={useLayers()} />;
+  return <LayerList session={useSession()} layers={useLayers()} />;
 }
 
-function LayerList({ layers }: { layers: readonly PdfLayer[] }) {
-  const viewer = useViewer();
+function LayerList({ session, layers }: { session: PdfSession; layers: readonly PdfLayer[] }) {
   return (
     <ul className="demo-layers">
       {layers.map((layer, index) => (
@@ -223,13 +224,15 @@ function LayerList({ layers }: { layers: readonly PdfLayer[] }) {
                 type="checkbox"
                 checked={layer.visible}
                 onChange={(event) => {
-                  if (layer.id) setLayerVisible(viewer, layer.id, event.target.checked);
+                  if (layer.id) setLayerVisible(session, layer.id, event.target.checked);
                 }}
               />
               {layer.name}
             </label>
           )}
-          {layer.children.length > 0 ? <LayerList layers={layer.children} /> : null}
+          {layer.children.length > 0 ? (
+            <LayerList session={session} layers={layer.children} />
+          ) : null}
         </li>
       ))}
     </ul>
@@ -237,7 +240,7 @@ function LayerList({ layers }: { layers: readonly PdfLayer[] }) {
 }
 
 function Attachments() {
-  const viewer = useViewer();
+  const session = useSession();
   const attachments = useAttachments();
   return (
     <ul className="demo-files">
@@ -246,7 +249,7 @@ function Attachments() {
           <button
             type="button"
             title={attachment.description ?? undefined}
-            onClick={() => void openAttachment(viewer, attachment)}
+            onClick={() => void openAttachment(session, attachment)}
           >
             <Icon name="attachment" size={18} />
             <span>{attachment.filename}</span>

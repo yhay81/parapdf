@@ -35,7 +35,6 @@ describe("rendererChanged", () => {
       destinationZoom: false,
       initialScale: "auto",
       initialPage: 3,
-      openAttachment: () => {},
       opening: async () => null,
     };
     assert.equal(rendererChanged(previous, next), false);

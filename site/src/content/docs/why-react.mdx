@@ -51,7 +51,6 @@ import {
   PdfDocument,
   PdfPageRect,
   PdfViewer,
-  setViewState,
   useSelection,
   useCreateViewer,
 } from "parapdf";
@@ -75,7 +74,7 @@ function ReviewWorkspace() {
             <PdfPageRect x={123} y={300} width={348} height={39}>
               <button
                 type="button"
-                onClick={() => setViewState(viewer, { page: 4, y: 120 })}
+                onClick={() => viewer.setViewState({ page: 4, y: 120 })}
               >
                 Jump to §2.2
               </button>
@@ -116,12 +115,18 @@ import {
   PdfViewer,
   setFormValues,
   useFormChange,
-  useCreateViewer,
+  useViewer,
+  useSession,
 } from "parapdf";
 import { useState } from "react";
 
 function TaxForm() {
-  const viewer = useCreateViewer();
+  return <PdfDocument source="/f1040.pdf"><TaxFormFields /></PdfDocument>;
+}
+
+function TaxFormFields() {
+  const viewer = useViewer();
+  const session = useSession();
   const [firstName, setFirstName] = useState("Ada");
 
   useFormChange(({ name, value }) => {
@@ -131,23 +136,23 @@ function TaxForm() {
   }, viewer);
 
   return (
-    <PdfDocument source="/f1040.pdf">
+    <>
       <input
         value={firstName}
         onChange={(e) => {
           setFirstName(e.target.value);
-          void setFormValues(viewer, {
+          void setFormValues(session, {
             "topmostSubform[0].Page1[0].f1_14[0]": e.target.value,
           });
         }}
       />
-      <button type="button" onClick={() => void download(viewer, { filename: "filled.pdf" })}>
+      <button type="button" onClick={() => void download(session, { filename: "filled.pdf" })}>
         Download filled PDF
       </button>
       <PdfViewer viewer={viewer} style={{ height: "85vh" }}>
         <PdfForms />
       </PdfViewer>
-    </PdfDocument>
+    </>
   );
 }
 ```

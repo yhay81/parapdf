@@ -2,8 +2,6 @@ import {
   PdfDocument,
   PdfViewer,
   type PdfViewerProps,
-  searchOf,
-  useAnnotationEditing,
   useCreateViewer,
   useOutline,
   useSession,
@@ -11,6 +9,7 @@ import {
   type Viewer,
 } from "parapdf";
 import { Activity, type ReactNode, Suspense, useEffect, useState, useTransition } from "react";
+import { searchOf, useAnnotationEditing } from "./internals.ts";
 import { type DemoFeatures, ViewerFeatures } from "./ViewerFeatures.tsx";
 
 declare global {

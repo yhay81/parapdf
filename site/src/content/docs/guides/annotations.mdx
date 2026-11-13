@@ -171,8 +171,8 @@ as `PdfComment`s: `id`, `pageIndex`, `rect` (PDF points from the page's
 bottom left), `subtype` (`"Text"` for a note, `"Highlight"`, and so on),
 `text`, `author`, `date` (when it was last changed, or else created), and
 `replyTo`, the `id` of the comment it answers. A free text annotation's
-text is what it shows, not a comment. The comments the editors add are the
-annotation editing's (`useAnnotationEditing()`).
+text is what it shows, not a comment. The comments the editors add belong to
+annotation editing (`useAnnotations()`).
 
 ```tsx
 function Comments() {
@@ -191,8 +191,8 @@ function Comments() {
 
 ## Saving and keeping annotations
 
-Annotations go into the document's bytes that `save(viewer)`,
-`download(viewer)`, and `print(viewer)` use. To keep them apart from the
+Annotations go into the document's bytes that `save(session)`,
+`download(session)` (`useSave()`), and `print(viewer)` (`usePrint()`) use. To keep them apart from the
 PDF, say on a server, `annotations.export()` returns them as
 JSON-compatible data, and `annotations.import(saved)` adds them again where
 they were, after the same document opens again, without an undo step, and
@@ -227,7 +227,7 @@ its own annotations.
 ## Several viewers
 
 Viewers of one `PdfDocument` that edit annotations share its document.
-`save()`, `download()`, and `print()` from any of them include every
+`save(session)`, `download(session)`, and `print(viewer)` include every
 viewer's annotations, those of a viewer whose `PdfViewer` is unmounted too,
 and what is being typed in any of them; those of a viewer React hides
 (`<Activity>`) are left out until it is shown again. Each viewer shows the
@@ -244,8 +244,7 @@ of `<PdfViewer>`. `useAnnotations(viewer?)` always returns an
 `AnnotationControls` object (`state` and `styles` are null until editing
 starts) and tracks read fields so components that read only methods (such as
 `const { setTool } = useAnnotations()`) never re-render on annotation changes.
-`useAnnotationEditing(viewer?)` gives the underlying feature handle, whose
-`store` reads its state directly. Thumbnails show pages without the
+Thumbnails show pages without the
 annotations created, as pdf.js's do.
 
 Label the editor's controls in the application's language with

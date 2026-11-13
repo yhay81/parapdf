@@ -76,17 +76,17 @@ interface Viewer {
   goToDestination(dest: unknown): Promise<boolean>;
   rotate(degrees: number): void;
   setSpread(spread: string): void;
+  viewState(): ViewState | null;
+  setViewState(view: Record<string, unknown>): void;
   stats: Record<string, number> | null;
 }
 
-/** The package's functions the demo exposes, which take the viewer. */
+/** The package's functions the demo exposes. */
 interface Parapdf {
-  getViewState(viewer: Viewer): ViewState | null;
-  setViewState(viewer: Viewer, view: Record<string, unknown>): void;
   print(viewer: Viewer | undefined): Promise<void>;
-  save(viewer: Viewer | undefined): Promise<Uint8Array | null>;
-  getFormFields(viewer: Viewer | undefined): Promise<FormField[]>;
-  setFormValues(viewer: Viewer | undefined, values: Record<string, unknown>): Promise<string[]>;
+  save(session: Demo["__session"]): Promise<Uint8Array | null>;
+  getFormFields(session: Demo["__session"]): Promise<FormField[]>;
+  setFormValues(session: Demo["__session"], values: Record<string, unknown>): Promise<string[]>;
 }
 
 /** What the demo exposes on `window` for these checks. */
@@ -618,7 +618,7 @@ try {
     await page.waitForSelector('.parapdf-annotation-layer input[name="color"]:checked');
     const initial = await page.evaluate(async () => {
       const demo = window as unknown as Demo;
-      const field = (await demo.__parapdf?.getFormFields(demo.__viewer))?.find(
+      const field = (await demo.__parapdf?.getFormFields(demo.__session))?.find(
         ({ name }) => name === "color",
       );
       return field?.value;
@@ -631,7 +631,7 @@ try {
     await page.locator('.parapdf-annotation-layer input[name="color"]').nth(1).check();
     const changed = await page.evaluate(async () => {
       const demo = window as unknown as Demo;
-      const field = (await demo.__parapdf?.getFormFields(demo.__viewer))?.find(
+      const field = (await demo.__parapdf?.getFormFields(demo.__session))?.find(
         ({ name }) => name === "color",
       );
       return field?.value;
@@ -651,7 +651,7 @@ try {
     );
     await page.waitForSelector('.parapdf-annotation-layer input[name="name"]');
     const fields = await page.evaluate(() =>
-      (window as unknown as Demo).__parapdf?.getFormFields((window as unknown as Demo).__viewer),
+      (window as unknown as Demo).__parapdf?.getFormFields((window as unknown as Demo).__session),
     );
     const summary = fields?.map(({ name, type, value, options, exportValues, widgets }) => ({
       name,
@@ -754,7 +754,7 @@ try {
       Object.fromEntries(
         (
           (await (window as unknown as Demo).__parapdf?.getFormFields(
-            (window as unknown as Demo).__viewer,
+            (window as unknown as Demo).__session,
           )) ?? []
         ).map(({ name, value }) => [name, value]),
       ),
@@ -766,7 +766,7 @@ try {
       JSON.stringify(entered),
     );
     const set = await page.evaluate(() =>
-      (window as unknown as Demo).__parapdf?.setFormValues((window as unknown as Demo).__viewer, {
+      (window as unknown as Demo).__parapdf?.setFormValues((window as unknown as Demo).__session, {
         name: "Grace",
         agree: false,
         color: "green",
@@ -817,7 +817,7 @@ try {
     );
     const saved = await page.evaluate(async () => {
       const bytes = await (window as unknown as Demo).__parapdf?.save(
-        (window as unknown as Demo).__viewer,
+        (window as unknown as Demo).__session,
       );
       const text = bytes ? new TextDecoder("latin1").decode(bytes) : "";
       return { grace: text.includes("(Grace)"), large: text.includes("(large)") };
@@ -926,7 +926,7 @@ try {
       Object.fromEntries(
         (
           (await (window as unknown as Demo).__parapdf?.getFormFields(
-            (window as unknown as Demo).__viewer,
+            (window as unknown as Demo).__session,
           )) ?? []
         ).map(({ name, value }) => [name, value]),
       ),
@@ -977,7 +977,7 @@ try {
     check("DidPrint runs once printing ends", (await value("stamp")) === "");
     const saving = await page.evaluate(async () => {
       const demo = window as unknown as Demo;
-      const bytes = await demo.__parapdf?.save(demo.__viewer);
+      const bytes = await demo.__parapdf?.save(demo.__session);
       return bytes ? new TextDecoder("latin1").decode(bytes).includes("(on save)") : false;
     });
     check("what WillSave changes saves", saving);
@@ -1059,11 +1059,11 @@ try {
         scroller.scrollTop += 333;
         scroller.scrollLeft += 120;
       }
-      return viewer ? ((window as unknown as Demo).__parapdf?.getViewState(viewer) ?? null) : null;
+      return viewer?.viewState() ?? null;
     });
     await page.waitForTimeout(200);
     check(
-      "getViewState() keeps the page, its point, the zoom, and the arrangement",
+      "viewer.viewState() keeps the page, its point, the zoom, and the arrangement",
       kept !== null &&
         kept.scale === 2 &&
         kept.rotation === 90 &&
@@ -1097,7 +1097,7 @@ try {
     const shown = await reopened.evaluate(() => {
       const viewer = (window as unknown as Demo).__viewer;
       return {
-        view: viewer ? ((window as unknown as Demo).__parapdf?.getViewState(viewer) ?? null) : null,
+        view: viewer?.viewState() ?? null,
         back: (window as unknown as Demo).__history?.store.get().canGoBack,
       };
     });
@@ -1115,11 +1115,11 @@ try {
       JSON.stringify(shown),
     );
     const later = await reopened.evaluate(() => {
-      const { __viewer: viewer, __parapdf: parapdf } = window as unknown as Demo;
-      if (!viewer || !parapdf) return { fitted: null, ignored: null, state: null };
-      parapdf.setViewState(viewer, { page: 5, scale: "fit-width", rotation: 0, spread: "none" });
-      const fitted = parapdf.getViewState(viewer);
-      parapdf.setViewState(viewer, {
+      const { __viewer: viewer } = window as unknown as Demo;
+      if (!viewer) return { fitted: null, ignored: null, state: null };
+      viewer.setViewState({ page: 5, scale: "fit-width", rotation: 0, spread: "none" });
+      const fitted = viewer.viewState();
+      viewer.setViewState({
         page: "x",
         x: Number.NaN,
         scale: -1,
@@ -1129,12 +1129,12 @@ try {
       });
       return {
         fitted,
-        ignored: parapdf.getViewState(viewer),
+        ignored: viewer.viewState(),
         state: viewer.store.get().zoomMode,
       };
     });
     check(
-      "setViewState() shows a page from its top with the fit it asks for",
+      "viewer.setViewState() shows a page from its top with the fit it asks for",
       later.fitted?.page === 5 &&
         later.fitted.scale === "fit-width" &&
         later.fitted.rotation === 0 &&
@@ -1143,7 +1143,7 @@ try {
       JSON.stringify(later.fitted),
     );
     check(
-      "setViewState() ignores values out of range",
+      "viewer.setViewState() ignores values out of range",
       JSON.stringify(later.ignored) === JSON.stringify(later.fitted) && later.state === "fit-width",
       JSON.stringify(later.ignored),
     );
@@ -1161,8 +1161,8 @@ try {
     );
     const opened = await state(page);
     const view = await page.evaluate(() => {
-      const { __viewer: viewer, __parapdf: parapdf } = window as unknown as Demo;
-      return viewer ? parapdf?.getViewState(viewer) : undefined;
+      const { __viewer: viewer } = window as unknown as Demo;
+      return viewer?.viewState() ?? undefined;
     });
     check(
       "a view state wins over /OpenAction, and the layout it leaves out still applies",

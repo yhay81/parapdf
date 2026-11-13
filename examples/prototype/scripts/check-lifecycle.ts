@@ -137,7 +137,7 @@ const comes = (page: Page, condition: () => boolean, timeout = 10_000): Promise<
 const left = (page: Page) =>
   page.evaluate(() => {
     const viewer = window.__viewer;
-    const view = viewer && window.__parapdf?.getViewState(viewer);
+    const view = viewer?.viewState();
     const search = window.__search?.store.get();
     if (!viewer || !view || !search) return null;
     const storage = viewer.session?.proxy.annotationStorage as
@@ -225,6 +225,18 @@ async function checkReaders(browser: Browser, dev: ViteDevServer, base: string):
       unlocked,
       (await page.locator("#encrypted").textContent()) ?? "",
     );
+    const actions = await page.evaluate(
+      async ({ url, engine }) => {
+        const fixture: typeof import("./lifecycle-actions.tsx") = await import(url);
+        return fixture.checkActionLifetimes(engine);
+      },
+      { url: new URL("/scripts/lifecycle-actions.tsx", base).href, engine },
+    );
+    check(
+      "saving resets after a save finishes while its controls are hidden",
+      actions.save === true,
+    );
+    check("printing resets after its controls hide and cancel preparation", actions.print === true);
   } finally {
     await page.context().close();
   }
@@ -277,11 +289,13 @@ async function checkTransition(browser: Browser, base: string): Promise<void> {
       .waitForFunction(
         (name) => {
           const viewer = window.__viewer;
+          const source = viewer?.pdfSession?.source;
+          const shown = source && "url" in source ? (source.url.split("/").pop() ?? null) : null;
           return (
             document.querySelector(`[data-file="${name}"] [data-pending="false"]`) !== null &&
-            viewer?.sourceName === name &&
-            viewer.store.get().layout !== null &&
-            viewer.sharpness() > 0.99
+            shown === name &&
+            viewer?.store.get().layout !== null &&
+            (viewer?.sharpness() ?? 0) > 0.99
           );
         },
         file,
@@ -299,9 +313,10 @@ async function checkTransition(browser: Browser, base: string): Promise<void> {
         const seen = (pending: boolean) => {
           observer.disconnect();
           const viewer = window.__viewer;
+          const source = viewer?.pdfSession?.source;
           resolve({
             pending,
-            shown: viewer?.sourceName ?? null,
+            shown: source && "url" in source ? (source.url.split("/").pop() ?? null) : null,
             painted: viewer?.hasPixels(0) ?? false,
           });
         };
@@ -552,8 +567,11 @@ async function checkReplacedFile(browser: Browser, base: string, replace: () => 
     const result = await page.evaluate(async () => {
       const viewer = window.__viewer;
       const session = viewer?.session;
-      if (!session || !viewer || !window.__parapdf) throw new Error("missing reopened document");
-      const bytes = await window.__parapdf.save(viewer);
+      const pdfSession = window.__session;
+      if (!session || !viewer || !pdfSession || !window.__parapdf) {
+        throw new Error("missing reopened document");
+      }
+      const bytes = await window.__parapdf.save(pdfSession);
       if (!bytes) throw new Error("saving the reopened document failed");
       const { pdfjs, worker } = session.pdfjs;
       const task = pdfjs.getDocument({ data: bytes, worker });

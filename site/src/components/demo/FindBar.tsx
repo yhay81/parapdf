@@ -1,4 +1,4 @@
-import { type SearchOptions, searchOf, useDocumentState, useSearch, useViewer } from "parapdf";
+import { type SearchOptions, useDocumentState, useSearch } from "parapdf";
 import { useEffect, useRef, useState } from "react";
 import { Icon, IconButton } from "./icons.tsx";
 
@@ -14,24 +14,23 @@ const OPTIONS = [
  * matches, and Escape closes it, which clears the highlights.
  */
 export function FindBar({ onClose }: { onClose: () => void }) {
-  const viewer = useViewer();
   const search = useSearch();
   const { pageCount } = useDocumentState();
   const [value, setValue] = useState("");
   const [options, setOptions] = useState<SearchOptions>({});
   const input = useRef<HTMLInputElement>(null);
-  const { query } = search;
+  const { query, search: runSearch, clear } = search;
 
   useEffect(() => {
     input.current?.focus();
-    return () => searchOf(viewer).clear();
-  }, [viewer]);
+    return () => clear();
+  }, [clear]);
 
   useEffect(() => {
     if (value === query) return;
-    const timer = setTimeout(() => searchOf(viewer).search(value, options), 250);
+    const timer = setTimeout(() => runSearch(value, options), 250);
     return () => clearTimeout(timer);
-  }, [value, query, viewer, options]);
+  }, [value, query, runSearch, options]);
 
   const toggle = (name: keyof SearchOptions) => {
     const next = { ...options, [name]: !options[name] };

@@ -74,8 +74,8 @@ its first use on: mount it with the viewer, not only when a button shows.
 jump, and `forward()` to where `back()` left; a new jump forgets the
 positions `forward()` had. `canGoBack` and `canGoForward` say whether there
 is one, and the `GoBack` and `GoForward` actions of a PDF's links call them.
-The history keeps 50 positions. Outside React, `historyOf(viewer)` gives the
-same history.
+The history keeps 50 positions, tracks read fields when called without a
+selector, and keeps `back` and `forward` referentially stable.
 
 Named actions in the document's links work too: `NextPage`, `PrevPage`,
 `FirstPage`, and `LastPage`.
