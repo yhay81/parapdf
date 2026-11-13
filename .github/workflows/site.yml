@@ -35,6 +35,8 @@ jobs:
       # The demo's samples include generated documents.
       - run: pnpm --filter @parapdf/bench corpus
       - run: pnpm --filter @parapdf/site build
+      - name: Check the development and preview launchers
+        run: node --test .claude/launch.test.mjs
       # Pull requests only build.
       - name: Upload main as the preview
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

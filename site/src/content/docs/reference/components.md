@@ -7,12 +7,13 @@ description: Everything the parapdf package exports.
 
 ### `PdfDocument`
 
-Opens `source`, or joins the session another `PdfDocument` opened of it,
-and renders its children at once, giving them its `PdfSession`
-([`useSession()`](/reference/state/#the-session)). Nothing suspends before
-the first page draws. Every `PdfViewer` and `PdfThumbnails` inside it shows
-its document; the document closes a second after no `PdfDocument` holds it
-any more.
+Opens `source` as it renders, or joins the session another `PdfDocument`
+opened of it, and renders its children at once, giving them its
+`PdfSession` ([`useSession()`](/reference/state/#the-session)). Nothing
+suspends before the first page draws. Every `PdfViewer` and `PdfThumbnails`
+inside it shows its document. It holds the document while it is mounted and
+shown: the document closes a second after no `PdfDocument` holds it any
+more, and one React hides (`<Activity>`) and shows again opens it again.
 
 | Prop | |
 |---|---|
@@ -94,7 +95,7 @@ too, and those that take none read the nearest `PdfDocument`.
 
 | Hook | Returns |
 |---|---|
-| `useViewer()` | A `Viewer` for the life of the calling component: give it to a `PdfViewer` and to the hooks and functions that act through it (see [Viewer](/reference/viewer/)). It keeps its view and annotations while its `PdfViewer` unmounts, and closes its document once the calling component unmounts. |
+| `useViewer()` | A `Viewer` for the life of the calling component: give it to a `PdfViewer` and to the hooks and functions that act through it (see [Viewer](/reference/viewer/)). It keeps its view and annotations while its `PdfViewer` unmounts and while React hides the calling component or the `PdfDocument` (`<Activity>`), and goes with the calling component. |
 | `useViewState(viewer, selector)` | The selected part of the viewer's view state, rendering again only when it changes (see [State](/reference/state/#view-state)). |
 | `useSession()` | The nearest `PdfDocument`'s `PdfSession` (see [State](/reference/state/#the-session)). |
 | `useDocumentState(selector)` | The selected part of the document's state: status, error, password request, progress, page count, and permissions (see [State](/reference/state/#document-state)). |
@@ -115,7 +116,17 @@ too, and those that take none read the nearest `PdfDocument`.
 
 The seven hooks of the document's data suspend until it is read: render
 them under a `<Suspense>` boundary of your own, apart from the viewer. A
-read that fails gives the empty value instead of throwing.
+read that fails gives the empty value instead of throwing, and so does a
+document that failed to open or waits for a password; once the password is
+answered, the hooks suspend again and read it.
+
+The document opens as `PdfDocument` renders, not once it has mounted, so
+React may wait for these hooks where it mounts nothing meanwhile: the
+boundary may be above the `PdfDocument`, and a `source` changed in a
+transition (`startTransition`) keeps showing the document before it until
+the next one's data is read. A document a render opened and no
+`PdfDocument` came to hold, as when React abandons a transition for
+another, closes ten seconds after it loaded.
 
 ## Functions
 

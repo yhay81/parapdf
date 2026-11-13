@@ -97,7 +97,9 @@ export function attachHistory(viewer: Viewer): History {
       if (action === "GoBack") back();
       else if (action === "GoForward") forward();
     },
-    closed() {
+    closed(kept) {
+      // Positions hold for the session, whichever pdf.js document shows it next.
+      if (kept) return;
       positions.clear();
       publish();
     },

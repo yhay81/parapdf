@@ -46,6 +46,17 @@ document once. Each session owns an `AbortController`: drawing, text,
 searches, background reads, and the editor all take its signal, and closing
 the session aborts everything at once.
 
+The lifetimes are React's. A render may never mount: a Suspense boundary
+above it waits, or React abandons a transition. So a `PdfDocument` starts
+its session as it renders, and what a render reads of the document is kept
+in the registry, where the next render of the same source finds the same
+promise; a session no `PdfDocument` came to hold closes ten seconds after
+it loaded. And React destroys effects alike when it hides a tree
+(`<Activity>`), runs them twice (StrictMode), and unmounts: everything
+held, the document and what a viewer drew, is held by an effect and let go
+by its cleanup, while the viewer, which the component's state keeps, keeps
+the reader's place, search, and annotations to show again.
+
 The session publishes the document's state (status, progress, password
 request, page count, permissions) in a store of its own from the moment it
 starts to open, and every viewer reads that one store.

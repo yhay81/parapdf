@@ -136,6 +136,18 @@ function SplitView() {
 A viewer lives as long as the component that called `useViewer()`. While
 its `PdfViewer` is unmounted it stops drawing and searching but keeps its
 view and annotations, and a `PdfViewer` given it again returns to where it
-was. To keep a view while it is hidden, for example in React's
-`<Activity>`, create the viewer above what hides it: a `PdfViewer` without
-a `viewer` prop has one of its own, which goes with it.
+was. A `PdfViewer` without a `viewer` prop has one of its own, which goes
+with it.
+
+React may hide a tree and keep its state, as `<Activity>` does. A viewer
+keeps the reader's place through that too, wherever `useViewer()` is
+called: hidden, the `PdfDocument` lets go of the document, which closes a
+second later unless another `PdfDocument` shows it, and the viewer of
+everything it drew. Shown again, they open the document if it closed, and
+the viewer returns to the page, zoom, rotation, and tool the reader left,
+with the search they ran and the annotations they made. If the server
+returns a different PDF or revision at the same URL, the viewer opens it
+with a fresh view, search and annotations. What the reader
+typed into form fields belongs to the document and goes when it closes: a
+`PdfDocument` outside what hides keeps the document open, and those values
+with it.

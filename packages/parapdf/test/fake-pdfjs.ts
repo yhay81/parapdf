@@ -439,8 +439,8 @@ export function show(
   loader: PdfjsLoader,
   options: { passwordPrompt?: boolean } = {},
 ): { session: PdfSession; close: () => void } {
-  const session = new PdfSession(source, options);
-  const close = connectSession(session, loader);
+  const session = new PdfSession(source, { ...options, pdfjs: loader });
+  const close = connectSession(session);
   openViewer(viewer, session);
   return { session, close };
 }

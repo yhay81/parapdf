@@ -6,6 +6,36 @@ change the API.
 
 ## Unreleased
 
+- A document and its viewer follow React's lifetimes. `PdfDocument` starts
+  opening its document as it renders instead of once it has mounted: a
+  Suspense boundary above it, and a `source` changed in a transition, wait
+  for the hooks that read the document (`useOutline()` and the others)
+  instead of never showing it. A viewer keeps its page, zoom, rotation,
+  tool, history, finished search, and annotations while React hides it or
+  its `PdfDocument` (`<Activity>`), wherever `useViewer()` is called,
+  instead of resetting the view, or failing once the document had closed;
+  a document hidden for more than a second closes, and opens again when
+  shown. If that URL now returns another PDF or revision, its view, search,
+  and annotations start fresh. Saving or printing after a hide includes
+  restored images and deletions of original annotations. What this changes
+  for applications:
+  - The session's promises (`outline()` and the others) and the data hooks
+    give their empty value while the document waits for a password, with
+    or without `passwordPrompt`, and read it once the password is
+    answered. A data hook no longer shows its Suspense fallback while the
+    prompt is open, and code that awaited a promise before the answer asks
+    again once the document is ready.
+  - A `ViewerExtension`'s `closed` hook takes `kept`: true when the viewer
+    lets go of a document it may show again, false when it forgets the
+    session, which may follow.
+  - While React hides a viewer or its `PdfDocument`, the viewer's
+    `session`, `sourceName`, and layout are null, and the annotations it
+    made are out of the document: `save()` and `print()` from another
+    viewer leave them out until it is shown again.
+  - A document a render opened and no `PdfDocument` came to hold, as in a
+    transition React abandoned for another, loads, and closes ten seconds
+    later.
+
 - Distinct URLs and request options can no longer share the wrong PDF.
   Form fields settle empty when a provider shows a password error and are
   read again when the document opens. Metadata lists all authors in the

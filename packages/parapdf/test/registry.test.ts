@@ -4,6 +4,8 @@ import type { PDFDataRangeTransport } from "pdfjs-dist";
 import {
   acquireSession,
   type SessionLease,
+  type SharedSession,
+  sharedSession,
   sourceKey,
   splitFragment,
 } from "../src/document/registry.ts";
@@ -623,6 +625,245 @@ describe("acquireSession with passwords and progress", () => {
     acquireSession(loader, { url: "/locked.pdf" });
     await settle();
     assert.equal(calls.opens, 2);
+  });
+});
+
+describe("sharedSession", () => {
+  beforeEach(() => mock.timers.enable({ apis: ["setTimeout"] }));
+  afterEach(() => mock.timers.reset());
+
+  const A: PdfSource = { url: "/a.pdf" };
+
+  it("opens a session for a render, and closes one no lease came to hold ten seconds on", async () => {
+    const { loader, calls } = fakePdfjs();
+    const shared = sharedSession(loader, A);
+    assert.equal(shared.state.get().status, "loading");
+    assert.equal(sharedSession(loader, { url: "/a.pdf#page=2" }), shared, "one for the source");
+    await settle();
+    assert.equal(shared.state.get().status, "ready");
+    mock.timers.tick(9_999);
+    await settle();
+    assert.equal(shared.signal.aborted, false);
+    mock.timers.tick(1);
+    await settle();
+    assert.equal(shared.signal.aborted, true);
+    assert.equal(calls.destroys, 1);
+    assert.notEqual(sharedSession(loader, A), shared, "the next render opens it again");
+    await settle();
+    assert.equal(calls.opens, 2);
+  });
+
+  it("stays open while the document loads and while it is read, however long that takes", async () => {
+    let open = (): void => {};
+    const opened = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    let give = (): void => {};
+    const given = new Promise<void>((resolve) => {
+      give = resolve;
+    });
+    const { loader } = fakePdfjs(async () => {
+      await opened;
+      const getOutline = async () => {
+        await given;
+        return null;
+      };
+      return fakeDocument({ proxy: { getOutline } }).proxy;
+    });
+    const shared = sharedSession(loader, A);
+    const outline = shared.read("outline", (session) => session.outline(), []);
+    mock.timers.tick(60_000);
+    await settle();
+    assert.equal(shared.signal.aborted, false, "while it loads");
+    open();
+    await settle();
+    assert.equal(shared.state.get().status, "ready");
+    mock.timers.tick(60_000);
+    await settle();
+    assert.equal(shared.signal.aborted, false, "while a render may wait for what is read");
+    give();
+    assert.deepEqual(await outline, []);
+    await settle();
+    mock.timers.tick(9_999);
+    await settle();
+    assert.equal(shared.signal.aborted, false);
+    mock.timers.tick(1);
+    await settle();
+    assert.equal(shared.signal.aborted, true);
+  });
+
+  it("rests only after a read started on an already idle document settles", async () => {
+    const { loader } = fakePdfjs();
+    const shared = sharedSession(loader, A);
+    await settle();
+    mock.timers.tick(9_000);
+    let finish!: (value: string) => void;
+    const late = new Promise<string>((resolve) => {
+      finish = resolve;
+    });
+    const reading = shared.read("late", () => late, "fallback");
+    mock.timers.tick(10_000);
+    await settle();
+    assert.equal(shared.signal.aborted, false, "the read outlives the original deadline");
+    finish("result");
+    assert.equal(await reading, "result");
+    mock.timers.tick(9_999);
+    assert.equal(shared.signal.aborted, false, "the full grace period starts after the read");
+    mock.timers.tick(1);
+    assert.equal(shared.signal.aborted, true);
+  });
+
+  it("closes a released document even if a remaining reader starts a slow read", async () => {
+    const { loader } = fakePdfjs();
+    const lease = acquireSession(loader, A);
+    await settle();
+    lease.release();
+    const reading = lease.shared.read("late", () => new Promise<string>(() => {}), "fallback");
+    mock.timers.tick(1000);
+    assert.equal(await reading, "fallback");
+    assert.equal(lease.shared.signal.aborted, true);
+  });
+
+  it("gives each render that asks its own time, and stays while a lease holds it", async () => {
+    const { loader, calls } = fakePdfjs();
+    const shared = sharedSession(loader, A);
+    await settle();
+    mock.timers.tick(9_000);
+    assert.equal(sharedSession(loader, A), shared);
+    mock.timers.tick(9_000);
+    await settle();
+    assert.equal(shared.signal.aborted, false, "asked for again before it closed");
+    const lease = acquireSession(loader, A);
+    assert.equal(lease.shared, shared);
+    assert.equal(await lease.session, await shared.session);
+    mock.timers.tick(60_000);
+    await settle();
+    assert.equal(shared.signal.aborted, false, "held");
+    lease.release();
+    // The render of a tree about to mount again finds it within the second a release leaves.
+    mock.timers.tick(999);
+    assert.equal(sharedSession(loader, A), shared);
+    mock.timers.tick(9_999);
+    await settle();
+    assert.equal(shared.signal.aborted, false);
+    mock.timers.tick(1);
+    await settle();
+    assert.equal(shared.signal.aborted, true);
+    assert.equal(calls.opens, 1);
+  });
+
+  it("reads each thing once, with one promise for every reader of the source", async () => {
+    let outlines = 0;
+    const { loader } = fakePdfjs(async () => {
+      const getOutline = async () => {
+        outlines++;
+        return null;
+      };
+      return fakeDocument({ proxy: { getOutline } }).proxy;
+    });
+    const read = (from: SharedSession) => from.read("outline", (session) => session.outline(), []);
+    const shared = sharedSession(loader, A);
+    const outline = read(shared);
+    assert.equal(read(shared), outline, "what a render reads with use(), however often it renders");
+    const lease = acquireSession(loader, A);
+    assert.equal(read(lease.shared), outline, "and what its provider reads once mounted");
+    assert.deepEqual(await outline, []);
+    assert.equal(outlines, 1);
+    lease.release();
+  });
+
+  it("settles with the fallback what is read from a session that closed", async () => {
+    const { loader } = fakePdfjs();
+    const shared = sharedSession(loader, A);
+    const outline = shared.read("outline", (session) => session.outline(), []);
+    await settle();
+    mock.timers.tick(10_000);
+    await settle();
+    assert.equal(shared.signal.aborted, true);
+    assert.equal(
+      shared.read("outline", (session) => session.outline(), []),
+      outline,
+    );
+    const labels = shared.read("pageLabels", (session) => session.pageLabels(), null);
+    assert.equal(await labels, null);
+    assert.equal(
+      shared.read("pageLabels", (session) => session.pageLabels(), null),
+      labels,
+    );
+  });
+
+  it("keeps a failure no lease holds for the render that opened it, and forgets it once held", async (context) => {
+    const errors = context.mock.method(console, "error", () => {});
+    const { loader, calls } = failingPdfjs();
+    const shared = sharedSession(loader, A);
+    const outline = shared.read("outline", (session) => session.outline(), []);
+    await settle();
+    assert.equal(shared.state.get().status, "error");
+    assert.deepEqual(await outline, [], "what a render waits for settles");
+    // A tree React renders from nothing after each failure opens nothing again.
+    assert.equal(sharedSession(loader, A), shared);
+    assert.equal(calls.opens, 1);
+    const lease = acquireSession(loader, A);
+    assert.equal(lease.shared, shared, "the provider that mounts shows the failure");
+    const retry = acquireSession(loader, A);
+    assert.notEqual(retry.shared, shared, "and the next viewer tries again");
+    await settle();
+    assert.equal(calls.opens, 2);
+    assert.equal(errors.mock.callCount(), 0, "the document's state says it failed");
+    lease.release();
+    retry.release();
+  });
+
+  it("forgets a failure no lease came to hold, ten seconds on", async () => {
+    const { loader, calls } = failingPdfjs();
+    const shared = sharedSession(loader, A);
+    await settle();
+    mock.timers.tick(10_000);
+    await settle();
+    assert.equal(shared.signal.aborted, true);
+    assert.notEqual(sharedSession(loader, A), shared);
+    await settle();
+    assert.equal(calls.opens, 2);
+  });
+
+  it("settles what is read while it waits for a password, and closes when no lease comes to answer", async () => {
+    const { loader, calls } = lockedPdfjs();
+    const shared = sharedSession(loader, { url: "/locked.pdf" });
+    const outline = shared.read("outline", (session) => session.outline(), []);
+    await settle();
+    assert.equal(shared.state.get().status, "password");
+    assert.deepEqual(await outline, [], "the render that waited shows the request");
+    mock.timers.tick(9_999);
+    await settle();
+    assert.equal(shared.signal.aborted, false);
+    mock.timers.tick(1);
+    await settle();
+    assert.equal(shared.signal.aborted, true);
+    assert.equal(calls.destroys, 1, "pdf.js's loading task is destroyed");
+  });
+
+  it("reads anew what settled while it waited for a password, once a lease answers", async () => {
+    const { loader } = lockedPdfjs();
+    const shared = sharedSession(loader, { url: "/locked.pdf" });
+    const read = () => shared.read("pageCount", async (session) => session.pageCount, 0);
+    const waiting = read();
+    await settle();
+    assert.equal(await waiting, 0);
+    const { reads } = shared;
+    const lease = acquireSession(loader, { url: "/locked.pdf" });
+    assert.equal(shared.reads, reads, "a lease alone changes nothing");
+    lease.submitPassword("wrong");
+    assert.notEqual(shared.reads, reads);
+    await settle();
+    assert.equal(shared.state.get().passwordReason, "incorrect");
+    assert.equal(await read(), 0);
+    lease.submitPassword("secret");
+    const unlocked = read();
+    assert.notEqual(unlocked, waiting);
+    await settle();
+    assert.equal(await unlocked, 1);
+    assert.equal(read(), unlocked);
+    lease.release();
   });
 });
 

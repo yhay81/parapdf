@@ -35,7 +35,7 @@ export async function save(
   if (!session) return null;
   // The text being typed counts, in every viewer, as it would once the
   // reader clicks away.
-  session.commit();
+  await session.commit();
   await session.output("WillSave");
   const bytes = await session.save(pages);
   await session.output("DidSave");

@@ -10,6 +10,7 @@ import type {
   AnnotationLabels,
   AnnotationStyles,
   AnnotationTool,
+  KeptAnnotations,
   SavedAnnotation,
   SignatureInput,
 } from "../pdfjs/editor-types.ts";
@@ -156,7 +157,9 @@ const STOPPED: AnnotationEditingStore = { tool: "none", state: null, styles: nul
  * Let the reader create annotations on `viewer`'s pages, once its document
  * is open in an attached viewport and permits annotating
  * (`enforcePermissions()`). A viewport that detaches keeps them for the
- * next one; closing the document removes them from it. `detach()` undoes it.
+ * next one, and in the document meanwhile. A viewer that lets go of the
+ * document takes them out of it and keeps them for when it shows the
+ * session again; one that forgets the session drops them. `detach()` undoes it.
  */
 export function attachAnnotationEditing(
   viewer: Viewer,
@@ -173,11 +176,16 @@ export function attachAnnotationEditing(
   let control: AbortController | null = null;
   /** The page the editor was last told is current. */
   let editorPage = -1;
-  /** Annotations kept while no viewport is attached, which the next one shows again. */
-  let kept: SavedAnnotation[] | null = null;
+  /**
+   * Annotations kept while no viewport is attached or the viewer has let
+   * go of the document, which the next editor shows again.
+   */
+  let kept: KeptAnnotations | null = null;
+  /** The prior editor's complete snapshot remains authoritative until every page restores. */
+  let restoring: Promise<void> | null = null;
   /**
    * Removes the kept annotations from the document's storage, where they
-   * stay meanwhile: other viewers save and print them.
+   * stay while only the viewport is away: other viewers save and print them.
    */
   let forgetKept: (() => void) | null = null;
   let open: { session: DocumentSession; signal: AbortSignal } | null = null;
@@ -215,13 +223,13 @@ export function attachAnnotationEditing(
         scale: layout?.scale ?? scale,
         rotation,
         onStateChange: (state) => {
-          if (created && !signal.aborted) store.set({ state });
+          if (created && !restoring && !signal.aborted) store.set({ state });
         },
         onStylesChange: (styles) => {
-          if (created && !signal.aborted) store.set({ styles });
+          if (created && !restoring && !signal.aborted) store.set({ styles });
         },
         onToolChange: (tool) => {
-          if (created && !signal.aborted) showTool(tool);
+          if (created && !restoring && !signal.aborted) showTool(tool);
         },
         // Pages leave out the annotations of the file being edited, and
         // then those changed.
@@ -235,20 +243,37 @@ export function attachAnnotationEditing(
     const { currentPage } = viewer.store.get();
     editorPage = currentPage;
     editing.setCurrentPage(currentPage);
-    viewer.setAnnotationEditor(editing);
-    // Saving and printing from any viewer of the document finish what is typed here.
-    session.onCommit(() => editing.commit(), signal);
-    store.set({ tool: "none", state: editing.state, styles: editing.styles });
-    const restore = kept;
-    kept = null;
-    // The new editor adds them again, under ids of its own.
+    const publish = () => {
+      viewer.setAnnotationEditor(editing);
+      store.set({ tool: "none", state: editing.state, styles: editing.styles });
+    };
     forgetKept?.();
     forgetKept = null;
-    if (restore?.length) {
-      editing.import(restore).catch((error: unknown) => {
-        if (!signal.aborted) console.error("restoring annotations failed", error);
-      });
+    // Register before publishing the editor: a subscriber may immediately save.
+    session.onCommit(() => {
+      if (restoring) return restoring.then(() => editing.commit());
+      editing.commit();
+    }, signal);
+    if (!kept || (!kept.annotations.length && !kept.deletions.length)) {
+      kept = null;
+      publish();
+      return;
     }
+    // Finish importing before attaching editor layers or accepting input.
+    // A second hide can discard this partial editor and retry the entire
+    // snapshot. A save or print cannot silently proceed with partial edits.
+    const ended = new Promise<never>((_, reject) => {
+      signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+    });
+    restoring = Promise.race([editing.restore(kept), ended]).then(() => {
+      signal.throwIfAborted();
+      kept = null;
+      restoring = null;
+      publish();
+    });
+    restoring.catch((error: unknown) => {
+      if (!signal.aborted) console.error("restoring annotations failed", error);
+    });
   };
 
   /**
@@ -258,6 +283,8 @@ export function attachAnnotationEditing(
    */
   const stop = (keep: boolean) => {
     const stopped = editor;
+    const interrupted = restoring !== null;
+    restoring = null;
     control?.abort();
     control = null;
     if (!keep) {
@@ -266,14 +293,15 @@ export function attachAnnotationEditing(
       forgetKept = null;
     }
     if (!stopped) return;
-    if (keep) {
+    if (keep && !interrupted) {
       stopped.commit();
-      kept = stopped.export();
+      kept = stopped.snapshot();
     }
     editor = null;
     viewer.setAnnotationEditor(null);
-    const forget = stopped.destroy(keep);
-    if (keep) forgetKept = forget;
+    const keepStorage = keep && !interrupted;
+    const forget = stopped.destroy(keepStorage);
+    if (keepStorage) forgetKept = forget;
     viewer.content?.classList.remove("parapdf-annotating");
     viewer.claimPointer(false);
     store.set(STOPPED);
@@ -299,7 +327,7 @@ export function attachAnnotationEditing(
     ready(session, signal) {
       open = { session, signal };
       // The viewport detaching (`detaching`) keeps the annotations, and the
-      // document closing (`closed`) forgets them, before this aborts.
+      // viewer forgetting the session (`closed`) drops them, before this aborts.
       signal.addEventListener("abort", () => stop(true), { once: true });
       start();
     },
@@ -318,14 +346,32 @@ export function attachAnnotationEditing(
       );
       start();
     },
-    closed() {
-      stop(false);
+    closed(keep) {
+      stop(keep);
+      // Nothing says whether the viewer shows the document again: what it
+      // keeps waits here, out of a document it may never edit again and
+      // other viewers would go on saving and printing. Shown again, in the
+      // same pdf.js document or another of the same source, it is restored.
+      forgetKept?.();
+      forgetKept = null;
       open = null;
     },
   });
 
+  /** An editor which went away while a command waited can no longer take it. */
+  const restored = async () => {
+    const waiting = editor;
+    try {
+      await restoring;
+      return editor === waiting;
+    } catch {
+      return false;
+    }
+  };
+
   /** Page `requested`, or the current one, once its annotations can be edited; null if never. */
   const editablePage = async (requested: number | undefined): Promise<number | null> => {
+    if (restoring && !(await restored())) return null;
     const renderer = viewer.renderer;
     const signal = viewer.workSignal;
     const { currentPage, first, last } = viewer.store.get();
@@ -341,6 +387,7 @@ export function attachAnnotationEditing(
   return {
     store,
     async setTool(tool) {
+      if (restoring && !(await restored())) return;
       const current = editor;
       if (!current) return;
       showTool(tool);
@@ -382,9 +429,10 @@ export function attachAnnotationEditing(
       return current.addSignature(page, signature, description);
     },
     export() {
-      return editor?.export() ?? [];
+      return (restoring && kept ? kept.annotations : editor?.export()) ?? [];
     },
     async import(annotations) {
+      if (restoring && !(await restored())) return 0;
       return (await editor?.import(annotations)) ?? 0;
     },
     setLabels(next) {

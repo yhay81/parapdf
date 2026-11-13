@@ -16,8 +16,8 @@ export { attachViewport };
 
 /** Show `source`, opened with `pdfjs`, in `viewer`; returns what closes it. */
 export function showWith(viewer: Viewer, source: PdfSource, pdfjs: PdfjsLoader): () => void {
-  const session = new PdfSession(source);
-  const close = connectSession(session, pdfjs);
+  const session = new PdfSession(source, { pdfjs });
+  const close = connectSession(session);
   openViewer(viewer, session);
   return close;
 }

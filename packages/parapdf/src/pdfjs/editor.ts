@@ -19,6 +19,7 @@ import type {
   AnnotationStyles,
   AnnotationTool,
   AnnotationType,
+  KeptAnnotations,
   SavedAnnotation,
   SelectedAnnotation,
   SignatureInput,
@@ -44,6 +45,7 @@ import type {
 /** The parts of pdf.js's editors this module calls, which pdf.js types loosely. */
 interface PdfjsEditor {
   readonly id: string;
+  readonly constructor: Pick<KeptAnnotations["deletions"][number], "deleteAnnotationElement">;
   readonly div: HTMLElement | null;
   /** pdf.js's name of the kind, the same as ParaPDF's. */
   readonly editorType: AnnotationType;
@@ -108,6 +110,7 @@ interface PdfjsUIManager {
   updateParams(type: number, value: unknown): void;
   getMode(): number;
   addChangedExistingAnnotation(editor: PdfjsEditor): void;
+  addDeletedAnnotationElement(editor: PdfjsEditor): void;
   removeDeletedAnnotationElement(editor: PdfjsEditor): void;
   getLayer(pageIndex: number): PdfjsEditorLayer | undefined;
   getEditors(pageIndex: number): Iterable<PdfjsEditor>;
@@ -901,6 +904,51 @@ export function createPdfjsAnnotationEditor(
         signal?.removeEventListener("abort", aborted);
       }
     },
+    snapshot() {
+      const deletions: KeptAnnotations["deletions"] = [];
+      // Removing an original removes its editor from the manager, but its
+      // deletion stays in storage, under the id of the viewer that made it.
+      for (const [key, value] of doc.annotationStorage) {
+        if (!own.has(key)) continue;
+        const editor = value as PdfjsEditor;
+        if (!editor.deleted || !editor.annotationElementId) continue;
+        const popupRef = editor.serialize()?.popupRef;
+        deletions.push({
+          pageIndex: editor.pageIndex,
+          id: editor.annotationElementId,
+          popupRef: typeof popupRef === "string" ? popupRef : "",
+          deleteAnnotationElement: editor.constructor.deleteAnnotationElement,
+        });
+      }
+      return { annotations: this.export(), deletions };
+    },
+    async restore({ annotations, deletions }) {
+      for (const { id, pageIndex, deleteAnnotationElement, popupRef } of deletions) {
+        if (destroyed) return;
+        await withLayer(pageIndex, async (parent) => {
+          if (destroyed) return;
+          // pdf.js uses this deletion record when an original changes pages.
+          // It serializes into saved and printed output, without loading the
+          // original's image, appearance or editor on a mounted page.
+          deleteAnnotationElement({
+            _uiManager: manager,
+            parent,
+            annotationElementId: id,
+          });
+          const deleted = doc.annotationStorage.getEditor(id) as PdfjsEditor;
+          deleted._initialData = { popupRef };
+          manager.addDeletedAnnotationElement(deleted);
+        });
+      }
+      if (deletions.length && !destroyed) {
+        resetModifiedIds();
+        options.onRedraw();
+      }
+      const count = destroyed ? 0 : await this.import(annotations);
+      if (!destroyed && count !== annotations.length) {
+        throw new Error("Some annotations could not be restored");
+      }
+    },
     export() {
       const annotations: SavedAnnotation[] = [];
       for (let pageIndex = 0; pageIndex < doc.numPages; pageIndex++) {
@@ -955,6 +1003,7 @@ export function createPdfjsAnnotationEditor(
             // element; this one is made new, and takes its place below.
             const { annotationElementId: id, ...rest } = (item ?? {}) as Record<string, unknown>;
             const editor = item ? await layer.deserialize({ ...rest, pageIndex }) : null;
+            if (destroyed) return 0;
             if (editor && typeof id === "string")
               replacing.set(editor, { id, popupRef: rest.popupRef });
             // pdf.js saves a comment as the popup it serializes, and reads

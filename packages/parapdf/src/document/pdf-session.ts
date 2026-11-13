@@ -7,6 +7,8 @@ import {
   OPENING,
   type PdfjsLoader,
   type SessionLease,
+  type SharedSession,
+  sharedSession,
   splitFragment,
 } from "./registry.ts";
 import type {
@@ -57,11 +59,15 @@ function withoutPrompt(
   };
 }
 
-/** Connects a session to the registry; see `connectSession()`. */
-let connect: (session: PdfSession, pdfjs: PdfjsLoader) => () => void;
-/** The loaded document of a session; see `documentOf()`. */
-let loaded: (session: PdfSession) => Promise<DocumentSession>;
-/** Read optional feature data with the provider's cache and failure handling. */
+/** Starts opening a session's document; see `startSession()`. */
+let start: (session: PdfSession) => void;
+/** Holds a session's document; see `connectSession()`. */
+let connect: (session: PdfSession) => () => void;
+/** The document a session's provider holds; see `documentOf()`. */
+let held: (session: PdfSession) => Promise<DocumentSession>;
+/** What a session's readers got; see `readsOf()`. */
+let reads: (session: PdfSession) => object | null;
+/** Read optional feature data with the document's cache and failure handling. */
 export let readSessionData: <T>(
   provider: PdfSession,
   what: string,
@@ -77,14 +83,20 @@ let fragment: (session: PdfSession) => Store<{ fragment: string }>;
  * One `<PdfDocument>`'s view of the session of its source, shared by the
  * viewers it shows: the session's document state, the answer to its
  * request for a password, pdf.js's document once ready, and its secondary
- * data, each read once. Its provider creates it as it renders and holds the
- * registry's session for it while mounted; nothing here opens, closes, or
- * releases anything.
+ * data, each read once. Its provider creates it as it renders, which starts
+ * opening the document, and holds the registry's session for it while
+ * mounted; nothing here opens, closes, or releases anything.
  */
 export class PdfSession {
   static {
-    connect = (session, pdfjs) => session.#connect(pdfjs);
-    loaded = (session) => session.#loaded;
+    start = (session) => {
+      // Once: a render never opens again a document that closed, which
+      // the provider does when it holds it.
+      if (!session.#shared) session.#follow(sharedSession(session.#pdfjs, session.source));
+    };
+    connect = (session) => session.#connect();
+    held = (session) => session.#lease?.session ?? session.#held.then((shared) => shared.session);
+    reads = (session) => session.#shared?.reads ?? null;
     readSessionData = (provider, what, read, fallback) => provider.#read(what, read, fallback);
     prompt = (session, passwordPrompt) => {
       if (session.#prompt === passwordPrompt) return;
@@ -98,76 +110,87 @@ export class PdfSession {
   readonly source: PdfSource;
   /** Status, progress, the password request, page count, and permissions. */
   readonly state: ReadableStore<DocumentState>;
+  /** Loads the pdf.js its document opens with. */
+  readonly #pdfjs: PdfjsLoader;
+  /**
+   * The registry's session it follows: the one its provider holds or held
+   * last or, before the first hold, the one its first render started. Its
+   * state is what `state` reads, also once the registry closed it.
+   */
+  #shared: SharedSession | null = null;
+  /** Stops hearing `#shared`'s state, which it hears while `state` has listeners. */
+  #unwatch: (() => void) | null = null;
+  readonly #listeners = new Set<() => void>();
   /** The registry's session while the provider holds it. */
   #lease: SessionLease | null = null;
-  /** The state of the last session held, which `state` reads. */
-  #source: ReadableStore<DocumentState> | null = null;
-  #unsubscribe: (() => void) | null = null;
-  readonly #listeners = new Set<() => void>();
   /** Aborted when the provider lets the session go; the next hold gets another. */
   #control = new AbortController();
-  /** The loaded document of the session held, or, before the first hold, its promise. */
-  #loaded: Promise<DocumentSession>;
-  #resolveLoaded!: (session: Promise<DocumentSession>) => void;
-  /** The registry's session that `#loaded` follows; null before the first hold. */
-  #held: Promise<DocumentSession> | null = null;
+  /** The session of the next hold, for what asks while the provider holds none. */
+  #held!: Promise<SharedSession>;
+  #resolveHeld!: (shared: SharedSession) => void;
+  /** What was read before it followed a session, which the first hold settles. */
+  readonly #early = new Map<string, Promise<unknown>>();
   /** Whether a password request shows as such, or as the error pdf.js gives without one. */
   #prompt: boolean;
-  /** Resolves once `state` shows the document failed, which settles what is read from it. */
-  #failed!: Promise<void>;
-  #fail!: () => void;
-  /** Whether `state` showed the document failed since `#failed` was last reset. */
-  #showedFailure = false;
-  /** What is read from the document held, once each; `#reads` races them with `#failed`. */
-  readonly #documentReads = new Map<string, Promise<unknown>>();
-  readonly #reads = new Map<string, Promise<unknown>>();
-  #proxy: Pdfjs.PDFDocumentProxy | null = null;
+  /** Accept an answer from a descendant's mount effect before the provider's first hold. */
+  #beforeFirstHold = true;
+  #earlyAnswer: (() => void) | null = null;
   /** Where its URL's fragment says to open, which changes without opening the document again. */
   readonly #fragment: Store<{ fragment: string }>;
 
-  constructor(source: PdfSource, { passwordPrompt = true }: { passwordPrompt?: boolean } = {}) {
+  constructor(
+    source: PdfSource,
+    {
+      passwordPrompt = true,
+      pdfjs = loadPdfjs,
+    }: { passwordPrompt?: boolean; pdfjs?: PdfjsLoader } = {},
+  ) {
     const [url, hash] = "url" in source ? splitFragment(source.url) : ["", ""];
     this.source = "url" in source && source.url !== url ? { ...source, url } : source;
     this.#fragment = new Store({ fragment: hash });
-    this.#loaded = new Promise((resolve) => {
-      this.#resolveLoaded = resolve;
-    });
-    // A document that fails says so in `state`; its readers handle the failure.
-    this.#loaded.catch(() => {});
+    this.#pdfjs = pdfjs;
     this.#prompt = passwordPrompt;
-    this.#resetFailure();
-    const held: ReadableStore<DocumentState> = {
-      get: () => this.#source?.get() ?? OPENING,
+    this.#awaitHold();
+    const followed: ReadableStore<DocumentState> = {
+      get: () => this.#shared?.state.get() ?? OPENING,
       subscribe: (listener) => {
         this.#listeners.add(listener);
+        if (this.#listeners.size === 1) this.#watch();
         return () => {
-          this.#listeners.delete(listener);
+          if (this.#listeners.delete(listener) && this.#listeners.size === 0) this.#watch();
         };
       },
     };
-    this.state = withoutPrompt(held, () => this.#prompt);
+    this.state = withoutPrompt(followed, () => this.#prompt);
   }
 
-  #resetFailure(): void {
-    this.#showedFailure = false;
-    this.#failed = new Promise((resolve) => {
-      this.#fail = resolve;
+  #awaitHold(): void {
+    this.#held = new Promise((resolve) => {
+      this.#resolveHeld = resolve;
     });
   }
 
-  /** Tell the state's readers, and settle what is read while the document shows it failed. */
-  #notify(): void {
-    if (this.state.get().status === "error") {
-      this.#showedFailure = true;
-      this.#fail();
-    } else if (this.#showedFailure) {
-      // A request it showed as an error was answered, or shows as such
-      // again: what is read from now on waits for the document, and what
-      // settled empty meanwhile is read anew.
-      this.#reads.clear();
-      this.#resetFailure();
-    }
+  readonly #notify = (): void => {
     for (const listener of [...this.#listeners]) listener();
+  };
+
+  /**
+   * Hear the followed session's state while `state` has listeners, and
+   * only then: a provider React rendered but never mounted leaves nothing
+   * behind in a session other providers keep open.
+   */
+  #watch(): void {
+    this.#unwatch?.();
+    this.#unwatch =
+      this.#shared && this.#listeners.size > 0 ? this.#shared.state.subscribe(this.#notify) : null;
+  }
+
+  /** Follow `shared` from now on: its state, its document, and what is read from it. */
+  #follow(shared: SharedSession): void {
+    if (this.#shared === shared) return;
+    this.#shared = shared;
+    this.#watch();
+    this.#notify();
   }
 
   /**
@@ -181,7 +204,7 @@ export class PdfSession {
 
   /** pdf.js's own document, for its APIs ParaPDF does not wrap; null until it loads. */
   get proxy(): Pdfjs.PDFDocumentProxy | null {
-    return this.#proxy;
+    return this.#shared?.proxy ?? null;
   }
 
   /**
@@ -191,7 +214,11 @@ export class PdfSession {
    * (`passwordPrompt={false}`), other providers of the document may still ask.
    */
   submitPassword(password: string | null): void {
-    this.#lease?.submitPassword(password);
+    if (this.#lease) this.#lease.submitPassword(password);
+    else if (this.#beforeFirstHold) {
+      const request = this.#shared?.passwordRequest;
+      if (request) this.#earlyAnswer = () => request.answer(password);
+    }
   }
 
   /** The document outline (bookmarks); empty when it has none or cannot be read. */
@@ -230,35 +257,26 @@ export class PdfSession {
   }
 
   /**
-   * What `read` reads from the loaded document, once for this provider:
-   * `fallback` when the read or the document fails, so that a component
-   * reading it with `use()` shows nothing rather than failing. A fallback
-   * given while a request showed as an error lasts until it no longer does.
+   * What `read` reads from the document it follows, once for every provider
+   * of that document: `fallback` when the read fails, and while the document
+   * failed to open or waits for a password, so that a component reading it
+   * with `use()` shows nothing rather than failing or waiting. Such a
+   * fallback lasts until the password is answered or the provider holds the
+   * document opened again; what is read after that waits for it.
    */
   #read<T>(what: string, read: (session: DocumentSession) => Promise<T>, fallback: T): Promise<T> {
-    let reading = this.#reads.get(what) as Promise<T> | undefined;
+    if (this.#shared) return this.#shared.read(what, read, fallback);
+    let reading = this.#early.get(what) as Promise<T> | undefined;
     if (!reading) {
-      // A provider without a prompt shows a password request as an error
-      // while the document still waits: what is read settles then too.
-      let fromDocument = this.#documentReads.get(what) as Promise<T> | undefined;
-      if (!fromDocument) {
-        fromDocument = this.#loaded.then(read);
-        this.#documentReads.set(what, fromDocument);
-      }
-      const failed = this.#failed.then(() => fallback);
-      reading = Promise.race([fromDocument, failed]).catch((error: unknown) => {
-        if (this.#source?.get().status === "ready") console.error(`loading ${what} failed`, error);
-        return fallback;
-      });
-      this.#reads.set(what, reading);
+      reading = this.#held.then((shared) => shared.read(what, read, fallback));
+      this.#early.set(what, reading);
     }
     return reading;
   }
 
   /** Hold the registry's session of the source; returns the release. */
-  #connect(pdfjs: PdfjsLoader): () => void {
-    this.#unsubscribe?.();
-    const lease = acquireSession(pdfjs, this.source);
+  #connect(): () => void {
+    const lease = acquireSession(this.#pdfjs, this.source);
     const control = this.#control;
     // The session closing stops what was started for it, as releasing does.
     lease.signal.addEventListener("abort", () => control.abort(), {
@@ -266,35 +284,21 @@ export class PdfSession {
       signal: control.signal,
     });
     this.#lease = lease;
-    this.#source = lease.state;
-    if (this.#held !== lease.session) {
-      // The first hold, or one after the session closed, which opens it again.
-      const held = lease.session;
-      if (this.#held === null) this.#resolveLoaded(held);
-      else {
-        this.#loaded = held;
-        this.#documentReads.clear();
-        this.#reads.clear();
-        this.#proxy = null;
-        this.#resetFailure();
-      }
-      this.#held = held;
-      held.then(
-        (session) => {
-          if (this.#held === held) this.#proxy = session.proxy;
-        },
-        () => {},
-      );
-    }
-    this.#unsubscribe = lease.state.subscribe(() => this.#notify());
-    this.#notify();
+    // The session its render started, or another when that one closed or
+    // failed meanwhile: its state and what is read from it follow.
+    this.#beforeFirstHold = false;
+    if (this.#shared === lease.shared) this.#earlyAnswer?.();
+    this.#earlyAnswer = null;
+    this.#follow(lease.shared);
+    this.#resolveHeld(lease.shared);
     let released = false;
     return () => {
       if (released) return;
       released = true;
-      this.#unsubscribe?.();
-      this.#unsubscribe = null;
-      if (this.#lease === lease) this.#lease = null;
+      if (this.#lease === lease) {
+        this.#lease = null;
+        this.#awaitHold();
+      }
       lease.release();
       control.abort();
       if (this.#control === control) this.#control = new AbortController();
@@ -303,20 +307,42 @@ export class PdfSession {
 }
 
 /**
- * Hold the registry's session of `session`'s source until the returned
- * release: what `<PdfDocument>` does while it is mounted. The session
- * closes once nothing holds it, after the registry's grace period.
+ * Start opening `session`'s document, unless it follows one already: what
+ * `<PdfDocument>` does as it renders in the browser, so that what a render
+ * reads of the document arrives whether or not React has mounted the
+ * provider. The registry closes a document no provider comes to hold.
  */
-export function connectSession(session: PdfSession, pdfjs: PdfjsLoader = loadPdfjs): () => void {
-  return connect(session, pdfjs);
+export function startSession(session: PdfSession): void {
+  start(session);
 }
 
 /**
- * The loaded document of `session`, once its provider holds it; rejects
- * when the document cannot be opened.
+ * Hold the registry's session of `session`'s source until the returned
+ * release: what `<PdfDocument>` does while it is mounted. The session
+ * closes once nothing holds it, after the registry's grace period, and a
+ * later hold opens the document again.
+ */
+export function connectSession(session: PdfSession): () => void {
+  return connect(session);
+}
+
+/**
+ * The loaded document of the session `session`'s provider holds or, while
+ * it holds none, of the one it holds next: a viewer may ask before its
+ * provider's effect has run, and after the document it showed last has
+ * closed. Rejects when the document cannot be opened.
  */
 export function documentOf(session: PdfSession): Promise<DocumentSession> {
-  return loaded(session);
+  return held(session);
+}
+
+/**
+ * What `session`'s readers got so far, as an object that is another once
+ * they are to read again: the provider holds another session, a password
+ * was answered, or a failed read can be retried. Null before it follows a session.
+ */
+export function readsOf(session: PdfSession): object | null {
+  return reads(session);
 }
 
 /**

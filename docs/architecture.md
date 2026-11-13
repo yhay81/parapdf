@@ -89,20 +89,33 @@ search and `getText()`.
   `PDFDataRangeTransport`. A URL is identified without its fragment, which
   says where to open.
 - The registry (`registry.ts`) shares one session among every viewer of a
-  source, keyed by the source, and closes it one second after the last
-  lease goes, so StrictMode and quick remounts open once. Its entry
-  publishes the document state (`store.ts`) from the moment it starts to
-  open: status (`"loading"`, `"password"`, `"ready"`, `"error"`), the
-  error, why a password is asked for, progress (at most once a frame), and,
-  once ready, the page count and permissions.
+  source, keyed by the source. A session opens the first time a provider's
+  render or a lease asks for it, and leases hold it: it closes one second
+  after the last lease goes, so StrictMode and quick remounts open once,
+  and, when no lease came to hold it (a render React never mounted), ten
+  seconds after it came to rest, loaded or failed and with nothing being
+  read. Its entry publishes the document state (`store.ts`) from the
+  moment it starts to open: status (`"loading"`, `"password"`, `"ready"`,
+  `"error"`), the error, why a password is asked for, progress (at most
+  once a frame), and, once ready, the page count and permissions. It also
+  keeps what was read of the document for every provider of the source,
+  one promise for each thing read, which a render React suspended finds
+  again when it renders anew (decision 0032). Reads in progress postpone the
+  timeout for an unheld render. A new provider's first hold retries failed
+  reads and publishes the new promises. The shared entry exposes its loaded
+  proxy to every ready provider, including one that just joined.
 - A session owns an `AbortController`: everything started for it (drawing,
   text, searches, background passes, the editor, form scripts) takes its
   signal, and closing aborts it all. No generation counters.
 - Applications see a `PdfSession` (`pdf-session.ts`), one per
   `PdfDocument`: its source, state, `submitPassword()`, pdf.js's `proxy`
   once ready, a `signal`, and promises of the document's data, each
-  settling empty when the read or the document fails. It opens, closes, and
-  releases nothing itself: `PdfDocument` holds and returns its lease.
+  settling empty when the read or the document fails and while the document
+  waits for a password, to be read anew once it is answered. It opens,
+  closes, and releases nothing itself: `PdfDocument` starts its session as
+  it renders, and holds and returns its lease. It follows the registry's
+  session its render started and then the one its provider holds, which is
+  another once the first closed.
 
 Viewers that edit annotations share the session's one annotation storage,
 each with an editor of its own under ids unique to the session. Saving and
@@ -148,6 +161,21 @@ A viewer has an `AbortController` of its own. Its viewport detaching
 aborts its work (drawing, searches, printing, publishing) but keeps the
 view and edits for reattachment; it lives as long as the `useViewer()`
 that created it, or the `PdfViewer` that made its own.
+
+A viewer shows a session while the session's provider holds the document
+and the viewer's owner holds the viewer (`holdViewer()`). When either lets
+go, the viewer lets go of the document: it stops its work, releases what
+it drew, and tells its extensions (`closed(true)`). It keeps a weak reference
+to the provider, the view position, history, finished search and annotation
+edits. Edits leave the document's storage while hidden, including deletions
+of original annotations. Saving and printing await restoration when shown.
+On reopening, the viewer compares both pdf.js fingerprints, for the file
+and its revision. A changed fingerprint or a different provider starts a
+fresh view and clears the kept edits and search (`closed(false)`).
+React destroys effects alike when it hides a tree
+(`<Activity>`), runs them again (StrictMode), and unmounts, and says
+nothing more of a tree it removes while hidden: the viewer keeps only what
+the garbage collector takes with it (decision 0032).
 
 ### render/
 
@@ -216,10 +244,22 @@ it undoes what it added. The core imports no feature.
 `react/` is the only module that uses React, and every module that touches
 the DOM declares `"use client"`.
 
-- `PdfDocument` opens or joins a session and renders its children at once;
-  nothing suspends before the first page draws. A source with another URL,
-  headers, bytes, transport, or password opens another; a new fragment
-  moves its viewers as a link would.
+- `PdfDocument` opens or joins a session as it renders, holds it in an
+  effect, and renders its children at once; nothing suspends before the
+  first page draws. A source with another URL, headers, bytes, transport,
+  or password opens another; a new fragment moves its viewers as a link
+  would.
+- The lifetimes are React's (decision 0032). A render may never mount, as
+  under a Suspense boundary that waits or in a transition React abandons,
+  so what a render needs of the document starts in the render and is kept
+  in the registry, not in the component's state, which React drops with
+  the render. Everything held is held by an effect and let go by its
+  cleanup: the provider's lease, the viewer's hold (`useViewer()`), and the
+  viewport. What the reader gets back after React hid a tree lives in the
+  viewer, which the component's state keeps. During hydration,
+  `useDocumentState()` uses the server's opening snapshot before reading
+  the live state. A password submitted by a child's first effect answers
+  the pending request once the provider takes its lease.
 - `PdfViewer` is one viewport. View state (`zoom`, `rotation`, `spread`,
   `scrollMode`, `tool`) is controlled or uncontrolled; the current page is
   reported (`onPageChange`) and set with `viewer.goToPage()`. Every other

@@ -114,8 +114,10 @@ type SignatureDemo = Demo & {
 
 declare global {
   interface Window {
+    __releaseStampDecode?: () => void;
     pdfjsLib?: {
       getDocument(source: { data: Uint8Array }): {
+        destroy(): Promise<void>;
         promise: Promise<{
           getPage(n: number): Promise<{
             getAnnotations(): Promise<{ subtype: string; contentsObj?: { str: string } }[]>;
@@ -209,7 +211,106 @@ const launched = await launchBrowser();
 console.log(`${launched.label}, engine ${engine}`);
 const demo = (query: string) => `${baseUrl}?engine=${engine}&annotations=1&${query}`;
 
+/** Read the saved bytes with a separate pdf.js document, including hidden edits. */
+const savedTypes = (page: Page) =>
+  page.evaluate(async () => {
+    const bytes = window.__viewer && (await window.__parapdf?.save(window.__viewer));
+    if (!bytes || !window.pdfjsLib) throw new Error("No document to save");
+    const task = window.pdfjsLib.getDocument({ data: bytes });
+    const document = await task.promise;
+    try {
+      return (await (await document.getPage(1)).getAnnotations()).map((item) => item.subtype);
+    } finally {
+      await task.destroy();
+    }
+  });
+
+const hide = async (page: Page) => {
+  await page.evaluate(() => window.__lifetimes?.show?.(false));
+  await page.waitForFunction(() => window.__viewer?.session === null);
+};
+
 try {
+  {
+    const { page } = await open(
+      launched.browser,
+      demo("lifetimes=activity&file=synthetic-annotations.pdf"),
+    );
+    await page.evaluate(() => window.__annotations?.setTool("ink"));
+    await page.locator(".freeTextEditor").click();
+    await page.keyboard.press("Delete");
+    await page.locator(".freeTextEditor").waitFor({ state: "detached" });
+    check("the saved file omits the deleted text", !(await savedTypes(page)).includes("FreeText"));
+    for (const reopen of [false, true]) {
+      await hide(page);
+      if (reopen) await page.waitForTimeout(1200);
+      await page.evaluate(() => window.__lifetimes?.show?.(true));
+      await editorLayer(page, 1);
+      const saved = await savedTypes(page);
+      await page.evaluate(() => window.__annotations?.setTool("ink"));
+      await page.locator(".inkEditor").waitFor();
+      check(
+        `the deletion survives hiding with the document ${reopen ? "reopened" : "still open"}`,
+        !saved.includes("FreeText") &&
+          saved.includes("Ink") &&
+          (await page.locator(".freeTextEditor").count()) === 0,
+        saved.join(", "),
+      );
+    }
+    await page.context().close();
+  }
+  {
+    const { page } = await open(launched.browser, demo("lifetimes=activity&file=usrguide.pdf"));
+    const added = await page.evaluate(async () => {
+      const canvas = new OffscreenCanvas(40, 20);
+      canvas.getContext("2d")?.fillRect(0, 0, 40, 20);
+      return window.__annotations?.addImage(await canvas.convertToBlob(), {
+        altText: "Kept image",
+      });
+    });
+    check(
+      "a stamp is saved before its editor hides",
+      added === true && (await savedTypes(page)).includes("Stamp"),
+    );
+    for (const hideAgain of [false, true]) {
+      await hide(page);
+      await page.evaluate(() => {
+        const create = window.createImageBitmap;
+        const waiting = new Promise<void>((resolve) => {
+          window.createImageBitmap = ((...args: Parameters<typeof create>) => {
+            if (!(args[0] instanceof Blob)) return create(...args);
+            window.createImageBitmap = create;
+            window.__releaseStampDecode = resolve;
+            return waiting.then(() => create(...args));
+          }) as typeof create;
+        });
+        window.__lifetimes?.show?.(true);
+      });
+      await page.waitForFunction(() => Boolean(window.__releaseStampDecode));
+      // Start saving before the decoder can finish. A second hide interrupts
+      // the import; the next editor must still have the entire snapshot.
+      let saving: Promise<string[]> | undefined;
+      if (hideAgain) await hide(page);
+      else saving = savedTypes(page);
+      await page.evaluate(() => {
+        window.__releaseStampDecode?.();
+        delete window.__releaseStampDecode;
+      });
+      if (hideAgain) {
+        await page.evaluate(() => window.__lifetimes?.show?.(true));
+        await editorLayer(page, 1);
+      }
+      const saved = await (saving ?? savedTypes(page));
+      check(
+        hideAgain
+          ? "a hide during restoration preserves the stamp for the next editor"
+          : "saving during restoration includes the stamp",
+        saved.filter((type) => type === "Stamp").length === 1,
+        `${saved.filter((type) => type === "Stamp").length} stamp(s)`,
+      );
+    }
+    await page.context().close();
+  }
   const { page, errors } = await open(launched.browser, demo("file=usrguide.pdf"));
   const section = page.locator('section[data-page="1"]');
   const box = await section.boundingBox();

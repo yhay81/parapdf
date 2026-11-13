@@ -83,11 +83,6 @@ function attachedTo(viewer: Viewer): Attached {
   return entry;
 }
 
-/** Detach every feature `viewer`'s options attached, as the viewer closes. */
-export function detachFeatures(viewer: Viewer): void {
-  setFeatureOptions(viewer, OFF);
-}
-
 /** The features loaded for `viewer`'s options. */
 export function loadedFeatures(viewer: Viewer): ReadableStore<LoadedFeatures> {
   return attachedTo(viewer).loaded;
@@ -97,7 +92,9 @@ export function loadedFeatures(viewer: Viewer): ReadableStore<LoadedFeatures> {
  * Attach and detach the features `options` ask of `viewer`, as they change.
  * Those that change how pages are drawn load first; while they load, the
  * next document's first layout waits for them. They stay while the
- * viewer's viewport unmounts, and go with the viewer (`useViewer()`).
+ * viewer's viewport unmounts and while the viewer lets go of its document,
+ * with what they keep for the reader, and go with the viewer
+ * (`useViewer()`): they hold nothing outside it once it has let go.
  */
 export function setFeatureOptions(viewer: Viewer, options: FeatureOptions): void {
   const entry = attachedTo(viewer);

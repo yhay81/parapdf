@@ -96,6 +96,22 @@ export interface SavedAnnotation {
   data: unknown;
 }
 
+/** What a viewer restores when its editor starts again, including edits a public export omits. */
+export interface KeptAnnotations {
+  annotations: SavedAnnotation[];
+  deletions: {
+    pageIndex: number;
+    id: string;
+    popupRef: string;
+    /** pdf.js's editor class creates its own lightweight deletion record. */
+    deleteAnnotationElement(editor: {
+      _uiManager: object;
+      parent: object;
+      annotationElementId: string;
+    }): void;
+  }[];
+}
+
 /**
  * The accessible names of the controls and annotations the editor shows,
  * in the application's language.
@@ -233,6 +249,9 @@ export interface AnnotationEditor {
     signature: SignatureInput,
     description?: string,
   ): Promise<boolean>;
+  /** Save and restore the changes of the same viewer and document, deletions included. */
+  snapshot(): KeptAnnotations;
+  restore(kept: KeptAnnotations): Promise<void>;
   /** Every annotation created, and those of the file changed, as data `import` takes. */
   export(): SavedAnnotation[];
   /**

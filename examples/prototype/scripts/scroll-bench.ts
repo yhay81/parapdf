@@ -6,6 +6,9 @@
  * main-thread lag, dropped frames, React commits, the store's window and
  * current-page changes, and render counts. Within each file and speed, the
  * variants follow each other run by run, so that they meet the same machine.
+ * The report gives the median of each measure over a job's runs and, of the
+ * first paint, every run's: a page shows on an animation frame, so that
+ * median moves by a whole frame when one run in a few changes frames.
  *
  * Usage: pnpm --filter @parapdf/prototype build && pnpm --filter @parapdf/prototype bench
  * Environment: BROWSER (chromium, webkit, or firefox), VARIANTS, TEXT and LINKS (1, 0, or 1,0),
@@ -379,6 +382,9 @@ const summaries = files.flatMap((file) =>
         scrollMode: variant.scroll,
         scale: variant.scale,
         firstPaintMs: pick((result) => result.firstPaintMs),
+        // Every run's, in the order they ran: the median alone hides on
+        // which frames the first page showed.
+        firstPaintRunsMs: ok.map((result) => result.firstPaintMs ?? Number.NaN),
         pagesCrossed: pick((result) => result.pagesCrossed),
         commitsDuringScroll: pick((result) => result.commitsDuringScroll),
         commitsPerSecond: pick((result) =>
@@ -492,7 +498,7 @@ const markdown = [
         "- The viewport takes focus before scrolling, exercising page focus as the current page changes.",
       ]
     : []),
-  "- First paint: time from navigation start until page 1 shows pixels.",
+  "- First paint: time from navigation start until page 1 shows pixels, the median of the runs. Each run's is listed under its table: a page shows on an animation frame, so the median moves by a whole frame when one run in a few changes frames.",
   "- Blank: share of the viewport covered by pages without pixels, averaged over frames; blank frames: frames where more than 1% was blank.",
   "- Main thread: summed lateness of a 4 ms timer while scrolling, beyond 2 ms or the idle page's 95th percentile, whichever is larger, plus the raw p95 and maximum lateness.",
   "- Dropped frames: animation frames longer than 1.5 idle frame intervals.",
@@ -512,6 +518,15 @@ const markdown = [
         .map(
           (summary) =>
             `| ${summary.variant} | ${fmt(summary.firstPaintMs)} | ${fmt(summary.pagesCrossed)} | ${fmt(summary.blankMeanPct, 1)} | ${fmt(summary.blankFramesPct, 1)} | ${fmt(summary.blockedMs)} | ${fmt(summary.lagP95Ms, 1)} / ${fmt(summary.lagMaxMs)} | ${fmt(summary.droppedFrames)} / ${fmt(summary.frames)} | ${fmt(summary.commitsDuringScroll)} (${fmt(summary.commitsPerSecond, 1)}) | ${fmt(summary.storeUpdates)} (${fmt(summary.windowChanges)} / ${fmt(summary.currentPageChanges)}) | ${fmt(summary.baseRenders)} / ${fmt(summary.detailRenders)} / ${fmt(summary.textLayers)} / ${fmt(summary.annotationLayers)} / ${fmt(summary.cancelledRenders)} | ${fmt(summary.canvasMiB)} |`,
+        ),
+      "",
+      "First paint of each run (ms):",
+      "",
+      ...summaries
+        .filter((summary) => summary.file === file && summary.speed === speed)
+        .map(
+          (summary) =>
+            `- ${summary.variant}: ${summary.firstPaintRunsMs.map((ms) => fmt(ms)).join(", ")}`,
         ),
       "",
     ]),

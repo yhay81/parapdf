@@ -1,0 +1,49 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "site-preview",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "@parapdf/site",
+        "preview",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "4321",
+        "--ignore-lock"
+      ],
+      "port": 4321
+    },
+    {
+      "name": "site-dev",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "@parapdf/site",
+        "dev",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "4322",
+        "--ignore-lock"
+      ],
+      "port": 4322
+    },
+    {
+      "name": "prototype-dev",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "@parapdf/prototype",
+        "dev",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "5190"
+      ],
+      "port": 5190
+    }
+  ]
+}

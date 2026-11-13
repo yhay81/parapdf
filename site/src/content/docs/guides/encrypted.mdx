@@ -33,7 +33,10 @@ function PasswordPrompt() {
 ```
 
 Render it inside the `PdfDocument`, beside the viewer: every viewer of the
-document waits for the same answer.
+document waits for the same answer. While it waits, the hooks that read
+the document's data, such as `useOutline()`, give their empty values
+instead of suspending, so a boundary around the prompt and such a hook
+still shows the prompt; they read the document once the password opens it.
 
 <PasswordExample client:visible />
 
