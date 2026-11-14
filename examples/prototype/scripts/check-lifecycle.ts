@@ -250,10 +250,25 @@ async function checkReaders(browser: Browser, dev: ViteDevServer, base: string):
       overlays.isolatedWindowCommit,
     );
     check(
-      "mounting and unmounting overlays on live pages activates and cleans up overlay layers",
-      overlays.liveActivated && overlays.liveDeactivated,
+      "a single-page overlay activates only its mounted target page",
+      overlays.scopedPortalOnly,
+      JSON.stringify(overlays.diagnostics.scoped),
+    );
+    check(
+      "overlays on newly mounted pages survive queued viewport updates",
+      overlays.liveActivated,
+      JSON.stringify({
+        commit: overlays.diagnostics.liveCommit,
+        afterFrame: overlays.diagnostics.liveAfterFrame,
+      }),
+    );
+    check(
+      "unmounting overlays cleans up every overlay host and layer",
+      overlays.liveDeactivated,
+      JSON.stringify(overlays.diagnostics.deactivated),
     );
     check("dynamic overlays remain visible after StrictMode replays effects", overlays.strict);
+    check("Activity hiding pages cleans up overlay hosts and layers", overlays.hiddenCleaned);
     check("dynamic overlays reconnect after Activity hides their page", overlays.restored);
     check("moving an overlay to another viewer preserves its existing overlays", overlays.moved);
   } finally {

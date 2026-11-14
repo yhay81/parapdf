@@ -14,6 +14,7 @@ function setupLaidOutViewer(pageCount = 4): {
 } {
   const session = new PdfSessionController({ url: "/overlay-lifetimes.pdf" });
   const viewer = new ViewerController();
+  viewer.configure({ overscan: 1 });
   const sizes = Array.from({ length: pageCount }, () => ({ width: 612, height: 792 }));
   const layout = computeLayout(sizes, 1, {
     gap: 12,
@@ -42,10 +43,39 @@ export async function checkOverlayLifetimes() {
   const { session, viewer } = setupLaidOutViewer(4);
   const other = new ViewerController();
   const store = overlayStoreOf(viewer);
-  const tick = () => new Promise((resolve) => setTimeout(resolve, 20));
+  const afterViewportUpdate = async () => {
+    // Exercise a queued viewport update even if the browser coalesces scroll
+    // events. The second frame also lets the initial ResizeObserver update run.
+    // A timer is not a barrier for either of these browser callbacks.
+    viewer.scroller?.dispatchEvent(new Event("scroll"));
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+  };
   const hasDynamicProbe = () => element.querySelector("section [data-overlay-probe]") !== null;
   const hasPortalProbe = () => element.querySelector("section [data-portal-probe]") !== null;
   const childCounter = { renders: 0 };
+  const snapshot = () => {
+    const { first, last, currentPage } = viewer.store.get();
+    return {
+      first,
+      last,
+      currentPage,
+      scrollTop: viewer.scroller?.scrollTop ?? null,
+      active: store.isActive(),
+      hosts: [0, 1, 2, 3].filter((index) => store.hasHost(index)),
+      pages: [...element.querySelectorAll<HTMLElement>("section")].map((page) => page.dataset.page),
+      layers: element.querySelectorAll(".parapdf-overlay-layer").length,
+      portal: hasPortalProbe(),
+      dynamicPage4:
+        element.querySelector('section[data-page="4"] [data-overlay-page="4"]') !== null,
+    };
+  };
+  const diagnostics: Record<string, ReturnType<typeof snapshot>> = {};
+  const inactive = () =>
+    !store.isActive() &&
+    [0, 1, 2, 3].every((index) => !store.hasHost(index)) &&
+    element.querySelector(".parapdf-overlay-layer") === null;
 
   try {
     // 1. Idle viewer: zero overlay hosts or layers, and scrolling the page window does not re-render <PdfViewer> children.
@@ -53,25 +83,27 @@ export async function checkOverlayLifetimes() {
       root.render(
         <SessionContext value={session}>
           <ViewerContext value={viewer}>
-            <PdfViewer style={{ width: 800, height: 600 }}>
+            <PdfViewer overscan={1} style={{ width: 800, height: 600 }}>
               <ChildProbe counter={childCounter} />
             </PdfViewer>
           </ViewerContext>
         </SessionContext>,
       ),
     );
-    const idleSkipped =
-      !store.isActive() &&
-      !store.hasHost(0) &&
-      !store.hasHost(1) &&
-      element.querySelector(".parapdf-overlay-layer") === null;
+    const idleSkipped = inactive();
 
     const rendersBeforeScroll = childCounter.renders;
-    flushSync(() => viewer.store.set({ first: 1, last: 2, currentPage: 1 }));
+    // Keep the scroll position and mounted range consistent. Writing first/last
+    // directly leaves scrollTop at zero, so the next frame removes test pages.
+    flushSync(() => viewer.goToPage(1));
+    await afterViewportUpdate();
+    diagnostics.scrolled = snapshot();
     const isolatedWindowCommit =
       childCounter.renders === rendersBeforeScroll &&
-      element.querySelector('section[data-page="1"]') === null &&
+      viewer.store.get().currentPage === 1 &&
       element.querySelector('section[data-page="3"]') !== null &&
+      element.querySelector('section[data-page="4"]') === null &&
+      !store.hasHost(0) &&
       !store.hasHost(1) &&
       !store.hasHost(2);
 
@@ -81,7 +113,7 @@ export async function checkOverlayLifetimes() {
       root.render(
         <SessionContext value={session}>
           <ViewerContext value={viewer}>
-            <PdfViewer style={{ width: 800, height: 600 }}>
+            <PdfViewer overscan={1} style={{ width: 800, height: 600 }}>
               <ChildProbe counter={childCounter} />
               <PdfPageOverlay page={1}>
                 <span data-portal-probe>Portal overlay</span>
@@ -91,14 +123,23 @@ export async function checkOverlayLifetimes() {
         </SessionContext>,
       ),
     );
-    await tick();
-    const scopedPortalOnly = store.hasHost(1) && !store.hasHost(2) && hasPortalProbe();
+    const scoped = () =>
+      store.isActive() &&
+      store.hasHost(1) &&
+      !store.hasHost(0) &&
+      !store.hasHost(2) &&
+      element.querySelector('section[data-page="3"]') !== null &&
+      hasPortalProbe();
+    const scopedAtCommit = scoped();
+    await afterViewportUpdate();
+    diagnostics.scoped = snapshot();
+    const scopedPortalOnly = scopedAtCommit && scoped();
 
     flushSync(() =>
       root.render(
         <SessionContext value={session}>
           <ViewerContext value={viewer}>
-            <PdfViewer style={{ width: 800, height: 600 }}>
+            <PdfViewer overscan={1} style={{ width: 800, height: 600 }}>
               <ChildProbe counter={childCounter} />
               <PdfPageOverlay page={1}>
                 <span data-portal-probe>Portal overlay</span>
@@ -115,41 +156,44 @@ export async function checkOverlayLifetimes() {
         </SessionContext>,
       ),
     );
-    await tick();
-    // Scroll to mount page 4 (index 3) for the first time while overlays are already active (production non-StrictMode mount order).
-    flushSync(() => viewer.store.set({ first: 1, last: 3, currentPage: 2 }));
-    await tick();
-    const liveActivated =
-      scopedPortalOnly &&
+    await afterViewportUpdate();
+    const page4WasAbsent = element.querySelector('section[data-page="4"]') === null;
+    // Mount page 4 for the first time with active overlays, outside StrictMode.
+    flushSync(() => viewer.goToPage(2));
+    const activated = () =>
       store.isActive() &&
+      store.hasHost(1) &&
+      store.hasHost(2) &&
       store.hasHost(3) &&
       hasPortalProbe() &&
       element.querySelector('section[data-page="4"] [data-overlay-page="4"]') !== null;
+    const activeAtCommit = activated();
+    diagnostics.liveCommit = snapshot();
+    await afterViewportUpdate();
+    diagnostics.liveAfterFrame = snapshot();
+    const liveActivated = page4WasAbsent && activeAtCommit && activated();
 
     flushSync(() =>
       root.render(
         <SessionContext value={session}>
           <ViewerContext value={viewer}>
-            <PdfViewer style={{ width: 800, height: 600 }}>
+            <PdfViewer overscan={1} style={{ width: 800, height: 600 }}>
               <ChildProbe counter={childCounter} />
             </PdfViewer>
           </ViewerContext>
         </SessionContext>,
       ),
     );
-    await tick();
-    const liveDeactivated =
-      !store.isActive() &&
-      !store.hasHost(1) &&
-      !store.hasHost(2) &&
-      !store.hasHost(3) &&
-      element.querySelector(".parapdf-overlay-layer") === null;
+    const inactiveAtCommit = inactive();
+    await afterViewportUpdate();
+    diagnostics.deactivated = snapshot();
+    const liveDeactivated = inactiveAtCommit && inactive();
 
     // 3. StrictMode effect replay and <Activity> hide/restore preserve both <PdfPageOverlays> and <PdfPageOverlay>.
     const viewerWithOverlays = () => (
       <SessionContext value={session}>
         <ViewerContext value={viewer}>
-          <PdfViewer style={{ width: 800, height: 600 }}>
+          <PdfViewer overscan={1} style={{ width: 800, height: 600 }}>
             <PdfPageOverlay page={1}>
               <span data-portal-probe>Portal overlay</span>
             </PdfPageOverlay>
@@ -164,7 +208,8 @@ export async function checkOverlayLifetimes() {
     );
 
     flushSync(() => root.render(<StrictMode>{viewerWithOverlays()}</StrictMode>));
-    await tick();
+    await afterViewportUpdate();
+    diagnostics.strict = snapshot();
     const strict = hasDynamicProbe() && hasPortalProbe();
 
     const activity = (mode: "visible" | "hidden") => (
@@ -172,9 +217,12 @@ export async function checkOverlayLifetimes() {
     );
     flushSync(() => root.render(activity("visible")));
     flushSync(() => root.render(activity("hidden")));
-    await tick();
+    await afterViewportUpdate();
+    diagnostics.hidden = snapshot();
+    const hiddenCleaned = inactive();
     flushSync(() => root.render(activity("visible")));
-    await tick();
+    await afterViewportUpdate();
+    diagnostics.restored = snapshot();
     const restored = hasDynamicProbe() && hasPortalProbe();
 
     const render = () => "overlay";
@@ -190,11 +238,14 @@ export async function checkOverlayLifetimes() {
     return {
       idleSkipped,
       isolatedWindowCommit,
+      scopedPortalOnly,
       liveActivated,
       liveDeactivated,
       strict,
+      hiddenCleaned,
       restored,
       moved,
+      diagnostics,
     };
   } finally {
     flushSync(() => root.unmount());
