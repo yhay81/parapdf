@@ -9,9 +9,16 @@ export interface HistoryState {
   canGoForward: boolean;
 }
 
+export interface HistoryControls extends HistoryState {
+  /** Return to the position, and the zoom, before the most recent link or outline jump. */
+  back(): void;
+  /** Return to the position the most recent `back()` left. */
+  forward(): void;
+}
+
 /** Back and forward through the positions a viewer's links and outline jumped from. */
 export interface History {
-  readonly store: ReadableStore<HistoryState>;
+  readonly store: ReadableStore<HistoryControls>;
   /** Return to the position, and the zoom, before the most recent link or outline jump. */
   back(): void;
   /** Return to the position the most recent `back()` left. */
@@ -69,7 +76,6 @@ export class Positions<T> {
 /** Keep where `viewer`'s links, outline, and named actions jumped from; `detach()` undoes it. */
 export function attachHistory(viewer: ViewerController): History {
   const positions = new Positions<ViewerPosition>();
-  const store = new Store<HistoryState>({ canGoBack: false, canGoForward: false });
   const publish = () =>
     store.set({ canGoBack: positions.canGoBack, canGoForward: positions.canGoForward });
   // A viewer with no viewport has no position to leave, nor one to show:
@@ -86,6 +92,12 @@ export function attachHistory(viewer: ViewerController): History {
     publish();
     if (entry) viewer.restorePosition(entry);
   };
+  const store = new Store<HistoryControls>({
+    canGoBack: false,
+    canGoForward: false,
+    back,
+    forward,
+  });
   const detachExtension = viewer.extend({
     jumping() {
       const position = viewer.position();

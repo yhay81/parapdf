@@ -56,6 +56,7 @@ import { configureEngine, type Pdfjs } from "./engines.ts";
 import { Icon, type IconName } from "./Icon.tsx";
 import {
   type AnnotationEditing,
+  annotationEditingOf,
   attachViewport,
   controllerOf,
   getSelection,
@@ -64,7 +65,6 @@ import {
   type Search,
   searchOf,
   showWith,
-  useAnnotationEditing,
   type ViewerController,
 } from "./internals.ts";
 import { PasswordPrompt } from "./PasswordPrompt.tsx";
@@ -544,7 +544,10 @@ function Probes() {
   window.__session = session;
   window.__search = searchOf(viewer);
   window.__history = historyOf(viewer);
-  window.__annotations = useAnnotationEditing();
+  Object.defineProperty(window, "__annotations", {
+    get: () => annotationEditingOf(viewer),
+    configurable: true,
+  });
   // pdf.js's document once ready.
   window.__pdfDocument = useDocumentState((state) => state.status === "ready" && session.proxy)
     ? (session.proxy ?? undefined)

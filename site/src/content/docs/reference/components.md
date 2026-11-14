@@ -293,7 +293,7 @@ tree-shaken out of your bundle.
 | Export | |
 |---|---|
 | `configurePdfjs(config)` | Changes how pdf.js loads, before the first `PdfDocument` renders (see [Configuring pdf.js](/setup/pdfjs/)). |
-| `preloadDocument(source)` | Starts loading pdf.js, preloading `source`'s URL (outside WebKit and header-carrying requests), and opening `source` in the shared document registry ahead of `PdfDocument` mounting (for example on route hover). |
+| `preloadDocument(source)` | Starts loading pdf.js, preloading `source`'s URL (outside WebKit and header-carrying requests), and warming `source` in the shared document registry ahead of `PdfDocument` mounting (for example on route hover) so `PdfViewer` lays out synchronously before the first paint. |
 | `preloadPdfjs()` | Starts loading pdf.js and its worker early without opening a document. |
 | `pdfjsVersion` | The version of pdf.js the package ships. |
 | `legacyBuild` | From `parapdf/legacy`: pdf.js's legacy build, for `configurePdfjs({ build })`. |

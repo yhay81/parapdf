@@ -2,10 +2,10 @@
 
 import { useEffectEvent, useLayoutEffect, useRef } from "react";
 import type { FormChange } from "../features/forms/fields.ts";
+import { onViewerFormChange } from "../features/forms/index.ts";
 import { attachFormLayers, type FormLayers } from "../features/forms/layers.ts";
 import type { Viewer } from "../view/viewer.ts";
 import { useOptionalViewer } from "./context.ts";
-import { notifyFormChange } from "./forms.ts";
 
 export interface PdfFormsProps {
   /**
@@ -40,9 +40,9 @@ export function PdfForms({
   const initialScripts = useRef(scripts);
   initialScripts.current = scripts;
   const appliedScripts = useRef(scripts);
+  const hasOnChange = Boolean(onChange);
   const handleChange = useEffectEvent((change: FormChange) => {
     onChange?.(change);
-    notifyFormChange(viewer, change);
   });
 
   useLayoutEffect(() => {
@@ -50,13 +50,16 @@ export function PdfForms({
     appliedScripts.current = startScripts;
     const layers = attachFormLayers(viewer, { scripts: startScripts });
     layersRef.current = layers;
-    const off = layers.onFormChange((change) => handleChange(change));
     return () => {
-      off();
       layersRef.current = null;
       layers.detach();
     };
   }, [viewer]);
+
+  useLayoutEffect(() => {
+    if (!hasOnChange) return;
+    return onViewerFormChange(viewer, (change) => handleChange(change));
+  }, [viewer, hasOnChange]);
 
   useLayoutEffect(() => {
     if (scripts === appliedScripts.current) return;

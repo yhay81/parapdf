@@ -58,7 +58,13 @@ import {
   type ScrollTarget,
   type ViewerPosition,
 } from "./navigation.ts";
-import { rendererChanged, rendererOptions, type ShownView, type ViewerOptions } from "./options.ts";
+import {
+  type Opening,
+  rendererChanged,
+  rendererOptions,
+  type ShownView,
+  type ViewerOptions,
+} from "./options.ts";
 import {
   type Motion,
   move,
@@ -118,11 +124,55 @@ interface Showing {
   direction: Direction | null;
 }
 
+/** A zoom: CSS pixels per PDF point, or a fit that keeps fitting as the viewport resizes. */
+export type Zoom = number | FitMode;
+
+/** Each view setting a `<PdfViewer>` controls or leaves to the viewer, by its prop. */
+export interface ControlledViewValues {
+  zoom: Zoom;
+  rotation: Rotation;
+  spread: SpreadMode;
+  scrollMode: ScrollMode;
+  tool: PointerTool;
+}
+
+export interface ViewControlCallbacks {
+  zoom?: ((zoom: Zoom) => void) | undefined;
+  rotation?: ((rotation: Rotation) => void) | undefined;
+  spread?: ((spread: SpreadMode) => void) | undefined;
+  scrollMode?: ((scrollMode: ScrollMode) => void) | undefined;
+  tool?: ((tool: PointerTool) => void) | undefined;
+  page?: ((pageIndex: number) => void) | undefined;
+  viewState?: ((viewState: ViewState) => void) | undefined;
+}
+
+export interface ViewerControlBinding {
+  sync(
+    options: ViewerOptions,
+    controlled: Partial<ControlledViewValues>,
+    callbacks: ViewControlCallbacks,
+  ): void;
+  disconnect(): void;
+}
+
+const zoomOf = (state: ViewerState): Zoom =>
+  state.zoomMode === "custom" ? state.scale : state.zoomMode;
+
+const viewValuesOf = (state: ViewerState): ControlledViewValues => ({
+  zoom: zoomOf(state),
+  rotation: state.rotation,
+  spread: state.spread,
+  scrollMode: state.scrollMode,
+  tool: state.tool,
+});
+
+const VIEW_CONTROL_KEYS = ["zoom", "rotation", "spread", "scrollMode", "tool"] as const;
+
 /**
- * Imperative controller and read-only diagnostics of one `<PdfViewer>`
- * viewport (`useViewer()`, `useCreateViewer()`, `<PdfViewer ref={...}>`).
- * Reactive view state is read in React through `useViewState()`, and view
- * persistence goes through `<PdfViewer onViewStateChange>`.
+ * Imperative controller of one `<PdfViewer>` viewport (`useViewer()`,
+ * `useCreateViewer()`, `<PdfViewer ref={...}>`). Reactive view state is read in
+ * React through `useViewState()`, and view persistence goes through
+ * `<PdfViewer onViewStateChange>`.
  */
 export interface Viewer {
   /** The viewer's current `ViewerState` snapshot; subscribe in React with `useViewState()`. */
@@ -133,18 +183,6 @@ export interface Viewer {
   readonly content: HTMLElement | null;
   /** How external links open in this viewer (`"new-tab"` or `"disabled"`). */
   readonly externalLinks: "new-tab" | "disabled";
-
-  /** Render counters for the current document. */
-  readonly stats: RenderStats | null;
-  /** Pixels of the canvases kept from pages that left the mounted window (`maxKeptPixels`). */
-  readonly keptPixels: number;
-  /** `performance.now()` when the first page first showed pixels, or null. */
-  readonly firstPaintAt: number | null;
-  hasPixels(index: number): boolean;
-  /** Fraction of the viewport covered by pages that show no pixels yet. */
-  blankFraction(): number;
-  /** Resolution of visible pages' pixels as a share of full device resolution (0 to 1). */
-  sharpness(): number;
 
   goToPage(index: number): void;
   nextPage(): void;
@@ -166,8 +204,6 @@ export interface Viewer {
     rect: { x: number; y: number; width: number; height: number },
   ): void;
   pointAt(point: { clientX: number; clientY: number }): PdfPagePoint | null;
-  position(): ViewerPosition | null;
-  restorePosition(entry: ViewerPosition): void;
 }
 
 const controllers = new WeakSet<ViewerController>();
@@ -440,11 +476,136 @@ export class ViewerController implements Viewer {
     });
   }
 
+  /** Show each controlled value the viewer does not currently show. */
+  applyControlled(controlled: Partial<ControlledViewValues>): void {
+    const state = this.store.get();
+    const shown = viewValuesOf(state);
+    const { zoom, rotation, spread, scrollMode, tool } = controlled;
+    if (spread !== undefined && spread !== shown.spread) this.setSpread(spread);
+    if (scrollMode !== undefined && scrollMode !== shown.scrollMode) {
+      this.setScrollMode(scrollMode);
+    }
+    if (rotation !== undefined && rotation !== shown.rotation) this.setRotation(rotation);
+    if (tool !== undefined && tool !== shown.tool) this.setTool(tool);
+    // A zoom needs pages to zoom; the first layout takes it as the initial one.
+    if (zoom !== undefined && zoom !== shown.zoom && state.layout) this.setScale(zoom);
+  }
+
+  /**
+   * Bind a `<PdfViewer>`'s live options, controlled view props, and change
+   * callbacks without echoing controlled updates or re-rendering the viewport.
+   */
+  bindControls(onDiverge: () => void): ViewerControlBinding {
+    let currentControlled: Partial<ControlledViewValues> = {};
+    let currentCallbacks: ViewControlCallbacks = {};
+    let reported: ControlledViewValues | null = null;
+    let page = this.store.get().currentPage;
+    let laidOut = this.store.get().layout !== null;
+    let inSync = false;
+
+    const unsubscribeStore = this.store.subscribe(() => {
+      const state = this.store.get();
+      const view = viewValuesOf(state);
+      const last = reported ?? view;
+      if (inSync) {
+        for (const key of VIEW_CONTROL_KEYS) {
+          if (currentControlled[key] !== undefined || Object.is(view[key], last[key])) continue;
+          (currentCallbacks[key] as ((value: unknown) => void) | undefined)?.(view[key]);
+        }
+        reported = {
+          ...view,
+          ...(state.layout === null && currentControlled.zoom !== undefined
+            ? { zoom: currentControlled.zoom }
+            : {}),
+        };
+        if (state.currentPage !== page) {
+          page = state.currentPage;
+          currentCallbacks.page?.(page);
+        }
+        laidOut = state.layout !== null;
+        return;
+      }
+      // The first layout of a document may come after a controlled value changed.
+      let differs =
+        !laidOut &&
+        state.layout !== null &&
+        VIEW_CONTROL_KEYS.some(
+          (key) =>
+            currentControlled[key] !== undefined && !Object.is(view[key], currentControlled[key]),
+        );
+      laidOut = state.layout !== null;
+      for (const key of VIEW_CONTROL_KEYS) {
+        if (Object.is(view[key], last[key])) continue;
+        (currentCallbacks[key] as ((value: unknown) => void) | undefined)?.(view[key]);
+        if (
+          currentControlled[key] !== undefined &&
+          !Object.is(view[key], currentControlled[key]) &&
+          (key !== "zoom" || state.layout !== null)
+        ) {
+          differs = true;
+        }
+      }
+      reported = view;
+      if (state.currentPage !== page) {
+        page = state.currentPage;
+        currentCallbacks.page?.(page);
+      }
+      if (differs) onDiverge();
+    });
+
+    const unsubscribeViewState = this.onViewStateChange((view) => {
+      currentCallbacks.viewState?.(view);
+    });
+    const onPageHide = () => this.flushViewState();
+    const hasWindowEvents =
+      typeof window !== "undefined" && typeof window.addEventListener === "function";
+    if (hasWindowEvents) window.addEventListener("pagehide", onPageHide);
+
+    return {
+      sync: (options, controlled, callbacks) => {
+        currentControlled = controlled;
+        currentCallbacks = callbacks;
+        const before = this.store.get();
+        reported = {
+          ...(reported ?? viewValuesOf(before)),
+          ...controlled,
+        };
+        inSync = true;
+        try {
+          this.batchView(() => {
+            this.configure(options);
+            this.applyControlled(controlled);
+          });
+        } finally {
+          inSync = false;
+        }
+        const after = this.store.get();
+        reported = {
+          ...viewValuesOf(after),
+          ...(after.layout === null && controlled.zoom !== undefined
+            ? { zoom: controlled.zoom }
+            : {}),
+        };
+      },
+      disconnect: () => {
+        if (hasWindowEvents && typeof window.removeEventListener === "function") {
+          window.removeEventListener("pagehide", onPageHide);
+        }
+        unsubscribeViewState();
+        unsubscribeStore();
+      },
+    };
+  }
+
   /** The view a document opens with, before its opening applies. */
   #resetView(): void {
     const options = this.#options;
     this.store.set({
       currentPage: 0,
+      scale:
+        typeof this.#initialScale === "number"
+          ? clamp(this.#initialScale, this.#minScale, this.#maxScale)
+          : 1,
       zoomMode: this.#initialZoomMode(),
       rotation: options.initialRotation ?? 0,
       spread: options.initialSpread ?? "none",
@@ -690,6 +851,7 @@ export class ViewerController implements Viewer {
     connection?.abort();
     // An attached viewport says where the reader is; one that detached left it.
     if (connection && this.#scroller && this.store.get().layout) {
+      this.flushViewState();
       shown.savedPosition = this.position();
     }
     // Features let go of the document while its pages are still there,
@@ -729,6 +891,68 @@ export class ViewerController implements Viewer {
     if (!pdf) return;
     shown.work = linked(pdf.signal, this.#viewportControl.signal);
     const { signal } = shown.work;
+    const warm = this.#scroller ? pdf.openDocument() : null;
+    if (
+      !signal.aborted &&
+      warm &&
+      warm.knownPageSizes !== null &&
+      warm.knownPermissions !== undefined &&
+      warm.knownDirection !== undefined
+    ) {
+      this.#prepareFingerprints(shown, warm);
+      const opening = shown.savedPosition ? undefined : this.#options.opening;
+      let syncView: Opening | null | Promise<Opening | null> = null;
+      if (opening) {
+        try {
+          syncView = opening(warm);
+        } catch (error: unknown) {
+          console.error("reading the initial view failed", error);
+          syncView = null;
+        }
+      }
+      if (!(syncView instanceof Promise)) {
+        this.#showReady(
+          shown,
+          warm,
+          warm.knownPageSizes,
+          warm.knownPermissions,
+          warm.knownDirection,
+          syncView,
+          signal,
+        );
+        return;
+      }
+      void syncView
+        .catch((error: unknown) => {
+          console.error("reading the initial view failed", error);
+          return null;
+        })
+        .then((view) => {
+          if (
+            signal.aborted ||
+            !warm.knownPageSizes ||
+            warm.knownPermissions === undefined ||
+            warm.knownDirection === undefined
+          ) {
+            return;
+          }
+          this.#showReady(
+            shown,
+            warm,
+            warm.knownPageSizes,
+            warm.knownPermissions,
+            warm.knownDirection,
+            view,
+            signal,
+          );
+        })
+        .catch((error: unknown) => {
+          if (!signal.aborted && pdf.state.status === "ready") {
+            console.error("showing the document failed", error);
+          }
+        });
+      return;
+    }
     this.#load(shown, pdf, signal).catch((error: unknown) => {
       // A document that fails to open says so in its session's state.
       if (!signal.aborted && pdf.state.status === "ready") {
@@ -745,6 +969,28 @@ export class ViewerController implements Viewer {
   async #load(shown: Showing, pdf: PdfSessionController, signal: AbortSignal): Promise<void> {
     const session = await pdf.document();
     signal.throwIfAborted();
+    this.#prepareFingerprints(shown, session);
+    const opening = shown.savedPosition ? undefined : this.#options.opening;
+    // Fetched beside the first page's size: features read the permissions
+    // before the pages are drawn, and the first layout follows the opening.
+    const [sizes, permissions, direction, view] = await Promise.all([
+      session.pageSizes(),
+      session.permissions().catch(() => null),
+      session.direction().catch(() => null),
+      opening
+        ? Promise.resolve()
+            .then(() => opening(session))
+            .catch((error: unknown) => {
+              console.error("reading the initial view failed", error);
+              return null;
+            })
+        : null,
+    ]);
+    signal.throwIfAborted();
+    this.#showReady(shown, session, sizes, permissions, direction, view, signal);
+  }
+
+  #prepareFingerprints(shown: Showing, session: DocumentSession): void {
     const previous = shown.fingerprints;
     const ids = session.proxy.fingerprints;
     if (previous && (previous[0] !== ids[0] || previous[1] !== ids[1])) {
@@ -759,31 +1005,31 @@ export class ViewerController implements Viewer {
       this.#resetView();
     }
     shown.fingerprints = ids;
-    const opening = shown.savedPosition ? undefined : this.#options.opening;
-    // Fetched beside the first page's size: features read the permissions
-    // before the pages are drawn, and the first layout follows the opening.
-    const [sizes, permissions, direction, view] = await Promise.all([
-      session.pageSizes(),
-      session.permissions().catch(() => null),
-      session.direction().catch(() => null),
-      opening
-        ? opening(session).catch((error: unknown) => {
-            console.error("reading the initial view failed", error);
-            return null;
-          })
-        : null,
-    ]);
-    signal.throwIfAborted();
+  }
+
+  #showReady(
+    shown: Showing,
+    session: DocumentSession,
+    sizes: readonly PageSize[],
+    permissions: DocumentPermissions | null,
+    direction: Direction | null,
+    view: Opening | null,
+    signal: AbortSignal,
+  ): void {
+    if (signal.aborted) return;
     shown.session = session;
     shown.permissions = permissions;
     shown.direction = direction;
     // Every page has the first one's size until the background pass knows better.
     this.#sizes = [...sizes];
     this.#extensions.prepare(session, signal);
-    signal.throwIfAborted();
+    if (signal.aborted) return;
+    const loadedLayers = session.loadedLayers;
+    if (loadedLayers) shown.layers = loadedLayers;
     let painted = false;
     const renderer = new Renderer(session, {
       ...rendererOptions(this.#options),
+      ...(loadedLayers ? { layers: loadedLayers } : {}),
       links: this.#links,
       annotationSetup: this.#annotationSetup,
       selection: this.#selection,
@@ -854,17 +1100,21 @@ export class ViewerController implements Viewer {
     // default ones, which they start with: nothing is drawn again, unless
     // another viewer of the session changed them already. Changes any viewer
     // of the session makes are drawn in every one.
-    this.#background(
-      session.layers().then((layers) => {
-        if (signal.aborted) return;
-        shown.layers = layers;
-        renderer.setLayers(layers);
-        layers.subscribe(this.#onLayersChange, signal);
-        if (layers.changed) this.#onLayersChange();
-      }),
-      "loading layers",
-      signal,
-    );
+    if (loadedLayers) {
+      loadedLayers.subscribe(this.#onLayersChange, signal);
+    } else {
+      this.#background(
+        session.layers().then((layers) => {
+          if (signal.aborted) return;
+          shown.layers = layers;
+          renderer.setLayers(layers);
+          layers.subscribe(this.#onLayersChange, signal);
+          if (layers.changed) this.#onLayersChange();
+        }),
+        "loading layers",
+        signal,
+      );
+    }
   }
 
   /** A viewer of the document showed or hid layers: pages are drawn again. */
@@ -902,11 +1152,9 @@ export class ViewerController implements Viewer {
     const control = this.#viewportControl;
     this.#scroller = scroller;
     this.#content = content;
-    if (resuming && this.#shown) {
+    if (resuming && this.#shown && !this.#shown.savedPosition) {
       // React can reuse a hidden viewport's DOM after its source changed.
-      if (!this.#shown.savedPosition) scroller.scrollTo(0, 0);
-      // A viewer that let the document go shows it once it is opened again.
-      if (this.#shown.connection) this.#start(this.#shown);
+      scroller.scrollTo(0, 0);
     }
     this.#shown?.renderer?.setKeeping(true);
     const layout = this.store.get().layout;
@@ -924,6 +1172,10 @@ export class ViewerController implements Viewer {
     const unfollow = this.#followFocus();
     this.#requestUpdate();
     this.#extensions.viewport(scroller, content, control.signal);
+    if (resuming && this.#shown?.connection) {
+      // A viewer that let the document go shows it once it is opened again.
+      this.#start(this.#shown);
+    }
     let detached = false;
     return () => {
       if (detached) return;

@@ -72,7 +72,7 @@ export interface ViewerOptions {
    * initial view feature makes it from `initialView` and `initialViewState`.
    * A viewport that reattaches returns to where it was instead.
    */
-  opening?: (session: DocumentSession) => Promise<Opening | null>;
+  opening?: (session: DocumentSession) => Opening | null | Promise<Opening | null>;
   /**
    * Whether links and the outline take the zoom their destination asks for
    * (default true), as in pdf.js: a factor, the page's width or height, the

@@ -301,8 +301,13 @@ export class DocumentSession {
   readonly #outputs = new Set<(event: OutputEvent) => Promise<void>>();
   /** What hears the document's content change, such as form values; see `invalidateContent()`. */
   readonly #contentListeners = new Set<() => void>();
+  /** Initial uniform page-size array once page 1's size is known, before `measurePages()` finishes. */
+  #firstSizes: readonly PageSize[] | null = null;
   /** Every page's size, once the background pass has learned them. */
   #sizes: readonly PageSize[] | null = null;
+  #knownPermissions: DocumentPermissions | undefined = undefined;
+  #knownInitialView: PdfInitialView | undefined = undefined;
+  #knownDirection: "ltr" | "rtl" | null | undefined = undefined;
   /** Which layers show, once read. */
   #loadedLayers: LayerState | null = null;
 
@@ -432,9 +437,31 @@ export class DocumentSession {
    * every page until `measurePages()` has learned the others.
    */
   async pageSizes(): Promise<readonly PageSize[]> {
-    if (this.#sizes) return this.#sizes;
+    if (this.knownPageSizes) return this.knownPageSizes;
     const first = await this.pageSize(0);
-    return this.#sizes ?? Array.from({ length: this.pageCount }, () => first);
+    if (this.#sizes) return this.#sizes;
+    this.#firstSizes ??= Array.from({ length: this.pageCount }, () => first);
+    return this.#firstSizes;
+  }
+
+  /** Synchronously known page sizes (`pageSizes()` or `measurePages()`), or null before page 1 is read. */
+  get knownPageSizes(): readonly PageSize[] | null {
+    return this.#sizes ?? this.#firstSizes;
+  }
+
+  /** Synchronously known document permissions once `permissions()` has resolved. */
+  get knownPermissions(): DocumentPermissions | undefined {
+    return this.#knownPermissions;
+  }
+
+  /** Synchronously known initial view once `initialView()` has resolved. */
+  get knownInitialView(): PdfInitialView | undefined {
+    return this.#knownInitialView;
+  }
+
+  /** Synchronously known reading direction once `direction()` has resolved. */
+  get knownDirection(): "ltr" | "rtl" | null | undefined {
+    return this.#knownDirection;
   }
 
   /**
@@ -522,7 +549,9 @@ export class DocumentSession {
         fillForms: has(flag.FILL_INTERACTIVE_FORMS),
         assemble: has(flag.ASSEMBLE),
       };
-      return { restricted: Object.values(permissions).includes(false), ...permissions };
+      const resolved = { restricted: Object.values(permissions).includes(false), ...permissions };
+      this.#knownPermissions = resolved;
+      return resolved;
     });
   }
 
@@ -535,13 +564,15 @@ export class DocumentSession {
         this.proxy.getPageMode(),
       ]);
       const dest = openAction?.get("dest");
-      return {
+      const resolved: PdfInitialView = {
         destination: dest
           ? await resolveExplicit(this.proxy, (index) => this.page(index), dest).catch(() => null)
           : null,
         pageLayout: PAGE_LAYOUTS.has(pageLayout) ? (pageLayout as PdfPageLayout) : null,
         pageMode: PAGE_MODES.has(pageMode) ? (pageMode as PdfPageMode) : null,
       };
+      this.#knownInitialView = resolved;
+      return resolved;
     });
   }
 
@@ -551,7 +582,9 @@ export class DocumentSession {
       // pdf.js gives the preferences there are as a Map, or null.
       const preferences = (await this.proxy.getViewerPreferences()) as Map<string, unknown> | null;
       const direction = preferences?.get("Direction");
-      return direction === "R2L" ? "rtl" : direction === "L2R" ? "ltr" : null;
+      const resolved = direction === "R2L" ? "rtl" : direction === "L2R" ? "ltr" : null;
+      this.#knownDirection = resolved;
+      return resolved;
     });
   }
 

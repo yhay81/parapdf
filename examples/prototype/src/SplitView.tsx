@@ -12,10 +12,10 @@ import {
 import { useRef, useState } from "react";
 import {
   type AnnotationEditing,
+  annotationEditingOf,
   controllerOf,
   type Search,
   searchOf,
-  useAnnotationEditing,
   type ViewerController,
 } from "./internals.ts";
 import { type DemoFeatures, ViewerFeatures } from "./ViewerFeatures.tsx";
@@ -107,14 +107,18 @@ function Pane({
   features: DemoFeatures;
 }) {
   const viewer = useViewer();
+  const controller = controllerOf(viewer);
   const { currentPage: page, scale, layout } = useViewState();
   const shown = layout !== null;
   const { status } = useDocumentState();
   const [visible, setVisible] = useState(true);
-  const annotations = useAnnotationEditing();
   // For the checks; a closed pane's viewer stays for the lifecycle probe.
-  probes().searches[index] = searchOf(controllerOf(viewer));
-  probes().annotations[index] = annotations;
+  probes().searches[index] = searchOf(controller);
+  Object.defineProperty(probes().annotations, index, {
+    get: () => annotationEditingOf(controller),
+    configurable: true,
+    enumerable: true,
+  });
   return (
     <>
       <div className="split-bar">

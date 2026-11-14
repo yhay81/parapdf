@@ -26,15 +26,22 @@ export interface SearchState {
   pagesSearched: number;
 }
 
-/** Whole-document search in one viewer, with its matches highlighted on the mounted pages. */
-export interface Search {
-  readonly store: ReadableStore<SearchState>;
+export interface SearchControls extends SearchState {
   /**
    * Search from the current page, wrapping at the end. The first match is
    * selected and scrolled into view. Each update lists matches in document
    * order and preserves the selection. By default case and diacritics are
    * ignored and matches may be parts of words.
    */
+  search(query: string, options?: SearchOptions): void;
+  next(): void;
+  previous(): void;
+  clear(): void;
+}
+
+/** Whole-document search in one viewer, with its matches highlighted on the mounted pages. */
+export interface Search {
+  readonly store: ReadableStore<SearchControls>;
   search(query: string, options?: SearchOptions): void;
   next(): void;
   previous(): void;
@@ -100,10 +107,68 @@ export function pageIndex(
 
 /** Search `viewer`'s document; `detach()` undoes it. */
 export function attachSearch(viewer: ViewerController): Search {
-  const store = new Store<SearchState>(IDLE_SEARCH);
   const highlights = new SearchHighlights();
   /** Stops the search in progress. */
   let control: AbortController | null = null;
+
+  const stop = () => {
+    control?.abort();
+    control = null;
+    highlights.clear();
+  };
+
+  const search = (query: string, options: SearchOptions = {}) => {
+    // A new search stops the one in progress.
+    stop();
+    const normalized = normalizeQuery(query, options);
+    const session = viewer.session;
+    const work = viewer.workSignal;
+    if (!normalized || !session || !work || work.aborted) {
+      store.set({ ...IDLE_SEARCH, query, options });
+      return;
+    }
+    // Clearing the search stops it, and so does closing the document.
+    const searching = linked(work);
+    control = searching;
+    const { signal } = searching;
+    store.set({
+      query,
+      options,
+      status: "searching",
+      matches: [],
+      current: -1,
+      pagesSearched: 0,
+    });
+    run(session, normalized, options, signal).catch((error: unknown) => {
+      if (signal.aborted) return;
+      console.error("search failed", error);
+      store.set({ status: "done" });
+    });
+  };
+
+  const next = () => {
+    const { matches, current } = store.get();
+    if (matches.length > 0) selectMatch((current + 1) % matches.length);
+  };
+
+  const previous = () => {
+    const { matches, current } = store.get();
+    // From the first match or none, the last.
+    if (matches.length > 0) selectMatch(current > 0 ? current - 1 : matches.length - 1);
+  };
+
+  const clear = () => {
+    stop();
+    store.set(IDLE_SEARCH);
+  };
+
+  const store = new Store<SearchControls>({
+    ...IDLE_SEARCH,
+    search,
+    next,
+    previous,
+    clear,
+  });
 
   /** Scrolling to a match may outlive its document: it then fails quietly. */
   const background = (work: Promise<unknown>, signal: AbortSignal | null) => {
@@ -193,12 +258,6 @@ export function attachSearch(viewer: ViewerController): Search {
     publish("done", session.pageCount);
   };
 
-  const stop = () => {
-    control?.abort();
-    control = null;
-    highlights.clear();
-  };
-
   const detachExtension = viewer.extend({
     ready(_session, signal) {
       // Letting go of the document or detaching the viewport stops the search.
@@ -224,47 +283,10 @@ export function attachSearch(viewer: ViewerController): Search {
 
   return {
     store,
-    search(query, options = {}) {
-      // A new search stops the one in progress.
-      stop();
-      const normalized = normalizeQuery(query, options);
-      const session = viewer.session;
-      const work = viewer.workSignal;
-      if (!normalized || !session || !work || work.aborted) {
-        store.set({ ...IDLE_SEARCH, query, options });
-        return;
-      }
-      // Clearing the search stops it, and so does closing the document.
-      const searching = linked(work);
-      control = searching;
-      const { signal } = searching;
-      store.set({
-        query,
-        options,
-        status: "searching",
-        matches: [],
-        current: -1,
-        pagesSearched: 0,
-      });
-      run(session, normalized, options, signal).catch((error: unknown) => {
-        if (signal.aborted) return;
-        console.error("search failed", error);
-        store.set({ status: "done" });
-      });
-    },
-    next() {
-      const { matches, current } = store.get();
-      if (matches.length > 0) selectMatch((current + 1) % matches.length);
-    },
-    previous() {
-      const { matches, current } = store.get();
-      // From the first match or none, the last.
-      if (matches.length > 0) selectMatch(current > 0 ? current - 1 : matches.length - 1);
-    },
-    clear() {
-      stop();
-      store.set(IDLE_SEARCH);
-    },
+    search,
+    next,
+    previous,
+    clear,
     detach() {
       stop();
       detachExtension();

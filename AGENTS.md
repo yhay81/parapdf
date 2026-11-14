@@ -76,7 +76,8 @@ that matters for performance or direction gets a decision record.
   holds of it behind the narrow public `PdfSession` interface, which
   applications see (`src/document/`); one
   `ViewerController` per viewport behind the narrow public `Viewer` interface,
-  its options (`options.ts`), layout, scrolling, gestures, keys and the hand
+  its options (`options.ts`), controlled view binding (`viewer.bindControls()`),
+  layout, scrolling, gestures, keys and the hand
   tool (`input.ts`), hot/cold/page-size state (`state.ts`), serializable view snapshots
   (`view-state.ts`, `viewer.viewState()`, `viewer.setViewState()`, and
   `<PdfViewer onViewStateChange>`), the pure rules of its zoom (`zoom.ts`) and

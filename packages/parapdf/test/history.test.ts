@@ -86,10 +86,20 @@ describe("the history feature", () => {
     const history = attachHistory(fake.viewer);
     fake.jump(4);
     fake.jump(9);
-    assert.deepEqual(history.store.get(), { canGoBack: true, canGoForward: false });
+    assert.deepEqual(history.store.get(), {
+      canGoBack: true,
+      canGoForward: false,
+      back: history.back,
+      forward: history.forward,
+    });
     history.back();
     assert.deepEqual(fake.restored, [4]);
-    assert.deepEqual(history.store.get(), { canGoBack: true, canGoForward: true });
+    assert.deepEqual(history.store.get(), {
+      canGoBack: true,
+      canGoForward: true,
+      back: history.back,
+      forward: history.forward,
+    });
     history.forward();
     assert.deepEqual(fake.restored, [4, 9]);
   });
@@ -103,7 +113,12 @@ describe("the history feature", () => {
     history.back();
     history.forward();
     assert.deepEqual(fake.restored, []);
-    assert.deepEqual(history.store.get(), { canGoBack: true, canGoForward: false });
+    assert.deepEqual(history.store.get(), {
+      canGoBack: true,
+      canGoForward: false,
+      back: history.back,
+      forward: history.forward,
+    });
     fake.place(at(9));
     history.back();
     history.back();
@@ -125,7 +140,12 @@ describe("the history feature", () => {
     const history = attachHistory(fake.viewer);
     fake.jump(2);
     fake.hear("closed", true);
-    assert.deepEqual(history.store.get(), { canGoBack: true, canGoForward: false });
+    assert.deepEqual(history.store.get(), {
+      canGoBack: true,
+      canGoForward: false,
+      back: history.back,
+      forward: history.forward,
+    });
     history.back();
     assert.deepEqual(fake.restored, [0]);
   });
@@ -136,7 +156,12 @@ describe("the history feature", () => {
     fake.jump(2);
     fake.hear("closed", true);
     fake.hear("closed", false);
-    assert.deepEqual(history.store.get(), { canGoBack: false, canGoForward: false });
+    assert.deepEqual(history.store.get(), {
+      canGoBack: false,
+      canGoForward: false,
+      back: history.back,
+      forward: history.forward,
+    });
     history.detach();
     assert.equal(fake.extensions.size, 0, "the viewer hears nothing more of it");
     fake.jump(5);

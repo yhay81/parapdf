@@ -84,7 +84,10 @@ Next.js emit the files (`check:bundlers`); other bundlers take a copy of
 once, then the real ones in the background), and the document's data, each
 read once: page labels, outline, metadata, attachments, comments,
 permissions, the initial view, optional content, and the text read for
-search and `getText()`.
+search and `getText()`. Resolved page sizes, permissions, direction, initial
+view, and optional-content layers are also exposed synchronously (`knownPageSizes`,
+`knownPermissions`, `knownDirection`, `knownInitialView`, `loadedLayers`) so a
+viewer joining a warm session lays out without awaiting microtasks.
 
 - A source is a URL (with request headers and credentials), bytes, or a
   `PDFDataRangeTransport`. A URL is identified without its fragment, which
@@ -117,9 +120,12 @@ search and `getText()`.
   for `useOutline()` and the other Suspense hooks settle empty when the read or
   the document fails and while the document waits for a password, to be read
   anew once it is answered. It opens, closes, and releases nothing itself:
-  `PdfDocument` starts its session as it renders, and holds and returns its
-  lease. It follows the registry's session its render started and then the one
-  its provider holds, which is another once the first closed. `PdfDocument`'s
+  `PdfDocument` starts its session as it renders, and mounts a leaf
+  `<SessionLeaseMount>` before its children so `session.connect()`, the owned
+  viewer's `hold()`, password prompt, attachment handler, and URL fragment
+  apply in `useLayoutEffect` before any child effect runs (decision 0041). It
+  follows the registry's session its render started and then the one its
+  provider holds, which is another once the first closed. `PdfDocument`'s
   `onOpenAttachment` sets how embedded files opened from the session are
   handled, while `PdfSessionController` stays free of DOM imports so
   tree-shaking drops unused document actions. `DocumentSession` also publishes
@@ -141,9 +147,15 @@ changed out of every viewer's drawings.
 `ViewerController` (`viewer.ts`) is one viewport onto a session, with its own
 position, zoom, rotation, spreads, scroll mode, direction, and tool; several
 may show one session. Applications see the narrow `Viewer` interface (`state`
-snapshot, `scroller`, `content`, `externalLinks`, navigation/view methods, and
-diagnostic metrics), while `react/` and `features/` resolve the backing
-`ViewerController` through `controllerOf(viewer)` (decision 0038).
+snapshot, `scroller`, `content`, `externalLinks`, and navigation/view methods),
+while `react/` and `features/` resolve the backing `ViewerController` through
+`controllerOf(viewer)` (decisions 0038 and 0041); internal positions
+(`position()`, `restorePosition()`) and diagnostic measures (`stats`,
+`keptPixels`, `firstPaintAt`, `hasPixels()`, `blankFraction()`, `sharpness()`)
+stay on `ViewerController`. `ViewerController.bindControls()` owns live option
+updates, controlled view prop synchronization without callback echoes,
+divergence notification, and `pagehide` / session-stop `ViewState` flushing,
+and `#start()` lays out warm sessions synchronously before `open()` returns.
 
 - `layout.ts`: pure and immutable per zoom (typed arrays, rows, spreads,
   scroll modes, direction). `zoom.ts` and `navigation.ts` hold the pure
@@ -249,9 +261,15 @@ of its own, and detaching it undoes what it added. The core imports no feature.
   functions rather than methods on `PdfSession`, keeping `PdfDocument` free of
   optional feature code while working without a mounted `PdfViewer`. Vanilla-only
   plumbing (`searchOf`, `attachSearch`, `historyOf`, `attachHistory`,
-  `attachThumbnail`, `enforcePermissions`, `useAnnotationEditing`,
+  `attachThumbnail`, `enforcePermissions`, `annotationSlot`,
   `getSelection`, `getViewState`, `setViewState`) stays internal to the package
-  (decision 0035).
+  (decisions 0035 and 0041). Each stateful feature owns its single reactive
+  store or listener registry directly in `features/` (`Store<SearchControls>`,
+  `Store<HistoryControls>`, `annotation-slot.ts`'s `Store<AnnotationControls>`
+  and `bindAnnotationTool()`, `onViewerFormChange()`, and
+  `createPrintController()`), so `react/` subscribes directly without wrapper
+  stores or relay `WeakMap`s while keeping `annotations.ts`, `pdfjs/editor*.ts`,
+  and `forms/layers.ts` in lazy chunks.
 - Form scripts are off by default and load only for a document that has
   some: pdf.js's QuickJS sandbox, one per session, started after the first
   paint (decision 0016), sending pdf.js's viewer's document events around
@@ -260,7 +278,8 @@ of its own, and detaching it undoes what it added. The core imports no feature.
   pdf.js's viewer finds them and added to the annotation layer.
 - The initial view applies `/OpenAction`, `/PageLayout`, `/PageMode`, a
   URL's open parameters (`page`, `zoom`, `nameddest`; decision 0023), and
-  `initialViewState`, once per document.
+  `initialViewState`, once per document, resolving explicit numeric parameters
+  and `initialViewState` synchronously (`resolveDestinationSync`) when warm.
 - Download and save take the whole document or chosen pages, through
   pdf.js's `extractPages()`, with the form values and annotations.
 - Search ports pdf.js's find normalization (`text-search.ts`), CJK
@@ -274,18 +293,19 @@ of its own, and detaching it undoes what it added. The core imports no feature.
 `react/` is the only module that uses React, and every module that touches
 the DOM declares `"use client"`.
 
-- `PdfDocument` opens or joins a session as it renders, holds it in an
-  effect, provides a default `Viewer` through `ViewerContext` (or provides
-  the `viewer` prop given to it), and renders its children at once; nothing
-  suspends before the first page draws. A source with another URL, headers,
-  bytes, transport, or password opens another; a new fragment moves its
-  viewers as a link would.
+- `PdfDocument` opens or joins a session as it renders, holds it in a first-child
+  `<SessionLeaseMount>` `useLayoutEffect`, provides a default `Viewer` through
+  `ViewerContext` (or provides the `viewer` prop given to it), and renders its
+  children at once; nothing suspends before the first page draws. A source with
+  another URL, headers, bytes, transport, or password opens another; a new
+  fragment moves its viewers as a link would.
 - `PdfView` provides an independent `Viewer` scope inside a `PdfDocument`
   so split panes compose the same controls, thumbnails, and `PdfViewer`
   without prop plumbing. `useViewer()` reads the nearest `ViewerContext`;
   `useCreateViewer()` creates a standalone `Viewer` for callers above
-  `PdfDocument` or across panes, and `PdfViewer` and `PdfView` forward a
-  React 19 `ref` to their `Viewer` (decision 0033).
+  `PdfDocument` or across panes (holding it in `useLayoutEffect`), and
+  `PdfViewer` and `PdfView` forward a React 19 `ref` to their `Viewer`
+  (decisions 0033 and 0041).
 - The lifetimes are React's (decision 0032). A render may never mount, as
   under a Suspense boundary that waits or in a transition React abandons,
   so what a render needs of the document starts in the render and is kept
@@ -296,8 +316,9 @@ the DOM declares `"use client"`.
   viewport. What the reader gets back after React hid a tree lives in the
   viewer, which the component's state keeps. During hydration,
   `useDocumentState()` uses the server's opening snapshot before reading
-  the live state. A password submitted by a child's first effect answers
-  the pending request once the provider takes its lease.
+  the live state. Because `<SessionLeaseMount>` takes the provider's lease in
+  `useLayoutEffect` before any child effect runs, a password submitted by a
+  child's first effect answers the held session directly.
 - `PdfViewer` is one viewport. View state (`zoom`, `rotation`, `spread`,
   `scrollMode`, `tool`) is controlled or uncontrolled; the current page is
   reported (`onPageChange`) and set with `viewer.goToPage()`; settled
@@ -305,22 +326,30 @@ the DOM declares `"use client"`.
   or per-frame scroll emissions, flushing pending scrolls on `pagehide` and
   viewport detach (decision 0038). Every other
   prop is a live option: changing it needs no remount, and an option set to
-  its default is the option left out. A child `memo(ViewerPages)` owns the
-  `viewer.store.hot` page-window subscription (`layout`, `first`, `last`), so
-  scrolling across page windows and committing zooms leave `<PdfViewer>`'s
-  option construction, `{children}` reconciliation, and `configure` /
-  controlled-prop layout effects idle (decision 0040). `children` renders
+  its default is the option left out. `<PdfViewer>` separates `<ViewerViewport>`
+  (the scroll container, `{children}`, and `memo(ViewerPages)`) from a sibling
+  leaf `<ViewerControlSync>` (`return null`) that binds options, controlled
+  props, fragment following, and `viewer.open(session)` in `useLayoutEffect` via
+  `viewer.bindControls(reconcile)`: rejected controlled changes re-render only
+  `<ViewerControlSync>`, `memo(ViewerPages)` subscribes to `viewer.store.hot` in
+  `useLayoutEffect` (`usePageWindow`) so warm sessions flush `<PdfPage>` hosts
+  and canvases synchronously before the first browser paint, and each
+  `memo(PdfPage)` registers its `<section>` host with a React 19 ref cleanup
+  callback rather than a per-page `useLayoutEffect` (decisions 0040 and 0041).
+  `children` renders
   inside the viewport container so declarative feature components (`PdfForms`,
   `PdfAnnotationEditor`, `PdfAutoLinks`, `PdfPermissions`) mount synchronously
   with `useLayoutEffect` before the browser paints, without async layout
   deferrals. `PdfAnnotationEditor` renders its `<style
   precedence="parapdf">` directly, controls or initializes the active tool
-  (`tool`, `defaultTool`, `onToolChange`), and preserves kept snapshots when
+  (`tool`, `defaultTool`, `onToolChange`) in `useLayoutEffect` via
+  `bindAnnotationTool()`, and preserves kept snapshots when
   hidden with its viewport (`<Activity>` or unmounting `PdfViewer`) while
-  detaching immediately when removed from an attached viewport (decision
-  0034). Cleanup waits until the commit finishes so a sibling editor can
-  mount after the viewport and reclaim its kept annotations. `useAnnotations()` returns a non-null, getter-tracked
-  `AnnotationControls` object whose action methods stay referentially stable.
+  detaching immediately when removed from an attached viewport (decisions
+  0034 and 0041). Cleanup waits until the commit finishes so a sibling editor can
+  mount after the viewport and reclaim its kept annotations. `useAnnotations()`
+  subscribes directly to `annotationSlot(viewer)`'s `Store<AnnotationControls>`,
+  whose action methods stay referentially stable.
   `PdfPageOverlay` (single-page, RSC-compatible plain `children`) and
   `PdfPageOverlays` (evaluated inside each page's `memo(PdfPage)` so mounted
   pages stay memoized as the window shifts) render through portals into a
@@ -339,8 +368,10 @@ the DOM declares `"use client"`.
   and zoom previews imperatively without per-frame React state commits;
   `useSelection()` also provides a virtual `selection.anchor` for external
   popover libraries. `preloadDocument(source)` starts loading pdf.js,
-  preloading `source`'s URL, and opening `source` in the shared registry ahead
-  of `PdfDocument` mounting.
+  preloading `source`'s URL, and warming `source`'s initial page dimensions,
+  permissions, direction, and initial view in the shared registry ahead of
+  `PdfDocument` mounting so `PdfViewer` lays out synchronously before the first
+  paint.
 - `PdfThumbnails` and `PdfThumbnail` draw the viewer's document at a lower
   priority, reading unrotated page dimensions from `viewer.store.sizes` outside
   `viewer.store.hot` (decision 0040). `PdfThumbnails` virtualizes its `<ol>` window over a prefix-sum

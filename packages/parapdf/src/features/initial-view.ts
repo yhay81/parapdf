@@ -4,7 +4,11 @@
 
 import type { DocumentSession, PdfInitialView, PdfPageLayout } from "../document/session.ts";
 import type { ReadableStore } from "../document/store.ts";
-import type { Destination, ResolvedDestination } from "../pdfjs/destinations.ts";
+import {
+  type Destination,
+  type ResolvedDestination,
+  resolveDestinationSync,
+} from "../pdfjs/destinations.ts";
 import type { ScrollMode, SpreadMode } from "../view/layout.ts";
 import type { Opening, ViewerOptions } from "../view/options.ts";
 import { linked } from "../view/signals.ts";
@@ -100,6 +104,19 @@ async function firstResolved(
   for (const dest of destinations) {
     const target = await session.resolveDestination(dest).catch(() => null);
     if (target && target.pageIndex >= 0 && target.pageIndex < session.pageCount) return target;
+  }
+  return null;
+}
+
+/** Synchronous fast path when no destination requires named or page-viewport lookup. */
+function firstResolvedSync(
+  pageCount: number,
+  destinations: readonly Destination[],
+): ResolvedDestination | null | undefined {
+  for (const dest of destinations) {
+    const target = resolveDestinationSync(pageCount, dest);
+    if (target === undefined) return undefined;
+    if (target && target.pageIndex >= 0 && target.pageIndex < pageCount) return target;
   }
   return null;
 }
@@ -240,21 +257,32 @@ export function initialViewOpening(
   if (options.initialView !== "document" && !options.initialViewState && !fragment) {
     return undefined;
   }
-  return async (session: DocumentSession) => {
-    const view =
-      options.initialView === "document"
-        ? await session.initialView().catch((error: unknown) => {
-            console.error("reading the initial view failed", error);
-            return null;
-          })
-        : null;
+  return (session: DocumentSession) => {
+    if (options.initialView === "document" && session.knownInitialView === undefined) {
+      return (async () => {
+        const view = await session.initialView().catch((error: unknown) => {
+          console.error("reading the initial view failed", error);
+          return null;
+        });
+        const page = options.initialPage ?? view?.destination?.pageIndex ?? 0;
+        const destinations = fragment ? fragmentDestinations(fragment(), page) : [];
+        const linked = destinations.length > 0 ? await firstResolved(session, destinations) : null;
+        return openingOf(view, session.pageCount, options, linked);
+      })();
+    }
+    const view = options.initialView === "document" ? (session.knownInitialView ?? null) : null;
     // A zoom without a page applies to the page the document opens at otherwise.
     const page =
       options.initialPage ??
       (options.initialView === "document" ? view?.destination?.pageIndex : undefined) ??
       0;
     const destinations = fragment ? fragmentDestinations(fragment(), page) : [];
-    const linked = destinations.length > 0 ? await firstResolved(session, destinations) : null;
-    return openingOf(view, session.pageCount, options, linked);
+    const syncLinked = firstResolvedSync(session.pageCount, destinations);
+    if (syncLinked !== undefined) {
+      return openingOf(view, session.pageCount, options, syncLinked);
+    }
+    return firstResolved(session, destinations).then((linked) =>
+      openingOf(view, session.pageCount, options, linked),
+    );
   };
 }

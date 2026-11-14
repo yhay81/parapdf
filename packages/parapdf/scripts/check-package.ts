@@ -292,6 +292,22 @@ function Toolbar() {
   void viewer.renderer;
   // @ts-expect-error Viewer hides internal session
   void viewer.session;
+  // @ts-expect-error Viewer hides benchmark/diagnostic metrics
+  void viewer.stats;
+  // @ts-expect-error Viewer hides benchmark/diagnostic metrics
+  void viewer.keptPixels;
+  // @ts-expect-error Viewer hides benchmark/diagnostic metrics
+  void viewer.firstPaintAt;
+  // @ts-expect-error Viewer hides benchmark/diagnostic metrics
+  void viewer.hasPixels;
+  // @ts-expect-error Viewer hides benchmark/diagnostic metrics
+  void viewer.blankFraction;
+  // @ts-expect-error Viewer hides benchmark/diagnostic metrics
+  void viewer.sharpness;
+  // @ts-expect-error Viewer hides internal position helpers in favor of viewState()
+  void viewer.position;
+  // @ts-expect-error Viewer hides internal position helpers in favor of setViewState()
+  void viewer.restorePosition;
   // @ts-expect-error PdfSession hides internal stateStore
   void session.stateStore;
   // @ts-expect-error PdfSession.state is a synchronous snapshot, not a store

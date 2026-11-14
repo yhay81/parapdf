@@ -27,7 +27,17 @@ export function preloadDocumentWith(
   const [url] = "url" in resolved ? splitFragment(resolved.url) : [""];
   const stripped: PdfSource =
     "url" in resolved && resolved.url !== url ? { ...resolved, url } : resolved;
-  sharedSession(pdfjs, stripped);
+  const shared = sharedSession(pdfjs, stripped);
+  void shared.session.then(
+    (doc) => {
+      if (shared.signal.aborted) return;
+      void doc.pageSizes().catch(() => {});
+      void doc.permissions().catch(() => {});
+      void doc.direction().catch(() => {});
+      void doc.initialView().catch(() => {});
+    },
+    () => {},
+  );
 }
 
 /**

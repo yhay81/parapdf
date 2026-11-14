@@ -1378,10 +1378,34 @@ try {
       undefined,
       { timeout: 15_000 },
     );
+    // Let preloadDocument()'s worker startup and warm metadata reads settle.
+    await page.waitForTimeout(500);
     const opensBeforeMount = await page.evaluate(() => window.__lifecycle?.stats.opens ?? 0);
-    await page.evaluate(() => {
-      window.__lifecycle?.mount();
-    });
+    const firstFrame = await page.evaluate(
+      () =>
+        new Promise<{
+          laidOut: boolean;
+          pageIndex: number;
+          pagesMounted: number;
+          hasCanvas: boolean;
+        }>((resolve) => {
+          // MutationObserver runs as a microtask at the end of React's mount commit task,
+          // strictly before the browser paints that commit.
+          const observer = new MutationObserver(() => {
+            if (!document.querySelector(".parapdf-viewport")) return;
+            observer.disconnect();
+            const state = window.__viewer?.store.get();
+            resolve({
+              laidOut: state?.layout !== null && state?.layout !== undefined,
+              pageIndex: state?.currentPage ?? -1,
+              pagesMounted: document.querySelectorAll("section[data-page]").length,
+              hasCanvas: document.querySelector(".parapdf-pages canvas") !== null,
+            });
+          });
+          observer.observe(document.body, { childList: true, subtree: true });
+          window.__lifecycle?.mount();
+        }),
+    );
     await page.waitForFunction(() => window.__session?.state.status === "ready", undefined, {
       timeout: 15_000,
     });
@@ -1403,6 +1427,11 @@ try {
         joined.stats.destroys === 0 &&
         (launched.name === "webkit" || launched.name === "safari" || joined.downloads === 1),
       JSON.stringify({ opensBeforeMount, ...joined }),
+    );
+    check(
+      "mounting onto a preloaded document lays out pages and canvases before the first frame",
+      firstFrame.laidOut && firstFrame.pagesMounted > 0 && firstFrame.hasCanvas,
+      JSON.stringify(firstFrame),
     );
     check(
       "no errors with preloadDocument()",

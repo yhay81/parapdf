@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { type Viewer, ViewerController } from "../view/viewer.ts";
 import { useOptionalViewer } from "./context.ts";
 
@@ -26,6 +26,6 @@ export function useCreateViewer(): Viewer {
   // React cleans up alike for a component it hides and for one it removes,
   // and says nothing more of one it removes while hidden: the viewer lets go
   // of the document, and what it keeps goes with the component's state.
-  useEffect(() => viewer.hold(), [viewer]);
+  useLayoutEffect(() => viewer.hold(), [viewer]);
   return viewer;
 }

@@ -9,7 +9,7 @@ import {
   type Viewer,
 } from "parapdf";
 import { Activity, type ReactNode, Suspense, useEffect, useState, useTransition } from "react";
-import { controllerOf, searchOf, useAnnotationEditing } from "./internals.ts";
+import { annotationEditingOf, controllerOf, searchOf } from "./internals.ts";
 import { type DemoFeatures, ViewerFeatures } from "./ViewerFeatures.tsx";
 
 declare global {
@@ -103,7 +103,10 @@ function Probes() {
   window.__viewer = viewer;
   window.__session = useSession();
   window.__search = searchOf(viewer);
-  window.__annotations = useAnnotationEditing();
+  Object.defineProperty(window, "__annotations", {
+    get: () => annotationEditingOf(viewer),
+    configurable: true,
+  });
   return null;
 }
 

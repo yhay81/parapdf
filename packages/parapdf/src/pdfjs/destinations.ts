@@ -34,23 +34,18 @@ export type DestinationView =
   | { fit: "height" }
   | { fit: "rect"; width: number; height: number };
 
-/** An explicit destination's page, point, and view (PDF 32000-1, 12.3.2.2); null if it is not one. */
-export async function resolveExplicit(
-  doc: Pdfjs.PDFDocumentProxy,
-  getPage: (pageIndex: number) => Promise<Pdfjs.PDFPageProxy>,
-  explicit: unknown,
-): Promise<ResolvedDestination | null> {
-  if (!Array.isArray(explicit)) return null;
-  const [target, mode, ...args] = explicit as [unknown, { name?: string }?, ...unknown[]];
-  let pageIndex: number;
-  if (Number.isInteger(target)) pageIndex = target as number;
-  else if (target && typeof target === "object") {
-    pageIndex = await doc.getPageIndex(target as Parameters<typeof doc.getPageIndex>[0]);
-  } else return null;
-  // A page not in the document is nowhere, as in pdf.js's viewer.
-  if (pageIndex < 0 || pageIndex >= doc.numPages) return null;
+interface ExplicitCoordinates {
+  left: number | null;
+  top: number | null;
+  view: DestinationView | undefined;
+  corner: [number, number] | null;
+}
+
+function parseExplicitCoordinates(
+  mode: { name?: string } | undefined,
+  args: readonly unknown[],
+): ExplicitCoordinates {
   const num = (value: unknown) => (typeof value === "number" ? value : null);
-  // [left, top] in PDF user space, and the view asked for.
   let left: number | null = null;
   let top: number | null = null;
   let view: DestinationView | undefined;
@@ -88,6 +83,46 @@ export async function resolveExplicit(
       break;
     }
   }
+  return { left, top, view, corner };
+}
+
+/**
+ * Resolve `dest` synchronously when it names a numeric page without page-space
+ * coordinates (such as `#page=3` or `#zoom=page-fit`); returns `undefined` when
+ * named-destination or page-viewport resolution is required.
+ */
+export function resolveDestinationSync(
+  pageCount: number,
+  dest: Destination,
+): ResolvedDestination | null | undefined {
+  if (typeof dest === "string") return undefined;
+  if (!Array.isArray(dest)) return null;
+  const [target, mode, ...args] = dest as [unknown, { name?: string }?, ...unknown[]];
+  if (!Number.isInteger(target)) return target && typeof target === "object" ? undefined : null;
+  const pageIndex = target as number;
+  if (pageIndex < 0 || pageIndex >= pageCount) return null;
+  const { left, top, view } = parseExplicitCoordinates(mode, args);
+  if (left !== null || top !== null) return undefined;
+  return view ? { pageIndex, x: null, y: null, view } : { pageIndex, x: null, y: null };
+}
+
+/** An explicit destination's page, point, and view (PDF 32000-1, 12.3.2.2); null if it is not one. */
+export async function resolveExplicit(
+  doc: Pdfjs.PDFDocumentProxy,
+  getPage: (pageIndex: number) => Promise<Pdfjs.PDFPageProxy>,
+  explicit: unknown,
+): Promise<ResolvedDestination | null> {
+  if (!Array.isArray(explicit)) return null;
+  const [target, mode, ...args] = explicit as [unknown, { name?: string }?, ...unknown[]];
+  let pageIndex: number;
+  if (Number.isInteger(target)) pageIndex = target as number;
+  else if (target && typeof target === "object") {
+    pageIndex = await doc.getPageIndex(target as Parameters<typeof doc.getPageIndex>[0]);
+  } else return null;
+  // A page not in the document is nowhere, as in pdf.js's viewer.
+  if (pageIndex < 0 || pageIndex >= doc.numPages) return null;
+  const { left, top, view: parsedView, corner } = parseExplicitCoordinates(mode, args);
+  let view = parsedView;
   const resolved = (x: number | null, y: number | null): ResolvedDestination =>
     view ? { pageIndex, x, y, view } : { pageIndex, x, y };
   if (left === null && top === null) return resolved(null, null);

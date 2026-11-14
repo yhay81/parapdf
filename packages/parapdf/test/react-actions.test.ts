@@ -9,6 +9,7 @@ import { getFormFields, setFormValues } from "../src/features/forms/index.ts";
 import { historyOf } from "../src/features/history.ts";
 import { setLayerVisible } from "../src/features/layers.ts";
 import { enforcePermissions } from "../src/features/permissions.ts";
+import { createPrintController, type PrintState } from "../src/features/print/index.ts";
 import { searchOf } from "../src/features/search/index.ts";
 import {
   activeTracked,
@@ -17,10 +18,10 @@ import {
   SessionContext,
   ViewerContext,
 } from "../src/react/context.ts";
-import { historyControlsStore, useHistory } from "../src/react/history.ts";
-import { createPrintController, type PrintState, usePrint } from "../src/react/print.ts";
+import { useHistory } from "../src/react/history.ts";
+import { usePrint } from "../src/react/print.ts";
 import { useSave } from "../src/react/save.ts";
-import { searchControlsStore, useSearch } from "../src/react/search.ts";
+import { useSearch } from "../src/react/search.ts";
 import { ViewerController } from "../src/view/viewer.ts";
 import { fakeDocument, fakePdfjs, LETTER, settle, show } from "./fake-pdfjs.ts";
 
@@ -172,6 +173,8 @@ describe("public React-first surface (decision 0035)", () => {
       "setViewState",
       "ViewerExtension",
       "Opening",
+      "RenderStats",
+      "ViewerPosition",
     ];
     for (const name of removed) {
       assert.equal(specifiers.has(name), false, `${name} should not be exported`);
@@ -516,7 +519,7 @@ describe("useSave, usePrint, useSearch, and useHistory", () => {
     const { close } = show(viewer, { url: "/search.pdf" }, fakePdfjs(async () => doc.proxy).loader);
     await settle();
 
-    const searchStore = searchControlsStore(searchOf(viewer));
+    const searchStore = searchOf(viewer).store;
     const initialSearch = searchStore.get();
     const actionOnlySnap = createTrackedSnapshot(initialSearch);
     const { search, next, previous, clear } = actionOnlySnap.proxy;
@@ -539,7 +542,7 @@ describe("useSave, usePrint, useSearch, and useHistory", () => {
       false,
     );
 
-    const historyStore = historyControlsStore(historyOf(viewer));
+    const historyStore = historyOf(viewer).store;
     const initialHistory = historyStore.get();
     const historyActionSnap = createTrackedSnapshot(initialHistory);
     const { back, forward } = historyActionSnap.proxy;

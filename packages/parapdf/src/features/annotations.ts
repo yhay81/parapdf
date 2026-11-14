@@ -18,9 +18,15 @@ import { linked } from "../view/signals.ts";
 import type { ViewerController } from "../view/viewer.ts";
 import { onEnforcementChange, permits } from "./permissions.ts";
 
+export interface AnnotationEditingStoreWriter extends ReadableStore<AnnotationEditingStore> {
+  set(patch: Partial<AnnotationEditingStore>): void;
+}
+
 export interface AnnotationEditingOptions {
   /** The accessible names of the editor's controls, by default in English. */
   labels?: Partial<AnnotationLabels>;
+  /** Shared reactive store (such as `AnnotationSlot.store`) to write directly into. */
+  store?: AnnotationEditingStoreWriter;
 }
 
 export interface AnnotationEditingStore {
@@ -166,7 +172,8 @@ export function attachAnnotationEditing(
   options: AnnotationEditingOptions = {},
 ): AnnotationEditing {
   let labels = { ...ANNOTATION_LABELS, ...options.labels };
-  const store = new Store<AnnotationEditingStore>(STOPPED);
+  const store: AnnotationEditingStoreWriter =
+    options.store ?? new Store<AnnotationEditingStore>(STOPPED);
   /** Edits the open document's annotations once the document and the viewport are there. */
   let editor: AnnotationEditor | null = null;
   /**

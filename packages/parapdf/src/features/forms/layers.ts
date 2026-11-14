@@ -3,17 +3,10 @@
 import type { DocumentSession } from "../../document/session.ts";
 import type { ViewerController } from "../../view/viewer.ts";
 import { onEnforcementChange, permits } from "../permissions.ts";
-import type { FormChange } from "./fields.ts";
-import { formsOf } from "./index.ts";
+import { formsOf, hasViewerFormListeners, notifyViewerFormChange } from "./index.ts";
 
 /** Form fields the reader fills in on `viewer`'s pages (`forms`). */
 export interface FormLayers {
-  /**
-   * Call `listener` with each value the reader enters into a form field, as
-   * they type; returns the function that stops it. `setFormValues()` does
-   * not call it.
-   */
-  onFormChange(listener: (change: FormChange) => void): () => void;
   /**
    * Run the document's scripts in the fields, or stop running them
    * (`formScripts`): calculations, validation, formatting, and actions.
@@ -30,21 +23,20 @@ export interface FormLayers {
  * again.
  */
 export function attachFormLayers(viewer: ViewerController, { scripts = false } = {}): FormLayers {
-  const listeners = new Set<(change: FormChange) => void>();
   let open: { session: DocumentSession; signal: AbortSignal } | null = null;
   /** The session whose scripts the fields run, and how to stop, once they do. */
   let scripting: { session: DocumentSession; leave: (() => void) | null } | null = null;
   /** Whether the open document's pages showed pixels, which the scripts wait for. */
   let painted = false;
 
-  /** Tell the listeners the new value of the field `id`. */
+  /** Tell the viewer's listeners the new value of the field `id`. */
   const report = (session: DocumentSession, signal: AbortSignal, id: string): void => {
     formsOf(session)
       .formChange(id)
       .then(
         (change) => {
           if (!change || signal.aborted) return;
-          for (const listener of listeners) listener(change);
+          notifyViewerFormChange(viewer, change);
         },
         (error: unknown) => console.error("reading a form change failed", error),
       );
@@ -73,7 +65,9 @@ export function attachFormLayers(viewer: ViewerController, { scripts = false } =
           const joined = module.joinScripting(session, {
             viewer,
             changed: (id) => {
-              if (open?.session === session) report(session, open.signal, id);
+              if (open?.session === session && hasViewerFormListeners(viewer)) {
+                report(session, open.signal, id);
+              }
             },
           });
           current.leave = joined.leave;
@@ -97,7 +91,12 @@ export function attachFormLayers(viewer: ViewerController, { scripts = false } =
    */
   const onInput = (event: Event): void => {
     const target = event.target;
-    if (!open || open.signal.aborted || listeners.size === 0 || !(target instanceof Element)) {
+    if (
+      !open ||
+      open.signal.aborted ||
+      !hasViewerFormListeners(viewer) ||
+      !(target instanceof Element)
+    ) {
       return;
     }
     const { signal } = open;
@@ -135,12 +134,6 @@ export function attachFormLayers(viewer: ViewerController, { scripts = false } =
   });
 
   return {
-    onFormChange(listener) {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
     setScripts(next) {
       scripts = next;
       if (next) startScripts();
@@ -150,7 +143,6 @@ export function attachFormLayers(viewer: ViewerController, { scripts = false } =
       unsubscribePermissions();
       stopScripts();
       detachExtension();
-      listeners.clear();
       viewer.content?.removeEventListener("input", onInput);
       viewer.content?.removeEventListener("change", onInput);
       viewer.setFormLayers(false);

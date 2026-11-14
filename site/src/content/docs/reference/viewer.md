@@ -58,8 +58,6 @@ its callback and returns to its value unless you take the change up (see
 | `setViewState(view)` | Shows a `Partial<ViewState>` again; fields left out stay as they are, and values out of range are clamped or ignored. |
 | `revealRect(pageIndex, rect)` | Scrolls so that `rect` (`x`, `y`, `width`, `height` in PDF points from the page's unturned top-left corner) sits in the upper third of the viewport; the page becomes current. Search shows its matches this way. |
 | `pointAt(point)` | Maps a client coordinate (`{ clientX, clientY }`, such as a `MouseEvent` or `PointerEvent`) to `{ pageIndex, x, y }` in unturned PDF points from the page's top-left corner (`PdfPageRect`'s coordinates); returns `null` when outside the viewport or in the space between or beside pages. |
-| `position()` | Where the viewer shows its document, as `{ pageIndex, x, y, current, scale, zoomMode }`: the page at the viewport's top-left corner and where that corner is as a share of the page, which survive zoom changes, with the current page and zoom; null without a layout. |
-| `restorePosition(position)` | Shows a `position()` again, with its zoom; a fitted zoom fits the viewport as it is now. |
 
 Back and forward are the history's: [`useHistory()`](/guides/navigation/).
 Search, printing, saving, text, and the rest are hooks and functions (see
@@ -72,14 +70,3 @@ Search, printing, saving, text, and the rest are hooks and functions (see
 | `state` | The current `ViewerState` snapshot, for synchronous reads in event handlers and effects (use [`useViewState()`](/reference/state/#view-state) to re-render when it changes). |
 | `scroller`, `content` | The scroll container and the element that holds the pages, while a viewport is attached. |
 | `externalLinks` | `"new-tab"` or `"disabled"`, as `PdfViewer` set it (live across `PdfOutline`, `PdfAutoLinks`, and annotation layers). |
-
-## Measuring
-
-| Member | |
-|---|---|
-| `stats` | Render counters for the current document: `base`, `detail`, `trimmed` (canvases cleared to stay within `maxCanvasPixels`), `kept` (layers shown again from kept canvases), and the DOM layers built. |
-| `keptPixels` | Pixels of the canvases kept from pages that left the mounted window (`maxKeptPixels`). |
-| `firstPaintAt` | `performance.now()` when the first page first showed pixels, or null. |
-| `hasPixels(index)` | Whether a page shows pixels. |
-| `blankFraction()` | The share of the viewport covered by pages that show no pixels yet. |
-| `sharpness()` | The resolution of the visible pages' pixels as a share of full device resolution, weighted by visible area: 1 is sharp everywhere, 0 blank. |

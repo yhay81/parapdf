@@ -47,6 +47,7 @@ it. A new choice gets a new record, numbered next.
 | [0038](0038-react-viewer-surface.md) | Narrow React-only Viewer interface and settled onViewStateChange | adopted |
 | [0039](0039-react-pdf-session.md) | Narrow React-only PdfSession interface and drop duplicate promise readers | adopted |
 | [0040](0040-isolated-viewer-commits.md) | Isolated PdfViewer page-window commits, per-page overlay activation, and cold page-size store | adopted |
+| [0041](0041-tighten-react-runtime.md) | Warm-mount synchronous layout, controller-owned React synchronization, unified feature stores, and narrower Viewer | adopted |
 
 ## Template
 

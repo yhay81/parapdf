@@ -6,6 +6,28 @@ change the API.
 
 ## Unreleased
 
+- Tighten React-to-controller coupling, warm-mount synchronous layout, and the
+  public `Viewer` surface:
+  - **Breaking:** Removed internal diagnostic metrics (`stats`, `keptPixels`,
+    `firstPaintAt`, `hasPixels()`, `blankFraction()`, `sharpness()`) and
+    low-level jump positions (`position()`, `restorePosition()`) from the public
+    `Viewer` interface, and removed `RenderStats` and `ViewerPosition` from
+    `parapdf` exports. Use `viewer.viewState()`, `viewer.setViewState()`, and
+    `<PdfViewer onViewStateChange>` for serializable view persistence, and
+    `useHistory()` for link and outline history.
+  - Connect `<PdfDocument>`, `<PdfView>`, `useCreateViewer()`, `<PdfViewer>`,
+    and `<PdfAnnotationEditor>` in `useLayoutEffect`; warm initial page
+    dimensions, permissions, direction, and initial view in `preloadDocument()`;
+    and resolve warm openings (including numeric `#page=` / `#zoom=` fragments
+    and `initialViewState`) synchronously so `<PdfViewer>` lays out pages and
+    mounts canvases before the first browser paint.
+  - Attach `<PdfPage>` hosts via React 19 ref cleanup callbacks, isolate
+    `<PdfViewer>` controlled-prop reconciliation into a leaf
+    `<ViewerControlSync>` sibling backed by `ViewerController.bindControls()`,
+    and unify `useSearch()`, `useHistory()`, `useAnnotations()`, `<PdfForms>`,
+    and `usePrint()` onto single feature-owned stores and controllers without
+    duplicate store wrappers or relay `WeakMap`s.
+
 - Isolate `<PdfViewer>` page-window and zoom commits inside a memoized page-list
   boundary so `<PdfViewer>` option setup, `{children}` subtrees, and
   `configure` / controlled-prop layout effects stay idle while scrolling or

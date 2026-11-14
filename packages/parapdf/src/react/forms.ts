@@ -2,26 +2,9 @@
 
 import { use, useEffect, useEffectEvent } from "react";
 import type { FormChange, FormField } from "../features/forms/fields.ts";
-import { initialFormFields } from "../features/forms/index.ts";
-import type { Viewer, ViewerController } from "../view/viewer.ts";
+import { initialFormFields, onViewerFormChange } from "../features/forms/index.ts";
+import type { Viewer } from "../view/viewer.ts";
 import { useOptionalViewer, useSessionData } from "./context.ts";
-
-const formListeners = new WeakMap<ViewerController, Set<(change: FormChange) => void>>();
-
-function listenersFor(viewer: ViewerController): Set<(change: FormChange) => void> {
-  let set = formListeners.get(viewer);
-  if (!set) {
-    set = new Set();
-    formListeners.set(viewer, set);
-  }
-  return set;
-}
-
-export function notifyFormChange(viewer: ViewerController, change: FormChange): void {
-  const set = formListeners.get(viewer);
-  if (!set) return;
-  for (const listener of set) listener(change);
-}
 
 /**
  * Call `listener` with each value the reader enters into a form field in
@@ -31,14 +14,7 @@ export function notifyFormChange(viewer: ViewerController, change: FormChange): 
 export function useFormChange(listener: (change: FormChange) => void, viewer?: Viewer): void {
   const resolved = useOptionalViewer(viewer);
   const onChange = useEffectEvent(listener);
-  useEffect(() => {
-    const set = listenersFor(resolved);
-    const handler = (change: FormChange) => onChange(change);
-    set.add(handler);
-    return () => {
-      set.delete(handler);
-    };
-  }, [resolved]);
+  useEffect(() => onViewerFormChange(resolved, (change) => onChange(change)), [resolved]);
 }
 
 /**

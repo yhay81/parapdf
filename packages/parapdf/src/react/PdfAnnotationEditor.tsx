@@ -1,10 +1,14 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useReducer, useRef } from "react";
+import { useLayoutEffect, useReducer, useRef } from "react";
+import {
+  type AnnotationToolBinding,
+  annotationSlot,
+  bindAnnotationTool,
+} from "../features/annotation-slot.ts";
 import { attachAnnotationEditing } from "../features/annotations.ts";
 import type { AnnotationLabels, AnnotationTool } from "../pdfjs/editor-types.ts";
 import type { Viewer } from "../view/viewer.ts";
-import { type AnnotationToolBinding, annotationSlot, bindAnnotationTool } from "./annotations.ts";
 import { useOptionalViewer } from "./context.ts";
 import { EDITOR_CSS } from "./editor-styles.ts";
 
@@ -56,20 +60,19 @@ export function PdfAnnotationEditor({
   useLayoutEffect(() => slot.mount(attachAnnotationEditing, initialLabels.current), [slot]);
 
   useLayoutEffect(() => {
-    slot.updateLabels(labels);
-    bindingRef.current = { tool, defaultTool, onToolChange };
-    controllerRef.current?.applyControlled(tool);
-  });
-
-  useEffect(() => {
     const controller = bindAnnotationTool(viewer, slot, () => bindingRef.current, reconcile);
     controllerRef.current = controller;
-    controller.applyControlled(bindingRef.current.tool);
     return () => {
       controllerRef.current = null;
       controller.disconnect();
     };
   }, [slot, viewer]);
+
+  useLayoutEffect(() => {
+    slot.updateLabels(labels);
+    bindingRef.current = { tool, defaultTool, onToolChange };
+    controllerRef.current?.applyControlled(tool);
+  });
 
   return (
     <style href="parapdf-editor" precedence="parapdf">

@@ -4,12 +4,41 @@ import {
   sessionControllerOf,
 } from "../../document/pdf-session.ts";
 import type { DocumentSession } from "../../document/session.ts";
-import { createFormAccess, type FormField, type FormValue } from "./fields.ts";
+import type { ViewerController } from "../../view/viewer.ts";
+import { createFormAccess, type FormChange, type FormField, type FormValue } from "./fields.ts";
 
 export type { FormChange, FormField, FormFieldType, FormValue } from "./fields.ts";
 
 /** Each session's form fields, read once for every viewer of it. */
 const access = new WeakMap<DocumentSession, ReturnType<typeof createFormAccess>>();
+
+/** Listeners subscribed to form field edits per viewer (`<PdfForms onChange>`, `useFormChange()`). */
+const viewerListeners = new WeakMap<ViewerController, Set<(change: FormChange) => void>>();
+
+export function onViewerFormChange(
+  viewer: ViewerController,
+  listener: (change: FormChange) => void,
+): () => void {
+  let set = viewerListeners.get(viewer);
+  if (!set) {
+    set = new Set();
+    viewerListeners.set(viewer, set);
+  }
+  set.add(listener);
+  return () => {
+    set.delete(listener);
+  };
+}
+
+export function hasViewerFormListeners(viewer: ViewerController): boolean {
+  return (viewerListeners.get(viewer)?.size ?? 0) > 0;
+}
+
+export function notifyViewerFormChange(viewer: ViewerController, change: FormChange): void {
+  const set = viewerListeners.get(viewer);
+  if (!set) return;
+  for (const listener of [...set]) listener(change);
+}
 
 /** The form fields of `session`, read and set through pdf.js's annotation storage. */
 export function formsOf(session: DocumentSession): ReturnType<typeof createFormAccess> {

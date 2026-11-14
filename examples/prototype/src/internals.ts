@@ -7,11 +7,11 @@
 import { PdfSessionController } from "../../../packages/parapdf/src/document/pdf-session.ts";
 import type { PdfjsLoader } from "../../../packages/parapdf/src/document/registry.ts";
 import type { PdfSource } from "../../../packages/parapdf/src/document/session.ts";
+import { annotationSlot } from "../../../packages/parapdf/src/features/annotation-slot.ts";
 import type { AnnotationEditing } from "../../../packages/parapdf/src/features/annotations.ts";
 import { type History, historyOf } from "../../../packages/parapdf/src/features/history.ts";
 import { type Search, searchOf } from "../../../packages/parapdf/src/features/search/index.ts";
 import { getSelection } from "../../../packages/parapdf/src/features/selection.ts";
-import { useAnnotationEditing } from "../../../packages/parapdf/src/react/annotations.ts";
 import { controllerOf, type ViewerController } from "../../../packages/parapdf/src/view/viewer.ts";
 
 export {
@@ -22,9 +22,13 @@ export {
   historyOf,
   type Search,
   searchOf,
-  useAnnotationEditing,
   type ViewerController,
 };
+
+/** Current `AnnotationEditing` instance attached to `viewer`, or null when unmounted. */
+export function annotationEditingOf(viewer: ViewerController): AnnotationEditing | null {
+  return annotationSlot(viewer).editing;
+}
 
 /** Bind `viewer` to `scroller` and `content`, for `check-options.ts`. */
 export function attachViewport(

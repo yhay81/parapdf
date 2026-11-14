@@ -9,7 +9,7 @@ import { getText } from "../src/features/text/index.ts";
 import type { Rotation } from "../src/pdfjs/draw.ts";
 import type { ViewerOptions } from "../src/view/options.ts";
 import type { ViewState } from "../src/view/view-state.ts";
-import { ViewerController } from "../src/view/viewer.ts";
+import { ViewerController, type Zoom } from "../src/view/viewer.ts";
 import {
   askPassword,
   fakeDocument,
@@ -827,23 +827,24 @@ describe("a viewer's viewport", () => {
 
   /**
    * A provider's session, its viewer, and the viewer's owner as React
-   * mounts them: the viewport's layout effect, then the passive ones, a
-   * child's before its parent's. The returned `hide` destroys them in that
-   * order, as React does when it hides the tree or unmounts it.
+   * mounts them in layout effects: `<SessionLeaseMount>`, then
+   * `<ViewerViewport>`, then `<ViewerControlSync>`. The returned `hide`
+   * destroys them in that order, as React does when it hides or unmounts
+   * the tree.
    */
   function mount(
     viewer: ViewerController,
     scroller: Scroller,
     session: PdfSessionController,
   ): () => void {
-    const detach = attach(viewer, scroller);
-    viewer.open(session);
     const releaseSession = session.connect();
     const releaseViewer = viewer.hold();
+    const detach = attach(viewer, scroller);
+    viewer.open(session);
     const hide = () => {
-      detach();
       releaseSession();
       releaseViewer();
+      detach();
     };
     release.push(hide);
     return hide;
@@ -1090,5 +1091,126 @@ describe("a viewer's viewport", () => {
     detach();
     assert.equal(heard.length, 5, "detaching the viewport flushes the unsettled scroll");
     unsubscribe();
+  });
+
+  it("lays out a warm session synchronously before open() returns, including fragments and initialViewState", async () => {
+    const { loader } = fivePages();
+    const warmup = new PdfSessionController({ url: "/warm.pdf" }, { pdfjs: loader });
+    const releaseWarmup = warmup.connect();
+    const doc = await warmup.document();
+    await Promise.all([doc.pageSizes(), doc.permissions(), doc.direction(), doc.initialView()]);
+
+    // 1. Default warm open + numeric #page= & #zoom= fragment resolves in zero microtasks.
+    const session = new PdfSessionController(
+      { url: "/warm.pdf#page=4&zoom=150" },
+      { pdfjs: loader },
+    );
+    session.start();
+    const viewer = new ViewerController({
+      opening: initialViewOpening({ fragment: () => session.fragment.get().fragment }),
+    });
+    const scroller = new Scroller();
+    mount(viewer, scroller, session);
+
+    const state = viewer.store.get();
+    assert.ok(state.layout, "layout is ready synchronously before any microtask");
+    assert.ok(viewer.renderer, "renderer is created synchronously");
+    assert.equal(state.currentPage, 3);
+    // 150% printed size = 1.5 * (96 / 72) = 2 CSS pixels per PDF point.
+    assert.equal(state.scale, 2);
+    assert.ok(state.last >= state.first);
+
+    // 2. Warm open with initialViewState places the view synchronously without microtasks.
+    const restored = new PdfSessionController({ url: "/warm.pdf" }, { pdfjs: loader });
+    restored.start();
+    const secondViewer = new ViewerController({
+      opening: initialViewOpening({
+        initialViewState: {
+          page: 2,
+          x: 0,
+          y: 96,
+          scale: 2,
+          rotation: 0,
+          spread: "none",
+          scrollMode: "vertical",
+        },
+      }),
+    });
+    const secondScroller = new Scroller();
+    mount(secondViewer, secondScroller, restored);
+    assert.ok(secondViewer.store.get().layout);
+    assert.equal(secondViewer.store.get().currentPage, 2);
+    assert.equal(secondViewer.store.get().scale, 2);
+    assert.equal(secondViewer.store.get().rotation, 0);
+    assert.equal(secondViewer.viewState()?.y, 96);
+
+    releaseWarmup();
+  });
+
+  it("binds controlled view props without echoing callbacks, reconciles rejected values, and flushes on stop", async (context) => {
+    let now = 1000;
+    context.mock.method(performance, "now", () => now);
+    const { loader } = fivePages();
+    const session = new PdfSessionController({ url: "/controlled.pdf" }, { pdfjs: loader });
+    const viewer = new ViewerController();
+    const scroller = new Scroller();
+    let diverges = 0;
+    const zoomed: Zoom[] = [];
+    const pages: number[] = [];
+    const viewStates: ViewState[] = [];
+    const binding = viewer.bindControls(() => {
+      diverges++;
+    });
+    release.push(() => binding.disconnect());
+
+    const releaseSession = session.connect();
+    const releaseViewer = viewer.hold();
+    attach(viewer, scroller);
+    const callbacks = {
+      zoom: (value: Zoom) => void zoomed.push(value),
+      page: (value: number) => void pages.push(value),
+      viewState: (value: ViewState) => void viewStates.push(value),
+    };
+    binding.sync(
+      { maxScale: 3, initialScale: 5, initialRotation: 90 },
+      { zoom: 5, rotation: 90 },
+      callbacks,
+    );
+    viewer.open(session);
+    await settle();
+
+    // Clamping zoom=5 against maxScale=3 on initial open reports 3 once and notifies divergence once.
+    assert.equal(viewer.store.get().scale, 3);
+    assert.equal(viewer.store.get().rotation, 90);
+    assert.deepEqual(zoomed, [3]);
+    assert.equal(diverges, 1, "clamped controlled zoom on initial layout notifies divergence");
+
+    // Re-syncing the same clamped prop inside sync() does not echo or re-trigger onDiverge in a loop.
+    binding.sync(
+      { maxScale: 3, initialScale: 5, initialRotation: 90 },
+      { zoom: 5, rotation: 90 },
+      callbacks,
+    );
+    assert.deepEqual(zoomed, [3]);
+    assert.equal(diverges, 1, "clamping inside sync() never loops onDiverge");
+
+    // Imperative viewer change while controlled notifies onZoomChange and onDiverge so React can reconcile.
+    viewer.setScale(2);
+    assert.deepEqual(zoomed, [3, 2]);
+    assert.equal(diverges, 2);
+
+    // Unsettled scroll flushes through bindControls when the session stops before viewport detach.
+    const statesBeforeScroll = viewStates.length;
+    now += 16;
+    scroller.scrollTop += 60;
+    scroller.dispatchEvent(new Event("scroll"));
+    assert.equal(viewStates.length, statesBeforeScroll);
+    releaseSession();
+    releaseViewer();
+    assert.equal(
+      viewStates.length,
+      statesBeforeScroll + 1,
+      "stopping the session flushes unsettled ViewState",
+    );
   });
 });

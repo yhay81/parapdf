@@ -122,13 +122,8 @@ export class PdfSessionController implements PdfSession {
   /** The session of the next hold, for what asks while the provider holds none. */
   #held!: Promise<SharedSession>;
   #resolveHeld!: (shared: SharedSession) => void;
-  /** What was read before it followed a session, which the first hold settles. */
-  readonly #early = new Map<string, Promise<unknown>>();
   /** Whether a password request shows as such, or as the error pdf.js gives without one. */
   #prompt: boolean;
-  /** Accept an answer from a descendant's mount effect before the provider's first hold. */
-  #beforeFirstHold = true;
-  #earlyAnswer: (() => void) | null = null;
   /** Optional handler `<PdfDocument onOpenAttachment>` sets for embedded files. */
   #openAttachment: AttachmentHandler | undefined;
   /** Where its URL's fragment says to open, which changes without opening the document again. */
@@ -203,11 +198,7 @@ export class PdfSessionController implements PdfSession {
   }
 
   submitPassword(password: string | null): void {
-    if (this.#lease) this.#lease.submitPassword(password);
-    else if (this.#beforeFirstHold) {
-      const request = this.#shared?.passwordRequest;
-      if (request) this.#earlyAnswer = () => request.answer(password);
-    }
+    this.#lease?.submitPassword(password);
   }
 
   /**
@@ -239,9 +230,6 @@ export class PdfSessionController implements PdfSession {
     this.#lease = lease;
     // The session its render started, or another when that one closed or
     // failed meanwhile: its state and what is read from it follow.
-    this.#beforeFirstHold = false;
-    if (this.#shared === lease.shared) this.#earlyAnswer?.();
-    this.#earlyAnswer = null;
     this.#follow(lease.shared);
     this.#resolveHeld(lease.shared);
     let released = false;
@@ -273,10 +261,7 @@ export class PdfSessionController implements PdfSession {
    * waiting for a password, failed, or after its provider released it.
    */
   openDocument(): DocumentSession | null {
-    const active =
-      this.#lease !== null ||
-      (this.#beforeFirstHold && this.#shared !== null && !this.#shared.signal.aborted);
-    if (!active || this.state.status !== "ready") return null;
+    if (!this.#lease || this.state.status !== "ready") return null;
     return this.#shared?.document ?? null;
   }
 
@@ -298,13 +283,8 @@ export class PdfSessionController implements PdfSession {
    * document opened again; what is read after that waits for it.
    */
   read<T>(what: string, read: (session: DocumentSession) => Promise<T>, fallback: T): Promise<T> {
-    if (this.#shared) return this.#shared.read(what, read, fallback);
-    let reading = this.#early.get(what) as Promise<T> | undefined;
-    if (!reading) {
-      reading = this.#held.then((shared) => shared.read(what, read, fallback));
-      this.#early.set(what, reading);
-    }
-    return reading;
+    this.start();
+    return (this.#shared as SharedSession).read(what, read, fallback);
   }
 
   /**

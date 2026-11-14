@@ -160,34 +160,17 @@ describe("a PdfSession", () => {
     assert.equal(staying.state.status, "ready");
   });
 
-  it("accepts the password from a mounted child before its provider's effect", async () => {
+  it("accepts the password once connected, as <SessionLeaseMount> connects before child effects", async () => {
     const { loader } = lockedPdfjs();
     const session = new PdfSessionController({ url: "/locked.pdf" }, { pdfjs: loader });
     session.start();
     assert.equal(await readPageLabels(session), null, "the Suspense boundary now commits");
     assert.equal(session.state.status, "password");
-    session.submitPassword("secret");
     close.push(session.connect());
+    session.submitPassword("secret");
     await settle();
     assert.equal(session.state.status, "ready");
     assert.deepEqual(await readPageLabels(session), ["i"]);
-  });
-
-  it("only applies a child's early answer to the request the child saw", async () => {
-    const { loader } = lockedPdfjs();
-    const first = provide({ url: "/locked.pdf" }, loader);
-    await settle();
-    const later = new PdfSessionController(first.source, { pdfjs: loader });
-    later.start();
-    later.submitPassword("secret");
-    first.submitPassword("wrong");
-    await settle();
-    close.push(later.connect());
-    await settle();
-    assert.equal(later.state.passwordReason, "incorrect");
-    later.submitPassword("secret");
-    await settle();
-    assert.equal(later.state.status, "ready");
   });
 
   it("ignores a password typed after the provider let go, even once it holds again", async () => {

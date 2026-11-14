@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, type Ref, useEffect, useImperativeHandle, useState } from "react";
+import { type ReactNode, type Ref, useImperativeHandle, useLayoutEffect, useState } from "react";
 import { controllerOf, type Viewer, ViewerController } from "../view/viewer.ts";
 import { ViewerContext } from "./context.ts";
 
@@ -29,7 +29,7 @@ export function PdfView({ viewer: externalViewer, ref, children }: PdfViewProps)
     activeViewer = new ViewerController();
     setOwnViewer(activeViewer);
   }
-  useEffect(
+  useLayoutEffect(
     () => (externalViewer || !ownViewer ? undefined : ownViewer.hold()),
     [externalViewer, ownViewer],
   );

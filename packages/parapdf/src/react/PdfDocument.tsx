@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useEffect, useLayoutEffect, useState } from "react";
+import { type ReactNode, useLayoutEffect, useState } from "react";
 import { type AttachmentHandler, PdfSessionController } from "../document/pdf-session.ts";
 import { sourceKey, splitFragment } from "../document/registry.ts";
 import type { PdfSource } from "../document/session.ts";
@@ -102,24 +102,49 @@ export function PdfDocument({
   // provider still waits for them, and neither mounts the provider before
   // they do. The server opens no document.
   if (typeof window !== "undefined") session.start();
+  const fragment = "url" in resolved ? splitFragment(resolved.url)[1] : "";
+  return (
+    <SessionContext value={session}>
+      <SessionLeaseMount
+        session={session}
+        ownViewer={externalViewer ? null : ownViewer}
+        passwordPrompt={passwordPrompt}
+        onOpenAttachment={onOpenAttachment}
+        fragment={fragment}
+      />
+      <ViewerContext value={activeViewer}>{children}</ViewerContext>
+    </SessionContext>
+  );
+}
+
+/**
+ * Leaf sibling placed before `<PdfDocument>`'s children so `session.connect()`
+ * and `ownViewer.hold()` run in `useLayoutEffect` before any descendant's
+ * layout or passive effects (`<PdfViewer>`, `submitPassword`, session actions).
+ */
+function SessionLeaseMount({
+  session,
+  ownViewer,
+  passwordPrompt,
+  onOpenAttachment,
+  fragment,
+}: {
+  session: PdfSessionController;
+  ownViewer: ViewerController | null;
+  passwordPrompt: boolean;
+  onOpenAttachment: AttachmentHandler | undefined;
+  fragment: string;
+}): null {
   // The session is held while the provider is mounted and shown. StrictMode's
   // mount-unmount-mount cycle and quick remounts reuse the open document
   // instead of opening it again, and a provider React rendered but never
   // mounted leaves its document to close (document/registry.ts).
-  useEffect(() => session.connect(), [session]);
-  useEffect(
-    () => (externalViewer || !ownViewer ? undefined : ownViewer.hold()),
-    [externalViewer, ownViewer],
-  );
+  useLayoutEffect(() => session.connect(), [session]);
+  useLayoutEffect(() => ownViewer?.hold(), [ownViewer]);
   // The prompt changes what the session shows, not the document.
-  useEffect(() => session.setPasswordPrompt(passwordPrompt), [session, passwordPrompt]);
+  useLayoutEffect(() => session.setPasswordPrompt(passwordPrompt), [session, passwordPrompt]);
   useLayoutEffect(() => session.setOpenAttachment(onOpenAttachment), [session, onOpenAttachment]);
   // A new fragment moves the viewers where it points, as a link would.
-  const fragment = "url" in resolved ? splitFragment(resolved.url)[1] : "";
-  useEffect(() => session.setFragment(fragment), [session, fragment]);
-  return (
-    <SessionContext value={session}>
-      <ViewerContext value={activeViewer}>{children}</ViewerContext>
-    </SessionContext>
-  );
+  useLayoutEffect(() => session.setFragment(fragment), [session, fragment]);
+  return null;
 }
