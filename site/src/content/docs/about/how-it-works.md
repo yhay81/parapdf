@@ -90,8 +90,9 @@ are called from the viewer's own store subscription, so they cost React
 nothing unless the application sets state in them.
 
 Pixels never go through React. React renders each mounted page's host, a
-`<section>`, and the application's overlay, through a portal into a layer
-of that host; everything else in it is the renderer's.
+`<section>`, and any active overlay layer (`PdfPageOverlays` inline inside
+`PdfPage`, `PdfPageOverlay` portaled into that layer); everything else in it is
+the renderer's.
 
 ## Rendering: a planner and a renderer
 

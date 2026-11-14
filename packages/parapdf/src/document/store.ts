@@ -1,7 +1,10 @@
+/** Listener notified when a store publishes; receives changed keys when known. */
+export type StoreListener = (changedKeys?: ReadonlySet<PropertyKey>) => void;
+
 /** An immutable snapshot and its subscriptions, without a public writer. */
 export interface ReadableStore<T> {
   get(): T;
-  subscribe(listener: () => void): () => void;
+  subscribe(listener: StoreListener): () => void;
 }
 
 /**
@@ -10,7 +13,8 @@ export interface ReadableStore<T> {
  */
 export class Store<T extends object> implements ReadableStore<T> {
   #value: T;
-  readonly #listeners = new Set<() => void>();
+  readonly #listeners = new Set<StoreListener>();
+  readonly #pendingKeys = new Set<PropertyKey>();
 
   constructor(value: T) {
     this.#value = value;
@@ -18,7 +22,7 @@ export class Store<T extends object> implements ReadableStore<T> {
 
   get = (): T => this.#value;
 
-  subscribe = (listener: () => void): (() => void) => {
+  subscribe = (listener: StoreListener): (() => void) => {
     this.#listeners.add(listener);
     return () => {
       this.#listeners.delete(listener);
@@ -27,14 +31,27 @@ export class Store<T extends object> implements ReadableStore<T> {
 
   /** Install all related snapshots before notifying any of their readers. */
   update(patch: Partial<T>): boolean {
-    const keys = Object.keys(patch) as (keyof T)[];
-    if (!keys.some((key) => !Object.is(this.#value[key], patch[key]))) return false;
+    let changed = false;
+    for (const key of Object.keys(patch) as (keyof T)[]) {
+      if (!Object.is(this.#value[key], patch[key])) {
+        this.#pendingKeys.add(key);
+        changed = true;
+      }
+    }
+    if (!changed) return false;
     this.#value = { ...this.#value, ...patch };
     return true;
   }
 
   publish(): void {
-    for (const listener of this.#listeners) listener();
+    if (this.#listeners.size === 0) {
+      this.#pendingKeys.clear();
+      return;
+    }
+    const changedKeys: ReadonlySet<PropertyKey> | undefined =
+      this.#pendingKeys.size > 0 ? new Set(this.#pendingKeys) : undefined;
+    this.#pendingKeys.clear();
+    for (const listener of [...this.#listeners]) listener(changedKeys);
   }
 
   /** Apply `patch` and notify the listeners, unless it changes nothing. */

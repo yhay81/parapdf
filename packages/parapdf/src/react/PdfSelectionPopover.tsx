@@ -9,7 +9,7 @@ import {
   computePopoverPosition,
   type PopoverBox,
   type PopoverPlacement,
-  useSelection,
+  useSettledSelection,
 } from "./selection.ts";
 
 export type { PopoverPlacement };
@@ -53,15 +53,21 @@ export function PdfSelectionPopover({
   children,
 }: PdfSelectionPopoverProps) {
   const resolved = useOptionalViewer(viewer);
-  const selection = useSelection(resolved);
+  const selection = useSettledSelection(resolved);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const latestRef = useRef({ selection, placement, offset });
+  latestRef.current = { selection, placement, offset };
+  const updateRef = useRef<(() => void) | null>(null);
 
   const rendered = selection ? children(selection) : null;
   const active =
     selection !== null && rendered !== null && rendered !== undefined && rendered !== false;
 
   useLayoutEffect(() => {
-    if (!active || !selection) return;
+    if (!active) {
+      updateRef.current = null;
+      return;
+    }
     const el = popoverRef.current;
     if (!el) return;
     const hostDoc = el.ownerDocument;
@@ -69,13 +75,18 @@ export function PdfSelectionPopover({
     let dragging = false;
 
     const update = () => {
+      const {
+        selection: current,
+        placement: currentPlacement,
+        offset: currentOffset,
+      } = latestRef.current;
       const scroller = resolved.scroller;
-      if (!scroller) {
+      if (!current || !scroller) {
         el.style.visibility = "hidden";
         el.style.pointerEvents = "none";
         return;
       }
-      const anchorBox = selection.anchor.getBoundingClientRect();
+      const anchorBox = current.anchor.getBoundingClientRect();
       const scrollerBox = scroller.getBoundingClientRect();
       const vpLeft = scrollerBox.left + scroller.clientLeft;
       const vpTop = scrollerBox.top + scroller.clientTop;
@@ -99,8 +110,8 @@ export function PdfSelectionPopover({
         windowHeight: win?.innerHeight ?? viewportBox.bottom,
         popoverWidth: popWidth,
         popoverHeight: popHeight,
-        placement,
-        offset,
+        placement: currentPlacement,
+        offset: currentOffset,
       });
       if (!placed) {
         el.style.visibility = "hidden";
@@ -113,6 +124,7 @@ export function PdfSelectionPopover({
       el.style.visibility = "visible";
       el.style.pointerEvents = dragging ? "none" : "auto";
     };
+    updateRef.current = update;
 
     const onPointerDown = (event: PointerEvent) => {
       if (event.button !== 0 || el.contains(event.target as Node | null)) return;
@@ -125,10 +137,7 @@ export function PdfSelectionPopover({
       update();
     };
 
-    update();
-
     const scroller = resolved.scroller;
-    const content = resolved.content;
     scroller?.addEventListener("scroll", update, { passive: true });
     scroller?.addEventListener("pointerdown", onPointerDown, { passive: true });
     win?.addEventListener("scroll", update, { passive: true, capture: true });
@@ -136,13 +145,17 @@ export function PdfSelectionPopover({
     win?.addEventListener("pointerup", onPointerEnd, { passive: true });
     win?.addEventListener("pointercancel", onPointerEnd, { passive: true });
     win?.addEventListener("blur", onPointerEnd);
-    const unsubscribeStore = resolved.store.subscribe(update);
-
-    let styleObserver: MutationObserver | null = null;
-    if (content && typeof MutationObserver === "function") {
-      styleObserver = new MutationObserver(update);
-      styleObserver.observe(content, { attributes: true, attributeFilter: ["style"] });
-    }
+    const unsubscribeStore = resolved.store.subscribe((changedKeys) => {
+      if (
+        !changedKeys ||
+        changedKeys.has("layout") ||
+        changedKeys.has("first") ||
+        changedKeys.has("last")
+      ) {
+        update();
+      }
+    });
+    const unsubscribePreview = resolved.onPreviewChange(update);
 
     let resizeObserver: ResizeObserver | null = null;
     if (typeof ResizeObserver === "function") {
@@ -151,6 +164,7 @@ export function PdfSelectionPopover({
     }
 
     return () => {
+      updateRef.current = null;
       scroller?.removeEventListener("scroll", update);
       scroller?.removeEventListener("pointerdown", onPointerDown);
       win?.removeEventListener("scroll", update, { capture: true });
@@ -159,10 +173,15 @@ export function PdfSelectionPopover({
       win?.removeEventListener("pointercancel", onPointerEnd);
       win?.removeEventListener("blur", onPointerEnd);
       unsubscribeStore();
-      styleObserver?.disconnect();
+      unsubscribePreview();
       resizeObserver?.disconnect();
     };
-  }, [active, selection, resolved, placement, offset]);
+  }, [active, resolved]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: repositions in place when selection, placement, or offset updates without tearing down active listeners or ResizeObserver.
+  useLayoutEffect(() => {
+    updateRef.current?.();
+  }, [active, resolved, selection, placement, offset]);
 
   if (!active) return null;
   const hostDoc =

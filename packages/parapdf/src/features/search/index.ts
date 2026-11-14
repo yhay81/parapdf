@@ -106,7 +106,7 @@ export function pageIndex(
 }
 
 /** Search `viewer`'s document; `detach()` undoes it. */
-export function attachSearch(viewer: ViewerController): Search {
+export function attachSearch(viewer: ViewerController, onDetach?: () => void): Search {
   const highlights = new SearchHighlights();
   /** Stops the search in progress. */
   let control: AbortController | null = null;
@@ -291,6 +291,7 @@ export function attachSearch(viewer: ViewerController): Search {
       stop();
       detachExtension();
       store.set(IDLE_SEARCH);
+      onDetach?.();
     },
   };
 }
@@ -305,14 +306,9 @@ const shared = new WeakMap<ViewerController, Search>();
 export function searchOf(viewer: ViewerController): Search {
   let search = shared.get(viewer);
   if (!search) {
-    const attached = attachSearch(viewer);
-    const own: Search = {
-      ...attached,
-      detach() {
-        attached.detach();
-        if (shared.get(viewer) === own) shared.delete(viewer);
-      },
-    };
+    const own = attachSearch(viewer, () => {
+      if (shared.get(viewer) === own) shared.delete(viewer);
+    });
     shared.set(viewer, own);
     search = own;
   }

@@ -6,10 +6,16 @@ import { prerender } from "react-dom/static";
 import { PdfSessionController } from "../src/document/pdf-session.ts";
 import { createSelectionAnchor, type PdfSelection } from "../src/features/selection.ts";
 import type { Rotation } from "../src/pdfjs/draw.ts";
-import { SessionContext, ViewerContext } from "../src/react/context.ts";
-import { overlayStoreOf, PdfPageOverlay, PdfPageOverlays } from "../src/react/overlays.ts";
+import { PageContext, SessionContext, ViewerContext } from "../src/react/context.ts";
+import {
+  overlayStoreOf,
+  PdfPageOverlay,
+  PdfPageOverlays,
+  PdfPageRect,
+} from "../src/react/overlays.ts";
 import { preloadDocument, preloadDocumentWith } from "../src/react/preload.ts";
 import { computePopoverPosition, sameSelection } from "../src/react/selection.ts";
+import { TextSelectionTracker } from "../src/render/selection.ts";
 import { computeLayout, turnBox, unturnPoint } from "../src/view/layout.ts";
 import { ViewerController } from "../src/view/viewer.ts";
 import { FakeDocument } from "./fake-dom.ts";
@@ -253,66 +259,63 @@ describe("OverlayStore, PdfPageOverlay, PdfPageOverlays, and PdfPageRect", () =>
     assert.equal(second.getRenderers()[0]?.render(0), "second");
   });
 
-  it("allocates .parapdf-overlay-layer lazily and coordinates multiple portal claims across window shifts", () =>
+  it("publishes React-rendered .parapdf-overlay-layer targets and coordinates multiple portal claims across window shifts", () =>
     withBrowserGlobals(() => {
       const viewer = new ViewerController();
       const store = overlayStoreOf(viewer);
-      const host0 = document.createElement("section");
+      const layer0 = document.createElement("div") as HTMLDivElement;
 
-      // Attaching a page host with no overlays allocates no .parapdf-overlay-layer child.
-      const detachHost0 = store.attachHost(0, host0, 0, 612, 792, false);
-      assert.equal((host0 as unknown as { children: unknown[] }).children.length, 0);
-      assert.equal(store.portalLayer(0), null);
+      // Without a portal claim, attaching a layer exposes no portalTarget.
+      const detachLayer0 = store.attachLayer(0, layer0, LETTER);
+      assert.equal(store.hasLayer(0), true);
+      assert.equal(store.hasPortalClaim(0), false);
+      assert.equal(store.portalTarget(0), null);
 
-      // Claiming two <PdfPageOverlay page={0}> portals creates and shares one layer.
+      // Claiming two <PdfPageOverlay page={0}> portals shares the same target without redundant notifications.
       let portalNotifications = 0;
       const unsubPortal = store.subscribePortal(0, () => portalNotifications++);
       const releaseA = store.claimPortal(0);
-      const layer0 = store.portalLayer(0);
-      assert.ok(layer0);
-      assert.equal((host0 as unknown as { children: unknown[] }).children.length, 1);
-      assert.equal(layer0.style.width, "612px");
-      assert.equal(layer0.style.height, "792px");
-      assert.equal(layer0.dataset.mainRotation, "0");
+      assert.equal(store.hasPortalClaim(0), true);
+      const target0 = store.portalTarget(0);
+      assert.ok(target0);
+      assert.equal(target0.layer, layer0);
+      assert.equal(target0.size, LETTER);
+      assert.equal(portalNotifications, 1);
 
       const releaseB = store.claimPortal(0);
-      assert.equal(store.portalLayer(0), layer0);
-      assert.ok(portalNotifications >= 2);
+      assert.equal(store.portalTarget(0), target0);
+      assert.equal(portalNotifications, 1);
 
-      // Rotating 90deg swaps the overlay layer's unturned CSS width and height.
-      store.syncHostGeometry(0, 90, 792, 612, false);
-      assert.equal(layer0.dataset.mainRotation, "90");
-      assert.equal(layer0.style.width, "612px");
-      assert.equal(layer0.style.height, "792px");
-
-      // Releasing the first portal keeps the shared layer until the second releases.
+      // Releasing the first portal keeps the shared target until the second releases.
       releaseA();
-      assert.equal(store.portalLayer(0), layer0);
-      assert.equal((host0 as unknown as { children: unknown[] }).children.length, 1);
+      assert.equal(store.portalTarget(0), target0);
+      assert.equal(portalNotifications, 1);
 
       releaseB();
-      assert.equal(store.portalLayer(0), null);
-      assert.equal((host0 as unknown as { children: unknown[] }).children.length, 0);
+      assert.equal(store.hasPortalClaim(0), false);
+      assert.equal(store.portalTarget(0), null);
+      assert.equal(portalNotifications, 2);
 
-      // Claiming for an offscreen page (page 3) waits cleanly until page 3 mounts, then detaches on unmount.
+      // Claiming for an offscreen page (page 3) waits cleanly until page 3's layer mounts, then detaches on unmount.
       let page3Events = 0;
       const unsubPage3 = store.subscribePortal(3, () => page3Events++);
       const releasePage3 = store.claimPortal(3);
-      assert.equal(store.portalLayer(3), null);
-
-      const host3 = document.createElement("section");
-      const detachHost3 = store.attachHost(3, host3, 0, 612, 792, false);
-      assert.ok(store.portalLayer(3));
+      assert.equal(store.portalTarget(3), null);
       assert.equal(page3Events, 1);
 
-      detachHost3();
-      assert.equal(store.portalLayer(3), null);
+      const layer3 = document.createElement("div") as HTMLDivElement;
+      const detachLayer3 = store.attachLayer(3, layer3, LETTER);
+      assert.equal(store.portalTarget(3)?.layer, layer3);
       assert.equal(page3Events, 2);
+
+      detachLayer3();
+      assert.equal(store.portalTarget(3), null);
+      assert.equal(page3Events, 3);
 
       releasePage3();
       unsubPage3();
       unsubPortal();
-      detachHost0();
+      detachLayer0();
     }));
 
   it("keeps getRenderers reference stable when render function identity does not change", () => {
@@ -350,7 +353,7 @@ describe("OverlayStore, PdfPageOverlay, PdfPageOverlays, and PdfPageRect", () =>
     assert.equal(store.isActive(), false);
     assert.equal(store.getActivity().allPages, false);
     assert.equal(store.getActivity().portalPages.size, 0);
-    assert.equal(store.hasHost(0), false);
+    assert.equal(store.hasLayer(0), false);
 
     // First portal claim on page 0 activates only page 0; a second claim on page 0 does not re-notify.
     const release0A = store.claimPortal(0);
@@ -410,13 +413,46 @@ describe("OverlayStore, PdfPageOverlay, PdfPageOverlays, and PdfPageRect", () =>
     );
     assert.equal(ssrHtml, "");
   });
+
+  it("positions PdfPageRect purely from PageContext.size with zero store subscriptions", () => {
+    const html = renderToString(
+      createElement(
+        PageContext,
+        { value: { pageIndex: 0, size: { width: 600, height: 800 } } },
+        createElement(
+          PdfPageRect,
+          { x: 150, y: 200, width: 300, height: 100, className: "pin" },
+          "Hit",
+        ),
+      ),
+    );
+    assert.match(html, /class="pin"/);
+    assert.match(html, /left:25%/);
+    assert.match(html, /top:25%/);
+    assert.match(html, /width:50%/);
+    assert.match(html, /height:12\.5%/);
+
+    assert.equal(
+      renderToString(
+        createElement(
+          PageContext,
+          { value: { pageIndex: 0, size: undefined } },
+          createElement(PdfPageRect, { x: 0, y: 0, width: 10, height: 10 }),
+        ),
+      ),
+      "",
+    );
+  });
 });
 
 describe("SelectionAnchor, sameSelection, and computePopoverPosition", () => {
   it("tracks scroll, scale, and rotation live in selection.anchor.getBoundingClientRect()", () =>
     withBrowserGlobals(() => {
       const viewer = new ViewerController();
-      const { scroller, content, sections } = fakeScrollerAndContent(800, 600, 20, 40);
+      const { scroller, content } = fakeScrollerAndContent(800, 600, 20, 40);
+      content.querySelector = () => {
+        throw new Error("createSelectionAnchor must read viewer.pageHost(index) in O(1)");
+      };
       const detach = viewer.attachViewport(scroller, content);
 
       const layout = computeLayout([LETTER, LETTER], 1, {
@@ -447,7 +483,7 @@ describe("SelectionAnchor, sameSelection, and computePopoverPosition", () => {
       const boxScrolled = anchor.getBoundingClientRect();
       assert.equal(boxScrolled.top, box1.top - 60);
 
-      // Live mounted section box (e.g., rotated 90deg) maps accurately:
+      // Live mounted section box (e.g., rotated 90deg) maps accurately via viewer.pageHost(0):
       const layout90 = computeLayout([LETTER], 1, {
         gap: 12,
         rotation: 90,
@@ -458,7 +494,9 @@ describe("SelectionAnchor, sameSelection, and computePopoverPosition", () => {
         page: 0,
       });
       viewer.store.set({ layout: layout90, scale: 1, rotation: 90 });
-      sections.set(0, {
+      const detachPage = viewer.attachPage(0, {
+        ownerDocument: { activeElement: null },
+        contains: () => false,
         style: { visibility: "" },
         getBoundingClientRect: () =>
           ({ left: 30, top: 50, width: 792, height: 612, right: 822, bottom: 662 }) as DOMRect,
@@ -470,6 +508,7 @@ describe("SelectionAnchor, sameSelection, and computePopoverPosition", () => {
       assert.ok(Math.abs(box90.width - expected90.width) < 1e-6);
       assert.ok(Math.abs(box90.height - expected90.height) < 1e-6);
 
+      detachPage();
       detach();
     }));
 
@@ -535,6 +574,109 @@ describe("SelectionAnchor, sameSelection, and computePopoverPosition", () => {
       offset: 8,
     });
     assert.equal(offscreen, null);
+  });
+
+  it("notifies selection drag transitions on TextSelectionTracker for deferred popover commits", () => {
+    const savedDoc = Object.getOwnPropertyDescriptor(globalThis, "document");
+    const savedWin = Object.getOwnPropertyDescriptor(globalThis, "window");
+    const savedElement = Object.getOwnPropertyDescriptor(globalThis, "Element");
+    const savedHTMLElement = Object.getOwnPropertyDescriptor(globalThis, "HTMLElement");
+    const docListeners = new Map<string, ((event?: unknown) => void)[]>();
+    const winListeners = new Map<string, (() => void)[]>();
+
+    class StubElement {
+      className = "";
+      lastChild: StubElement | null = null;
+      readonly style = { width: "", height: "", userSelect: "" };
+      readonly classList = {
+        add() {},
+        remove() {},
+      };
+      append(child: StubElement) {
+        this.lastChild = child;
+      }
+      closest(selector: string) {
+        return selector === ".parapdf-text-layer" && this.className === "parapdf-text-layer"
+          ? this
+          : null;
+      }
+    }
+
+    Object.assign(globalThis, {
+      Element: StubElement,
+      HTMLElement: StubElement,
+      document: {
+        getSelection: () => null,
+        addEventListener(
+          type: string,
+          listener: (event?: unknown) => void,
+          opts?: { signal?: AbortSignal },
+        ) {
+          const list = docListeners.get(type) ?? [];
+          list.push(listener);
+          docListeners.set(type, list);
+          opts?.signal?.addEventListener(
+            "abort",
+            () => {
+              docListeners.set(
+                type,
+                (docListeners.get(type) ?? []).filter((fn) => fn !== listener),
+              );
+            },
+            { once: true },
+          );
+        },
+      },
+      window: {
+        addEventListener(type: string, listener: () => void, opts?: { signal?: AbortSignal }) {
+          const list = winListeners.get(type) ?? [];
+          list.push(listener);
+          winListeners.set(type, list);
+          opts?.signal?.addEventListener(
+            "abort",
+            () => {
+              winListeners.set(
+                type,
+                (winListeners.get(type) ?? []).filter((fn) => fn !== listener),
+              );
+            },
+            { once: true },
+          );
+        },
+      },
+    });
+
+    try {
+      const tracker = new TextSelectionTracker();
+      const layer = new StubElement() as unknown as HTMLElement;
+      layer.className = "parapdf-text-layer";
+      const end = new StubElement() as unknown as HTMLElement;
+      tracker.add(layer, end);
+
+      const states: boolean[] = [];
+      const unsub = tracker.onDragChange(() => states.push(tracker.dragging));
+
+      for (const fn of docListeners.get("pointerdown") ?? []) fn({});
+      for (const fn of docListeners.get("mousedown") ?? []) fn({ button: 0, target: layer });
+      assert.equal(tracker.dragging, true);
+      assert.deepEqual(states, [true]);
+
+      for (const fn of docListeners.get("pointerup") ?? []) fn({});
+      assert.equal(tracker.dragging, false);
+      assert.deepEqual(states, [true, false]);
+
+      unsub();
+      tracker.clear();
+    } finally {
+      if (savedDoc) Object.defineProperty(globalThis, "document", savedDoc);
+      else Reflect.deleteProperty(globalThis, "document");
+      if (savedWin) Object.defineProperty(globalThis, "window", savedWin);
+      else Reflect.deleteProperty(globalThis, "window");
+      if (savedElement) Object.defineProperty(globalThis, "Element", savedElement);
+      else Reflect.deleteProperty(globalThis, "Element");
+      if (savedHTMLElement) Object.defineProperty(globalThis, "HTMLElement", savedHTMLElement);
+      else Reflect.deleteProperty(globalThis, "HTMLElement");
+    }
   });
 });
 

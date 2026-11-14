@@ -8,6 +8,7 @@ import {
   sessionControllerOf,
 } from "../document/pdf-session.ts";
 import { type DocumentState, OPENING } from "../document/registry.ts";
+import type { PageSize } from "../document/session.ts";
 import type { ReadableStore } from "../document/store.ts";
 import type { ViewerState } from "../view/state.ts";
 import { controllerOf, type Viewer, type ViewerController } from "../view/viewer.ts";
@@ -17,10 +18,11 @@ export const SessionContext = createContext<PdfSessionController | null>(null);
 /** The viewer of the nearest `<PdfView>` or `<PdfDocument>`. */
 export const ViewerContext = createContext<ViewerController | null>(null);
 
-/** The viewer of the `<PdfViewer>` and the page an overlay is rendered in. */
-export const PageContext = createContext<{ viewer: ViewerController; pageIndex: number } | null>(
-  null,
-);
+/** The page index and unturned PDF size of the `<PdfPageOverlay>` or `<PdfPageOverlays>` subtree. */
+export const PageContext = createContext<{
+  pageIndex: number;
+  size: PageSize | undefined;
+} | null>(null);
 
 /**
  * `viewer` when given, otherwise the viewer of the nearest `<PdfView>` or
@@ -44,11 +46,6 @@ export function useSelected<T, S>(store: ReadableStore<T>, selector: (state: T) 
     () => selector(store.get()),
     () => selector(store.get()),
   );
-}
-
-/** A store's whole state, re-rendering on every change. */
-export function useStore<T>(store: ReadableStore<T>): T {
-  return useSyncExternalStore(store.subscribe, store.get, store.get);
 }
 
 function isPlainObject(value: object): boolean {
@@ -101,6 +98,9 @@ export interface TrackedSnapshot<T extends object> {
 
 interface SliceState<T extends object, S> {
   readonly store: ReadableStore<T>;
+  readonly subscribe: (onStoreChange: () => void) => () => void;
+  hasSelector: boolean;
+  pendingNotify: boolean;
   trackedClient: TrackedSnapshot<T> | null;
   trackedServer: TrackedSnapshot<T> | null;
   selectedClient: SelectedCache<T, S> | null;
@@ -194,21 +194,53 @@ export function useStoreSlice<T extends object, S>(
   const ensure = (): SliceState<T, S> => {
     let state = ref.current;
     if (!state || state.store !== store) {
-      state = {
+      const created: SliceState<T, S> = {
         store,
+        subscribe: (onStoreChange) =>
+          store.subscribe((changedKeys) => {
+            if (
+              !created.hasSelector &&
+              changedKeys &&
+              created.trackedClient &&
+              !created.pendingNotify
+            ) {
+              const tracked = activeTracked(created.trackedClient);
+              let hit = false;
+              if (tracked) {
+                for (const key of changedKeys) {
+                  if (tracked.has(key)) {
+                    hit = true;
+                    break;
+                  }
+                }
+              }
+              if (!hit) {
+                created.trackedClient.raw = store.get();
+                return;
+              }
+            }
+            created.pendingNotify = true;
+            onStoreChange();
+          }),
+        hasSelector: Boolean(selector),
+        pendingNotify: false,
         trackedClient: null,
         trackedServer: null,
         selectedClient: null,
         selectedServer: null,
       };
+      state = created;
       ref.current = state;
     }
+    state.hasSelector = Boolean(selector);
     return state;
   };
+  const sliceState = ensure();
   return useSyncExternalStore(
-    store.subscribe,
+    sliceState.subscribe,
     () => {
       const state = ensure();
+      state.pendingNotify = false;
       const raw = store.get();
       if (selector) {
         state.selectedClient = selectCached(state.selectedClient, raw, selector);

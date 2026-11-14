@@ -211,10 +211,11 @@ user-space unit (`/UserUnit`). Rendered anywhere else, it throws.
 ### `PdfSelectionPopover`
 
 Portals floating selection UI (such as a copy or highlight toolbar) to
-`document.body` outside page `contain: "strict"` clipping, following scroll,
-zoom previews, layout changes, and rotation imperatively without per-frame React
-state commits, and keeping the browser's text selection intact when clicking
-non-editable toolbar buttons inside it.
+`document.body` outside page `contain: "strict"` clipping, deferring commits
+while the reader drags a selection, following scroll, zoom previews, layout
+changes, and rotation imperatively without per-frame React state commits, and
+keeping the browser's text selection intact when clicking non-editable toolbar
+buttons inside it.
 
 | Prop | |
 |---|---|

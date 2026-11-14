@@ -36,7 +36,7 @@ feature, and React is used only in `react/`.
 
 ```
 react/      PdfDocument, PdfView, PdfViewer, PdfForms, PdfAnnotationEditor,
-            PdfAutoLinks, PdfPermissions, PdfThumbnails, PdfOutline, hooks; overlays through portals
+            PdfAutoLinks, PdfPermissions, PdfThumbnails, PdfOutline, hooks, overlays
 features/   search, history, initial view, permissions, forms,
             annotations, autoLinks, print, download, thumbnails, layers,
             attachments, selection, text
@@ -85,9 +85,11 @@ once, then the real ones in the background), and the document's data, each
 read once: page labels, outline, metadata, attachments, comments,
 permissions, the initial view, optional content, and the text read for
 search and `getText()`. Resolved page sizes, permissions, direction, initial
-view, and optional-content layers are also exposed synchronously (`knownPageSizes`,
-`knownPermissions`, `knownDirection`, `knownInitialView`, `loadedLayers`) so a
-viewer joining a warm session lays out without awaiting microtasks.
+view, page labels, and optional-content layers are also exposed synchronously (`knownPageSizes`,
+`knownPermissions`, `knownDirection`, `knownInitialView`, `knownPageLabels`, `loadedLayers`) so a
+viewer or thumbnail list joining a warm session renders without awaiting microtasks, and
+the registry eagerly kicks off `pageSizes()` and `direction()` alongside `permissions()` when a
+document opens (decisions 0041 and 0042).
 
 - A source is a URL (with request headers and credentials), bytes, or a
   `PDFDataRangeTransport`. A URL is identified without its fragment, which
@@ -162,9 +164,13 @@ and `#start()` lays out warm sessions synchronously before `open()` returns.
   rules of zoom modes ("fit-width", the default, "fit-page", and "auto",
   pdf.js's default) and of destinations and the current page.
 - `scrolling.ts`, `gestures.ts`, and `input.ts`: scrolling, a zoom
-  previewed with a CSS transform and committed where it showed, touch,
+  previewed with a CSS transform (notifying listeners through
+  `viewer.onPreviewChange()`) and committed where it showed, touch,
   wheel, Safari's gesture events, swipes in "page" mode, the keys, and the
-  hand tool.
+  hand tool. `viewer.pageHost(index)`, `viewer.selectionDragging`, and
+  `viewer.onSelectionDragChange()` expose mounted page hosts and primary-button
+  text-drag transitions to internal `features/` and `react/` callers without
+  DOM queries.
 - `state.ts`: the viewer's store, view state only. Hot state changes while
   the reader scrolls or zooms (layout, mounted window, current page, scale,
   zoom mode); cold state does not (page count, rotation, spreads, scroll
@@ -287,6 +293,15 @@ of its own, and detaching it undoes what it added. The core imports no feature.
   It scans forward from the viewer's current page and wraps at the end.
   Each progress update puts both runs of matches in document order and
   preserves the selected match as earlier pages arrive (decision 0027).
+- Selection (`selection.ts`) resolves text layers and mounted page hosts
+  through `viewer.textLayers` (`TextLayerHandle.layer`) and `viewer.pageHost()`
+  rather than `querySelectorAll`, and caches each text layer's node-to-item
+  `Map` in a `WeakMap`. Thumbnails (`thumbnails/`) skip `scrollParent` walks
+  and `IntersectionObserver`s when `virtualized: true` (`<PdfThumbnails>`),
+  retain detached drawn canvases in a bounded LRU pixel pool (`maxKeptPixels`,
+  8 MP default) restored synchronously on remount via `drawImage` (or zero-copy
+  on `StrictMode` replay), and reset when `session.onContentChange` fires
+  (decision 0042).
 
 ## React
 
@@ -327,15 +342,19 @@ the DOM declares `"use client"`.
   viewport detach (decision 0038). Every other
   prop is a live option: changing it needs no remount, and an option set to
   its default is the option left out. `<PdfViewer>` separates `<ViewerViewport>`
-  (the scroll container, `{children}`, and `memo(ViewerPages)`) from a sibling
-  leaf `<ViewerControlSync>` (`return null`) that binds options, controlled
-  props, fragment following, and `viewer.open(session)` in `useLayoutEffect` via
+  (the scroll container, `{children}`, and `memo(ViewerPages)`) from a memoized
+  sibling leaf `<ViewerControlSync>` (`return null`) that receives only option
+  and control props and binds options, controlled props, fragment following, and
+  `viewer.open(session)` in dependency-tracked `useLayoutEffect` hooks via
   `viewer.bindControls(reconcile)`: rejected controlled changes re-render only
-  `<ViewerControlSync>`, `memo(ViewerPages)` subscribes to `viewer.store.hot` in
-  `useLayoutEffect` (`usePageWindow`) so warm sessions flush `<PdfPage>` hosts
-  and canvases synchronously before the first browser paint, and each
-  `memo(PdfPage)` registers its `<section>` host with a React 19 ref cleanup
-  callback rather than a per-page `useLayoutEffect` (decisions 0040 and 0041).
+  `<ViewerControlSync>`, parent renders that change only `children` or `style`
+  skip `<ViewerControlSync>` entirely, `memo(ViewerPages)` subscribes to
+  `viewer.store.hot` in `useLayoutEffect` (`usePageWindow`) so warm sessions
+  flush `<PdfPage>` hosts and canvases synchronously before the first browser
+  paint, static `.parapdf-pages` and `.parapdf-pages > section` styles live in
+  `VIEWER_CSS`, and each `memo(PdfPage)` registers its `<section>` host with a
+  React 19 ref cleanup callback rather than a per-page `useLayoutEffect`
+  (decisions 0040, 0041, and 0042).
   `children` renders
   inside the viewport container so declarative feature components (`PdfForms`,
   `PdfAnnotationEditor`, `PdfAutoLinks`, `PdfPermissions`) mount synchronously
@@ -352,33 +371,51 @@ the DOM declares `"use client"`.
   whose action methods stay referentially stable.
   `PdfPageOverlay` (single-page, RSC-compatible plain `children`) and
   `PdfPageOverlays` (evaluated inside each page's `memo(PdfPage)` so mounted
-  pages stay memoized as the window shifts) render through portals into a
-  lazily created `.parapdf-overlay-layer` in the page's host; React renders
-  nothing else there. `OverlayStore` tracks per-page overlay activity so pages
-  without an active renderer or portal claim mount no `<PdfPageOverlaySlot>`
-  and run no overlay subscriptions or host effects, and `<PdfPageOverlaySlot>`
-  renders as a sibling after `<section>` so `hostRef` attaches before its
-  layout effect runs (decision 0040). Dynamic portals retain their render-time container through
-  effect replay, and renderer identities are unique across viewers so changing
-  an overlay's viewer cannot overwrite another overlay (decision 0036). `PdfViewer`'s `onPageClick` and
+  pages stay memoized as the window shifts) render into `<PdfPageOverlayLayer>`,
+  placed directly as JSX at the end of `<section>` inside `memo(PdfPage)`:
+  `PdfPageOverlays` renders inline without portaling, while `PdfPageOverlay`
+  portals into the `.parapdf-overlay-layer` element published by a React 19 ref
+  cleanup callback (`store.attachLayer`). When neither produces content for a
+  page, `<PdfPageOverlayLayer>` returns `null` so zero `.parapdf-overlay-layer`
+  nodes exist in the DOM, and `OverlayStore` tracks per-page overlay activity so
+  pages without an active renderer or portal claim mount no
+  `<PdfPageOverlayLayer>` at all; `PageContext` carries `{ pageIndex, size }` so
+  `PdfPageRect` positions children with zero `viewer.store` subscriptions, and
+  renderer identities stay unique across viewers (decisions 0036, 0040, and
+  0042). `PdfViewer`'s `onPageClick` and
   `viewer.pointAt()` map client coordinates back to unturned PDF points
   (`PdfPageRect`'s coordinates) across rotations, zoom previews, and
   `/UserUnit` pages. `PdfSelectionPopover` portals floating selection UI to
-  `document.body` outside page `contain: "strict"` clipping and tracks scroll
-  and zoom previews imperatively without per-frame React state commits;
+  `document.body` outside page `contain: "strict"` clipping, suppresses range
+  reads and React commits during primary-button selection drags
+  (`useSettledSelection` over `viewer.onSelectionDragChange()`), commits once on
+  release while keeping its DOM listeners, store subscription, and
+  `ResizeObserver` attached across selection updates, and tracks scroll and zoom
+  previews (`viewer.onPreviewChange()`) imperatively without per-frame React
+  state commits or DOM `MutationObserver`s;
   `useSelection()` also provides a virtual `selection.anchor` for external
-  popover libraries. `preloadDocument(source)` starts loading pdf.js,
+  popover libraries (short-circuiting unchanged single-range endpoints and
+  skipping redundant state dispatches). `preloadDocument(source)` starts loading pdf.js,
   preloading `source`'s URL, and warming `source`'s initial page dimensions,
-  permissions, direction, and initial view in the shared registry ahead of
-  `PdfDocument` mounting so `PdfViewer` lays out synchronously before the first
-  paint.
+  permissions, direction, initial view, and page labels in the shared registry
+  ahead of `PdfDocument` mounting so `PdfViewer` and `PdfThumbnails` render
+  synchronously before the first paint.
 - `PdfThumbnails` and `PdfThumbnail` draw the viewer's document at a lower
   priority, reading unrotated page dimensions from `viewer.store.sizes` outside
-  `viewer.store.hot` (decision 0040). `PdfThumbnails` virtualizes its `<ol>` window over a prefix-sum
+  `viewer.store.hot` (decision 0040). `PdfThumbnails` passes primitive page
+  dimensions, `rotation`, and `virtualized` directly to a zero-subscription
+  `ThumbnailCanvas` (attached via a React 19 ref cleanup callback and backed by
+  `ThumbnailRenderer`'s bounded LRU kept-canvas pool) rather than subscribing
+  per item (decision 0042), caches scroll-container geometry across scroll
+  events so sidebar scrolling triggers zero `getComputedStyle` or
+  `getBoundingClientRect` reflows, skips re-measuring uniform item chrome on
+  window shifts, and virtualizes its `<ol>` window over a prefix-sum
   `Float64Array` of turned page heights (with `borderTop` / `borderBottom`
   transparent spacers preserving stylesheet padding and flex `rowGap`,
   `aria-setsize` / `aria-posinset` on mounted `<li>` items, non-suspending
-  `pageLabels` resolution, custom `children?: (item: ThumbnailItem) => ReactNode`,
+  `pageLabels` resolution reading warm `knownPageLabels` synchronously from a
+  single session-watch store, custom
+  `children?: (item: ThumbnailItem) => ReactNode`,
   and `block: "nearest"` auto-scroll of `currentPage` even when unmounted).
   Active-page alignment follows measured item chrome, width, and rotation;
   failed label reads retain numeric labels.
@@ -387,8 +424,12 @@ the DOM declares `"use client"`.
   expand/collapse controls for nested entries, and honoring optional
   `renderItem` customization (decision 0037). `PdfPageRect` places content in
   PDF points.
-- `useViewState()`, `useDocumentState()`, `useSearch()`, and `useHistory()`
-  read stores through `useSyncExternalStore` (`useStoreSlice`): called without
+- `useViewState()`, `useDocumentState()`, `useSearch()`, `useHistory()`, and
+  `useAnnotations()` read stores through `useSyncExternalStore`
+  (`useStoreSlice`), and `useLayers()` subscribes directly to `LayerState`:
+  `Store.update()` reports changed property keys to listeners so `useStoreSlice`
+  skips waking React when an update touches only untracked keys (decision 0042);
+  called without
   a selector, they track the fields read during rendering (dropping fields no
   longer read in inactive branches, while keeping a pre-render fallback set
   until the next render reads the proxy) so unread updates cause no re-render;

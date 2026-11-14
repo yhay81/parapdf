@@ -310,6 +310,24 @@ describe("acquireSession", () => {
       permissions: null,
     });
   });
+
+  it("warms knownPageSizes and knownDirection eagerly when a session opens", async () => {
+    const { loader } = fakePdfjs(
+      async () =>
+        fakeDocument({
+          pages: [LETTER, LETTER],
+          proxy: {
+            getViewerPreferences: async () => new Map([["Direction", "R2L"]]),
+          },
+        }).proxy,
+    );
+    const lease = acquireSession(loader, { url: "/warm.pdf" });
+    await lease.session;
+    await settle();
+    assert.equal(lease.state.get().status, "ready");
+    assert.equal(lease.shared.document?.knownPageSizes?.length, 2);
+    assert.equal(lease.shared.document?.knownDirection, "rtl");
+  });
 });
 
 /**
@@ -343,22 +361,20 @@ describe("acquireSession with passwords and progress", () => {
   it("asks every viewer of the document, and any of them may answer", async () => {
     const { loader, calls, asked } = lockedPdfjs();
     const heard: string[] = [];
-    const a = acquireSession(
-      loader,
-      { url: "/locked.pdf" },
-      {
-        onPassword: (reason) => heard.push(`a:${reason}`),
-      },
-    );
+    const watchPassword = (tag: string, lease: SessionLease) => {
+      const check = () => {
+        const { status, passwordReason } = lease.state.get();
+        if (status === "password" && passwordReason) heard.push(`${tag}:${passwordReason}`);
+      };
+      check();
+      return lease.state.subscribe(check);
+    };
+    const a = acquireSession(loader, { url: "/locked.pdf" });
+    watchPassword("a", a);
     await settle();
     // A viewer that joins while the request is pending hears it too.
-    const b = acquireSession(
-      loader,
-      { url: "/locked.pdf" },
-      {
-        onPassword: (reason) => heard.push(`b:${reason}`),
-      },
-    );
+    const b = acquireSession(loader, { url: "/locked.pdf" });
+    watchPassword("b", b);
     assert.deepEqual(heard, ["a:required", "b:required"]);
     a.submitPassword("wrong");
     await settle();
@@ -387,11 +403,13 @@ describe("acquireSession with passwords and progress", () => {
     await settle();
     first.release();
     const heard: string[] = [];
-    const second = acquireSession(
-      loader,
-      { url: "/locked.pdf", password: "secret" },
-      { onPassword: (reason) => heard.push(reason) },
-    );
+    const second = acquireSession(loader, { url: "/locked.pdf", password: "secret" });
+    const check = () => {
+      const { status, passwordReason } = second.state.get();
+      if (status === "password" && passwordReason) heard.push(passwordReason);
+    };
+    check();
+    second.state.subscribe(check);
     await settle();
     assert.deepEqual(heard, []);
     assert.equal(await first.session, await second.session);
@@ -405,11 +423,11 @@ describe("acquireSession with passwords and progress", () => {
     const first = acquireSession(loader, { url: "/locked.pdf", password: "wrong" });
     first.release();
     const heard: string[] = [];
-    const second = acquireSession(
-      loader,
-      { url: "/locked.pdf", password: "secret" },
-      { onPassword: (reason) => heard.push(reason) },
-    );
+    const second = acquireSession(loader, { url: "/locked.pdf", password: "secret" });
+    second.state.subscribe(() => {
+      const { status, passwordReason } = second.state.get();
+      if (status === "password" && passwordReason) heard.push(passwordReason);
+    });
     start();
     await settle();
     assert.deepEqual(heard, []);
@@ -452,20 +470,25 @@ describe("acquireSession with passwords and progress", () => {
     const { loader, calls } = lockedPdfjs();
     const heard: string[] = [];
     let second: SessionLease | undefined;
-    const first = acquireSession(
-      loader,
-      { url: "/locked.pdf", password: "wrong" },
-      {
-        onPassword(reason) {
-          heard.push(`first:${reason}`);
-          second = acquireSession(
-            loader,
-            { url: "/locked.pdf", password: "secret" },
-            { onPassword: (retryReason) => heard.push(`second:${retryReason}`) },
-          );
-        },
-      },
-    );
+    const first = acquireSession(loader, { url: "/locked.pdf", password: "wrong" });
+    first.state.subscribe(() => {
+      const { status, passwordReason } = first.state.get();
+      if (status === "password" && passwordReason) {
+        heard.push(`first:${passwordReason}`);
+        const joined = acquireSession(loader, { url: "/locked.pdf", password: "secret" });
+        second = joined;
+        const initial = joined.state.get();
+        if (initial.status === "password" && initial.passwordReason) {
+          heard.push(`second:${initial.passwordReason}`);
+        }
+        joined.state.subscribe(() => {
+          const next = joined.state.get();
+          if (next.status === "password" && next.passwordReason) {
+            heard.push(`second:${next.passwordReason}`);
+          }
+        });
+      }
+    });
     await settle();
     assert.deepEqual(heard, ["first:incorrect"]);
     assert.ok(second);
@@ -473,27 +496,29 @@ describe("acquireSession with passwords and progress", () => {
     assert.equal(calls.opens, 1);
   });
 
-  it("reports progress, also to viewers that join late", async () => {
+  it("reports progress through shared state, also to viewers that join late", async () => {
     const { loader } = lockedPdfjs();
     const early: (number | null)[][] = [];
     const late: (number | null)[][] = [];
-    const a = acquireSession(
-      loader,
-      { url: "/locked.pdf" },
-      {
-        onProgress: (loaded, total) => early.push([loaded, total]),
-      },
-    );
+    const watchProgress = (out: (number | null)[][], lease: SessionLease) => {
+      const initial = lease.state.get().progress;
+      if (initial) out.push([initial.loaded, initial.total]);
+      lease.state.subscribe((keys) => {
+        if (!keys || keys.has("progress")) {
+          const p = lease.state.get().progress;
+          if (p) out.push([p.loaded, p.total]);
+        }
+      });
+    };
+    const a = acquireSession(loader, { url: "/locked.pdf" });
+    watchProgress(early, a);
     await settle();
-    acquireSession(
-      loader,
-      { url: "/locked.pdf" },
-      {
-        onProgress: (loaded, total) => late.push([loaded, total]),
-      },
-    );
+    mock.timers.tick(16);
+    const b = acquireSession(loader, { url: "/locked.pdf" });
+    watchProgress(late, b);
     a.submitPassword("secret");
     await a.session;
+    mock.timers.tick(16);
     assert.deepEqual(early, [
       [10, 100],
       [100, 100],
@@ -594,12 +619,11 @@ describe("acquireSession with passwords and progress", () => {
       report = task.onProgress as NonNullable<FakeLoadingTask["onProgress"]>;
       return fakeDocument().proxy;
     });
-    const heard: number[] = [];
-    const lease = acquireSession(
-      loader,
-      { url: "/a.pdf" },
-      { onProgress: (loaded) => heard.push(loaded) },
-    );
+    const heard: (number | null)[] = [];
+    const lease = acquireSession(loader, { url: "/a.pdf" });
+    lease.state.subscribe((keys) => {
+      if (!keys || keys.has("progress")) heard.push(lease.state.get().progress?.loaded ?? null);
+    });
     await lease.session;
     await settle();
     lease.release();

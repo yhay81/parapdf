@@ -63,7 +63,7 @@ export async function checkOverlayLifetimes() {
       currentPage,
       scrollTop: viewer.scroller?.scrollTop ?? null,
       active: store.isActive(),
-      hosts: [0, 1, 2, 3].filter((index) => store.hasHost(index)),
+      targets: [0, 1, 2, 3].filter((index) => store.hasLayer(index)),
       pages: [...element.querySelectorAll<HTMLElement>("section")].map((page) => page.dataset.page),
       layers: element.querySelectorAll(".parapdf-overlay-layer").length,
       portal: hasPortalProbe(),
@@ -74,11 +74,11 @@ export async function checkOverlayLifetimes() {
   const diagnostics: Record<string, ReturnType<typeof snapshot>> = {};
   const inactive = () =>
     !store.isActive() &&
-    [0, 1, 2, 3].every((index) => !store.hasHost(index)) &&
+    [0, 1, 2, 3].every((index) => !store.hasLayer(index)) &&
     element.querySelector(".parapdf-overlay-layer") === null;
 
   try {
-    // 1. Idle viewer: zero overlay hosts or layers, and scrolling the page window does not re-render <PdfViewer> children.
+    // 1. Idle viewer: zero overlay layers, and scrolling the page window does not re-render <PdfViewer> children.
     flushSync(() =>
       root.render(
         <SessionContext value={session}>
@@ -103,11 +103,11 @@ export async function checkOverlayLifetimes() {
       viewer.store.get().currentPage === 1 &&
       element.querySelector('section[data-page="3"]') !== null &&
       element.querySelector('section[data-page="4"]') === null &&
-      !store.hasHost(0) &&
-      !store.hasHost(1) &&
-      !store.hasHost(2);
+      !store.hasLayer(0) &&
+      !store.hasLayer(1) &&
+      !store.hasLayer(2);
 
-    // 2. A single-page <PdfPageOverlay page={1}> activates ONLY page 1's overlay host, leaving page 2's host skipped;
+    // 2. A single-page <PdfPageOverlay page={1}> activates ONLY page 1's overlay layer, leaving page 2's skipped;
     //    mounting <PdfPageOverlays> activates all mounted pages, including pages newly scrolled into view outside StrictMode.
     flushSync(() =>
       root.render(
@@ -125,9 +125,9 @@ export async function checkOverlayLifetimes() {
     );
     const scoped = () =>
       store.isActive() &&
-      store.hasHost(1) &&
-      !store.hasHost(0) &&
-      !store.hasHost(2) &&
+      store.hasLayer(1) &&
+      !store.hasLayer(0) &&
+      !store.hasLayer(2) &&
       element.querySelector('section[data-page="3"]') !== null &&
       hasPortalProbe();
     const scopedAtCommit = scoped();
@@ -162,9 +162,9 @@ export async function checkOverlayLifetimes() {
     flushSync(() => viewer.goToPage(2));
     const activated = () =>
       store.isActive() &&
-      store.hasHost(1) &&
-      store.hasHost(2) &&
-      store.hasHost(3) &&
+      store.hasLayer(1) &&
+      store.hasLayer(2) &&
+      store.hasLayer(3) &&
       hasPortalProbe() &&
       element.querySelector('section[data-page="4"] [data-overlay-page="4"]') !== null;
     const activeAtCommit = activated();
@@ -189,7 +189,8 @@ export async function checkOverlayLifetimes() {
     diagnostics.deactivated = snapshot();
     const liveDeactivated = inactiveAtCommit && inactive();
 
-    // 3. StrictMode effect replay and <Activity> hide/restore preserve both <PdfPageOverlays> and <PdfPageOverlay>.
+    // 3. StrictMode effect replay and <Activity> hide/restore preserve both <PdfPageOverlays> and <PdfPageOverlay>,
+    //    and pages where <PdfPageOverlays> returns null allocate no .parapdf-overlay-layer element.
     const viewerWithOverlays = () => (
       <SessionContext value={session}>
         <ViewerContext value={viewer}>
@@ -210,7 +211,12 @@ export async function checkOverlayLifetimes() {
     flushSync(() => root.render(<StrictMode>{viewerWithOverlays()}</StrictMode>));
     await afterViewportUpdate();
     diagnostics.strict = snapshot();
-    const strict = hasDynamicProbe() && hasPortalProbe();
+    const strict =
+      hasDynamicProbe() &&
+      hasPortalProbe() &&
+      element.querySelector('section[data-page="1"]') !== null &&
+      element.querySelector('section[data-page="1"] .parapdf-overlay-layer') === null &&
+      !store.hasLayer(0);
 
     const activity = (mode: "visible" | "hidden") => (
       <Activity mode={mode}>{viewerWithOverlays()}</Activity>

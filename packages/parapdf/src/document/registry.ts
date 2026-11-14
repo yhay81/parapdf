@@ -82,13 +82,6 @@ const nextFrame = (callback: () => void): void => {
   else setTimeout(callback, 16);
 };
 
-/** What a viewer hears about a document while it loads. */
-export interface SessionListener {
-  onProgress?(loaded: number, total: number | null): void;
-  /** The document needs a password: any viewer of it may submit one. */
-  onPassword?(reason: PasswordReason): void;
-}
-
 /**
  * A session as the registry shares it, for what reads it without holding
  * it: a provider as it renders, before React mounts it.
@@ -131,7 +124,6 @@ interface Entry {
   /** The session's AbortController, from before it loads: aborting it stops the load. */
   readonly controller: AbortController;
   readonly signal: AbortSignal;
-  readonly listeners: Set<SessionListener>;
   /** The leases that hold it. */
   users: number;
   /** Closes the session; none while leases hold it, or while it works for a render. */
@@ -286,7 +278,6 @@ function openEntry(
     proxy: null,
     controller,
     signal: controller.signal,
-    listeners: new Set(),
     users: 0,
     timer: undefined,
     released: false,
@@ -342,7 +333,6 @@ function openEntry(
   entry.session = DocumentSession.open(pdfjs, source, controller, {
     onProgress(loaded, total) {
       entry.progress = { loaded, total };
-      for (const listener of entry.listeners) listener.onProgress?.(loaded, total);
       if (entry.progressQueued) return;
       entry.progressQueued = true;
       nextFrame(() => {
@@ -378,21 +368,20 @@ function openEntry(
         entry.passwordRequest = request;
         entry.markUnreadable();
         entry.state.set({ status: "password", passwordReason: reason });
-        for (const listener of [...entry.listeners]) {
-          // A listener may answer, or add another viewer that answers, at once.
-          if (entry.passwordRequest !== request) break;
-          listener.onPassword?.(reason);
-        }
         rested(registry, key, entry);
       });
     },
   });
-  // Ready once the permissions are read too: viewers follow them from their first layout.
+  // Ready once permissions are read too; kick off page 1's size and reading
+  // direction in parallel so viewers lay out sooner on cold open and
+  // synchronously before paint on every subsequent mount.
   entry.session.then(
     async (session) => {
       if (entry.signal.aborted) return;
       entry.document = session;
       entry.proxy = session.proxy;
+      if (session.pageCount > 0) void session.pageSizes().catch(() => null);
+      void session.direction().catch(() => null);
       const permissions = await session.permissions().catch((error: unknown) => {
         console.error("reading permissions failed", error);
         return null;
@@ -447,11 +436,7 @@ export function sharedSession(pdfjs: PdfjsLoader, source: PdfSource): SharedSess
  * viewer of it with the pdf.js `pdfjs` loads, those that edit annotations
  * included, until the lease is released.
  */
-export function acquireSession(
-  pdfjs: PdfjsLoader,
-  source: PdfSource,
-  listener: SessionListener = {},
-): SessionLease {
+export function acquireSession(pdfjs: PdfjsLoader, source: PdfSource): SessionLease {
   const registry = registryOf(pdfjs);
   const key = sourceKey(source);
   const held = registry.get(key) ?? openEntry(registry, key, pdfjs, source);
@@ -459,7 +444,6 @@ export function acquireSession(
   held.timer = undefined;
   held.released = false;
   held.users++;
-  held.listeners.add(listener);
   // A failure waited for the render that opened it. Held, it is forgotten,
   // so that the next viewer tries again.
   if (held.state.get().status === "error") registry.delete(key);
@@ -481,9 +465,6 @@ export function acquireSession(
     held.nextPassword = source.password;
     held.passwordRequest?.answer(source.password);
   }
-  // A viewer that joins late hears what the others already heard.
-  if (held.progress) listener.onProgress?.(held.progress.loaded, held.progress.total);
-  if (held.passwordRequest) listener.onPassword?.(held.passwordRequest.reason);
   const lease = new AbortController();
   // A lease ends with its session.
   held.signal.addEventListener("abort", () => lease.abort(), {
@@ -503,7 +484,6 @@ export function acquireSession(
       if (released) return;
       released = true;
       lease.abort();
-      held.listeners.delete(listener);
       held.users--;
       if (held.users === 0) {
         held.released = true;

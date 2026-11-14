@@ -1180,10 +1180,53 @@ try {
       const sidebar = document.querySelector<HTMLElement>("#sidebar");
       if (sidebar) sidebar.scrollTop = 0;
     });
-    await page.waitForTimeout(300);
+    await page
+      .waitForFunction(
+        () => {
+          const canvas = document.querySelector<HTMLCanvasElement>(
+            '.parapdf-thumbnails button[aria-label="Page 1 of 1000"] .parapdf-thumbnail',
+          );
+          return canvas !== null && canvas.width > 0;
+        },
+        undefined,
+        { timeout: 10_000 },
+      )
+      .catch(() => {});
     check(
       "manual thumbnail browsing stays at the chosen scroll position",
       await page.evaluate(() => document.querySelector<HTMLElement>("#sidebar")?.scrollTop === 0),
+    );
+    const restoredOnMount = await page.evaluate(async () => {
+      const sidebar = document.querySelector<HTMLElement>("#sidebar");
+      const list = document.querySelector<HTMLElement>(".parapdf-thumbnails");
+      if (!sidebar || !list) return null;
+      const selector = '.parapdf-thumbnails button[aria-label="Page 1 of 1000"] .parapdf-thumbnail';
+      sidebar.scrollTop = 10_000;
+      sidebar.dispatchEvent(new Event("scroll"));
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const unmounted = document.querySelector(selector) === null;
+      const widthAtMount = await new Promise<number | null>((resolve) => {
+        const observer = new MutationObserver(() => {
+          const canvas = document.querySelector<HTMLCanvasElement>(selector);
+          if (canvas) {
+            observer.disconnect();
+            resolve(canvas.width);
+          }
+        });
+        observer.observe(list, { childList: true, subtree: true });
+        sidebar.scrollTop = 0;
+        sidebar.dispatchEvent(new Event("scroll"));
+        setTimeout(() => {
+          observer.disconnect();
+          resolve(null);
+        }, 2_000);
+      });
+      return { unmounted, widthAtMount };
+    });
+    check(
+      "returning to a virtualized thumbnail restores its kept pixels synchronously on mount",
+      restoredOnMount?.unmounted === true && (restoredOnMount.widthAtMount ?? 0) > 0,
+      JSON.stringify(restoredOnMount),
     );
     await page.context().close();
   }

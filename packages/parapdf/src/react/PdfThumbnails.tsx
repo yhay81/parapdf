@@ -10,9 +10,11 @@ import {
   useRef,
   useState,
 } from "react";
-import type { Viewer } from "../view/viewer.ts";
+import type { PageSize } from "../document/session.ts";
+import type { Rotation } from "../pdfjs/draw.ts";
+import type { Viewer, ViewerController } from "../view/viewer.ts";
 import { useOptionalViewer, useSelected } from "./context.ts";
-import { PdfThumbnail } from "./PdfThumbnail.tsx";
+import { ThumbnailCanvas } from "./PdfThumbnail.tsx";
 import {
   computeThumbnailOffsets,
   computeThumbnailRange,
@@ -20,6 +22,7 @@ import {
   findThumbnailScroller,
   scrollOffsetForThumbnail,
   type ThumbnailItem,
+  type ThumbnailListLayout,
   thumbnailCanvasHeight,
   useOptionalPageLabels,
 } from "./thumbnails.ts";
@@ -56,6 +59,54 @@ export interface PdfThumbnailsProps {
   style?: CSSProperties;
 }
 
+interface ScrollMetrics {
+  scroller: HTMLElement | null;
+  listContentStart: number;
+  viewportHeight: number;
+  paddingTop: number;
+}
+
+function measureScrollMetrics(ol: HTMLOListElement, scroller: HTMLElement | null): ScrollMetrics {
+  const paddingTop = Number.parseFloat(getComputedStyle(ol).paddingTop) || 0;
+  if (scroller) {
+    const listContentStart =
+      ol.getBoundingClientRect().top -
+      scroller.getBoundingClientRect().top +
+      scroller.scrollTop +
+      paddingTop;
+    return {
+      scroller,
+      listContentStart,
+      viewportHeight: scroller.clientHeight,
+      paddingTop,
+    };
+  }
+  return {
+    scroller: null,
+    listContentStart: 0,
+    viewportHeight: typeof window === "undefined" ? 0 : window.innerHeight,
+    paddingTop,
+  };
+}
+
+function windowFromScrollMetrics(
+  ol: HTMLOListElement,
+  layout: ThumbnailListLayout,
+  pageCount: number,
+  metrics: ScrollMetrics,
+): { first: number; last: number } {
+  const relativeScrollTop = metrics.scroller
+    ? metrics.scroller.scrollTop - metrics.listContentStart
+    : -(ol.getBoundingClientRect().top + metrics.paddingTop);
+  const viewportHeight = metrics.scroller
+    ? metrics.viewportHeight
+    : typeof window === "undefined"
+      ? 0
+      : window.innerHeight;
+  const range = computeThumbnailRange(layout, pageCount, relativeScrollTop, viewportHeight);
+  return { first: range.first, last: range.last };
+}
+
 /**
  * The pages of `viewer`'s document as a window-virtualized navigation list,
  * each item showing a thumbnail and the page's label (from the PDF's
@@ -79,10 +130,11 @@ export function PdfThumbnails({
   const rotation = useSelected(viewer.store.cold, (state) => state.rotation);
   const sizes = useSelected(viewer.store.sizes, (state) => state.sizes);
   const currentPage = useSelected(viewer.store.hot, (state) => state.currentPage);
-  const pageLabels = useOptionalPageLabels(viewer);
+  const pageLabels = useOptionalPageLabels(viewer, externalViewer !== undefined);
 
   const navRef = useRef<HTMLElement>(null);
   const olRef = useRef<HTMLOListElement>(null);
+  const scrollMetricsRef = useRef<ScrollMetrics | null>(null);
   const measuredHeightsRef = useRef<Map<number, number>>(new Map());
   const [chrome, setChrome] = useState({
     extraHeight: DEFAULT_THUMBNAIL_EXTRA_HEIGHT,
@@ -153,139 +205,229 @@ export function PdfThumbnails({
       : 0;
   const bottomSpacer = pageCount > 0 ? Math.max(0, listLayout.totalHeight - lastBottom) : 0;
 
-  const latestRef = useRef({ listLayout, pageCount });
-  latestRef.current = { listLayout, pageCount };
+  const latestRef = useRef({
+    listLayout,
+    pageCount,
+    initialFirst: initialWindow.first,
+    initialLast: initialWindow.last,
+  });
+  latestRef.current = {
+    listLayout,
+    pageCount,
+    initialFirst: initialWindow.first,
+    initialLast: initialWindow.last,
+  };
 
-  const syncWindowFromScroll = useCallback(() => {
-    const nav = navRef.current;
-    const ol = olRef.current;
-    const { listLayout: currentLayout, pageCount: count } = latestRef.current;
-    if (!nav || !ol || count <= 0) return;
-    const scroller = findThumbnailScroller(nav);
-    const paddingTop = Number.parseFloat(getComputedStyle(ol).paddingTop) || 0;
-    let relativeScrollTop = 0;
-    let viewportHeight = 0;
-    if (scroller) {
-      const listContentStart =
-        ol.getBoundingClientRect().top -
-        scroller.getBoundingClientRect().top +
-        scroller.scrollTop +
-        paddingTop;
-      relativeScrollTop = scroller.scrollTop - listContentStart;
-      viewportHeight = scroller.clientHeight;
-    } else {
-      relativeScrollTop = -(ol.getBoundingClientRect().top + paddingTop);
-      viewportHeight = window.innerHeight;
-    }
-    const next = computeThumbnailRange(currentLayout, count, relativeScrollTop, viewportHeight);
-    setBounds((prev) =>
-      prev && prev.first === next.first && prev.last === next.last
-        ? prev
-        : { first: next.first, last: next.last },
-    );
+  const applyBounds = useCallback((next: { first: number; last: number }) => {
+    setBounds((prev) => {
+      const curFirst = prev ? prev.first : latestRef.current.initialFirst;
+      const curLast = prev ? prev.last : latestRef.current.initialLast;
+      return curFirst === next.first && curLast === next.last ? prev : next;
+    });
   }, []);
 
-  // Subscribe to scroll and resize on the list's scroll container without per-frame commits.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-evaluate range whenever listLayout or pageCount changes.
+  const syncWindowFromScroll = useCallback(() => {
+    const ol = olRef.current;
+    const metrics = scrollMetricsRef.current;
+    const { listLayout: currentLayout, pageCount: count } = latestRef.current;
+    if (!ol || !metrics || count <= 0) return;
+    applyBounds(windowFromScrollMetrics(ol, currentLayout, count, metrics));
+  }, [applyBounds]);
+
+  // Resolve the scroll container once and cache its geometry across scroll events.
+  const hasPages = pageCount > 0;
+  const overflowStyle = style?.overflow;
+  const overflowYStyle = style?.overflowY;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: overflow style or className changes can alter which element scrolls vertically.
   useLayoutEffect(() => {
     const nav = navRef.current;
-    if (!nav || pageCount <= 0) return;
+    const ol = olRef.current;
+    if (!nav || !ol || !hasPages) {
+      scrollMetricsRef.current = null;
+      return;
+    }
     const scroller = findThumbnailScroller(nav);
-    syncWindowFromScroll();
+    scrollMetricsRef.current = measureScrollMetrics(ol, scroller);
+
+    const refreshOnResize = () => {
+      scrollMetricsRef.current = measureScrollMetrics(ol, scroller);
+      syncWindowFromScroll();
+    };
+
     if (scroller) {
       scroller.addEventListener("scroll", syncWindowFromScroll, { passive: true });
-      const observer = new ResizeObserver(syncWindowFromScroll);
+      const observer = new ResizeObserver(refreshOnResize);
       observer.observe(scroller);
+      if (scroller !== nav) observer.observe(nav);
       return () => {
         scroller.removeEventListener("scroll", syncWindowFromScroll);
         observer.disconnect();
       };
     }
     window.addEventListener("scroll", syncWindowFromScroll, { passive: true });
-    window.addEventListener("resize", syncWindowFromScroll);
+    window.addEventListener("resize", refreshOnResize);
     return () => {
       window.removeEventListener("scroll", syncWindowFromScroll);
-      window.removeEventListener("resize", syncWindowFromScroll);
+      window.removeEventListener("resize", refreshOnResize);
     };
-  }, [pageCount, listLayout, syncWindowFromScroll]);
+  }, [hasPages, className, overflowStyle, overflowYStyle, syncWindowFromScroll]);
 
-  // Measure rendered `<li>` chrome and rowGap synchronously before paint so totalHeight is exact.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-measure when mounted range or item geometry changes.
+  // Measure `<li>` chrome/rowGap when unmeasured or custom, align `currentPage` when view geometry changed, and sync the mounted window.
+  const chromeMeasuredRef = useRef<{
+    pageCount: number;
+    sizes: readonly PageSize[] | undefined;
+    rotation: Rotation;
+    width: number;
+    className: string | undefined;
+  } | null>(null);
+  const alignKeyRef = useRef<{
+    currentPage: number;
+    pageCount: number;
+    sizes: readonly PageSize[] | undefined;
+    rotation: Rotation;
+    width: number;
+    extraHeight: number;
+    rowGap: number;
+  } | null>(null);
+
   useLayoutEffect(() => {
+    const nav = navRef.current;
     const ol = olRef.current;
-    if (!ol || pageCount <= 0 || activeLast < activeFirst) return;
-    const nextRowGap = Number.parseFloat(getComputedStyle(ol).rowGap) || 0;
+    if (!nav || !ol || pageCount <= 0) return;
+
+    const prevChromeKey = chromeMeasuredRef.current;
+    const needsUniformMeasure =
+      !prevChromeKey ||
+      prevChromeKey.pageCount !== pageCount ||
+      prevChromeKey.sizes !== sizes ||
+      prevChromeKey.rotation !== rotation ||
+      prevChromeKey.width !== width ||
+      prevChromeKey.className !== className;
+
     let nextExtra = chrome.extraHeight;
+    let nextRowGap = chrome.rowGap;
     let measuredChanged = false;
-    const items = ol.children;
-    for (let i = 0; i < items.length; i++) {
-      const element = items[i] as HTMLElement | undefined;
-      if (!element) continue;
-      const attr = element.getAttribute("data-page-index");
-      if (attr === null) continue;
-      const pageIndex = Number(attr);
-      const height = element.getBoundingClientRect().height;
-      if (height <= 0) continue;
-      if (i === 0) {
-        const canvasHeight = thumbnailCanvasHeight(sizes?.[pageIndex], rotation, width);
-        nextExtra = Math.max(0, height - canvasHeight);
+
+    if (activeLast >= activeFirst && (needsUniformMeasure || renderItem !== undefined)) {
+      if (needsUniformMeasure) {
+        nextRowGap = Number.parseFloat(getComputedStyle(ol).rowGap) || 0;
       }
-      if (renderItem) {
-        const previous = measuredHeightsRef.current.get(pageIndex);
-        if (previous === undefined || Math.abs(previous - height) > 0.5) {
-          measuredHeightsRef.current.set(pageIndex, height);
-          measuredChanged = true;
+      const items = ol.children;
+      let sawSizedItem = false;
+      for (let i = 0; i < items.length; i++) {
+        const element = items[i] as HTMLElement | undefined;
+        if (!element) continue;
+        const attr = element.getAttribute("data-page-index");
+        if (attr === null) continue;
+        const pageIndex = Number(attr);
+        if (!needsUniformMeasure && measuredHeightsRef.current.has(pageIndex)) continue;
+        const height = element.getBoundingClientRect().height;
+        if (height <= 0) continue;
+        sawSizedItem = true;
+        if (i === 0 && needsUniformMeasure) {
+          const canvasHeight = thumbnailCanvasHeight(sizes?.[pageIndex], rotation, width);
+          nextExtra = Math.max(0, height - canvasHeight);
+        }
+        if (renderItem) {
+          const previous = measuredHeightsRef.current.get(pageIndex);
+          if (previous === undefined || Math.abs(previous - height) > 0.5) {
+            measuredHeightsRef.current.set(pageIndex, height);
+            measuredChanged = true;
+          }
+        } else {
+          break;
         }
       }
+      if (sawSizedItem && needsUniformMeasure) {
+        chromeMeasuredRef.current = { pageCount, sizes, rotation, width, className };
+      }
     }
-    if (
+
+    const chromeChanged =
       Math.abs(nextExtra - chrome.extraHeight) > 0.5 ||
       Math.abs(nextRowGap - chrome.rowGap) > 0.5 ||
-      measuredChanged
-    ) {
+      measuredChanged;
+
+    const effectiveLayout = chromeChanged
+      ? computeThumbnailOffsets(
+          pageCount,
+          sizes,
+          rotation,
+          width,
+          nextExtra,
+          nextRowGap,
+          renderItem ? measuredHeightsRef.current : undefined,
+        )
+      : listLayout;
+
+    if (chromeChanged) {
+      latestRef.current.listLayout = effectiveLayout;
       setChrome((prev) => ({
         extraHeight: nextExtra,
         rowGap: nextRowGap,
         measuredVersion: measuredChanged ? prev.measuredVersion + 1 : prev.measuredVersion,
       }));
     }
-  }, [activeFirst, activeLast, pageCount, sizes, rotation, width, renderItem]);
 
-  // Keep the active page's thumbnail scrolled into view (`block: "nearest"`), even if unmounted.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: realign for global geometry changes, not individual custom item measurements during manual browsing.
-  useLayoutEffect(() => {
-    const nav = navRef.current;
-    const ol = olRef.current;
-    if (!nav || !ol || pageCount <= 0) return;
-    const scroller = findThumbnailScroller(nav);
-    if (!scroller) return;
-    const paddingTop = Number.parseFloat(getComputedStyle(ol).paddingTop) || 0;
-    const listContentStart =
-      ol.getBoundingClientRect().top -
-      scroller.getBoundingClientRect().top +
-      scroller.scrollTop +
-      paddingTop;
-    const target = scrollOffsetForThumbnail(
-      latestRef.current.listLayout,
-      pageCount,
-      currentPage,
-      listContentStart,
-      scroller.scrollTop,
-      scroller.clientHeight,
-    );
-    if (target !== null) {
-      scroller.scrollTop = target;
-      syncWindowFromScroll();
+    const prevAlign = alignKeyRef.current;
+    const shouldAlign =
+      !prevAlign ||
+      prevAlign.currentPage !== currentPage ||
+      prevAlign.pageCount !== pageCount ||
+      prevAlign.sizes !== sizes ||
+      prevAlign.rotation !== rotation ||
+      prevAlign.width !== width ||
+      Math.abs(prevAlign.extraHeight - nextExtra) > 0.5 ||
+      Math.abs(prevAlign.rowGap - nextRowGap) > 0.5;
+
+    if (!shouldAlign && !chromeChanged && !needsUniformMeasure && scrollMetricsRef.current) {
+      return;
     }
+
+    const scroller = scrollMetricsRef.current
+      ? scrollMetricsRef.current.scroller
+      : findThumbnailScroller(nav);
+    const metrics = measureScrollMetrics(ol, scroller);
+    scrollMetricsRef.current = metrics;
+
+    if (shouldAlign) {
+      alignKeyRef.current = {
+        currentPage,
+        pageCount,
+        sizes,
+        rotation,
+        width,
+        extraHeight: nextExtra,
+        rowGap: nextRowGap,
+      };
+      if (scroller) {
+        const target = scrollOffsetForThumbnail(
+          effectiveLayout,
+          pageCount,
+          currentPage,
+          metrics.listContentStart,
+          scroller.scrollTop,
+          metrics.viewportHeight,
+        );
+        if (target !== null) scroller.scrollTop = target;
+      }
+    }
+
+    applyBounds(windowFromScrollMetrics(ol, effectiveLayout, pageCount, metrics));
   }, [
+    activeFirst,
+    activeLast,
     currentPage,
     pageCount,
     sizes,
     rotation,
     width,
+    className,
+    renderItem,
     chrome.extraHeight,
     chrome.rowGap,
-    syncWindowFromScroll,
+    listLayout,
+    applyBounds,
   ]);
 
   // Stable while the props are, so that a new current page renders two items again, not all.
@@ -319,6 +461,7 @@ export function PdfThumbnails({
           const pageIndex = activeFirst + offset;
           const pageNumber = pageIndex + 1;
           const displayLabel = pageLabels?.[pageIndex] ?? String(pageNumber);
+          const size = sizes?.[pageIndex];
           const buttonAriaLabel = pageLabel
             ? pageLabel(pageNumber, pageCount, displayLabel)
             : hasCustomLabels
@@ -331,6 +474,10 @@ export function PdfThumbnails({
               pageIndex={pageIndex}
               pageCount={pageCount}
               width={width}
+              canvasHeight={thumbnailCanvasHeight(size, rotation, width)}
+              sizeWidth={size?.width}
+              sizeHeight={size?.height}
+              rotation={rotation}
               displayLabel={displayLabel}
               ariaLabel={buttonAriaLabel}
               current={pageIndex === currentPage}
@@ -345,10 +492,14 @@ export function PdfThumbnails({
 }
 
 interface ItemProps {
-  viewer: Viewer;
+  viewer: ViewerController;
   pageIndex: number;
   pageCount: number;
   width: number;
+  canvasHeight: number;
+  sizeWidth: number | undefined;
+  sizeHeight: number | undefined;
+  rotation: Rotation;
   displayLabel: string;
   ariaLabel: string;
   current: boolean;
@@ -361,13 +512,29 @@ const Item = memo(function Item({
   pageIndex,
   pageCount,
   width,
+  canvasHeight,
+  sizeWidth,
+  sizeHeight,
+  rotation,
   displayLabel,
   ariaLabel,
   current,
   select,
   renderItem,
 }: ItemProps) {
-  const thumbnail = <PdfThumbnail viewer={viewer} pageIndex={pageIndex} width={width} />;
+  const handleSelect = useCallback(() => select(pageIndex), [select, pageIndex]);
+  const thumbnail = (
+    <ThumbnailCanvas
+      viewer={viewer}
+      pageIndex={pageIndex}
+      width={width}
+      canvasHeight={canvasHeight}
+      sizeWidth={sizeWidth}
+      sizeHeight={sizeHeight}
+      rotation={rotation}
+      virtualized
+    />
+  );
   return (
     <li data-page-index={pageIndex} aria-setsize={pageCount} aria-posinset={pageIndex + 1}>
       {renderItem ? (
@@ -379,7 +546,7 @@ const Item = memo(function Item({
           current,
           width,
           ariaLabel,
-          select: () => select(pageIndex),
+          select: handleSelect,
           thumbnail,
         })
       ) : (
@@ -387,7 +554,7 @@ const Item = memo(function Item({
           type="button"
           aria-label={ariaLabel}
           aria-current={current ? "page" : undefined}
-          onClick={() => select(pageIndex)}
+          onClick={handleSelect}
         >
           {thumbnail}
           <span aria-hidden="true">{displayLabel}</span>

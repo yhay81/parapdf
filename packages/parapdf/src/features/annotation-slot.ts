@@ -57,7 +57,6 @@ export interface AnnotationSlot {
   mounts: number;
   labels: Partial<AnnotationLabels> | undefined;
   editing: AnnotationEditing | null;
-  unsubscribeEditing: (() => void) | null;
   removeViewportGuard: (() => void) | null;
   mount(
     attach: (viewer: ViewerController, options?: AnnotationEditingOptions) => AnnotationEditing,
@@ -91,10 +90,11 @@ export function annotationSlot(viewer: ViewerController): AnnotationSlot {
   const initialControls: AnnotationControls = { ...STOPPED, ...methods };
   const store = new Store<AnnotationControls>(initialControls);
 
+  let unsubscribeEditing: (() => void) | null = null;
   const detachNow = () => {
+    unsubscribeEditing?.();
+    unsubscribeEditing = null;
     if (!slot.editing) return;
-    slot.unsubscribeEditing?.();
-    slot.unsubscribeEditing = null;
     slot.removeViewportGuard?.();
     slot.removeViewportGuard = null;
     const current = slot.editing;
@@ -114,7 +114,6 @@ export function annotationSlot(viewer: ViewerController): AnnotationSlot {
     mounts: 0,
     labels: undefined,
     editing: null,
-    unsubscribeEditing: null,
     removeViewportGuard: null,
     mount(attach, labels) {
       slot.mounts++;
@@ -130,12 +129,8 @@ export function annotationSlot(viewer: ViewerController): AnnotationSlot {
         const created = attach(viewer, { ...(labels ? { labels } : {}), store });
         slot.editing = created;
         if (created.store !== store) {
-          const sync = () => {
-            const { tool, state, styles } = created.store.get();
-            store.set({ tool, state, styles });
-          };
-          sync();
-          slot.unsubscribeEditing = created.store.subscribe(sync);
+          store.set(created.store.get());
+          unsubscribeEditing = created.store.subscribe(() => store.set(created.store.get()));
         }
       } else if (!sameAnnotationLabels(labels, slot.labels)) {
         slot.labels = labels;

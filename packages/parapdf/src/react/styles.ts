@@ -23,6 +23,17 @@
  * whole pixels, is larger than its text layer, which pdf.js rounds down.
  */
 export const VIEWER_CSS = `
+.parapdf-pages {
+  position: relative;
+}
+.parapdf-pages > section {
+  position: absolute;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.3);
+  contain: strict;
+  --scale-round-x: 1px;
+  --scale-round-y: 1px;
+}
 .parapdf-pages > section, .parapdf-text-layer {
   --total-scale-factor: var(--scale-factor);
 }

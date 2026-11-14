@@ -1,7 +1,9 @@
 "use client";
 
 import type { ViewerController } from "../../view/viewer.ts";
-import { ThumbnailRenderer } from "./renderer.ts";
+import { type AttachThumbnailOptions, ThumbnailRenderer } from "./renderer.ts";
+
+export type { AttachThumbnailOptions };
 
 /** Each viewer's thumbnails, while any is attached. */
 const renderers = new WeakMap<
@@ -13,13 +15,15 @@ const renderers = new WeakMap<
  * Draw page `pageIndex` of `viewer`'s document into `canvas` as a thumbnail
  * `width` CSS pixels wide while it is near the visible part of its scroll
  * container, at a lower priority than the pages in the viewport; returns
- * the function that releases it. `<PdfThumbnail>` calls this.
+ * the function that releases it. `<PdfThumbnail>` and `<PdfThumbnails>` call
+ * this.
  */
 export function attachThumbnail(
   viewer: ViewerController,
   pageIndex: number,
   canvas: HTMLCanvasElement,
   width: number,
+  options?: AttachThumbnailOptions,
 ): () => void {
   let entry = renderers.get(viewer);
   if (!entry) {
@@ -30,8 +34,12 @@ export function attachThumbnail(
       layers: () => viewer.layers,
     });
     const detach = viewer.extend({
-      ready(_session, signal) {
+      ready(session, signal) {
         renderer.refresh();
+        session.onContentChange(() => {
+          renderer.reset();
+          renderer.refresh();
+        }, signal);
         // The document's pixels go with it, and with the viewport.
         signal.addEventListener("abort", () => renderer.reset(), { once: true });
       },
@@ -45,14 +53,21 @@ export function attachThumbnail(
   }
   const held = entry;
   held.count++;
-  const release = held.renderer.attach(pageIndex, canvas, width);
+  const release = held.renderer.attach(pageIndex, canvas, width, options);
   let released = false;
   return () => {
     if (released) return;
     released = true;
     release();
     if (--held.count > 0) return;
-    held.detach();
-    if (renderers.get(viewer) === held) renderers.delete(viewer);
+    // Defer teardown past the current React commit so StrictMode ref replay and
+    // single-commit window jumps (`0..10` -> `494..506`) keep kept canvases
+    // alive while unmounting `<PdfThumbnails>` releases them immediately after.
+    queueMicrotask(() => {
+      if (held.count > 0) return;
+      held.renderer.reset();
+      held.detach();
+      if (renderers.get(viewer) === held) renderers.delete(viewer);
+    });
   };
 }

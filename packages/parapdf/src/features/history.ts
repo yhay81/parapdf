@@ -74,7 +74,7 @@ export class Positions<T> {
 }
 
 /** Keep where `viewer`'s links, outline, and named actions jumped from; `detach()` undoes it. */
-export function attachHistory(viewer: ViewerController): History {
+export function attachHistory(viewer: ViewerController, onDetach?: () => void): History {
   const positions = new Positions<ViewerPosition>();
   const publish = () =>
     store.set({ canGoBack: positions.canGoBack, canGoForward: positions.canGoForward });
@@ -124,6 +124,7 @@ export function attachHistory(viewer: ViewerController): History {
       detachExtension();
       positions.clear();
       publish();
+      onDetach?.();
     },
   };
 }
@@ -138,14 +139,9 @@ const shared = new WeakMap<ViewerController, History>();
 export function historyOf(viewer: ViewerController): History {
   let history = shared.get(viewer);
   if (!history) {
-    const attached = attachHistory(viewer);
-    const own: History = {
-      ...attached,
-      detach() {
-        attached.detach();
-        if (shared.get(viewer) === own) shared.delete(viewer);
-      },
-    };
+    const own = attachHistory(viewer, () => {
+      if (shared.get(viewer) === own) shared.delete(viewer);
+    });
     shared.set(viewer, own);
     history = own;
   }

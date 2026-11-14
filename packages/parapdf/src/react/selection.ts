@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getSelection, type PdfSelection } from "../features/selection.ts";
-import type { Viewer } from "../view/viewer.ts";
+import type { Viewer, ViewerController } from "../view/viewer.ts";
 import { useOptionalViewer } from "./context.ts";
 
 const samePoint = (a: PdfSelection["start"], b: PdfSelection["start"]): boolean =>
@@ -117,6 +117,115 @@ export function computePopoverPosition(options: {
   return { x: Math.round(x), y: Math.round(y), side };
 }
 
+interface SelectionRangeSnapshot {
+  readonly startContainer: Node;
+  readonly startOffset: number;
+  readonly endContainer: Node;
+  readonly endOffset: number;
+  readonly layout: object;
+}
+
+function useViewerSelection(resolved: ViewerController, settleDrag: boolean): PdfSelection | null {
+  const [selection, setSelection] = useState<PdfSelection | null>(null);
+  const currentRef = useRef<PdfSelection | null>(selection);
+  currentRef.current = selection;
+
+  useEffect(() => {
+    let frame = 0;
+    let lastRange: SelectionRangeSnapshot | null = null;
+
+    const commit = (next: PdfSelection | null) => {
+      if (sameSelection(currentRef.current, next)) return;
+      currentRef.current = next;
+      setSelection(next);
+    };
+
+    const clear = () => {
+      lastRange = null;
+      commit(null);
+    };
+
+    const read = () => {
+      frame = 0;
+      if (settleDrag && resolved.selectionDragging) {
+        clear();
+        return;
+      }
+      const domSelection = document.getSelection();
+      const layout = resolved.store.get().layout;
+      if (
+        !domSelection ||
+        domSelection.isCollapsed ||
+        !layout ||
+        !resolved.content ||
+        resolved.textLayers.size === 0
+      ) {
+        clear();
+        return;
+      }
+      if (domSelection.rangeCount === 1) {
+        const range = domSelection.getRangeAt(0);
+        if (
+          lastRange !== null &&
+          lastRange.layout === layout &&
+          lastRange.startContainer === range.startContainer &&
+          lastRange.startOffset === range.startOffset &&
+          lastRange.endContainer === range.endContainer &&
+          lastRange.endOffset === range.endOffset
+        ) {
+          return;
+        }
+        lastRange = {
+          startContainer: range.startContainer,
+          startOffset: range.startOffset,
+          endContainer: range.endContainer,
+          endOffset: range.endOffset,
+          layout,
+        };
+      } else {
+        lastRange = null;
+      }
+      const next = getSelection(resolved);
+      if (!next) lastRange = null;
+      commit(next);
+    };
+
+    const onChange = () => {
+      if (settleDrag && resolved.selectionDragging) return;
+      frame ||= requestAnimationFrame(read);
+    };
+
+    const unsubscribeDrag = settleDrag
+      ? resolved.onSelectionDragChange(() => {
+          if (frame) {
+            cancelAnimationFrame(frame);
+            frame = 0;
+          }
+          if (resolved.selectionDragging) clear();
+          else read();
+        })
+      : null;
+
+    document.addEventListener("selectionchange", onChange);
+    read();
+    return () => {
+      document.removeEventListener("selectionchange", onChange);
+      unsubscribeDrag?.();
+      cancelAnimationFrame(frame);
+    };
+  }, [resolved, settleDrag]);
+  return selection;
+}
+
+/**
+ * Internal hook for `<PdfSelectionPopover>`: suppresses DOM range measurements
+ * and React commits during primary-button selection drags and commits once on
+ * pointer release, while still updating on keyboard or programmatic selections.
+ */
+export function useSettledSelection(viewer?: Viewer): PdfSelection | null {
+  return useViewerSelection(useOptionalViewer(viewer), true);
+}
+
 /**
  * The text selected in `viewer`, or in the viewer of the nearest `<PdfView>`
  * or `<PdfDocument>`, the rectangles it covers on its pages, and a virtual
@@ -125,24 +234,5 @@ export function computePopoverPosition(options: {
  * frame while the reader drags.
  */
 export function useSelection(viewer?: Viewer): PdfSelection | null {
-  const resolved = useOptionalViewer(viewer);
-  const [selection, setSelection] = useState<PdfSelection | null>(null);
-  useEffect(() => {
-    let frame = 0;
-    const read = () => {
-      frame = 0;
-      const next = getSelection(resolved);
-      setSelection((previous) => (sameSelection(previous, next) ? previous : next));
-    };
-    const onChange = () => {
-      frame ||= requestAnimationFrame(read);
-    };
-    document.addEventListener("selectionchange", onChange);
-    read();
-    return () => {
-      document.removeEventListener("selectionchange", onChange);
-      cancelAnimationFrame(frame);
-    };
-  }, [resolved]);
-  return selection;
+  return useViewerSelection(useOptionalViewer(viewer), false);
 }

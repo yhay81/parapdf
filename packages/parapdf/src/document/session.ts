@@ -308,6 +308,7 @@ export class DocumentSession {
   #knownPermissions: DocumentPermissions | undefined = undefined;
   #knownInitialView: PdfInitialView | undefined = undefined;
   #knownDirection: "ltr" | "rtl" | null | undefined = undefined;
+  #knownPageLabels: readonly string[] | null | undefined = undefined;
   /** Which layers show, once read. */
   #loadedLayers: LayerState | null = null;
 
@@ -464,6 +465,11 @@ export class DocumentSession {
     return this.#knownDirection;
   }
 
+  /** Synchronously known page labels once `pageLabels()` has resolved. */
+  get knownPageLabels(): readonly string[] | null | undefined {
+    return this.#knownPageLabels;
+  }
+
   /**
    * Learns the size of every page in the background, once for every viewer,
    * a batch at a time, and resolves with them. Stops when the session closes.
@@ -598,7 +604,9 @@ export class DocumentSession {
     return this.#once("pageLabels", async () => {
       const labels = await this.proxy.getPageLabels();
       // pdf.js returns labels only for documents that define them.
-      return labels && labels.length === this.pageCount ? labels : null;
+      const resolved = labels && labels.length === this.pageCount ? labels : null;
+      this.#knownPageLabels = resolved;
+      return resolved;
     });
   }
 

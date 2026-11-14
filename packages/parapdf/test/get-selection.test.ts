@@ -190,10 +190,15 @@ describe("getSelection", () => {
     const layer = new FakeElement([".parapdf-text-layer"], hello, new FakeElement([]), world, end);
     const section = new FakeElement(["section[data-page]"], layer);
     section.dataset.page = "1";
+    const content = new FakeElement([], section);
+    content.querySelectorAll = () => {
+      throw new Error("getSelection must read viewer.textLayers rather than querySelectorAll");
+    };
     const viewer = {
-      content: new FakeElement([], section),
+      content,
+      pageHost: (index: number) => (index === 0 ? section : undefined),
       store: { get: () => ({ layout: { sizes: [{ width: 612, height: 792 }], rotation: 0 } }) },
-      textLayers: new Map([[0, { elements: [hello, empty, world] }]]),
+      textLayers: new Map([[0, { layer, elements: [hello, empty, world] }]]),
     } as unknown as ViewerController;
     return { viewer, layer, hello, world, end };
   }

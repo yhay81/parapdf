@@ -64,6 +64,8 @@ export interface TextLayerRequest {
 }
 
 export interface TextLayerHandle {
+  /** The `.parapdf-text-layer` container holding the positioned runs. */
+  readonly layer: HTMLElement;
   /** One element per item of `PageText.items`, in the same order. */
   readonly elements: readonly HTMLElement[];
   /** The page's structure tree, which labels its annotations; null without `structure`. */
@@ -154,6 +156,7 @@ export function buildTextLayer(
       }
     }
     return {
+      layer: container,
       elements: rendered.textDivs,
       structTree: tree,
       update(nextScale, nextRotation) {

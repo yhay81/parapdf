@@ -115,6 +115,8 @@ export interface GestureHost {
   flip(direction: 1 | -1, axis: "x" | "y"): boolean;
   /** Update the mounted window and the scheduler at the next animation frame. */
   requestUpdate(): void;
+  /** Notify listeners when a gesture preview transform is applied or cleared. */
+  previewChanged?(): void;
 }
 
 /**
@@ -503,6 +505,7 @@ export class ViewerGestures {
     zoom.shiftY = target.top - clamp(target.top, 0, maxTop);
     content.style.transformOrigin = `${zoom.originX}px ${zoom.originY}px`;
     content.style.transform = `translate(${zoom.panX + zoom.shiftX}px, ${zoom.panY + zoom.shiftY}px) scale(${zoom.factor})`;
+    this.#host.previewChanged?.();
     this.#host.requestUpdate();
   }
 
@@ -556,6 +559,7 @@ export class ViewerGestures {
       // A two-finger drag that never pinched only scrolls.
       scroller.scrollLeft = left - zoom.panX;
       scroller.scrollTop = top - zoom.panY;
+      this.#host.previewChanged?.();
       return;
     }
     this.#host.zoomTo(
@@ -563,6 +567,7 @@ export class ViewerGestures {
       { x: zoom.originX + zoom.panX - left, y: zoom.originY + zoom.panY - top },
       { x: zoom.originX, y: zoom.originY },
     );
+    this.#host.previewChanged?.();
   };
 
   /** Commit a gesture in progress before something else changes the layout under its preview. */
@@ -580,6 +585,9 @@ export class ViewerGestures {
     this.#touchListeners = null;
     this.#gestureScale = null;
     const content = this.#host.content();
-    if (content) content.style.transform = "";
+    if (content?.style.transform) {
+      content.style.transform = "";
+      this.#host.previewChanged?.();
+    }
   }
 }

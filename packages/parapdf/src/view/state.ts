@@ -1,5 +1,5 @@
 import type { PageSize } from "../document/session.ts";
-import { type ReadableStore, Store } from "../document/store.ts";
+import { type ReadableStore, Store, type StoreListener } from "../document/store.ts";
 import type { Rotation } from "../pdfjs/draw.ts";
 import type { Direction, Layout, ScrollMode, SpreadMode } from "./layout.ts";
 
@@ -115,7 +115,7 @@ export class ViewerStore implements ReadableStore<ViewerState> {
   }
 
   get = (): ViewerState => this.#all.get();
-  subscribe = (listener: () => void): (() => void) => this.#all.subscribe(listener);
+  subscribe = (listener: StoreListener): (() => void) => this.#all.subscribe(listener);
 
   set(patch: Partial<ViewerState>): void {
     const full =

@@ -2,7 +2,7 @@
 
 import { type ReactNode, useContext, useMemo, useSyncExternalStore } from "react";
 import type { PdfSessionController } from "../document/pdf-session.ts";
-import type { PageSize } from "../document/session.ts";
+import type { DocumentSession, PageSize } from "../document/session.ts";
 import type { ReadableStore } from "../document/store.ts";
 import type { Rotation } from "../pdfjs/draw.ts";
 import { clamp, turnedSize } from "../view/layout.ts";
@@ -221,6 +221,11 @@ export function createPageLabelsStore(
   viewer: ViewerController,
   pdfSession: PdfSessionController | null,
 ): ReadableStore<readonly string[] | null> {
+  const viewerDoc = (): DocumentSession | null =>
+    viewer.workSignal && !viewer.workSignal.aborted ? viewer.session : null;
+  const currentDoc = (): DocumentSession | null =>
+    viewerDoc() ?? pdfSession?.openDocument() ?? null;
+
   let labels: readonly string[] | null = null;
   const listeners = new Set<() => void>();
   let stop: (() => void) | null = null;
@@ -232,53 +237,48 @@ export function createPageLabelsStore(
   };
 
   const start = () => {
-    let token = 0;
-    const detachViewer = viewer.extend({
-      ready(docSession, signal) {
-        const current = ++token;
+    const watch = new AbortController();
+    labels = currentDoc()?.knownPageLabels ?? null;
+
+    const sync = () => {
+      const fromViewer = viewerDoc();
+      const doc = fromViewer ?? pdfSession?.openDocument() ?? null;
+      if (!doc) {
         set(null);
-        signal.addEventListener(
-          "abort",
-          () => {
-            if (current === token) set(null);
-          },
-          { once: true },
-        );
-        void docSession.pageLabels().then(
-          (resolved) => {
-            if (!signal.aborted && current === token) set(resolved);
-          },
-          () => {
-            if (!signal.aborted && current === token) set(null);
-          },
-        );
+        return;
+      }
+      if (!fromViewer && pdfSession) {
+        pdfSession.signal.addEventListener("abort", sync, { once: true, signal: watch.signal });
+      }
+      if (doc.knownPageLabels !== undefined) {
+        set(doc.knownPageLabels);
+        return;
+      }
+      set(null);
+      void doc.pageLabels().then(
+        (resolved) => {
+          if (!watch.signal.aborted && currentDoc() === doc) set(resolved);
+        },
+        () => {
+          if (!watch.signal.aborted && currentDoc() === doc) set(null);
+        },
+      );
+    };
+
+    const detachViewer = viewer.extend({
+      ready(_docSession, signal) {
+        sync();
+        signal.addEventListener("abort", sync, { once: true, signal: watch.signal });
       },
     });
-
-    let unsubSession: (() => void) | null = null;
-    if (pdfSession) {
-      const readFromContext = () => {
-        if (viewer.session) return;
-        const { status } = pdfSession.state;
-        if (status !== "ready") {
-          set(null);
-          return;
-        }
-        const current = ++token;
-        void pdfSession
-          .read("pageLabels", (session) => session.pageLabels(), null)
-          .then((resolved) => {
-            if (current === token && pdfSession.state.status === "ready") {
-              set(resolved);
-            }
-          });
-      };
-      unsubSession = pdfSession.stateStore.subscribe(readFromContext);
-      readFromContext();
-    }
-
+    const unsubSession = pdfSession
+      ? pdfSession.stateStore.subscribe((changedKeys) => {
+          if (!changedKeys || changedKeys.has("status")) sync();
+        })
+      : null;
+    sync();
     return () => {
-      token++;
+      watch.abort();
       detachViewer();
       unsubSession?.();
       labels = null;
@@ -286,14 +286,15 @@ export function createPageLabelsStore(
   };
 
   return {
-    get: () => labels,
+    get: () => (stop ? labels : (currentDoc()?.knownPageLabels ?? null)),
     subscribe(listener) {
       listeners.add(listener);
       if (listeners.size === 1) stop = start();
       return () => {
         if (listeners.delete(listener) && listeners.size === 0) {
-          stop?.();
+          const cleanup = stop;
           stop = null;
+          cleanup?.();
         }
       };
     },
@@ -303,8 +304,12 @@ export function createPageLabelsStore(
 const getNullSnapshot = (): null => null;
 
 /** Non-suspending hook returning the PDF's `pageLabels` once resolved, or `null`. */
-export function useOptionalPageLabels(viewer: ViewerController): readonly string[] | null {
-  const pdfSession = useContext(SessionContext);
+export function useOptionalPageLabels(
+  viewer: ViewerController,
+  hasExternalViewer = false,
+): readonly string[] | null {
+  const contextSession = useContext(SessionContext);
+  const pdfSession = hasExternalViewer ? null : contextSession;
   const store = useMemo(() => createPageLabelsStore(viewer, pdfSession), [viewer, pdfSession]);
   return useSyncExternalStore(store.subscribe, store.get, getNullSnapshot);
 }

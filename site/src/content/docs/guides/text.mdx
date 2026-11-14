@@ -69,13 +69,15 @@ committing React state on scroll, render `PdfSelectionPopover` inside
 ```
 
 Pressing non-editable buttons inside `PdfSelectionPopover` keeps the browser's
-text selection intact until your `onClick` handler clears or acts on it.
+text selection intact until your `onClick` handler clears or acts on it. During
+a pointer selection drag, `PdfSelectionPopover` waits until release to commit,
+then follows scroll and zoom previews imperatively without React state updates.
 
 ## Overlays and page coordinates
 
 `PdfPageOverlay` and `PdfPageOverlays` draw your own elements over pages, placed
 with `PdfPageRect` in PDF points from the page's unturned top-left corner. React
-renders them through a portal into a layer of the page, above its drawing and
+renders them into an overlay layer of the page, above its drawing and
 text, and they follow zoom and rotation through layout alone, without
 re-rendering:
 

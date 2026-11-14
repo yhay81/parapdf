@@ -11,7 +11,7 @@ import {
   splitFragment,
 } from "./registry.ts";
 import type { DocumentSession, PdfSource } from "./session.ts";
-import { type ReadableStore, Store } from "./store.ts";
+import { type ReadableStore, Store, type StoreListener } from "./store.ts";
 
 /**
  * A session's document state as a provider that shows no password prompt
@@ -46,7 +46,17 @@ function withoutPrompt(
       }
       return shown;
     },
-    subscribe: state.subscribe,
+    subscribe: (listener) =>
+      state.subscribe((changedKeys) => {
+        if (
+          prompts() ||
+          (changedKeys && !changedKeys.has("status") && !changedKeys.has("passwordReason"))
+        ) {
+          listener(changedKeys);
+          return;
+        }
+        listener();
+      }),
   };
 }
 
@@ -114,7 +124,7 @@ export class PdfSessionController implements PdfSession {
   #shared: SharedSession | null = null;
   /** Stops hearing `#shared`'s state, which it hears while `stateStore` has listeners. */
   #unwatch: (() => void) | null = null;
-  readonly #listeners = new Set<() => void>();
+  readonly #listeners = new Set<StoreListener>();
   /** The registry's session while the provider holds it. */
   #lease: SessionLease | null = null;
   /** Aborted when the provider lets the session go; the next hold gets another. */
@@ -162,8 +172,8 @@ export class PdfSessionController implements PdfSession {
     });
   }
 
-  readonly #notify = (): void => {
-    for (const listener of [...this.#listeners]) listener();
+  readonly #notify = (changedKeys?: ReadonlySet<PropertyKey>): void => {
+    for (const listener of [...this.#listeners]) listener(changedKeys);
   };
 
   /**

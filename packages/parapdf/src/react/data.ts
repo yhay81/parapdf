@@ -8,8 +8,7 @@ import type {
   PdfInitialView,
   PdfMetadata,
 } from "../document/session.ts";
-import type { ReadableStore } from "../document/store.ts";
-import type { LayerState, PdfLayer } from "../pdfjs/layers.ts";
+import type { PdfLayer } from "../pdfjs/layers.ts";
 import { useSessionData } from "./context.ts";
 
 /**
@@ -64,43 +63,9 @@ export function useInitialView(): PdfInitialView | null {
   );
 }
 
-/** The layers a session's read gave, as a store: null until read. */
-interface LayerStore extends ReadableStore<readonly PdfLayer[] | null> {
-  readonly read: Promise<readonly PdfLayer[]>;
-}
-
-/** Each read of a session's layers as a store, which every component reading them shares. */
-const layerStores = new WeakMap<Promise<LayerState | null>, LayerStore>();
-
-function layerStore(reading: Promise<LayerState | null>): LayerStore {
-  let store = layerStores.get(reading);
-  if (!store) {
-    let layers: readonly PdfLayer[] | null = null;
-    const listeners = new Set<() => void>();
-    const publish = (next: readonly PdfLayer[]) => {
-      layers = next;
-      for (const listener of [...listeners]) listener();
-    };
-    const read = reading.then((state) => {
-      // The layers live as long as their document, and so does this.
-      state?.subscribe(() => publish(state.layers()), new AbortController().signal);
-      publish(state?.layers() ?? []);
-      return layers ?? [];
-    });
-    store = {
-      read,
-      get: () => layers,
-      subscribe: (listener) => {
-        listeners.add(listener);
-        return () => {
-          listeners.delete(listener);
-        };
-      },
-    };
-    layerStores.set(reading, store);
-  }
-  return store;
-}
+const EMPTY_LAYERS: readonly PdfLayer[] = [];
+const noopSubscribe = (): (() => void) => () => {};
+const getEmptyLayers = (): readonly PdfLayer[] => EMPTY_LAYERS;
 
 /**
  * The document's layers (optional content) in its own order, and which
@@ -108,12 +73,12 @@ function layerStore(reading: Promise<LayerState | null>): LayerStore {
  * the document; empty when it has none. Suspends as `useOutline()` does.
  */
 export function useLayers(): readonly PdfLayer[] {
-  const store = layerStore(
+  const state = use(
     useSessionData("useLayers").read("layers", (session) => session.layers(), null),
   );
-  const layers = useSyncExternalStore(store.subscribe, store.get, store.get);
-  // Read at every render, so that React finds the same promise at the same
-  // place each time it renders this again; it suspends until the first read.
-  const read = use(store.read);
-  return layers ?? read;
+  return useSyncExternalStore(
+    state ? state.subscribe : noopSubscribe,
+    state ? state.layers : getEmptyLayers,
+    getEmptyLayers,
+  );
 }

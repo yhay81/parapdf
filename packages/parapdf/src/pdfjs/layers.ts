@@ -54,6 +54,7 @@ export class LayerState {
   /** Every change, in order, to replay on a configuration for printing. */
   readonly #changes: ((config: OptionalContentConfig) => void)[] = [];
   readonly #listeners = new Set<() => void>();
+  #snapshot: readonly PdfLayer[] | null = null;
 
   private constructor(doc: Pdfjs.PDFDocumentProxy, config: OptionalContentConfig) {
     this.#doc = doc;
@@ -70,9 +71,10 @@ export class LayerState {
   }
 
   /** The document's layers in its own order, with their visibility now; empty when it has none. */
-  layers(): readonly PdfLayer[] {
-    return layersOf(this.config);
-  }
+  readonly layers = (): readonly PdfLayer[] => {
+    this.#snapshot ??= layersOf(this.config);
+    return this.#snapshot;
+  };
 
   /** Show or hide a layer. Showing one of a set of exclusive layers hides the others. */
   setVisible(id: string, visible: boolean): void {
@@ -95,16 +97,21 @@ export class LayerState {
     return config;
   }
 
-  /** Call `listener` after every change; aborting `signal` stops it. */
-  subscribe(listener: () => void, signal: AbortSignal): void {
-    if (signal.aborted) return;
+  /** Call `listener` after every change; returns an unsubscribe function and optionally stops on `signal`. */
+  readonly subscribe = (listener: () => void, signal?: AbortSignal): (() => void) => {
+    if (signal?.aborted) return () => {};
     this.#listeners.add(listener);
-    signal.addEventListener("abort", () => this.#listeners.delete(listener), { once: true });
-  }
+    const unsubscribe = () => {
+      this.#listeners.delete(listener);
+    };
+    signal?.addEventListener("abort", unsubscribe, { once: true });
+    return unsubscribe;
+  };
 
   #change(apply: (config: OptionalContentConfig) => void): void {
     this.#changes.push(apply);
     apply(this.config);
+    this.#snapshot = null;
     for (const listener of [...this.#listeners]) listener();
   }
 }

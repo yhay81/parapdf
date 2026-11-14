@@ -88,6 +88,8 @@ export {
   type PdfPageOverlayProps,
   PdfPageOverlays,
   type PdfPageOverlaysProps,
+  PdfPageRect,
+  type PdfPageRectProps,
 } from "./react/overlays.ts";
 export {
   PdfAnnotationEditor,
@@ -96,7 +98,6 @@ export {
 export { PdfAutoLinks, type PdfAutoLinksProps } from "./react/PdfAutoLinks.tsx";
 export { PdfDocument, type PdfDocumentProps } from "./react/PdfDocument.tsx";
 export { PdfForms, type PdfFormsProps } from "./react/PdfForms.tsx";
-export { PdfPageRect, type PdfPageRectProps } from "./react/PdfPageRect.tsx";
 export { PdfPermissions, type PdfPermissionsProps } from "./react/PdfPermissions.tsx";
 export {
   PdfSelectionPopover,

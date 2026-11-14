@@ -4,6 +4,8 @@ import { createElement, Suspense } from "react";
 import { renderToString } from "react-dom/server";
 import { prerender } from "react-dom/static";
 import { PdfSessionController } from "../src/document/pdf-session.ts";
+import { ThumbnailRenderer } from "../src/features/thumbnails/renderer.ts";
+import type { Rotation } from "../src/pdfjs/draw.ts";
 import { SessionContext, ViewerContext } from "../src/react/context.ts";
 import { OutlineTree, outlineItemStyle, PdfOutline } from "../src/react/outline.ts";
 import {
@@ -241,6 +243,188 @@ describe("createPageLabelsStore", () => {
     releaseSession();
     assert.equal(store.get(), null);
     unsubscribe();
+  });
+
+  it("exposes warm knownPageLabels synchronously on initial get() without a null flash", async () => {
+    const doc = fakeDocument({
+      pages: [LETTER, LETTER],
+      proxy: {
+        getPageLabels: async () => ["A-1", "A-2"],
+      },
+    });
+    const { loader: pdfjs } = fakePdfjs(async () => doc.proxy);
+    const session = new PdfSessionController(
+      { url: "https://example.test/warm-labels.pdf" },
+      { pdfjs },
+    );
+    const releaseSession = session.connect();
+    await settle();
+    const docSession = await session.document();
+    await docSession.pageLabels();
+    assert.deepEqual(docSession.knownPageLabels, ["A-1", "A-2"]);
+
+    const viewer = new ViewerController();
+    const releaseViewer = viewer.hold();
+    viewer.open(session);
+
+    const store = createPageLabelsStore(viewer, session);
+    assert.deepEqual(store.get(), ["A-1", "A-2"]);
+    let notifications = 0;
+    const unsubscribe = store.subscribe(() => notifications++);
+    assert.deepEqual(store.get(), ["A-1", "A-2"]);
+    assert.equal(notifications, 0);
+
+    unsubscribe();
+    releaseViewer();
+    releaseSession();
+  });
+
+  it("ignores download progress patches on pdfSession.stateStore", () => {
+    const viewer = new ViewerController();
+    let status: "loading" | "ready" = "loading";
+    let stateReads = 0;
+    const listeners = new Set<(changedKeys?: ReadonlySet<PropertyKey>) => void>();
+    const fakeSession = {
+      get state() {
+        stateReads++;
+        return { status };
+      },
+      openDocument: () => {
+        stateReads++;
+        return null;
+      },
+      stateStore: {
+        get: () => ({ status }),
+        subscribe(listener: (changedKeys?: ReadonlySet<PropertyKey>) => void) {
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        },
+      },
+    } as unknown as PdfSessionController;
+
+    const store = createPageLabelsStore(viewer, fakeSession);
+    const unsub = store.subscribe(() => {});
+    const afterStart = stateReads;
+    for (const listener of listeners) listener(new Set(["progress"]));
+    assert.equal(stateReads, afterStart);
+
+    status = "ready";
+    for (const listener of listeners) listener(new Set(["status"]));
+    assert.ok(stateReads > afterStart);
+    unsub();
+  });
+});
+
+describe("ThumbnailRenderer virtualized mode and kept canvases", () => {
+  it("skips getComputedStyle and IntersectionObserver, restores kept canvases on scroll-back without re-enqueuing, evicts LRU, and zeroes on reset", async () => {
+    const savedWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+    const savedComputed = Object.getOwnPropertyDescriptor(globalThis, "getComputedStyle");
+    const savedIO = Object.getOwnPropertyDescriptor(globalThis, "IntersectionObserver");
+    Object.assign(globalThis, {
+      window: { devicePixelRatio: 1 },
+      getComputedStyle: () => {
+        throw new Error("virtualized thumbnails must not call getComputedStyle");
+      },
+      IntersectionObserver: class {
+        constructor() {
+          throw new Error("virtualized thumbnails must not construct IntersectionObserver");
+        }
+      },
+    });
+
+    try {
+      let rotation: Rotation = 0;
+      const enqueued: number[] = [];
+      const makeCanvas = (label: string) => {
+        let drawnFrom: string | null = null;
+        const canvas = {
+          label,
+          width: 0,
+          height: 0,
+          get drawnFrom() {
+            return drawnFrom;
+          },
+          getContext: () => ({
+            drawImage(source: { label: string }) {
+              drawnFrom = source.label;
+            },
+          }),
+        };
+        return canvas as unknown as HTMLCanvasElement & {
+          readonly label: string;
+          readonly drawnFrom: string | null;
+        };
+      };
+
+      // Each 100x100 page drawn at width=100 holds 10,000 pixels; budget=20,000 holds at most 2 kept thumbnails.
+      const renderer = new ThumbnailRenderer({
+        renderer: () =>
+          ({
+            copyPage: () => false,
+            enqueue: (pageIndex: number, _request: unknown, done: (err: Error | null) => void) => {
+              enqueued.push(pageIndex);
+              done(null);
+              return null;
+            },
+          }) as never,
+        pageSize: () => ({ width: 100, height: 100 }),
+        rotation: () => rotation,
+        layers: () => null,
+        maxKeptPixels: 20_000,
+      });
+
+      const c0 = makeCanvas("c0");
+      const c1 = makeCanvas("c1");
+      const c2 = makeCanvas("c2");
+      const stop0 = renderer.attach(0, c0, 100, { virtualized: true });
+      const stop1 = renderer.attach(1, c1, 100, { virtualized: true });
+      const stop2 = renderer.attach(2, c2, 100, { virtualized: true });
+      assert.deepEqual(enqueued, [0, 1, 2]);
+      assert.equal(c0.width, 100);
+
+      // Unmounting all 3 keeps c0, c1, c2 initially, then microtask trims oldest (page 0) to stay <= 20,000 pixels.
+      stop0();
+      stop1();
+      stop2();
+      await Promise.resolve();
+      assert.equal(renderer.keptPixels, 20_000);
+      assert.equal(c0.width, 0);
+      assert.equal(c1.width, 100);
+      assert.equal(c2.width, 100);
+
+      // Scrolling back to page 1 restores synchronously from c1 without calling renderer.enqueue, and frees c1!
+      const c1Back = makeCanvas("c1-back");
+      const stop1Back = renderer.attach(1, c1Back, 100, { virtualized: true });
+      assert.deepEqual(enqueued, [0, 1, 2]);
+      assert.equal(c1Back.width, 100);
+      assert.equal(c1Back.drawnFrom, "c1");
+      assert.equal(c1.width, 0);
+      assert.equal(renderer.keptPixels, 10_000);
+
+      // Rotating invalidates page 2's kept canvas on next attach and enqueues a fresh rotated render.
+      rotation = 90;
+      const c2Rotated = makeCanvas("c2-rot");
+      const stop2Rotated = renderer.attach(2, c2Rotated, 100, { virtualized: true });
+      assert.deepEqual(enqueued, [0, 1, 2, 2]);
+      assert.equal(c2.width, 0);
+      assert.equal(renderer.keptPixels, 0);
+
+      // Unmounting c1Back and resetting zeroes both mounted and kept canvases immediately.
+      stop1Back();
+      assert.equal(renderer.keptPixels, 10_000);
+      renderer.reset();
+      assert.equal(renderer.keptPixels, 0);
+      assert.equal(c1Back.width, 0);
+      assert.equal(c2Rotated.width, 0);
+      stop2Rotated();
+    } finally {
+      if (savedWindow) Object.defineProperty(globalThis, "window", savedWindow);
+      else Reflect.deleteProperty(globalThis, "window");
+      if (savedComputed) Object.defineProperty(globalThis, "getComputedStyle", savedComputed);
+      else Reflect.deleteProperty(globalThis, "getComputedStyle");
+      if (savedIO) Object.defineProperty(globalThis, "IntersectionObserver", savedIO);
+      else Reflect.deleteProperty(globalThis, "IntersectionObserver");
+    }
   });
 });
 

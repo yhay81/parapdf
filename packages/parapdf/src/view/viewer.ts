@@ -311,6 +311,7 @@ export class ViewerController implements Viewer {
     return this.#pointerClaimed;
   }
   readonly #viewStateListeners = new Set<(view: ViewState) => void>();
+  readonly #previewListeners = new Set<() => void>();
   #lastViewState: ViewState | null = null;
   #batchingView = 0;
   #viewDirty = false;
@@ -342,6 +343,9 @@ export class ViewerController implements Viewer {
     },
     flip: (direction, axis) => this.#flip(direction, axis),
     requestUpdate: () => this.#requestUpdate(),
+    previewChanged: () => {
+      for (const listener of this.#previewListeners) listener();
+    },
   });
   #firstPaintAt: number | null = null;
   /** Viewport size the fitted scale was last computed for. */
@@ -388,6 +392,24 @@ export class ViewerController implements Viewer {
   /** Flush any unreported `viewState()` change (for `pagehide` or viewport unmount). */
   flushViewState(): void {
     this.#notifyViewState();
+  }
+
+  /** Subscribe to zoom-preview transform updates without a DOM `MutationObserver`. */
+  onPreviewChange(listener: () => void): () => void {
+    this.#previewListeners.add(listener);
+    return () => {
+      this.#previewListeners.delete(listener);
+    };
+  }
+
+  /** Whether a primary-button drag is currently selecting text in this viewer. */
+  get selectionDragging(): boolean {
+    return this.#selection.dragging;
+  }
+
+  /** Subscribe to text-selection drag start and end transitions. */
+  onSelectionDragChange(listener: () => void): () => void {
+    return this.#selection.onDragChange(listener);
   }
 
   /** Run a compound view update and emit at most one `onViewStateChange` when it finishes. */
@@ -676,6 +698,11 @@ export class ViewerController implements Viewer {
   /** Which of the open document's layers show, once known. */
   get layers(): LayerState | null {
     return this.#shown?.layers ?? null;
+  }
+
+  /** The mounted `<section>` host of page `index`, if attached. */
+  pageHost(index: number): HTMLElement | undefined {
+    return this.#pageHosts.get(index);
   }
 
   /** The text layers of the mounted pages that have one, by page. */

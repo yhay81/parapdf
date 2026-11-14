@@ -49,7 +49,9 @@ or a link labelled with the page.
 - Thumbnails draw at a lower priority than the pages in view, and always
   leave a render slot for the next page that scrolls in.
 - A thumbnail copies the page's drawing when the viewer already has one at
-  least as large, instead of drawing the page again.
+  least as large, instead of drawing the page again, and virtualized thumbnails
+  that scroll out of view keep their drawn pixels in a bounded LRU pool so
+  scrolling back shows them immediately without re-rendering in pdf.js.
 
 Thumbnails show pages without the annotations the reader created, as
 pdf.js's do, and pages drawn with fillable forms are drawn again for them.

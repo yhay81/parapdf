@@ -6,6 +6,36 @@ change the API.
 
 ## Unreleased
 
+- Render `<PdfPageOverlays>` directly in JSX, eliminate per-item store
+  subscriptions and sidebar scroll reflows on `<PdfPageRect>` and
+  `<PdfThumbnails>`, defer `<PdfSelectionPopover>` drag commits, and filter
+  store notifications by changed keys:
+  - Render `<PdfPageOverlayLayer>` directly inside each mounted page `<section>`
+    (`null` when empty), rendering `<PdfPageOverlays>` inline without portaling,
+    sharing the layer with `<PdfPageOverlay>` portals via React 19 ref cleanup
+    callbacks, and reading page dimensions in `<PdfPageRect>` from `PageContext`
+    with zero `viewer.store` subscriptions.
+  - Report changed keys from `Store.update()` so `useViewState()`,
+    `useDocumentState()`, `useSearch()`, `useHistory()`, and `useAnnotations()`
+    skip waking React on untracked updates; pass primitive page dimensions,
+    `rotation`, and `virtualized` from `<PdfThumbnails>` to a zero-subscription
+    `ThumbnailCanvas`; retain detached virtualized thumbnail canvases in a
+    bounded LRU pixel pool restored synchronously on scroll-back without
+    `IntersectionObserver` or `scrollParent` walks; cache scroll-container
+    geometry across sidebar scrolls and skip redundant initial window commits in
+    `<PdfThumbnails>`; and warm `pageLabels()` in `preloadDocument()`
+    (`knownPageLabels`) so preloaded thumbnails render their labels immediately.
+  - Resolve text layers and page hosts in `getSelection()` and selection anchors
+    in `O(1)` via `viewer.textLayers` and `viewer.pageHost()` with
+    `WeakMap`-cached text-run indices; suppress `<PdfSelectionPopover>` range
+    reads and React commits during primary-button selection drags, keeping its
+    listeners and `ResizeObserver` attached across selection updates and
+    replacing its `MutationObserver` with zoom-preview notifications; eagerly
+    start `pageSizes()` and `direction()` when sessions open in the registry;
+    subscribe `useLayers()` directly to `LayerState`; hoist static
+    `.parapdf-pages` and `<section>` styles into `VIEWER_CSS`; and memoize
+    `<ViewerControlSync>` against `children` and `style` renders.
+
 - Tighten React-to-controller coupling, warm-mount synchronous layout, and the
   public `Viewer` surface:
   - **Breaking:** Removed internal diagnostic metrics (`stats`, `keptPixels`,

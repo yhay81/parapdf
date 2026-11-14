@@ -55,6 +55,7 @@
 export class TextSelectionTracker {
   /** Each tracked text layer with its `.endOfContent` element. */
   readonly #layers = new Map<HTMLElement, HTMLElement>();
+  readonly #dragListeners = new Set<() => void>();
   #listeners: AbortController | null = null;
   #pointerDown = false;
   /** A primary-button drag from a tracked text layer or the pages element is in progress. */
@@ -70,6 +71,20 @@ export class TextSelectionTracker {
   /** Whether a drag is selecting text. */
   get dragging(): boolean {
     return this.#dragging;
+  }
+
+  /** Subscribe to `dragging` transitions (`true` when a selection drag starts, `false` when it ends). */
+  onDragChange(listener: () => void): () => void {
+    this.#dragListeners.add(listener);
+    return () => {
+      this.#dragListeners.delete(listener);
+    };
+  }
+
+  #setDragging(dragging: boolean): void {
+    if (this.#dragging === dragging) return;
+    this.#dragging = dragging;
+    for (const listener of [...this.#dragListeners]) listener();
   }
 
   /** Binds the element that holds the pages; returns the function that releases it. */
@@ -108,10 +123,10 @@ export class TextSelectionTracker {
   }
 
   #endDrag(): void {
-    this.#dragging = false;
     this.#anchor = null;
     this.#anchorPending = false;
     this.#pages?.classList.remove("selecting");
+    this.#setDragging(false);
   }
 
   #reset(layer: HTMLElement, end: HTMLElement): void {
@@ -148,8 +163,8 @@ export class TextSelectionTracker {
         if (isAt(selection, anchor) && selection.toString() === "") selection.removeAllRanges();
       }
       this.#pointerDown = false;
-      this.#endDrag();
       this.#resetAll();
+      this.#endDrag();
     };
     document.addEventListener(
       "mousedown",
@@ -164,7 +179,7 @@ export class TextSelectionTracker {
         if (layer instanceof HTMLElement && this.#layers.has(layer)) {
           layer.classList.add("selecting");
           if (primary) {
-            this.#dragging = true;
+            this.#setDragging(true);
             pages?.classList.add("selecting");
           }
         } else if (
@@ -177,7 +192,7 @@ export class TextSelectionTracker {
           const anchor = this.#nearestPoint(pages, event.clientX, event.clientY);
           this.#anchor = anchor;
           this.#anchorPending = true;
-          this.#dragging = true;
+          this.#setDragging(true);
           // Mark the layers for the anchor now: Chromium and Firefox hit-test
           // the first move before its listeners run.
           const at = document.createRange();

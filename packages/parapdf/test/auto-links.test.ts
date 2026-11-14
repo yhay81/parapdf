@@ -204,6 +204,7 @@ describe("attachAutoLinks", () => {
       getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 100 }),
     };
     return {
+      layer: container as unknown as HTMLElement,
       elements: items.map((item) => ({
         firstChild: item ? new FakeText(item) : null,
         closest: () => (item ? container : null),

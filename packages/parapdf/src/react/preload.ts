@@ -35,6 +35,7 @@ export function preloadDocumentWith(
       void doc.permissions().catch(() => {});
       void doc.direction().catch(() => {});
       void doc.initialView().catch(() => {});
+      void doc.pageLabels().catch(() => {});
     },
     () => {},
   );

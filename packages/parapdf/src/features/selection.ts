@@ -67,8 +67,7 @@ export function createSelectionAnchor(
     getBoundingClientRect(): DOMRect {
       const layout = viewer.store.get().layout;
       const scroller = viewer.scroller;
-      const content = viewer.content;
-      if (!layout || !scroller || !content || pages.length === 0) {
+      if (!layout || !scroller || !viewer.content || pages.length === 0) {
         return toDomRect(0, 0, 0, 0);
       }
       const { shown, rotation } = layout;
@@ -90,7 +89,7 @@ export function createSelectionAnchor(
         let boxTop = 0;
         let boxWidth = 0;
         let boxHeight = 0;
-        const section = content.querySelector<HTMLElement>(`section[data-page="${pageIndex + 1}"]`);
+        const section = viewer.pageHost(pageIndex);
         if (section && section.style.visibility !== "hidden") {
           const box = section.getBoundingClientRect();
           if (box.width > 0 && box.height > 0) {
@@ -184,6 +183,22 @@ function selectedRects(
   }
 }
 
+const itemIndexes = new WeakMap<readonly HTMLElement[], ReadonlyMap<Node, number>>();
+
+function itemsOf(elements: readonly HTMLElement[]): ReadonlyMap<Node, number> {
+  let map = itemIndexes.get(elements);
+  if (!map) {
+    const built = new Map<Node, number>();
+    for (let item = 0; item < elements.length; item++) {
+      const element = elements[item];
+      if (element) built.set(element, item);
+    }
+    map = built;
+    itemIndexes.set(elements, map);
+  }
+  return map;
+}
+
 /**
  * The place in the document's text of a range boundary (`node`, `offset`)
  * in a text layer whose runs are `elements`, one per item of the page's text;
@@ -196,7 +211,7 @@ function textPointOf(
   node: Node,
   offset: number,
 ): TextPoint | null {
-  const items = new Map<Node, number>(elements.map((element, item) => [element, item]));
+  const items = itemsOf(elements);
   for (let at: Node | null = node; at; at = at.parentNode) {
     const item = items.get(at);
     if (item === undefined) continue;
@@ -209,9 +224,10 @@ function textPointOf(
   // Between runs, in the layer or a marked-content span that holds them.
   const point = document.createRange();
   point.setStart(node, offset);
-  for (const [item, element] of elements.entries()) {
+  for (let item = 0; item < elements.length; item++) {
+    const element = elements[item];
     // pdf.js leaves the runs of empty items out of the layer.
-    if (!element.parentNode) continue;
+    if (!element?.parentNode) continue;
     const run = document.createRange();
     run.selectNode(element);
     if (point.compareBoundaryPoints(Range.START_TO_START, run) <= 0) {
@@ -225,13 +241,12 @@ function textPointOf(
 
 /** Where a range boundary in a mounted page's text layer of `viewer` lies in the document's text. */
 function textPointAt(viewer: ViewerController, node: Node, offset: number): TextPoint | null {
-  const element = node instanceof Element ? node : node.parentElement;
-  const layer = element?.closest<HTMLElement>(".parapdf-text-layer");
-  const section = layer?.closest<HTMLElement>("section[data-page]");
-  if (!layer || !section || !viewer.content?.contains(section)) return null;
-  const pageIndex = Number(section.dataset.page) - 1;
-  const handle = viewer.textLayers.get(pageIndex);
-  return handle ? textPointOf(pageIndex, handle.elements, node, offset) : null;
+  for (const [pageIndex, handle] of viewer.textLayers) {
+    if (handle.layer.contains(node)) {
+      return textPointOf(pageIndex, handle.elements, node, offset);
+    }
+  }
+  return null;
 }
 
 /**
@@ -244,7 +259,9 @@ export function getSelection(viewer: ViewerController): PdfSelection | null {
   const content = viewer.content;
   const layout = viewer.store.get().layout;
   const selection = document.getSelection();
-  if (!content || !layout || !selection || selection.isCollapsed) return null;
+  if (!content || !layout || !selection || selection.isCollapsed || viewer.textLayers.size === 0) {
+    return null;
+  }
   const rectsByPage = new Map<number, PdfRect[]>();
   let text = "";
   let outside = false;
@@ -256,14 +273,17 @@ export function getSelection(viewer: ViewerController): PdfSelection | null {
     }
     if (!content.contains(range.commonAncestorContainer)) outside = true;
     text += range.toString();
-    for (const layer of content.querySelectorAll<HTMLElement>(".parapdf-text-layer")) {
+    for (const [pageIndex, handle] of viewer.textLayers) {
+      const { layer } = handle;
       if (!range.intersectsNode(layer)) continue;
-      const section = layer.closest<HTMLElement>("section[data-page]");
-      const pageIndex = Number(section?.dataset.page) - 1;
+      const section = viewer.pageHost?.(pageIndex) ?? layer.parentElement;
       const size = layout.sizes[pageIndex];
       if (!section || !size) continue;
-      const rects = rectsByPage.get(pageIndex) ?? [];
-      rectsByPage.set(pageIndex, rects);
+      let rects = rectsByPage.get(pageIndex);
+      if (!rects) {
+        rects = [];
+        rectsByPage.set(pageIndex, rects);
+      }
       selectedRects(range, layer, section, size, layout.rotation, rects);
     }
   }

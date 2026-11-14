@@ -14,6 +14,7 @@ import {
   useRef,
 } from "react";
 import type { PdfSessionController } from "../document/pdf-session.ts";
+import type { PageSize } from "../document/session.ts";
 import {
   followFragments,
   type InitialViewOptions,
@@ -33,7 +34,7 @@ import type {
   Zoom,
 } from "../view/viewer.ts";
 import { useOptionalSession, useOptionalViewer, ViewerContext } from "./context.ts";
-import { PdfPageOverlaySlot, useOverlayActivity } from "./overlays.ts";
+import { PdfPageOverlayLayer, useOverlayActivity } from "./overlays.ts";
 import { VIEWER_CSS } from "./styles.ts";
 
 export type { Zoom } from "../view/viewer.ts";
@@ -196,7 +197,17 @@ const defaultPageLabel = (pageNumber: number, pageCount: number) =>
  * Scrolling renders this component again only when that window changes.
  * It is focusable, so the browser's own keys scroll it.
  */
-export function PdfViewer({ viewer: externalViewer, ref, ...props }: PdfViewerProps) {
+export function PdfViewer({
+  viewer: externalViewer,
+  ref,
+  className,
+  style,
+  label,
+  pageLabel,
+  onPageClick,
+  children,
+  ...controlProps
+}: PdfViewerProps) {
   const viewer = useOptionalViewer(externalViewer);
   const session = useOptionalSession();
   useImperativeHandle(ref, () => viewer, [viewer]);
@@ -204,15 +215,15 @@ export function PdfViewer({ viewer: externalViewer, ref, ...props }: PdfViewerPr
     <>
       <ViewerViewport
         viewer={viewer}
-        className={props.className}
-        style={props.style}
-        label={props.label}
-        pageLabel={props.pageLabel}
-        onPageClick={props.onPageClick}
+        className={className}
+        style={style}
+        label={label}
+        pageLabel={pageLabel}
+        onPageClick={onPageClick}
       >
-        {props.children}
+        {children}
       </ViewerViewport>
-      <ViewerControlSync {...props} viewer={viewer} session={session} />
+      <ViewerControlSync {...controlProps} viewer={viewer} session={session} />
     </>
   );
   return externalViewer ? <ViewerContext value={viewer}>{tree}</ViewerContext> : tree;
@@ -308,12 +319,20 @@ function ViewerViewport({
       </style>
       {children}
       {/* The viewer sizes this element imperatively so zoom can restore the scroll position first. */}
-      <div ref={contentRef} className="parapdf-pages" style={{ position: "relative" }}>
+      <div ref={contentRef} className="parapdf-pages">
         <ViewerPages viewer={viewer} pageLabel={pageLabel} />
       </div>
     </div>
   );
 }
+
+type ViewerControlProps = Omit<
+  PdfViewerProps,
+  "viewer" | "ref" | "className" | "style" | "label" | "pageLabel" | "onPageClick" | "children"
+> & {
+  viewer: ViewerController;
+  session: PdfSessionController;
+};
 
 /**
  * Leaf control synchronizer rendered after `<ViewerViewport>`: attaches options,
@@ -321,7 +340,7 @@ function ViewerViewport({
  * `attachViewport`, and reconciles rejected controlled changes without
  * re-rendering `<ViewerViewport>` or its children.
  */
-function ViewerControlSync({
+const ViewerControlSync = memo(function ViewerControlSync({
   viewer,
   session,
   zoom,
@@ -360,29 +379,106 @@ function ViewerControlSync({
   maxBasePixels,
   maxCanvasPixels,
   maxKeptPixels,
-}: PdfViewerProps & { viewer: ViewerController; session: PdfSessionController }): null {
-  const initialScale = zoom ?? defaultZoom;
-  const initialRotation = rotation ?? defaultRotation;
-  const initialSpread = spread ?? defaultSpread;
-  const initialScrollMode = scrollMode ?? defaultScrollMode;
-  const initialTool = tool ?? defaultTool;
-  const explicit = {
-    ...(initialScale !== undefined ? { initialScale } : {}),
-    ...(initialSpread !== undefined ? { initialSpread } : {}),
-    ...(initialScrollMode !== undefined ? { initialScrollMode } : {}),
-    ...(defaultPage !== undefined ? { initialPage: defaultPage } : {}),
-  };
+}: ViewerControlProps): null {
   const { fragment } = session;
-  const options: ViewerOptions = {
-    ...explicit,
-    ...(initialRotation !== undefined ? { initialRotation } : {}),
-    ...(initialTool !== undefined ? { initialTool } : {}),
-    opening: initialViewOpening({
-      initialView,
-      initialViewState,
+  // A change the application did not take up renders only this leaf again,
+  // returning the viewer to the controlled value without re-rendering the viewport.
+  const [reconcileCount, reconcile] = useReducer((count: number) => count + 1, 0);
+  const bindingRef = useRef<ViewerControlBinding | null>(null);
+
+  // Registered after attachViewport so viewport detach flushes unsettled
+  // scroll positions before unsubscribing.
+  useLayoutEffect(() => {
+    const binding = viewer.bindControls(reconcile);
+    bindingRef.current = binding;
+    return () => {
+      bindingRef.current = null;
+      binding.disconnect();
+    };
+  }, [viewer]);
+
+  // Options are live: the viewer compares them with those it has.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reconcileCount intentionally re-runs sync when a controlled prop change was rejected by the application.
+  useLayoutEffect(() => {
+    const initialScale = zoom ?? defaultZoom;
+    const initialRotation = rotation ?? defaultRotation;
+    const initialSpread = spread ?? defaultSpread;
+    const initialScrollMode = scrollMode ?? defaultScrollMode;
+    const initialTool = tool ?? defaultTool;
+    const explicit = {
+      ...(initialScale !== undefined ? { initialScale } : {}),
+      ...(initialSpread !== undefined ? { initialSpread } : {}),
+      ...(initialScrollMode !== undefined ? { initialScrollMode } : {}),
+      ...(defaultPage !== undefined ? { initialPage: defaultPage } : {}),
+    };
+    const options: ViewerOptions = {
       ...explicit,
-      fragment: () => openingFragment(viewer, fragment),
-    }),
+      ...(initialRotation !== undefined ? { initialRotation } : {}),
+      ...(initialTool !== undefined ? { initialTool } : {}),
+      opening: initialViewOpening({
+        initialView,
+        initialViewState,
+        ...explicit,
+        fragment: () => openingFragment(viewer, fragment),
+      }),
+      textLayer,
+      annotationLayer,
+      destinationZoom,
+      direction,
+      externalLinks,
+      pageColors,
+      gap,
+      overscan,
+      minScale,
+      maxScale,
+      maxConcurrentRenders,
+      maxDetailPixels,
+      maxDetailViewports,
+      maxBasePixels,
+      maxCanvasPixels,
+      maxKeptPixels,
+    };
+    const controlled: Partial<ControlledViewValues> = {
+      ...(zoom !== undefined ? { zoom } : {}),
+      ...(rotation !== undefined ? { rotation } : {}),
+      ...(spread !== undefined ? { spread } : {}),
+      ...(scrollMode !== undefined ? { scrollMode } : {}),
+      ...(tool !== undefined ? { tool } : {}),
+    };
+    const callbacks = {
+      zoom: onZoomChange,
+      rotation: onRotationChange,
+      spread: onSpreadChange,
+      scrollMode: onScrollModeChange,
+      tool: onToolChange,
+      page: onPageChange,
+      viewState: onViewStateChange,
+    };
+    bindingRef.current?.sync(options, controlled, callbacks);
+  }, [
+    viewer,
+    fragment,
+    reconcileCount,
+    zoom,
+    defaultZoom,
+    onZoomChange,
+    rotation,
+    defaultRotation,
+    onRotationChange,
+    spread,
+    defaultSpread,
+    onSpreadChange,
+    scrollMode,
+    defaultScrollMode,
+    onScrollModeChange,
+    tool,
+    defaultTool,
+    onToolChange,
+    defaultPage,
+    onPageChange,
+    onViewStateChange,
+    initialView,
+    initialViewState,
     textLayer,
     annotationLayer,
     destinationZoom,
@@ -399,43 +495,7 @@ function ViewerControlSync({
     maxBasePixels,
     maxCanvasPixels,
     maxKeptPixels,
-  };
-  const controlled: Partial<ControlledViewValues> = {
-    ...(zoom !== undefined ? { zoom } : {}),
-    ...(rotation !== undefined ? { rotation } : {}),
-    ...(spread !== undefined ? { spread } : {}),
-    ...(scrollMode !== undefined ? { scrollMode } : {}),
-    ...(tool !== undefined ? { tool } : {}),
-  };
-  const callbacks = {
-    zoom: onZoomChange,
-    rotation: onRotationChange,
-    spread: onSpreadChange,
-    scrollMode: onScrollModeChange,
-    tool: onToolChange,
-    page: onPageChange,
-    viewState: onViewStateChange,
-  };
-  // A change the application did not take up renders only this leaf again,
-  // returning the viewer to the controlled value without re-rendering the viewport.
-  const [, reconcile] = useReducer((count: number) => count + 1, 0);
-  const bindingRef = useRef<ViewerControlBinding | null>(null);
-
-  // Registered after attachViewport so viewport detach flushes unsettled
-  // scroll positions before unsubscribing.
-  useLayoutEffect(() => {
-    const binding = viewer.bindControls(reconcile);
-    bindingRef.current = binding;
-    return () => {
-      bindingRef.current = null;
-      binding.disconnect();
-    };
-  }, [viewer]);
-
-  // Options are live: the viewer compares them with those it has.
-  useLayoutEffect(() => {
-    bindingRef.current?.sync(options, controlled, callbacks);
-  });
+  ]);
 
   // A new fragment of the source's URL moves the viewer where it points.
   useLayoutEffect(() => {
@@ -448,7 +508,7 @@ function ViewerControlSync({
   }, [viewer, session]);
 
   return null;
-}
+});
 
 /**
  * Subscribes to `viewer.store.hot` in `useLayoutEffect` so warm sessions opened
@@ -511,6 +571,7 @@ const ViewerPages = memo(function ViewerPages({
         offset={layout.offsets[index] ?? 0}
         width={layout.widths[index] ?? 0}
         height={layout.heights[index] ?? 0}
+        size={layout.sizes[index]}
         scale={layout.scale}
         rotation={layout.rotation}
         overlaysActive={overlayActivity.allPages || overlayActivity.portalPages.has(index)}
@@ -537,6 +598,7 @@ interface PdfPageProps {
   offset: number;
   width: number;
   height: number;
+  size: PageSize | undefined;
   /** CSS pixels per PDF point; the DOM layers apply the page's user-space unit to it. */
   scale: number;
   rotation: Rotation;
@@ -555,70 +617,56 @@ const PdfPage = memo(function PdfPage({
   offset,
   width,
   height,
+  size,
   scale,
   rotation,
   overlaysActive,
 }: PdfPageProps) {
-  const hostRef = useRef<HTMLElement>(null);
-
-  // The renderer builds the page's canvases and layers at the start of the
-  // section; when overlays are active, their layer follows them.
+  // The renderer prepends the page's canvases and layers at the start of the
+  // section, leaving React's .parapdf-overlay-layer child at the end.
   const attachHost = useCallback(
     (host: HTMLElement | null) => {
-      hostRef.current = host;
       if (!host) return;
-      const detach = viewer.attachPage(index, host);
-      return () => {
-        if (hostRef.current === host) hostRef.current = null;
-        detach();
-      };
+      return viewer.attachPage(index, host);
     },
     [viewer, index],
   );
 
   return (
-    <>
-      {/* A labelled section is a region landmark, the role pdf.js gives its pages. */}
-      <section
-        ref={attachHost}
-        data-page={index + 1}
-        aria-label={label}
-        // Focusable, out of the tab order: the viewer moves the focus to the
-        // page shown, and a screen reader reads on from it.
-        tabIndex={-1}
-        style={
-          {
-            position: "absolute",
-            // Its row centered in the viewport, at the gap when larger:
-            // pageLeft() and pageTop() in layout.ts.
-            top:
-              rowHeight === null
-                ? top
-                : `calc(${top}px + max(0px, (100cqh - ${rowHeight}px) / 2 - ${gap}px))`,
-            left: `calc(max(${gap}px, (100cqw - ${rowWidth}px) / 2) + ${offset}px)`,
-            visibility: hidden ? "hidden" : undefined,
-            width,
-            height,
-            background: "#fff",
-            boxShadow: "0 1px 3px rgb(0 0 0 / 0.3)",
-            contain: "strict",
-            "--scale-factor": scale,
-            "--scale-round-x": "1px",
-            "--scale-round-y": "1px",
-          } as CSSProperties
-        }
-      />
-      {/* Sibling after <section ref={hostRef}> so React attaches hostRef before PdfPageOverlaySlot's layout effect runs; its portal appends inside <section>. */}
+    /* A labelled section is a region landmark, the role pdf.js gives its pages. */
+    <section
+      ref={attachHost}
+      data-page={index + 1}
+      aria-label={label}
+      // Focusable, out of the tab order: the viewer moves the focus to the
+      // page shown, and a screen reader reads on from it.
+      tabIndex={-1}
+      style={
+        {
+          // Its row centered in the viewport, at the gap when larger:
+          // pageLeft() and pageTop() in layout.ts.
+          top:
+            rowHeight === null
+              ? top
+              : `calc(${top}px + max(0px, (100cqh - ${rowHeight}px) / 2 - ${gap}px))`,
+          left: `calc(max(${gap}px, (100cqw - ${rowWidth}px) / 2) + ${offset}px)`,
+          visibility: hidden ? "hidden" : undefined,
+          width,
+          height,
+          "--scale-factor": scale,
+        } as CSSProperties
+      }
+    >
       {overlaysActive ? (
-        <PdfPageOverlaySlot
+        <PdfPageOverlayLayer
           viewer={viewer}
           index={index}
-          hostRef={hostRef}
+          size={size}
           rotation={rotation}
           width={width}
           height={height}
         />
       ) : null}
-    </>
+    </section>
   );
 });

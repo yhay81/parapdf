@@ -1,8 +1,9 @@
 "use client";
 
-import { type CSSProperties, useLayoutEffect, useRef } from "react";
+import { type CSSProperties, useCallback } from "react";
 import { attachThumbnail } from "../features/thumbnails/index.ts";
-import type { Viewer } from "../view/viewer.ts";
+import type { Rotation } from "../pdfjs/draw.ts";
+import type { Viewer, ViewerController } from "../view/viewer.ts";
 import { useOptionalViewer, useSelected } from "./context.ts";
 import { thumbnailCanvasHeight } from "./thumbnails.ts";
 
@@ -21,6 +22,64 @@ export interface PdfThumbnailProps {
   style?: CSSProperties;
 }
 
+export interface ThumbnailCanvasProps {
+  viewer: ViewerController;
+  pageIndex: number;
+  width: number;
+  canvasHeight: number;
+  sizeWidth: number | undefined;
+  sizeHeight: number | undefined;
+  rotation: Rotation;
+  virtualized?: boolean;
+  className?: string;
+  style?: CSSProperties;
+}
+
+/**
+ * Internal zero-subscription thumbnail canvas used by `<PdfThumbnails>` (which
+ * passes primitive dimensions and `virtualized`) and `<PdfThumbnail>`.
+ */
+export function ThumbnailCanvas({
+  viewer,
+  pageIndex,
+  width,
+  canvasHeight,
+  sizeWidth,
+  sizeHeight,
+  rotation,
+  virtualized = false,
+  className,
+  style,
+}: ThumbnailCanvasProps) {
+  // biome-ignore lint/correctness/useExhaustiveDependencies: primitive dimensions and rotation trigger a redraw only when numerically changed.
+  const attachCanvas = useCallback(
+    (canvas: HTMLCanvasElement | null) => {
+      if (!canvas) return;
+      return attachThumbnail(
+        viewer,
+        pageIndex,
+        canvas,
+        width,
+        virtualized ? { virtualized: true } : undefined,
+      );
+    },
+    [viewer, pageIndex, width, sizeWidth, sizeHeight, rotation, virtualized],
+  );
+
+  return (
+    // biome-ignore lint/a11y/noAriaHiddenOnFocusable: the canvas is not focusable; its button or link names the page.
+    <canvas
+      ref={attachCanvas}
+      // Empty until drawn: a canvas's default 300 by 150 pixels would hold memory for nothing.
+      width={0}
+      height={0}
+      className={className ? `parapdf-thumbnail ${className}` : "parapdf-thumbnail"}
+      aria-hidden="true"
+      style={{ display: "block", width, height: canvasHeight, background: "#fff", ...style }}
+    />
+  );
+}
+
 /**
  * A small picture of a page of `viewer`'s document, drawn once it comes
  * near the visible part of its scroll container and released once it
@@ -36,28 +95,20 @@ export function PdfThumbnail({
   style,
 }: PdfThumbnailProps) {
   const viewer = useOptionalViewer(externalViewer);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const size = useSelected(viewer.store.sizes, (state) => state.sizes?.[pageIndex]);
   const rotation = useSelected(viewer.store.cold, (state) => state.rotation);
-  const height = thumbnailCanvasHeight(size, rotation, width);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a new size or rotation draws the page again.
-  useLayoutEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    return attachThumbnail(viewer, pageIndex, canvas, width);
-  }, [viewer, pageIndex, width, size, rotation]);
 
   return (
-    // biome-ignore lint/a11y/noAriaHiddenOnFocusable: the canvas is not focusable; its button or link names the page.
-    <canvas
-      ref={canvasRef}
-      // Empty until drawn: a canvas's default 300 by 150 pixels would hold memory for nothing.
-      width={0}
-      height={0}
-      className={className ? `parapdf-thumbnail ${className}` : "parapdf-thumbnail"}
-      aria-hidden="true"
-      style={{ display: "block", width, height, background: "#fff", ...style }}
+    <ThumbnailCanvas
+      viewer={viewer}
+      pageIndex={pageIndex}
+      width={width}
+      canvasHeight={thumbnailCanvasHeight(size, rotation, width)}
+      sizeWidth={size?.width}
+      sizeHeight={size?.height}
+      rotation={rotation}
+      className={className}
+      style={style}
     />
   );
 }

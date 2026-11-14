@@ -7,6 +7,7 @@ import {
   PdfSessionController,
   sessionControllerOf,
 } from "../src/document/pdf-session.ts";
+import { Store } from "../src/document/store.ts";
 import { useAnnotations } from "../src/react/annotations.ts";
 import {
   activeTracked,
@@ -170,6 +171,30 @@ describe("getter-tracked snapshots", () => {
     assert.deepEqual(copy, { currentPage: 1, pageCount: 8, rotation: 90 });
     assert.deepEqual(Object.keys(snap.proxy), ["currentPage", "pageCount", "rotation"]);
     assert.deepEqual([...snap.tracked], ["currentPage", "pageCount", "rotation"]);
+  });
+
+  it("publishes exact changedKeys on Store across single set and multi-step update/publish", () => {
+    const store = new Store({ currentPage: 0, rotation: 0, search: () => {} });
+    const batches: string[][] = [];
+    const unsub = store.subscribe((changedKeys) => {
+      batches.push([...(changedKeys ?? [])].map(String));
+    });
+
+    // Unchanged value emits nothing.
+    store.set({ currentPage: 0 });
+    assert.equal(batches.length, 0);
+
+    // Hot update emits only currentPage, never rotation or search.
+    store.set({ currentPage: 3, rotation: 0 });
+    assert.deepEqual(batches, [["currentPage"]]);
+
+    // Multiple update() calls before publish() accumulate all changed keys.
+    assert.equal(store.update({ currentPage: 4 }), true);
+    assert.equal(store.update({ rotation: 90 }), true);
+    store.publish();
+    assert.deepEqual(batches, [["currentPage"], ["currentPage", "rotation"]]);
+
+    unsub();
   });
 });
 

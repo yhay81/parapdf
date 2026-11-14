@@ -1128,6 +1128,72 @@ try {
     afterPopoverClick.clickedText === popoverBefore?.text && afterPopoverClick.collapsed === false,
     JSON.stringify(afterPopoverClick),
   );
+  // Pointer drag selection: clears any prior popover on press, stays hidden and
+  // commits zero React renders while dragging across glyphs, and commits once on release.
+  const dragLine = (await pageLines(page, 1)).lines.find(
+    (line) => line.chars >= 12 && line.right - line.left >= 80,
+  );
+  let dragPopover: {
+    sawPopoverMidDrag: boolean;
+    commitsDelta: number;
+    mountedAfterRelease: boolean;
+    selectedChars: number;
+  } | null = null;
+  if (dragLine) {
+    await page.evaluate(async () => {
+      document.getSelection()?.removeAllRanges();
+      document.dispatchEvent(new Event("selectionchange"));
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      const win = window as Window & {
+        __dragProbe?: { beforeCommits: number; sawPopoverMidDrag: boolean; stop(): void };
+      };
+      let sawPopoverMidDrag = false;
+      const onMove = () => {
+        if (document.querySelector(".test-selection-popover")) sawPopoverMidDrag = true;
+      };
+      window.addEventListener("pointermove", onMove, true);
+      win.__dragProbe = {
+        beforeCommits: window.__commits?.() ?? 0,
+        get sawPopoverMidDrag() {
+          return sawPopoverMidDrag;
+        },
+        stop: () => window.removeEventListener("pointermove", onMove, true),
+      };
+    });
+    const y = middle(dragLine);
+    await page.mouse.move(dragLine.left + 2, y);
+    await page.mouse.down();
+    await page.mouse.move(Math.min(dragLine.right - 2, dragLine.left + 120), y, { steps: 12 });
+    await page.waitForTimeout(40);
+    await page.mouse.up();
+    dragPopover = await page.evaluate(async () => {
+      const win = window as Window & {
+        __dragProbe?: { beforeCommits: number; sawPopoverMidDrag: boolean; stop(): void };
+      };
+      const probe = win.__dragProbe;
+      probe?.stop();
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const pop = document.querySelector<HTMLElement>(".test-selection-popover");
+      return probe
+        ? {
+            sawPopoverMidDrag: probe.sawPopoverMidDrag,
+            commitsDelta: (window.__commits?.() ?? 0) - probe.beforeCommits,
+            mountedAfterRelease: pop !== null && getComputedStyle(pop).visibility === "visible",
+            selectedChars: (document.getSelection()?.toString() ?? "").replace(/\s/g, "").length,
+          }
+        : null;
+    });
+  }
+  check(
+    "PdfSelectionPopover defers commits during a pointer drag and mounts once on release",
+    dragPopover !== null &&
+      dragPopover.sawPopoverMidDrag === false &&
+      dragPopover.commitsDelta === 1 &&
+      dragPopover.mountedAfterRelease === true &&
+      dragPopover.selectedChars > 0,
+    JSON.stringify(dragPopover),
+  );
   await page.evaluate(() => {
     document.getSelection()?.removeAllRanges();
     window.__setOverlayTest?.({ selectionPopover: false });
