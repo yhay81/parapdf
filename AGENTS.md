@@ -53,9 +53,9 @@ that matters for performance or direction gets a decision record.
 
 ## How to work
 
-- One change per branch from `main`, in a worktree of its own, merged
-  through a pull request once CI passes. Sessions that change the runtime's
-  core never run in parallel.
+- Work directly on `main` in clean, self-contained commits, pushing once
+  local checks pass. Sessions that change the runtime's core never run in
+  parallel.
 - Do not keep old names working, reintroduce an engine abstraction, or
   reopen a decision without new measurements.
 - A change to the package gets an entry under "Unreleased" in
@@ -281,13 +281,14 @@ that development ports stay outside the functional checks' range.
 
 ## Releasing
 
-1. On a branch, set `version` in `packages/parapdf/package.json` and turn
+1. On `main`, set `version` in `packages/parapdf/package.json` and turn
    the changes since the last release in `CHANGELOG.md` into the release's
    entry, which lists every break.
 2. Run `pnpm check`, `pnpm typecheck`, `pnpm test`, `pnpm --filter parapdf
    check:package`, and every functional check in Chromium, WebKit, and
-   Firefox with `ENGINE=pdfjs`; merge the pull request once CI passes.
-3. Tag the merge commit on `main` `vX.Y.Z` and push the tag, which deploys
+   Firefox with `ENGINE=pdfjs`; commit, push `main`, and wait for CI to
+   pass.
+3. Tag that commit on `main` `vX.Y.Z` and push the tag, which deploys
    the documentation site (`.github/workflows/site.yml`).
 4. Run `pnpm --filter parapdf publish` from that commit, in a checkout with
    no uncommitted or untracked files (pnpm refuses otherwise). pnpm applies
