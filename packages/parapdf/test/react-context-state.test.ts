@@ -110,6 +110,23 @@ describe("shallowEqual and selector caching", () => {
     const c4 = selectCached(c3, raw2, (s) => ({ page: s.currentPage + offset, scale: s.scale }));
     assert.notEqual(c4.value, c3.value);
     assert.deepEqual(c4.value, { page: 4, scale: 1.25 });
+
+    // A stable selector skips invocation on unchanged raw state when force=false, and re-runs when force=true (out-of-band dirty key).
+    let runs = 0;
+    let outOfBand = "new-tab";
+    const stableSelector = (s: typeof raw2) => {
+      runs++;
+      return { page: s.currentPage, links: outOfBand };
+    };
+    const c5 = selectCached(null, raw2, stableSelector, false);
+    assert.equal(runs, 1);
+    const c6 = selectCached(c5, raw2, stableSelector, false);
+    assert.equal(runs, 1);
+    assert.equal(c6, c5);
+    outOfBand = "disabled";
+    const c7 = selectCached(c6, raw2, stableSelector, true);
+    assert.equal(runs, 2);
+    assert.deepEqual(c7.value, { page: 2, links: "disabled" });
   });
 });
 
@@ -210,6 +227,27 @@ describe("getter-tracked snapshots", () => {
     assert.deepEqual(batches, [["currentPage"], ["currentPage", "rotation"]]);
 
     unsub();
+
+    // Re-entrant store.set() inside a listener keeps outer and inner changedKeys isolated.
+    const seen: { listener: number; keys: string[] }[] = [];
+    const u1 = store.subscribe((changedKeys) => {
+      seen.push({ listener: 1, keys: [...(changedKeys ?? [])].map(String) });
+      if (store.get().currentPage === 7 && store.get().rotation !== 180) {
+        store.set({ rotation: 180 });
+      }
+    });
+    const u2 = store.subscribe((changedKeys) => {
+      seen.push({ listener: 2, keys: [...(changedKeys ?? [])].map(String) });
+    });
+    store.set({ currentPage: 7 });
+    assert.deepEqual(seen, [
+      { listener: 1, keys: ["currentPage"] },
+      { listener: 1, keys: ["rotation"] },
+      { listener: 2, keys: ["rotation"] },
+      { listener: 2, keys: ["currentPage"] },
+    ]);
+    u1();
+    u2();
   });
 
   it("subscribeKeys ignores unrelated keys such as streaming progress while firing on matching or unkeyed publishes", () => {
@@ -438,5 +476,21 @@ describe("ViewerContext, useCreateViewer, and optional viewer hooks", () => {
     } finally {
       releaseSession();
     }
+  });
+
+  it("keeps setPasswordPrompt quiet outside password status and publishes exact keys on PdfSessionController.stateStore", () => {
+    const session = new PdfSessionController(
+      { url: "/quiet-prompt.pdf" },
+      { passwordPrompt: false },
+    );
+    const batches: (string[] | undefined)[] = [];
+    const unsub = session.stateStore.subscribe((changedKeys) => {
+      batches.push(changedKeys ? [...changedKeys].map(String) : undefined);
+    });
+    // Toggling passwordPrompt while status === "loading" does not wake subscribers at all.
+    session.setPasswordPrompt(true);
+    session.setPasswordPrompt(false);
+    assert.deepEqual(batches, []);
+    unsub();
   });
 });

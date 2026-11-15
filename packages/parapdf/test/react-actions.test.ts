@@ -10,7 +10,7 @@ import { getFormFields, setFormValues } from "../src/features/forms/index.ts";
 import { historyOf } from "../src/features/history.ts";
 import { setLayerVisible } from "../src/features/layers.ts";
 import { enforcePermissions } from "../src/features/permissions.ts";
-import { createPrintController, type PrintState, printOf } from "../src/features/print/index.ts";
+import { type PrintState, printOf } from "../src/features/print/index.ts";
 import { searchOf } from "../src/features/search/index.ts";
 import { useAnnotations } from "../src/react/annotations.ts";
 import {
@@ -156,6 +156,10 @@ describe("public React-first surface (decision 0035)", () => {
       ),
     );
     const removed = [
+      "PdfThumbnail",
+      "PdfThumbnailProps",
+      "createPrintController",
+      "PrintController",
       "searchOf",
       "attachSearch",
       "Search",
@@ -545,7 +549,7 @@ describe("useSave, usePrint, useSearch, and useHistory", () => {
     void cancelFn;
   });
 
-  it("tracks progress, supports clean cancel() and dispose(), and propagates errors in createPrintController", async (t) => {
+  it("tracks progress, supports clean cancel(), and propagates errors in printOf(viewer)", async (t) => {
     const env = mockPrintEnvironment(t);
     const doc = fakeDocument({ pages: [LETTER, LETTER, LETTER] });
     const viewer = new ViewerController();
@@ -554,10 +558,15 @@ describe("useSave, usePrint, useSearch, and useHistory", () => {
     await settle();
 
     const states: PrintState[] = [];
-    const controller = createPrintController(viewer, (state) => states.push(state));
+    const slot = printOf(viewer);
+    const unsub = slot.store.subscribe(() => {
+      const { printing, progress } = slot.store.get();
+      states.push({ printing, progress });
+    });
+    t.after(unsub);
 
     // Complete 3-page print run.
-    const firstRun = controller.print();
+    const firstRun = slot.store.get().print();
     for (let index = 0; index < 3; index++) {
       await settle();
       doc.drawings[index]?.resolve();
@@ -574,23 +583,23 @@ describe("useSave, usePrint, useSearch, and useHistory", () => {
 
     // Cancelling mid-preparation resolves cleanly and resets to idle immediately.
     states.length = 0;
-    const cancelledRun = controller.print();
+    const cancelledRun = slot.store.get().print();
     await settle();
     assert.deepEqual(states, [{ printing: true, progress: { done: 0, total: 3 } }]);
-    controller.cancel();
+    slot.store.get().cancel();
     assert.deepEqual(states.at(-1), { printing: false, progress: null });
     await cancelledRun;
     assert.equal(env.prints(), 1);
 
     // Caller AbortSignal still rejects instead of being swallowed as cancel().
     const callerAbort = new AbortController();
-    const abortedRun = controller.print({ signal: callerAbort.signal });
+    const abortedRun = slot.store.get().print({ signal: callerAbort.signal });
     await settle();
     const reason = new Error("caller aborted");
     callerAbort.abort(reason);
     await assert.rejects(abortedRun, /Rendering cancelled/);
     await assert.rejects(
-      controller.print({ signal: AbortSignal.abort(reason) }),
+      slot.store.get().print({ signal: AbortSignal.abort(reason) }),
       (err) => err === reason,
     );
 
@@ -611,8 +620,7 @@ describe("useSave, usePrint, useSearch, and useHistory", () => {
       closeRestricted();
     });
     await settle();
-    const restrictedController = createPrintController(restrictedViewer, () => {});
-    await assert.rejects(restrictedController.print(), /does not permit printing/);
+    await assert.rejects(printOf(restrictedViewer).store.get().print(), /does not permit printing/);
   });
 
   it("keeps search and history action references stable and skips re-renders for action-only consumers", async () => {
@@ -624,7 +632,7 @@ describe("useSave, usePrint, useSearch, and useHistory", () => {
     const { close } = show(viewer, { url: "/search.pdf" }, fakePdfjs(async () => doc.proxy).loader);
     await settle();
 
-    const searchStore = searchOf(viewer).store;
+    const searchStore = searchOf(viewer);
     const initialSearch = searchStore.get();
     const actionOnlySnap = createTrackedSnapshot(initialSearch);
     const { search, next, previous, clear } = actionOnlySnap.proxy;
@@ -647,7 +655,7 @@ describe("useSave, usePrint, useSearch, and useHistory", () => {
       false,
     );
 
-    const historyStore = historyOf(viewer).store;
+    const historyStore = historyOf(viewer);
     const initialHistory = historyStore.get();
     const historyActionSnap = createTrackedSnapshot(initialHistory);
     const { back, forward } = historyActionSnap.proxy;

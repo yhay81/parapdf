@@ -35,12 +35,6 @@ interface PrintJob {
   cancelled: boolean;
 }
 
-export interface PrintController {
-  print(options?: PrintOptions): Promise<void>;
-  cancel(): void;
-  dispose(): void;
-}
-
 /**
  * Print `viewer`'s document through the browser's print dialog: every page
  * is drawn for printing, with what was typed into its form fields and the
@@ -86,38 +80,29 @@ export async function print(viewer: Viewer, options?: PrintOptions): Promise<voi
   }
 }
 
-export function createPrintController(
-  viewer: ViewerController,
-  onChange: (state: PrintState) => void,
-): PrintController {
-  let activeJob: PrintJob | null = null;
-  let disposed = false;
+export interface PrintSlot {
+  readonly store: ReadableStore<PrintControls>;
+  readonly initialControls: PrintControls;
+  hold(): () => void;
+}
 
-  const publish = (next: PrintState) => {
-    if (!disposed) onChange(next);
-  };
+const PRINT_SLOT = createSlotKey<PrintSlot>("parapdf.print");
 
-  const cancel = () => {
-    const job = activeJob;
-    if (!job) return;
-    job.cancelled = true;
-    activeJob = null;
-    job.controller.abort();
-    publish(IDLE_PRINT);
-  };
+export function printOf(viewer: ViewerController): PrintSlot {
+  return viewer.slot(PRINT_SLOT, () => {
+    let holders = 0;
+    let activeJob: PrintJob | null = null;
 
-  return {
-    cancel,
-    dispose() {
-      disposed = true;
+    const cancel = () => {
       const job = activeJob;
-      if (job) {
-        job.cancelled = true;
-        activeJob = null;
-        job.controller.abort();
-      }
-    },
-    async print(options?: PrintOptions): Promise<void> {
+      if (!job) return;
+      job.cancelled = true;
+      activeJob = null;
+      job.controller.abort();
+      store.set(IDLE_PRINT);
+    };
+
+    const runPrint = async (options?: PrintOptions): Promise<void> => {
       const doc = viewer.session;
       if (!doc || !viewer.workSignal || !permits(viewer, "print")) {
         await print(viewer, options);
@@ -134,14 +119,14 @@ export function createPrintController(
       activeJob = job;
       const onCallerAbort = () => job.controller.abort(options?.signal?.reason);
       options?.signal?.addEventListener("abort", onCallerAbort, { once: true });
-      publish({ printing: true, progress: { done: 0, total: doc.pageCount } });
+      store.set({ printing: true, progress: { done: 0, total: doc.pageCount } });
       try {
         await print(viewer, {
           ...options,
           signal: job.controller.signal,
           onProgress(done, total) {
             if (activeJob === job) {
-              publish({ printing: true, progress: { done, total } });
+              store.set({ printing: true, progress: { done, total } });
             }
             options?.onProgress?.(done, total);
           },
@@ -153,31 +138,15 @@ export function createPrintController(
         options?.signal?.removeEventListener("abort", onCallerAbort);
         if (activeJob === job) {
           activeJob = null;
-          publish(IDLE_PRINT);
+          store.set(IDLE_PRINT);
         }
       }
-    },
-  };
-}
+    };
 
-export interface PrintSlot {
-  readonly store: ReadableStore<PrintControls>;
-  readonly initialControls: PrintControls;
-  hold(): () => void;
-}
-
-const PRINT_SLOT = createSlotKey<PrintSlot>("parapdf.print");
-
-export function printOf(viewer: ViewerController): PrintSlot {
-  return viewer.slot(PRINT_SLOT, () => {
-    let holders = 0;
-    const controller = createPrintController(viewer, (next) => {
-      store.set(next);
-    });
     const initialControls: PrintControls = {
       ...IDLE_PRINT,
-      print: (options) => controller.print(options),
-      cancel: () => controller.cancel(),
+      print: runPrint,
+      cancel,
     };
     const store = new Store<PrintControls>(initialControls);
     return {
@@ -189,7 +158,7 @@ export function printOf(viewer: ViewerController): PrintSlot {
         return () => {
           if (released) return;
           released = true;
-          if (--holders === 0) controller.cancel();
+          if (--holders === 0) cancel();
         };
       },
     };

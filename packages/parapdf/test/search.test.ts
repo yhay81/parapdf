@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it, mock } from "node:test";
-import { attachSearch, searchOf } from "../src/features/search/index.ts";
+import { searchOf } from "../src/features/search/index.ts";
 import { ViewerController } from "../src/view/viewer.ts";
 import { fakeDocument, fakePdfjs, LETTER, settle, show } from "./fake-pdfjs.ts";
 
@@ -49,10 +49,10 @@ describe("the search feature", () => {
 
   it("finds the matches of every page", async () => {
     const { viewers } = await twoViewers();
-    const search = attachSearch(viewers[0]);
-    search.search("rose");
+    const search = searchOf(viewers[0]);
+    search.get().search("rose");
     await finish();
-    const { status, matches, current, pagesSearched } = search.store.get();
+    const { status, matches, current, pagesSearched } = search.get();
     assert.equal(status, "done");
     assert.deepEqual(
       matches.map((match) => match.pageIndex),
@@ -60,24 +60,24 @@ describe("the search feature", () => {
     );
     assert.equal(current, 0);
     assert.equal(pagesSearched, 3);
-    search.next();
-    assert.equal(search.store.get().current, 1);
-    search.previous();
-    search.previous();
-    assert.equal(search.store.get().current, 2);
+    search.get().next();
+    assert.equal(search.get().current, 1);
+    search.get().previous();
+    search.get().previous();
+    assert.equal(search.get().current, 2);
   });
 
   it("selects the first match at or after the current page, else the first of all", async () => {
     const { viewers } = await twoViewers();
-    const search = attachSearch(viewers[0]);
+    const search = searchOf(viewers[0]);
     viewers[0].store.set({ currentPage: 1 });
-    search.search("rose");
+    search.get().search("rose");
     await finish();
-    assert.equal(search.store.get().current, 1);
+    assert.equal(search.get().current, 1);
     viewers[0].store.set({ currentPage: 2 });
-    search.search("tulip");
+    search.get().search("tulip");
     await finish();
-    assert.equal(search.store.get().current, 0);
+    assert.equal(search.get().current, 0);
   });
 
   it("keeps the next match selected as the search publishes more pages and finishes", async (context) => {
@@ -98,16 +98,16 @@ describe("the search feature", () => {
     // Each page takes long enough for what was found so far to be published.
     let now = 0;
     context.mock.method(performance, "now", () => (now += 200));
-    const search = attachSearch(viewer);
+    const search = searchOf(viewer);
     const scroll = context.mock.method(viewer, "revealRect");
-    const unsubscribe = search.store.subscribe(() => {
-      if (search.store.get().current < 0) return;
+    const unsubscribe = search.subscribe(() => {
+      if (search.get().current < 0) return;
       unsubscribe();
-      search.next();
+      search.get().next();
     });
-    search.search("rose");
+    search.get().search("rose");
     await settle();
-    const second = search.store.get().matches[1];
+    const second = search.get().matches[1];
     assert.ok(second);
     assert.deepEqual(
       scroll.mock.calls.map((call) => call.arguments[1].x),
@@ -115,11 +115,11 @@ describe("the search feature", () => {
     );
     mock.timers.tick(0);
     await settle();
-    const partial = search.store.get();
+    const partial = search.get();
     assert.deepEqual([partial.status, partial.pagesSearched], ["searching", 2]);
     assert.strictEqual(partial.matches[partial.current], second);
     await finish();
-    const done = search.store.get();
+    const done = search.get();
     assert.equal(done.status, "done");
     assert.strictEqual(done.matches[done.current], second);
   });
@@ -129,18 +129,18 @@ describe("the search feature", () => {
     viewers[0].store.set({ currentPage: 2 });
     let now = 0;
     context.mock.method(performance, "now", () => (now += 200));
-    const search = attachSearch(viewers[0]);
-    search.search("rose");
+    const search = searchOf(viewers[0]);
+    search.get().search("rose");
     await settle();
     assert.deepEqual(textsRead, [2]);
-    const first = search.store.get();
+    const first = search.get();
     assert.deepEqual([first.pagesSearched, first.current, first.matches.length], [1, 0, 2]);
     const last = first.matches[1];
     assert.ok(last);
-    search.previous();
+    search.get().previous();
     mock.timers.tick(0);
     await settle();
-    const wrapped = search.store.get();
+    const wrapped = search.get();
     assert.deepEqual([wrapped.status, wrapped.pagesSearched, wrapped.current], ["searching", 2, 2]);
     assert.deepEqual(
       wrapped.matches.map((match) => match.pageIndex),
@@ -148,7 +148,7 @@ describe("the search feature", () => {
     );
     assert.strictEqual(wrapped.matches[wrapped.current], last);
     await finish();
-    const done = search.store.get();
+    const done = search.get();
     assert.deepEqual(textsRead, [2, 0, 1]);
     assert.deepEqual([done.status, done.pagesSearched], ["done", 3]);
     assert.strictEqual(done.matches[done.current], last);
@@ -156,48 +156,48 @@ describe("the search feature", () => {
 
   it("does nothing for a blank query, or to move through no matches", async () => {
     const { viewers, textsRead } = await twoViewers();
-    const search = attachSearch(viewers[0]);
-    search.search(" \t ");
+    const search = searchOf(viewers[0]);
+    search.get().search(" \t ");
     await finish();
-    assert.equal(search.store.get().status, "idle");
-    assert.equal(search.store.get().query, " \t ");
+    assert.equal(search.get().status, "idle");
+    assert.equal(search.get().query, " \t ");
     assert.deepEqual(textsRead, []);
-    search.search("lily");
+    search.get().search("lily");
     await finish();
-    search.next();
-    search.previous();
-    const { status, matches, current } = search.store.get();
+    search.get().next();
+    search.get().previous();
+    const { status, matches, current } = search.get();
     assert.deepEqual([status, matches.length, current], ["done", 0, -1]);
     assert.deepEqual(textsRead, [0, 1, 2]);
-    search.clear();
-    assert.equal(search.store.get().status, "idle");
-    assert.equal(search.store.get().query, "");
+    search.get().clear();
+    assert.equal(search.get().status, "idle");
+    assert.equal(search.get().query, "");
   });
 
   it("indexes pages apart for each way of comparing, from the text read once", async () => {
     const { viewers, textsRead } = await twoViewers();
-    const search = attachSearch(viewers[0]);
-    search.search("Rose", { caseSensitive: true });
+    const search = searchOf(viewers[0]);
+    search.get().search("Rose", { caseSensitive: true });
     await finish();
-    assert.equal(search.store.get().matches.length, 1);
-    search.search("Rose");
+    assert.equal(search.get().matches.length, 1);
+    search.get().search("Rose");
     await finish();
-    assert.equal(search.store.get().matches.length, 3);
-    search.search("rose", { caseSensitive: true, entireWord: true });
+    assert.equal(search.get().matches.length, 3);
+    search.get().search("rose", { caseSensitive: true, entireWord: true });
     await finish();
-    assert.equal(search.store.get().matches.length, 2);
+    assert.equal(search.get().matches.length, 2);
     assert.deepEqual(textsRead, [0, 1, 2]);
   });
 
   it("reads each page's text once for every viewer of the document", async () => {
     const { viewers, textsRead } = await twoViewers();
-    const first = attachSearch(viewers[0]);
-    const second = attachSearch(viewers[1]);
-    first.search("rose");
+    const first = searchOf(viewers[0]);
+    const second = searchOf(viewers[1]);
+    first.get().search("rose");
     await finish();
-    second.search("rose", { caseSensitive: false });
+    second.get().search("rose", { caseSensitive: false });
     await finish();
-    assert.equal(second.store.get().matches.length, 3);
+    assert.equal(second.get().matches.length, 3);
     assert.deepEqual(textsRead, [0, 1, 2]);
   });
 
@@ -211,14 +211,14 @@ describe("the search feature", () => {
     const viewer = new ViewerController();
     close.push(show(viewer, { url: "/slow.pdf" }, loader).close);
     await settle();
-    const search = attachSearch(viewer);
-    search.search("rose");
+    const search = searchOf(viewer);
+    search.get().search("rose");
     await settle();
     assert.deepEqual(document.textsRead, [0]);
-    search.search("tulip");
+    search.get().search("tulip");
     releaseText();
     await finish();
-    const state = search.store.get();
+    const state = search.get();
     assert.equal(state.query, "tulip");
     assert.equal(state.status, "done");
     assert.equal(state.matches.length, 2);
@@ -235,16 +235,16 @@ describe("the search feature", () => {
     const viewer = new ViewerController();
     close.push(show(viewer, { url: "/slow.pdf" }, loader).close);
     await settle();
-    const search = attachSearch(viewer);
-    search.search("rose");
+    const search = searchOf(viewer);
+    search.get().search("rose");
     await settle();
     assert.deepEqual(document.textsRead, [0]);
-    search.clear();
+    search.get().clear();
     releaseText();
     await finish();
-    assert.equal(search.store.get().status, "idle");
-    assert.equal(search.store.get().query, "");
-    assert.deepEqual(search.store.get().matches, []);
+    assert.equal(search.get().status, "idle");
+    assert.equal(search.get().query, "");
+    assert.deepEqual(search.get().matches, []);
   });
 
   it("keeps what it found while the viewer lets its document go, and forgets it with the session", async () => {
@@ -256,36 +256,24 @@ describe("the search feature", () => {
     const viewer = new ViewerController();
     const shown = show(viewer, { url: "/a.pdf" }, loader);
     await settle();
-    const search = attachSearch(viewer);
-    search.search("rose");
+    const search = searchOf(viewer);
+    search.get().search("rose");
     await finish();
-    const found = search.store.get();
+    const found = search.get();
     assert.deepEqual([found.status, found.matches.length], ["done", 2]);
     // Its provider lets the session go, as one React hides does.
     shown.close();
     assert.equal(viewer.session, null);
-    assert.equal(search.store.get(), found, "the viewer may show the session again");
+    assert.equal(search.get(), found, "the viewer may show the session again");
     close.push(show(viewer, { url: "/b.pdf" }, loader).close);
-    assert.equal(search.store.get().status, "idle");
-    assert.deepEqual(search.store.get().matches, []);
+    assert.equal(search.get().status, "idle");
+    assert.deepEqual(search.get().matches, []);
   });
 
-  it("stops when detached, and the viewer hears nothing more of it", async () => {
-    const { viewers, textsRead } = await twoViewers();
-    const search = attachSearch(viewers[0]);
-    search.search("rose");
-    search.detach();
-    await finish();
-    assert.equal(search.store.get().status, "idle");
-    assert.ok(textsRead.length <= 1, "it stopped after the page it was reading");
-  });
-
-  it("is one per viewer until detached", async () => {
+  it("shares one persistent search store per viewer", async () => {
     const { viewers } = await twoViewers();
     const own = searchOf(viewers[0]);
     assert.equal(searchOf(viewers[0]), own);
     assert.notEqual(searchOf(viewers[1]), own);
-    own.detach();
-    assert.notEqual(searchOf(viewers[0]), own);
   });
 });

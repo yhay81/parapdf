@@ -477,9 +477,9 @@ try {
     await page.evaluate(() => {
       (window as unknown as Demo).__viewer?.setScale(0.5);
       (window as unknown as Demo).__viewer?.goToPage(0);
-      window.__search?.search("marker 5");
+      window.__search?.get().search("marker 5");
     });
-    await page.waitForFunction(() => window.__search?.store.get().status === "done");
+    await page.waitForFunction(() => window.__search?.get().status === "done");
     await settle(page);
     const match = await page.evaluate(() => {
       const scroller = document.querySelector(".parapdf-viewport") as HTMLElement;
@@ -507,7 +507,7 @@ try {
         (mode === "page" ? g.shown?.first === 4 : true),
       `${JSON.stringify(match)} in ${g.clientWidth}x${g.clientHeight}`,
     );
-    await page.evaluate(() => window.__search?.search(""));
+    await page.evaluate(() => window.__search?.get().search(""));
 
     // Every other mode keeps the current page in view.
     for (const next of MODES.filter((other) => other !== mode)) {

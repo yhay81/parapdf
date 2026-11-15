@@ -441,12 +441,12 @@ try {
 
     // Search options on page 1's "Rose rose ROSE resume résumé cat concatenate cat-like".
     const count = async (query: string, options: object = {}) => {
-      await page.evaluate(([q, o]) => window.__search?.search(q as string, o as object), [
+      await page.evaluate(([q, o]) => window.__search?.get().search(q as string, o as object), [
         query,
         options,
       ] as const);
-      await page.waitForFunction(() => window.__search?.store.get().status === "done");
-      return page.evaluate(() => window.__search?.store.get().matches.length ?? -1);
+      await page.waitForFunction(() => window.__search?.get().status === "done");
+      return page.evaluate(() => window.__search?.get().matches.length ?? -1);
     };
     const counts = {
       rose: await count("rose"),
@@ -466,7 +466,7 @@ try {
         counts.catWord === 2,
       JSON.stringify(counts),
     );
-    await page.evaluate(() => window.__search?.search(""));
+    await page.evaluate(() => window.__search?.get().search(""));
 
     // Selections in PDF points: "Rose" is drawn at 72 points, its baseline 112 below the top.
     const selection = await page.evaluate(() => {

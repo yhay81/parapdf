@@ -148,10 +148,11 @@ export interface ViewControlCallbacks {
 }
 
 export interface ViewerControlBinding {
+  setCallbacks(callbacks: ViewControlCallbacks): void;
   sync(
     options: ViewerOptions,
     controlled: Partial<ControlledViewValues>,
-    callbacks: ViewControlCallbacks,
+    callbacks?: ViewControlCallbacks,
   ): void;
   disconnect(): void;
 }
@@ -669,14 +670,23 @@ export class ViewerController implements Viewer {
     if (hasWindowEvents) window.addEventListener("pagehide", onPageHide);
 
     return {
+      setCallbacks: (callbacks) => {
+        currentCallbacks = callbacks;
+      },
       sync: (options, controlled, callbacks) => {
         currentControlled = controlled;
-        currentCallbacks = callbacks;
+        if (callbacks !== undefined) currentCallbacks = callbacks;
         const before = this.store.get();
-        reported = {
-          ...(reported ?? viewValuesOf(before)),
-          ...controlled,
-        };
+        const nextReported: ControlledViewValues = reported
+          ? { ...reported }
+          : viewValuesOf(before);
+        for (const key of VIEW_CONTROL_KEYS) {
+          const value = controlled[key];
+          if (value !== undefined) {
+            (nextReported as unknown as Record<string, unknown>)[key] = value;
+          }
+        }
+        reported = nextReported;
         const wasDiverged = this.#controlDiverged;
         const preDiverge = this.#preDiverge;
         this.#controlDiverged = false;

@@ -104,7 +104,6 @@ export {
   type PdfSelectionPopoverProps,
   type PopoverPlacement,
 } from "./react/PdfSelectionPopover.tsx";
-export { PdfThumbnail, type PdfThumbnailProps } from "./react/PdfThumbnail.tsx";
 export { PdfThumbnails, type PdfThumbnailsProps } from "./react/PdfThumbnails.tsx";
 export { PdfView, type PdfViewProps } from "./react/PdfView.tsx";
 export { PdfViewer, type PdfViewerProps, type Zoom } from "./react/PdfViewer.tsx";

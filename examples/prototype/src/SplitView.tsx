@@ -14,7 +14,7 @@ import {
   type AnnotationEditing,
   annotationEditingOf,
   controllerOf,
-  type Search,
+  type SearchStore,
   searchOf,
   type ViewerController,
 } from "./internals.ts";
@@ -24,7 +24,7 @@ declare global {
   interface Window {
     __split?: {
       viewers: (ViewerController | null)[];
-      searches: (Search | null)[];
+      searches: (SearchStore | null)[];
       annotations: (AnnotationEditing | null)[];
     };
   }

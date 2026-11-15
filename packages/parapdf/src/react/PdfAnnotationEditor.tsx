@@ -3,7 +3,6 @@
 import { memo, useLayoutEffect, useReducer, useRef } from "react";
 import {
   type AnnotationEditorControlBinding,
-  type AnnotationToolBinding,
   annotationSlot,
 } from "../features/annotation-slot.ts";
 import { attachAnnotationEditing } from "../features/annotations.ts";
@@ -51,23 +50,11 @@ export const PdfAnnotationEditor = /*#__PURE__*/ memo(function PdfAnnotationEdit
 }: PdfAnnotationEditorProps) {
   const viewer = useOptionalViewer(externalViewer);
   const slot = annotationSlot(viewer);
-  const initialRef = useRef<{
-    labels: Partial<AnnotationLabels> | undefined;
-    binding: AnnotationToolBinding;
-  }>({ labels, binding: { tool, defaultTool, onToolChange } });
-  initialRef.current = { labels, binding: { tool, defaultTool, onToolChange } };
   const controlRef = useRef<AnnotationEditorControlBinding | null>(null);
-  const justBoundRef = useRef(false);
   const [reconcileCount, reconcile] = useReducer((count: number) => count + 1, 0);
 
   useLayoutEffect(() => {
-    justBoundRef.current = true;
-    const control = slot.bindControls(
-      attachAnnotationEditing,
-      initialRef.current.labels,
-      initialRef.current.binding,
-      reconcile,
-    );
+    const control = slot.bindControls(attachAnnotationEditing, reconcile);
     controlRef.current = control;
     return () => {
       controlRef.current = null;
@@ -77,10 +64,6 @@ export const PdfAnnotationEditor = /*#__PURE__*/ memo(function PdfAnnotationEdit
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: reconcileCount intentionally re-runs sync when a controlled tool change was rejected by the application.
   useLayoutEffect(() => {
-    if (justBoundRef.current) {
-      justBoundRef.current = false;
-      return;
-    }
     controlRef.current?.sync(labels, { tool, defaultTool, onToolChange });
   }, [slot, reconcileCount, labels, tool, defaultTool, onToolChange]);
 

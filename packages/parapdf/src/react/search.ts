@@ -22,7 +22,7 @@ export function useSearch<T>(
 ): SearchControls | T {
   const isSelector = typeof selectorOrViewer === "function";
   const resolved = useOptionalViewer(isSelector ? maybeViewer : selectorOrViewer);
-  const { store } = searchOf(resolved);
+  const store = searchOf(resolved);
   const selector = isSelector ? selectorOrViewer : undefined;
   return useStoreSlice(store, store.get, selector);
 }

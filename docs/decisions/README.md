@@ -52,6 +52,7 @@ it. A new choice gets a new record, numbered next.
 | [0043](0043-single-viewer-store-and-lazy-viewer.md) | Single key-filtered ViewerStore, lazy PdfDocument default viewer, and direct fragment synchronization | adopted |
 | [0044](0044-controller-slots-and-layout-overlays.md) | Typed controller slots, shared action stores, layout-phase overlays, and warm named destinations | adopted |
 | [0045](0045-settled-controls-and-static-proxies.md) | Settled controlled ViewState, pre-divergence scroll restoration, static tracked proxies, and merged thumbnail subscriptions | adopted |
+| [0046](0046-zero-copy-thumbnails-and-react-plumbing.md) | Zero-copy detached thumbnails, explicit-handle context bypass, swap-buffered stores, and streamlined React plumbing | adopted |
 
 ## Template
 

@@ -39,17 +39,6 @@ export interface SearchControls extends SearchState {
   clear(): void;
 }
 
-/** Whole-document search in one viewer, with its matches highlighted on the mounted pages. */
-export interface Search {
-  readonly store: ReadableStore<SearchControls>;
-  search(query: string, options?: SearchOptions): void;
-  next(): void;
-  previous(): void;
-  clear(): void;
-  /** Stop searching and take the highlights down; the viewer hears nothing more of it. */
-  detach(): void;
-}
-
 export const IDLE_SEARCH: SearchState = {
   query: "",
   options: {},
@@ -102,8 +91,15 @@ export function pageIndex(
   return index;
 }
 
-/** Search `viewer`'s document; `detach()` undoes it. */
-export function attachSearch(viewer: ViewerController, onDetach?: () => void): Search {
+/** Each viewer's own search store, which `useSearch()` shows. */
+const SEARCH_SLOT = createSlotKey<ReadableStore<SearchControls>>("parapdf.search");
+
+/** `viewer`'s own search store, attached at first use for the lifetime of `viewer`. */
+export function searchOf(viewer: ViewerController): ReadableStore<SearchControls> {
+  return viewer.slot(SEARCH_SLOT, () => createSearchStore(viewer));
+}
+
+function createSearchStore(viewer: ViewerController): ReadableStore<SearchControls> {
   const highlights = new SearchHighlights();
   /** Stops the search in progress. */
   let control: AbortController | null = null;
@@ -255,7 +251,7 @@ export function attachSearch(viewer: ViewerController, onDetach?: () => void): S
     publish("done", session.pageCount);
   };
 
-  const detachExtension = viewer.extend({
+  viewer.extend({
     ready(_session, signal) {
       // Letting go of the document or detaching the viewport stops the search.
       signal.addEventListener(
@@ -278,33 +274,5 @@ export function attachSearch(viewer: ViewerController, onDetach?: () => void): S
     },
   });
 
-  return {
-    store,
-    search,
-    next,
-    previous,
-    clear,
-    detach() {
-      stop();
-      detachExtension();
-      store.set(IDLE_SEARCH);
-      onDetach?.();
-    },
-  };
-}
-
-/** Each viewer's own search, which `useSearch()` shows. */
-const SEARCH_SLOT = createSlotKey<Search>("parapdf.search");
-
-/**
- * `viewer`'s own search, which `useSearch()` shows: attached at the
- * first call, and kept until its `detach()`.
- */
-export function searchOf(viewer: ViewerController): Search {
-  return viewer.slot(SEARCH_SLOT, () => {
-    const own = attachSearch(viewer, () => {
-      viewer.clearSlot(SEARCH_SLOT, own);
-    });
-    return own;
-  });
+  return store;
 }

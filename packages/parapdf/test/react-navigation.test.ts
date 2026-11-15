@@ -315,19 +315,19 @@ describe("createPageLabelsStore", () => {
   });
 });
 
-describe("ThumbnailRenderer virtualized mode and kept canvases", () => {
-  it("skips getComputedStyle and IntersectionObserver, restores kept canvases on scroll-back without re-enqueuing, evicts LRU, and zeroes on reset", async () => {
+describe("ThumbnailRenderer host-owned canvases and zero-copy kept pool", () => {
+  it("skips getComputedStyle and IntersectionObserver, detaches and moves kept canvases on scroll-back without copying pixels, evicts LRU, and zeroes on reset", async () => {
     const savedWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
     const savedComputed = Object.getOwnPropertyDescriptor(globalThis, "getComputedStyle");
     const savedIO = Object.getOwnPropertyDescriptor(globalThis, "IntersectionObserver");
     Object.assign(globalThis, {
       window: { devicePixelRatio: 1 },
       getComputedStyle: () => {
-        throw new Error("virtualized thumbnails must not call getComputedStyle");
+        throw new Error("ThumbnailRenderer must not call getComputedStyle");
       },
       IntersectionObserver: class {
         constructor() {
-          throw new Error("virtualized thumbnails must not construct IntersectionObserver");
+          throw new Error("ThumbnailRenderer must not construct IntersectionObserver");
         }
       },
     });
@@ -335,26 +335,59 @@ describe("ThumbnailRenderer virtualized mode and kept canvases", () => {
     try {
       let rotation: Rotation = 0;
       const enqueued: number[] = [];
-      const makeCanvas = (label: string) => {
-        let drawnFrom: string | null = null;
-        const canvas = {
-          label,
-          width: 0,
-          height: 0,
-          get drawnFrom() {
-            return drawnFrom;
+
+      interface FakeCanvas {
+        width: number;
+        height: number;
+        className: string;
+        attributes: Record<string, string>;
+        style: Record<string, string>;
+        parent: FakeHost | null;
+        setAttribute(name: string, value: string): void;
+        remove(): void;
+        getContext(): never;
+      }
+
+      interface FakeHost {
+        child: FakeCanvas | null;
+        readonly ownerDocument: { createElement(tag: string): FakeCanvas };
+        replaceChildren(node: FakeCanvas): void;
+      }
+
+      const makeCanvas = (): FakeCanvas => ({
+        width: 300,
+        height: 150,
+        className: "",
+        attributes: {},
+        style: {},
+        parent: null,
+        setAttribute(name, value) {
+          this.attributes[name] = value;
+        },
+        remove() {
+          if (this.parent?.child === this) this.parent.child = null;
+          this.parent = null;
+        },
+        getContext() {
+          throw new Error("ThumbnailRenderer must not call getContext or copy pixels");
+        },
+      });
+
+      const makeHost = (): FakeHost => ({
+        child: null,
+        ownerDocument: {
+          createElement(tag: string) {
+            assert.equal(tag, "canvas");
+            return makeCanvas();
           },
-          getContext: () => ({
-            drawImage(source: { label: string }) {
-              drawnFrom = source.label;
-            },
-          }),
-        };
-        return canvas as unknown as HTMLCanvasElement & {
-          readonly label: string;
-          readonly drawnFrom: string | null;
-        };
-      };
+        },
+        replaceChildren(node: FakeCanvas) {
+          node.remove();
+          if (this.child) this.child.parent = null;
+          this.child = node;
+          node.parent = this;
+        },
+      });
 
       // Each 100x100 page drawn at width=100 holds 10,000 pixels; budget=20,000 holds at most 2 kept thumbnails.
       const renderer = new ThumbnailRenderer({
@@ -373,49 +406,58 @@ describe("ThumbnailRenderer virtualized mode and kept canvases", () => {
         maxKeptPixels: 20_000,
       });
 
-      const c0 = makeCanvas("c0");
-      const c1 = makeCanvas("c1");
-      const c2 = makeCanvas("c2");
-      const stop0 = renderer.attach(0, c0, 100, { virtualized: true });
-      const stop1 = renderer.attach(1, c1, 100, { virtualized: true });
-      const stop2 = renderer.attach(2, c2, 100, { virtualized: true });
+      const h0 = makeHost();
+      const h1 = makeHost();
+      const h2 = makeHost();
+      const stop0 = renderer.attach(0, h0 as unknown as HTMLElement, 100);
+      const stop1 = renderer.attach(1, h1 as unknown as HTMLElement, 100);
+      const stop2 = renderer.attach(2, h2 as unknown as HTMLElement, 100);
       assert.deepEqual(enqueued, [0, 1, 2]);
+      const c0 = h0.child;
+      const c1 = h1.child;
+      const c2 = h2.child;
+      assert.ok(c0 && c1 && c2);
+      assert.equal(c0.className, "parapdf-thumbnail");
+      assert.equal(c0.attributes["aria-hidden"], "true");
       assert.equal(c0.width, 100);
 
-      // Unmounting all 3 keeps c0, c1, c2 initially, then microtask trims oldest (page 0) to stay <= 20,000 pixels.
+      // Unmounting detaches canvases from host DOM nodes immediately, then microtask trims oldest (page 0) to stay <= 20,000 pixels.
       stop0();
       stop1();
       stop2();
+      assert.equal(c0.parent, null);
+      assert.equal(c1.parent, null);
+      assert.equal(c2.parent, null);
       await Promise.resolve();
       assert.equal(renderer.keptPixels, 20_000);
       assert.equal(c0.width, 0);
       assert.equal(c1.width, 100);
       assert.equal(c2.width, 100);
 
-      // Scrolling back to page 1 restores synchronously from c1 without calling renderer.enqueue, and frees c1!
-      const c1Back = makeCanvas("c1-back");
-      const stop1Back = renderer.attach(1, c1Back, 100, { virtualized: true });
+      // Scrolling back to page 1 moves the exact kept HTMLCanvasElement into h1Back without calling enqueue or getContext!
+      const h1Back = makeHost();
+      const stop1Back = renderer.attach(1, h1Back as unknown as HTMLElement, 100);
       assert.deepEqual(enqueued, [0, 1, 2]);
-      assert.equal(c1Back.width, 100);
-      assert.equal(c1Back.drawnFrom, "c1");
-      assert.equal(c1.width, 0);
+      assert.equal(h1Back.child, c1);
+      assert.equal(c1.parent, h1Back);
+      assert.equal(c1.width, 100);
       assert.equal(renderer.keptPixels, 10_000);
 
-      // Rotating invalidates page 2's kept canvas on next attach and enqueues a fresh rotated render.
+      // Rotating invalidates page 2's kept canvas on next attach and enqueues a fresh rotated render on the reused canvas.
       rotation = 90;
-      const c2Rotated = makeCanvas("c2-rot");
-      const stop2Rotated = renderer.attach(2, c2Rotated, 100, { virtualized: true });
+      const h2Rotated = makeHost();
+      const stop2Rotated = renderer.attach(2, h2Rotated as unknown as HTMLElement, 100);
+      assert.equal(h2Rotated.child, c2);
       assert.deepEqual(enqueued, [0, 1, 2, 2]);
-      assert.equal(c2.width, 0);
       assert.equal(renderer.keptPixels, 0);
 
-      // Unmounting c1Back and resetting zeroes both mounted and kept canvases immediately.
+      // Unmounting h1Back and resetting zeroes both mounted and kept canvases immediately.
       stop1Back();
       assert.equal(renderer.keptPixels, 10_000);
       renderer.reset();
       assert.equal(renderer.keptPixels, 0);
-      assert.equal(c1Back.width, 0);
-      assert.equal(c2Rotated.width, 0);
+      assert.equal(c1.width, 0);
+      assert.equal(c2.width, 0);
       stop2Rotated();
     } finally {
       if (savedWindow) Object.defineProperty(globalThis, "window", savedWindow);

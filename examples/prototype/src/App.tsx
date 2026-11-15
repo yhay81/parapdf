@@ -60,9 +60,9 @@ import {
   attachViewport,
   controllerOf,
   getSelection,
-  type History,
+  type HistoryStore,
   historyOf,
-  type Search,
+  type SearchStore,
   searchOf,
   showWith,
   type ViewerController,
@@ -500,8 +500,8 @@ declare global {
     __session?: PdfSession;
     /** The package's functions, which take the viewer. */
     __parapdf?: typeof demoApi;
-    __search?: Search;
-    __history?: History;
+    __search?: SearchStore;
+    __history?: HistoryStore;
     __annotations?: AnnotationEditing | null;
     /** The escape hatch: pdf.js's own PDFDocumentProxy, for check-rotation.ts. */
     __pdfDocument?: unknown;

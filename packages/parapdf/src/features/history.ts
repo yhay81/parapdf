@@ -16,17 +16,6 @@ export interface HistoryControls extends HistoryState {
   forward(): void;
 }
 
-/** Back and forward through the positions a viewer's links and outline jumped from. */
-export interface History {
-  readonly store: ReadableStore<HistoryControls>;
-  /** Return to the position, and the zoom, before the most recent link or outline jump. */
-  back(): void;
-  /** Return to the position the most recent `back()` left. */
-  forward(): void;
-  /** Forget the positions; the viewer's jumps are no longer kept. */
-  detach(): void;
-}
-
 /** Jumps kept for `back()`. */
 export const HISTORY_LIMIT = 50;
 
@@ -73,8 +62,15 @@ export class Positions<T> {
   }
 }
 
-/** Keep where `viewer`'s links, outline, and named actions jumped from; `detach()` undoes it. */
-export function attachHistory(viewer: ViewerController, onDetach?: () => void): History {
+/** Each viewer's own navigation history store, which `useHistory()` shows. */
+const HISTORY_SLOT = createSlotKey<ReadableStore<HistoryControls>>("parapdf.history");
+
+/** `viewer`'s own navigation history store, attached at first use for the lifetime of `viewer`. */
+export function historyOf(viewer: ViewerController): ReadableStore<HistoryControls> {
+  return viewer.slot(HISTORY_SLOT, () => createHistoryStore(viewer));
+}
+
+function createHistoryStore(viewer: ViewerController): ReadableStore<HistoryControls> {
   const positions = new Positions<ViewerPosition>();
   const publish = () =>
     store.set({ canGoBack: positions.canGoBack, canGoForward: positions.canGoForward });
@@ -98,7 +94,7 @@ export function attachHistory(viewer: ViewerController, onDetach?: () => void): 
     back,
     forward,
   });
-  const detachExtension = viewer.extend({
+  viewer.extend({
     jumping() {
       const position = viewer.position();
       if (!position) return;
@@ -116,31 +112,5 @@ export function attachHistory(viewer: ViewerController, onDetach?: () => void): 
       publish();
     },
   });
-  return {
-    store,
-    back,
-    forward,
-    detach() {
-      detachExtension();
-      positions.clear();
-      publish();
-      onDetach?.();
-    },
-  };
-}
-
-/** Each viewer's own history, which `useHistory()` shows. */
-const HISTORY_SLOT = createSlotKey<History>("parapdf.history");
-
-/**
- * `viewer`'s own history, which `useHistory()` shows: attached at the
- * first call, and kept until its `detach()`.
- */
-export function historyOf(viewer: ViewerController): History {
-  return viewer.slot(HISTORY_SLOT, () => {
-    const own = attachHistory(viewer, () => {
-      viewer.clearSlot(HISTORY_SLOT, own);
-    });
-    return own;
-  });
+  return store;
 }

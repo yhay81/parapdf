@@ -40,7 +40,7 @@ const probe = (page: Page): Promise<ViewerProbe> =>
     return {
       scrollTop: Math.round(viewer?.scroller?.scrollTop ?? -1),
       currentPage: viewer?.store.get().currentPage ?? -1,
-      canGoBack: window.__history?.store.get().canGoBack ?? false,
+      canGoBack: window.__history?.get().canGoBack ?? false,
     };
   });
 

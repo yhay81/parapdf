@@ -11,11 +11,11 @@ import {
   useState,
 } from "react";
 import type { PageSize } from "../document/session.ts";
+import { attachThumbnail } from "../features/thumbnails/index.ts";
 import type { Rotation } from "../pdfjs/draw.ts";
 import type { ViewerState, ViewerStoreKey } from "../view/state.ts";
 import type { Viewer, ViewerController } from "../view/viewer.ts";
 import { useOptionalViewer, useStoreKeys } from "./context.ts";
-import { ThumbnailCanvas } from "./PdfThumbnail.tsx";
 import {
   computeThumbnailOffsets,
   computeThumbnailRange,
@@ -541,17 +541,16 @@ const Item = memo(function Item({
   renderItem,
 }: ItemProps) {
   const handleSelect = useCallback(() => select(pageIndex), [select, pageIndex]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: primitive dimensions and rotation trigger a redraw only when numerically changed.
+  const attachHost = useCallback(
+    (host: HTMLDivElement | null) => {
+      if (!host) return;
+      return attachThumbnail(viewer, pageIndex, host, width);
+    },
+    [viewer, pageIndex, width, sizeWidth, sizeHeight, rotation],
+  );
   const thumbnail = (
-    <ThumbnailCanvas
-      viewer={viewer}
-      pageIndex={pageIndex}
-      width={width}
-      canvasHeight={canvasHeight}
-      sizeWidth={sizeWidth}
-      sizeHeight={sizeHeight}
-      rotation={rotation}
-      virtualized
-    />
+    <div ref={attachHost} aria-hidden="true" style={{ width, height: canvasHeight }} />
   );
   return (
     <li data-page-index={pageIndex} aria-setsize={pageCount} aria-posinset={pageIndex + 1}>

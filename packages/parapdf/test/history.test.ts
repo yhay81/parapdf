@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { attachHistory, HISTORY_LIMIT, historyOf, Positions } from "../src/features/history.ts";
+import { HISTORY_LIMIT, historyOf, Positions } from "../src/features/history.ts";
 import type { ViewerExtension } from "../src/view/extensions.ts";
 import type { ViewerPosition } from "../src/view/navigation.ts";
 import type { ViewerController } from "../src/view/viewer.ts";
@@ -94,51 +94,53 @@ describe("history positions", () => {
 describe("the history feature", () => {
   it("keeps the positions jumps start from and returns to them", () => {
     const fake = fakeViewer();
-    const history = attachHistory(fake.viewer);
+    const history = historyOf(fake.viewer);
+    const { back, forward } = history.get();
     fake.jump(4);
     fake.jump(9);
-    assert.deepEqual(history.store.get(), {
+    assert.deepEqual(history.get(), {
       canGoBack: true,
       canGoForward: false,
-      back: history.back,
-      forward: history.forward,
+      back,
+      forward,
     });
-    history.back();
+    back();
     assert.deepEqual(fake.restored, [4]);
-    assert.deepEqual(history.store.get(), {
+    assert.deepEqual(history.get(), {
       canGoBack: true,
       canGoForward: true,
-      back: history.back,
-      forward: history.forward,
+      back,
+      forward,
     });
-    history.forward();
+    forward();
     assert.deepEqual(fake.restored, [4, 9]);
   });
 
   it("keeps its positions while the viewer has no viewport to leave or show them in", () => {
     const fake = fakeViewer();
-    const history = attachHistory(fake.viewer);
+    const history = historyOf(fake.viewer);
+    const { back, forward } = history.get();
     fake.jump(4);
     fake.jump(9);
     fake.place(null);
-    history.back();
-    history.forward();
+    back();
+    forward();
     assert.deepEqual(fake.restored, []);
-    assert.deepEqual(history.store.get(), {
+    assert.deepEqual(history.get(), {
       canGoBack: true,
       canGoForward: false,
-      back: history.back,
-      forward: history.forward,
+      back,
+      forward,
     });
     fake.place(at(9));
-    history.back();
-    history.back();
+    back();
+    back();
     assert.deepEqual(fake.restored, [4, 0]);
   });
 
   it("follows the GoBack and GoForward named actions of links", () => {
     const fake = fakeViewer();
-    attachHistory(fake.viewer);
+    historyOf(fake.viewer);
     fake.jump(3);
     fake.hear("namedAction", "GoBack");
     fake.hear("namedAction", "GoForward");
@@ -148,43 +150,40 @@ describe("the history feature", () => {
 
   it("keeps the positions while the viewer lets its document go, to show it again", () => {
     const fake = fakeViewer();
-    const history = attachHistory(fake.viewer);
+    const history = historyOf(fake.viewer);
+    const { back, forward } = history.get();
     fake.jump(2);
     fake.hear("closed", true);
-    assert.deepEqual(history.store.get(), {
+    assert.deepEqual(history.get(), {
       canGoBack: true,
       canGoForward: false,
-      back: history.back,
-      forward: history.forward,
+      back,
+      forward,
     });
-    history.back();
+    back();
     assert.deepEqual(fake.restored, [0]);
   });
 
-  it("forgets the positions when the viewer forgets its session, and detaches", () => {
+  it("forgets the positions when the viewer forgets its session", () => {
     const fake = fakeViewer();
-    const history = attachHistory(fake.viewer);
+    const history = historyOf(fake.viewer);
+    const { back, forward } = history.get();
     fake.jump(2);
     fake.hear("closed", true);
     fake.hear("closed", false);
-    assert.deepEqual(history.store.get(), {
+    assert.deepEqual(history.get(), {
       canGoBack: false,
       canGoForward: false,
-      back: history.back,
-      forward: history.forward,
+      back,
+      forward,
     });
-    history.detach();
-    assert.equal(fake.extensions.size, 0, "the viewer hears nothing more of it");
-    fake.jump(5);
-    assert.equal(history.store.get().canGoBack, false);
   });
 
-  it("is one per viewer until detached", () => {
+  it("shares one persistent history store per viewer", () => {
     const fake = fakeViewer();
+    const other = fakeViewer();
     const history = historyOf(fake.viewer);
     assert.equal(historyOf(fake.viewer), history);
-    history.detach();
-    assert.equal(fake.extensions.size, 0);
-    assert.notEqual(historyOf(fake.viewer), history);
+    assert.notEqual(historyOf(other.viewer), history);
   });
 });

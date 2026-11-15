@@ -13,51 +13,17 @@ import {
 import type { DocumentSession, PdfSource } from "./session.ts";
 import type { ReadableStore, SlotKey, StoreListener } from "./store.ts";
 
-/**
- * A session's document state as a provider that shows no password prompt
- * sees it: a request for a password is the error pdf.js gives without one.
- * Other providers of the same document may still answer the request.
- */
-function withoutPrompt(
-  state: ReadableStore<DocumentState>,
-  prompts: () => boolean,
-): ReadableStore<DocumentState> {
-  let source: DocumentState | null = null;
-  let shown: DocumentState | null = null;
-  return {
-    get() {
-      const current = state.get();
-      if (prompts()) return current;
-      if (current !== source || !shown) {
-        source = current;
-        shown =
-          current.status === "password"
-            ? {
-                ...current,
-                status: "error",
-                passwordReason: null,
-                // pdf.js's own messages, as when no prompt is given.
-                error:
-                  current.passwordReason === "incorrect"
-                    ? "PasswordException: Incorrect Password"
-                    : "PasswordException: No password given",
-              }
-            : current;
-      }
-      return shown;
-    },
-    subscribe: (listener) =>
-      state.subscribe((changedKeys) => {
-        if (
-          prompts() ||
-          (changedKeys && !changedKeys.has("status") && !changedKeys.has("passwordReason"))
-        ) {
-          listener(changedKeys);
-          return;
-        }
-        listener();
-      }),
-  };
+const PROMPT_KEYS: ReadonlySet<PropertyKey> = new Set<PropertyKey>([
+  "status",
+  "passwordReason",
+  "error",
+]);
+
+function onlyPromptKeys(keys: ReadonlySet<PropertyKey>): boolean {
+  for (const key of keys) {
+    if (!PROMPT_KEYS.has(key)) return false;
+  }
+  return true;
 }
 
 export type AttachmentHandler = (attachment: { filename: string; content: Uint8Array }) => void;
@@ -136,6 +102,8 @@ export class PdfSessionController implements PdfSession {
   #resolveHeld!: (shared: SharedSession) => void;
   /** Whether a password request shows as such, or as the error pdf.js gives without one. */
   #prompt: boolean;
+  #promptSource: DocumentState | null = null;
+  #promptShown: DocumentState | null = null;
   /** Optional handler `<PdfDocument onOpenAttachment>` sets for embedded files. */
   #openAttachment: AttachmentHandler | undefined;
   /** Where its URL's fragment says to open, which changes without opening the document again. */
@@ -156,8 +124,8 @@ export class PdfSessionController implements PdfSession {
     this.#pdfjs = pdfjs;
     this.#prompt = passwordPrompt;
     this.#awaitHold();
-    const followed: ReadableStore<DocumentState> = {
-      get: () => this.#shared?.state.get() ?? OPENING,
+    this.stateStore = {
+      get: () => this.#currentState(),
       subscribe: (listener) => {
         this.#listeners.add(listener);
         if (this.#listeners.size === 1) this.#watch();
@@ -166,7 +134,25 @@ export class PdfSessionController implements PdfSession {
         };
       },
     };
-    this.stateStore = withoutPrompt(followed, () => this.#prompt);
+  }
+
+  #currentState(): DocumentState {
+    const current = this.#shared?.state.get() ?? OPENING;
+    if (this.#prompt || current.status !== "password") return current;
+    if (this.#promptSource !== current || !this.#promptShown) {
+      this.#promptSource = current;
+      this.#promptShown = {
+        ...current,
+        status: "error",
+        passwordReason: null,
+        // pdf.js's own messages, as when no prompt is given.
+        error:
+          current.passwordReason === "incorrect"
+            ? "PasswordException: Incorrect Password"
+            : "PasswordException: No password given",
+      };
+    }
+    return this.#promptShown;
   }
 
   #awaitHold(): void {
@@ -176,7 +162,31 @@ export class PdfSessionController implements PdfSession {
   }
 
   readonly #notify = (changedKeys?: ReadonlySet<PropertyKey>): void => {
-    for (const listener of [...this.#listeners]) listener(changedKeys);
+    if (this.#listeners.size === 0) return;
+    let effectiveKeys = changedKeys;
+    if (
+      !this.#prompt &&
+      changedKeys &&
+      (changedKeys.has("status") || changedKeys.has("passwordReason"))
+    ) {
+      if (onlyPromptKeys(changedKeys)) {
+        effectiveKeys = PROMPT_KEYS;
+      } else {
+        const merged = new Set(changedKeys);
+        merged.add("status");
+        merged.add("passwordReason");
+        merged.add("error");
+        effectiveKeys = merged;
+      }
+    }
+    if (this.#listeners.size === 1) {
+      for (const listener of this.#listeners) {
+        listener(effectiveKeys);
+        break;
+      }
+      return;
+    }
+    for (const listener of [...this.#listeners]) listener(effectiveKeys);
   };
 
   /**
@@ -308,7 +318,9 @@ export class PdfSessionController implements PdfSession {
   setPasswordPrompt(passwordPrompt: boolean): void {
     if (this.#prompt === passwordPrompt) return;
     this.#prompt = passwordPrompt;
-    this.#notify();
+    if ((this.#shared?.state.get() ?? OPENING).status === "password") {
+      this.#notify(PROMPT_KEYS);
+    }
   }
 
   /** Configure how embedded files opened from this session are handled. */

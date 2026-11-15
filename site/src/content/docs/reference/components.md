@@ -132,20 +132,6 @@ The active thumbnail stays visible after the list measures its items, when
 `width` changes, and when pages rotate. If PDF page labels cannot be read,
 page numbers remain available.
 
-### `PdfThumbnail`
-
-One thumbnail, for lists of your own: a canvas drawn once it comes near
-the visible part of its scroll container and released once it leaves. It
-is a picture only, hidden from assistive technology: wrap it in a button or
-link labelled with the page, as `PdfThumbnails` does.
-
-| Prop | |
-|---|---|
-| `viewer` | The viewer whose document, rotation, and drawing slots it uses; by default, the viewer of the nearest `PdfView` or `PdfDocument`. |
-| `pageIndex` | The zero-based page. |
-| `width` | Width in CSS pixels; the height follows the page's shape as the view turns it. |
-| `className`, `style` | For the canvas. |
-
 ### `PdfOutline`
 
 The document's outline (bookmarks) as a nested `<nav><ol>…</ol></nav>`, reading

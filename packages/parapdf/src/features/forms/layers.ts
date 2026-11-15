@@ -3,7 +3,13 @@
 import type { DocumentSession } from "../../document/session.ts";
 import type { ViewerController } from "../../view/viewer.ts";
 import { onEnforcementChange, permits } from "../permissions.ts";
-import { formsOf, hasViewerFormListeners, notifyViewerFormChange } from "./index.ts";
+import type { FormChange } from "./fields.ts";
+import {
+  formsOf,
+  hasViewerFormListeners,
+  notifyViewerFormChange,
+  onViewerFormChange,
+} from "./index.ts";
 
 /** Form fields the reader fills in on `viewer`'s pages (`forms`). */
 export interface FormLayers {
@@ -12,6 +18,8 @@ export interface FormLayers {
    * (`formScripts`): calculations, validation, formatting, and actions.
    */
   setScripts(scripts: boolean): void;
+  /** Synchronize `scripts` and optional `onChange` listener from `<PdfForms>`. */
+  sync(scripts: boolean, onChange?: (change: FormChange) => void): void;
   /** Draw the fields again instead of showing them, and stop reporting changes. */
   detach(): void;
 }
@@ -133,13 +141,31 @@ export function attachFormLayers(viewer: ViewerController, { scripts = false } =
     },
   });
 
+  let currentOnChange: ((change: FormChange) => void) | undefined;
+  let unsubscribeChange: (() => void) | null = null;
+  const setScripts = (next: boolean) => {
+    if (scripts === next) return;
+    scripts = next;
+    if (next) startScripts();
+    else stopScripts();
+  };
+
   return {
-    setScripts(next) {
-      scripts = next;
-      if (next) startScripts();
-      else stopScripts();
+    setScripts,
+    sync(nextScripts, onChange) {
+      setScripts(nextScripts);
+      currentOnChange = onChange;
+      if (onChange) {
+        unsubscribeChange ??= onViewerFormChange(viewer, (change) => currentOnChange?.(change));
+      } else if (unsubscribeChange) {
+        unsubscribeChange();
+        unsubscribeChange = null;
+      }
     },
     detach() {
+      currentOnChange = undefined;
+      unsubscribeChange?.();
+      unsubscribeChange = null;
       unsubscribePermissions();
       stopScripts();
       detachExtension();

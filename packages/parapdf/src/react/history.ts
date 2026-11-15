@@ -20,7 +20,7 @@ export function useHistory<T>(
 ): HistoryControls | T {
   const isSelector = typeof selectorOrViewer === "function";
   const resolved = useOptionalViewer(isSelector ? maybeViewer : selectorOrViewer);
-  const { store } = historyOf(resolved);
+  const store = historyOf(resolved);
   const selector = isSelector ? selectorOrViewer : undefined;
   return useStoreSlice(store, store.get, selector);
 }

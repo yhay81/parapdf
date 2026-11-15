@@ -21,7 +21,9 @@ export interface ReadableStore<T> {
 export class Store<T extends object> implements ReadableStore<T> {
   #value: T;
   readonly #listeners = new Set<StoreListener>();
-  readonly #pendingKeys = new Set<PropertyKey>();
+  #pendingKeys = new Set<PropertyKey>();
+  #publishingKeys = new Set<PropertyKey>();
+  #publishing = false;
 
   constructor(value: T) {
     this.#value = value;
@@ -59,9 +61,36 @@ export class Store<T extends object> implements ReadableStore<T> {
       this.#pendingKeys.clear();
       return;
     }
-    const changedKeys: ReadonlySet<PropertyKey> | undefined =
-      this.#pendingKeys.size > 0 ? new Set(this.#pendingKeys) : undefined;
-    this.#pendingKeys.clear();
+    if (this.#pendingKeys.size === 0) {
+      this.#notifyListeners(undefined);
+      return;
+    }
+    if (this.#publishing) {
+      const changedKeys = new Set(this.#pendingKeys);
+      this.#pendingKeys.clear();
+      this.#notifyListeners(changedKeys);
+      return;
+    }
+    const changedKeys = this.#pendingKeys;
+    this.#pendingKeys = this.#publishingKeys;
+    this.#publishingKeys = changedKeys;
+    this.#publishing = true;
+    try {
+      this.#notifyListeners(changedKeys);
+    } finally {
+      changedKeys.clear();
+      this.#publishing = false;
+    }
+  }
+
+  #notifyListeners(changedKeys: ReadonlySet<PropertyKey> | undefined): void {
+    if (this.#listeners.size === 1) {
+      for (const listener of this.#listeners) {
+        listener(changedKeys);
+        break;
+      }
+      return;
+    }
     for (const listener of [...this.#listeners]) listener(changedKeys);
   }
 

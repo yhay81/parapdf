@@ -258,7 +258,7 @@ try {
     JSON.stringify({ overlayCenter, clickedPoints }),
   );
   await page.evaluate(() => {
-    window.__search?.search("israel");
+    window.__search?.get().search("israel");
   });
   // The match's page builds its text layer once scrolling settles.
   await page

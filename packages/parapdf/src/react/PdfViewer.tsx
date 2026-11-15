@@ -33,7 +33,12 @@ import type {
   ViewerController,
   Zoom,
 } from "../view/viewer.ts";
-import { useOptionalSession, useOptionalViewer, ViewerContext } from "./context.ts";
+import {
+  useLayoutSnapshot,
+  useOptionalSession,
+  useOptionalViewer,
+  ViewerContext,
+} from "./context.ts";
 import { type OverlayRenderer, PdfPageOverlayLayer, useOverlayActivity } from "./overlays.ts";
 import { VIEWER_CSS } from "./styles.ts";
 
@@ -383,18 +388,44 @@ const ViewerControlSync = memo(function ViewerControlSync({
   // A change the application did not take up renders only this leaf again,
   // returning the viewer to the controlled value without re-rendering the viewport.
   const [reconcileCount, reconcile] = useReducer((count: number) => count + 1, 0);
-  const bindingRef = useRef<ViewerControlBinding | null>(null);
+  const bindingRef = useRef<{ viewer: ViewerController; binding: ViewerControlBinding } | null>(
+    null,
+  );
 
   // Registered after attachViewport so viewport detach flushes unsettled
   // scroll positions before unsubscribing.
   useLayoutEffect(() => {
     const binding = viewer.bindControls(reconcile);
-    bindingRef.current = binding;
+    bindingRef.current = { viewer, binding };
     return () => {
       bindingRef.current = null;
       binding.disconnect();
     };
   }, [viewer]);
+
+  // Callbacks update in place without re-configuring the viewer or re-evaluating opening rules.
+  useLayoutEffect(() => {
+    const entry = bindingRef.current;
+    if (entry?.viewer !== viewer) return;
+    entry.binding.setCallbacks({
+      zoom: onZoomChange,
+      rotation: onRotationChange,
+      spread: onSpreadChange,
+      scrollMode: onScrollModeChange,
+      tool: onToolChange,
+      page: onPageChange,
+      viewState: onViewStateChange,
+    });
+  }, [
+    viewer,
+    onZoomChange,
+    onRotationChange,
+    onSpreadChange,
+    onScrollModeChange,
+    onToolChange,
+    onPageChange,
+    onViewStateChange,
+  ]);
 
   // Options are live: the viewer compares them with those it has.
   // biome-ignore lint/correctness/useExhaustiveDependencies: reconcileCount intentionally re-runs sync when a controlled prop change was rejected by the application.
@@ -404,20 +435,20 @@ const ViewerControlSync = memo(function ViewerControlSync({
     const initialSpread = spread ?? defaultSpread;
     const initialScrollMode = scrollMode ?? defaultScrollMode;
     const initialTool = tool ?? defaultTool;
-    const explicit = {
-      ...(initialScale !== undefined ? { initialScale } : {}),
-      ...(initialSpread !== undefined ? { initialSpread } : {}),
-      ...(initialScrollMode !== undefined ? { initialScrollMode } : {}),
-      ...(defaultPage !== undefined ? { initialPage: defaultPage } : {}),
-    };
     const options: ViewerOptions = {
-      ...explicit,
-      ...(initialRotation !== undefined ? { initialRotation } : {}),
-      ...(initialTool !== undefined ? { initialTool } : {}),
+      initialScale,
+      initialRotation,
+      initialSpread,
+      initialScrollMode,
+      initialTool,
+      initialPage: defaultPage,
       opening: initialViewOpening({
         initialView,
         initialViewState,
-        ...explicit,
+        initialScale,
+        initialSpread,
+        initialScrollMode,
+        initialPage: defaultPage,
         fragment: () => openingFragment(viewer, session),
       }),
       textLayer,
@@ -438,44 +469,29 @@ const ViewerControlSync = memo(function ViewerControlSync({
       maxKeptPixels,
     };
     const controlled: Partial<ControlledViewValues> = {
-      ...(zoom !== undefined ? { zoom } : {}),
-      ...(rotation !== undefined ? { rotation } : {}),
-      ...(spread !== undefined ? { spread } : {}),
-      ...(scrollMode !== undefined ? { scrollMode } : {}),
-      ...(tool !== undefined ? { tool } : {}),
+      zoom,
+      rotation,
+      spread,
+      scrollMode,
+      tool,
     };
-    const callbacks = {
-      zoom: onZoomChange,
-      rotation: onRotationChange,
-      spread: onSpreadChange,
-      scrollMode: onScrollModeChange,
-      tool: onToolChange,
-      page: onPageChange,
-      viewState: onViewStateChange,
-    };
-    bindingRef.current?.sync(options, controlled, callbacks);
+    const entry = bindingRef.current;
+    if (entry?.viewer === viewer) entry.binding.sync(options, controlled);
   }, [
     viewer,
     session,
     reconcileCount,
     zoom,
     defaultZoom,
-    onZoomChange,
     rotation,
     defaultRotation,
-    onRotationChange,
     spread,
     defaultSpread,
-    onSpreadChange,
     scrollMode,
     defaultScrollMode,
-    onScrollModeChange,
     tool,
     defaultTool,
-    onToolChange,
     defaultPage,
-    onPageChange,
-    onViewStateChange,
     initialView,
     initialViewState,
     textLayer,
@@ -518,26 +534,18 @@ const EMPTY_WINDOW: { layout: Layout | null; first: number; last: number } = {
   first: 0,
   last: -1,
 };
+const getEmptyWindow = () => EMPTY_WINDOW;
+const samePageWindow = (
+  a: { layout: Layout | null; first: number; last: number },
+  b: { layout: Layout | null; first: number; last: number },
+): boolean => a.layout === b.layout && a.first === b.first && a.last === b.last;
 
 function usePageWindow(viewer: ViewerController) {
-  const [, rerender] = useReducer((count: number) => count + 1, 0);
-  const state = typeof window === "undefined" ? EMPTY_WINDOW : viewer.store.get();
-  const windowRef = useRef({ layout: state.layout, first: state.first, last: state.last });
-  windowRef.current.layout = state.layout;
-  windowRef.current.first = state.first;
-  windowRef.current.last = state.last;
-  useLayoutEffect(() => {
-    const check = () => {
-      const next = viewer.store.get();
-      const prev = windowRef.current;
-      if (next.layout !== prev.layout || next.first !== prev.first || next.last !== prev.last) {
-        rerender();
-      }
-    };
-    check();
-    return viewer.store.subscribeKeys(PAGE_WINDOW_KEYS, check);
-  }, [viewer]);
-  return windowRef.current;
+  const subscribe = useCallback(
+    (onStoreChange: () => void) => viewer.store.subscribeKeys(PAGE_WINDOW_KEYS, onStoreChange),
+    [viewer],
+  );
+  return useLayoutSnapshot(subscribe, viewer.store.get, getEmptyWindow, samePageWindow);
 }
 
 const ViewerPages = memo(function ViewerPages({

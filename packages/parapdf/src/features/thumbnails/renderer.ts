@@ -27,23 +27,12 @@ export interface ThumbnailHost {
   maxKeptPixels?: number | undefined;
 }
 
-export interface AttachThumbnailOptions {
-  /**
-   * Set by `<PdfThumbnails>` when the caller already window-virtualizes the
-   * mounted items: skips `getComputedStyle` scroll-parent walks and per-item
-   * `IntersectionObserver` registration, draws immediately, and retains drawn
-   * canvases in a bounded LRU pool when items scroll out of the window.
-   */
-  virtualized?: boolean | undefined;
-}
-
 interface Thumbnail {
   readonly pageIndex: number;
+  readonly host: HTMLElement;
   readonly canvas: HTMLCanvasElement;
   /** Width in CSS pixels. */
   readonly width: number;
-  /** Near enough to the visible part of its scroller to be drawn. */
-  near: boolean;
   /** What the canvas holds: the view rotation and pixel width it was drawn for. */
   drawn: string | null;
   cancel: (() => void) | null;
@@ -56,22 +45,17 @@ interface KeptThumbnail {
 }
 
 /**
- * Thumbnails share the viewer's render slots but only take what the pages in
- * view leave (`Renderer.enqueue`), copy a page's drawing instead of rendering
- * when the viewer already has one large enough, and keep a bounded LRU pool of
- * unmounted thumbnail canvases so scrolling a virtualized `<PdfThumbnails>`
- * sidebar back and forth restores thumbnails synchronously without re-rendering
- * in pdf.js. Standalone `<PdfThumbnail>` elements observe their scroll parent
- * so non-virtualized lists hold pixels only near view.
+ * Owns `<canvas class="parapdf-thumbnail">` elements inside `<PdfThumbnails>`'s
+ * host slots: shares the viewer's render slots at lower priority
+ * (`Renderer.enqueue`), copies a page's drawing instead of rendering when the
+ * viewer already has one large enough, and retains detached `<canvas>` nodes in
+ * a bounded LRU pool when items scroll out of the virtualized window so
+ * scrolling back moves the kept `<canvas>` directly into the new host with zero
+ * pixel copy and no second backing-store allocation.
  */
 export class ThumbnailRenderer {
   readonly #host: ThumbnailHost;
-  readonly #byCanvas = new Map<Element, Thumbnail>();
-  /** One observer per scroll container, which a margin of its height extends, and its thumbnails. */
-  readonly #observers = new Map<
-    Element | null,
-    { observer: IntersectionObserver; count: number }
-  >();
+  readonly #mounted = new Map<HTMLElement, Thumbnail>();
   /** Unmounted drawn canvases by page index, least recently kept first. */
   readonly #kept = new Map<number, KeptThumbnail>();
   #keptPixels = 0;
@@ -88,95 +72,63 @@ export class ThumbnailRenderer {
     return this.#keptPixels;
   }
 
-  /** Draw page `pageIndex` into `canvas`, `width` CSS pixels wide, while near view. */
-  attach(
-    pageIndex: number,
-    canvas: HTMLCanvasElement,
-    width: number,
-    options?: AttachThumbnailOptions,
-  ): () => void {
-    const virtualized = options?.virtualized === true;
-    const thumbnail: Thumbnail = {
-      pageIndex,
-      canvas,
-      width,
-      near: virtualized,
-      drawn: null,
-      cancel: null,
-    };
-    this.#byCanvas.set(canvas, thumbnail);
-
-    if (virtualized) {
-      this.#draw(thumbnail);
-      // If the same canvas re-attached while not drawable (e.g. document closed), drop any stale kept entry for it.
-      if (this.#kept.get(pageIndex)?.canvas === canvas) {
-        this.#forgetKept(pageIndex);
-      }
-      return () => {
-        if (this.#byCanvas.get(canvas) === thumbnail) this.#byCanvas.delete(canvas);
-        thumbnail.cancel?.();
-        thumbnail.cancel = null;
-        if (thumbnail.drawn !== null && canvas.width > 0 && canvas.height > 0) {
-          const drawnKey = thumbnail.drawn;
-          thumbnail.drawn = null;
-          this.#keep(pageIndex, canvas, drawnKey);
-        } else {
-          this.#clear(thumbnail);
-        }
-      };
+  /** Place and draw page `pageIndex`'s `<canvas>` inside `host`, `width` CSS pixels wide. */
+  attach(pageIndex: number, host: HTMLElement, width: number): () => void {
+    const existing = this.#mounted.get(host);
+    if (existing) {
+      this.#mounted.delete(host);
+      this.#clear(existing);
+      existing.canvas.remove();
     }
 
-    const root = scrollParent(canvas);
-    const entry = this.#observerFor(root);
-    entry.count++;
-    entry.observer.observe(canvas);
+    const kept = this.#takeKept(pageIndex);
+    const canvas = kept ? kept.canvas : createThumbnailCanvas(host);
+    host.replaceChildren(canvas);
+
+    const thumbnail: Thumbnail = {
+      pageIndex,
+      host,
+      canvas,
+      width,
+      drawn: kept ? kept.key : null,
+      cancel: null,
+    };
+    this.#mounted.set(host, thumbnail);
+    this.#draw(thumbnail);
+
     return () => {
-      entry.observer.unobserve(canvas);
-      if (--entry.count === 0) {
-        entry.observer.disconnect();
-        this.#observers.delete(root);
+      if (this.#mounted.get(host) === thumbnail) this.#mounted.delete(host);
+      thumbnail.cancel?.();
+      thumbnail.cancel = null;
+      canvas.remove();
+      if (thumbnail.drawn !== null && canvas.width > 0 && canvas.height > 0) {
+        const drawnKey = thumbnail.drawn;
+        thumbnail.drawn = null;
+        this.#keep(pageIndex, canvas, drawnKey);
+      } else {
+        this.#clear(thumbnail);
       }
-      if (this.#byCanvas.get(canvas) === thumbnail) this.#byCanvas.delete(canvas);
-      this.#clear(thumbnail);
     };
   }
 
-  /** Draw every thumbnail near view that is not drawn yet, say once the document loads. */
+  /** Draw every mounted thumbnail that is not drawn yet, say once the document loads. */
   refresh(): void {
-    for (const thumbnail of this.#byCanvas.values()) this.#draw(thumbnail);
+    for (const thumbnail of this.#mounted.values()) this.#draw(thumbnail);
   }
 
   /** Drop every mounted and kept thumbnail's pixels, for example when the document closes. */
   reset(): void {
     this.#clearKept();
-    for (const thumbnail of this.#byCanvas.values()) this.#clear(thumbnail);
-  }
-
-  #observerFor(root: Element | null): { observer: IntersectionObserver; count: number } {
-    let entry = this.#observers.get(root);
-    if (!entry) {
-      const observer = new IntersectionObserver(
-        (entries) => {
-          for (const entry of entries) {
-            const thumbnail = this.#byCanvas.get(entry.target);
-            if (!thumbnail) continue;
-            thumbnail.near = entry.isIntersecting;
-            if (thumbnail.near) this.#draw(thumbnail);
-            else this.#clear(thumbnail);
-          }
-        },
-        { root, rootMargin: "100% 0px" },
-      );
-      entry = { observer, count: 0 };
-      this.#observers.set(root, entry);
-    }
-    return entry;
+    for (const thumbnail of this.#mounted.values()) this.#clear(thumbnail);
   }
 
   #draw(thumbnail: Thumbnail): void {
     const renderer = this.#host.renderer();
     const size = this.#host.pageSize(thumbnail.pageIndex);
-    if (!thumbnail.near || !renderer || !size || size.width === 0 || size.height === 0) return;
+    if (!renderer || !size || size.width === 0 || size.height === 0) {
+      if (thumbnail.drawn !== null) this.#clear(thumbnail);
+      return;
+    }
     const rotation = this.#host.rotation();
     const turned = turnedSize(size, rotation);
     const width = Math.max(1, Math.round(thumbnail.width * (window.devicePixelRatio || 1)));
@@ -185,12 +137,10 @@ export class ThumbnailRenderer {
     // drawn one came out 1 px shorter than a copied one.
     const height = Math.max(1, Math.floor((width * turned.height) / turned.width + 1e-6));
     const key = `${rotation} ${width}`;
-    if (thumbnail.drawn === key || thumbnail.cancel) return;
     const { canvas } = thumbnail;
-    if (this.#restoreKept(thumbnail.pageIndex, canvas, key, width, height)) {
-      thumbnail.drawn = key;
-      return;
-    }
+    if (thumbnail.drawn === key && canvas.width === width && canvas.height === height) return;
+    if (thumbnail.cancel) return;
+    thumbnail.drawn = null;
     canvas.width = width;
     canvas.height = height;
     if (renderer.copyPage(thumbnail.pageIndex, canvas, rotation)) {
@@ -212,6 +162,14 @@ export class ThumbnailRenderer {
         if (error === null) thumbnail.drawn = key;
       },
     );
+  }
+
+  #takeKept(pageIndex: number): KeptThumbnail | null {
+    const kept = this.#kept.get(pageIndex);
+    if (!kept) return null;
+    this.#kept.delete(pageIndex);
+    this.#keptPixels -= kept.pixels;
+    return kept;
   }
 
   #keep(pageIndex: number, canvas: HTMLCanvasElement, key: string): void {
@@ -236,34 +194,6 @@ export class ThumbnailRenderer {
         this.#trimKept(this.#maxKeptPixels);
       });
     }
-  }
-
-  #restoreKept(
-    pageIndex: number,
-    target: HTMLCanvasElement,
-    key: string,
-    width: number,
-    height: number,
-  ): boolean {
-    const kept = this.#kept.get(pageIndex);
-    if (!kept) return false;
-    this.#kept.delete(pageIndex);
-    this.#keptPixels -= kept.pixels;
-    if (kept.key !== key || kept.canvas.width !== width || kept.canvas.height !== height) {
-      if (kept.canvas !== target) releaseCanvas(kept.canvas);
-      return false;
-    }
-    if (kept.canvas === target) return true;
-    target.width = width;
-    target.height = height;
-    const context = target.getContext("2d", { alpha: false });
-    if (!context) {
-      releaseCanvas(kept.canvas);
-      return false;
-    }
-    context.drawImage(kept.canvas, 0, 0);
-    releaseCanvas(kept.canvas);
-    return true;
   }
 
   #forgetKept(pageIndex: number): void {
@@ -295,16 +225,21 @@ export class ThumbnailRenderer {
   }
 }
 
+function createThumbnailCanvas(host: HTMLElement): HTMLCanvasElement {
+  const canvas = host.ownerDocument.createElement("canvas");
+  // Empty until drawn: a canvas's default 300 by 150 pixels would hold memory for nothing.
+  canvas.width = 0;
+  canvas.height = 0;
+  canvas.className = "parapdf-thumbnail";
+  canvas.setAttribute("aria-hidden", "true");
+  canvas.style.display = "block";
+  canvas.style.width = "100%";
+  canvas.style.height = "100%";
+  canvas.style.background = "#fff";
+  return canvas;
+}
+
 function releaseCanvas(canvas: HTMLCanvasElement): void {
   canvas.width = 0;
   canvas.height = 0;
-}
-
-/** The nearest ancestor that scrolls vertically; null for the document. */
-function scrollParent(element: Element): Element | null {
-  for (let node = element.parentElement; node; node = node.parentElement) {
-    const { overflowY } = getComputedStyle(node);
-    if (overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay") return node;
-  }
-  return null;
 }

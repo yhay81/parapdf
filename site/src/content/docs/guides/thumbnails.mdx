@@ -33,11 +33,6 @@ automatic page labels, and current-page auto-scrolling. Thumbnails follow the
 viewer's rotation and draw with its drawing slots: by default they read the
 nearest `PdfView` or `PdfDocument`'s viewer, or take an explicit `viewer` prop.
 
-For a list of your own, `PdfThumbnail` (`pageIndex`, `width`, optional
-`viewer`) draws one page `width` CSS pixels wide; its height follows the
-page's shape as the view turns it. It is a picture only: wrap it in a button
-or a link labelled with the page.
-
 <ThumbnailsExample client:visible />
 
 ## What it costs
@@ -50,8 +45,9 @@ or a link labelled with the page.
   leave a render slot for the next page that scrolls in.
 - A thumbnail copies the page's drawing when the viewer already has one at
   least as large, instead of drawing the page again, and virtualized thumbnails
-  that scroll out of view keep their drawn pixels in a bounded LRU pool so
-  scrolling back shows them immediately without re-rendering in pdf.js.
+  that scroll out of view keep their detached `<canvas>` elements in a bounded
+  LRU pool so scrolling back moves them back into place without re-rendering in
+  pdf.js or copying pixels.
 
 Thumbnails show pages without the annotations the reader created, as
 pdf.js's do, and pages drawn with fillable forms are drawn again for them.

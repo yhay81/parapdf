@@ -4,7 +4,7 @@ import { PdfSessionController } from "../src/document/pdf-session.ts";
 import type { PdfjsLoader } from "../src/document/registry.ts";
 import type { PdfSource } from "../src/document/session.ts";
 import { initialViewOpening } from "../src/features/initial-view.ts";
-import { attachSearch } from "../src/features/search/index.ts";
+import { searchOf } from "../src/features/search/index.ts";
 import { getText } from "../src/features/text/index.ts";
 import type { Rotation } from "../src/pdfjs/draw.ts";
 import { preloadDocumentWith } from "../src/react/preload.ts";
@@ -282,9 +282,9 @@ describe("closing a viewer's document", () => {
     assert.ok(viewer.store.get().layout);
     const session = viewer.session;
     const reading = getText(pdfSession);
-    const search = attachSearch(viewer);
-    search.search("hello");
-    assert.equal(search.store.get().status, "searching");
+    const search = searchOf(viewer);
+    search.get().search("hello");
+    assert.equal(search.get().status, "searching");
     closeDocument();
     read();
     await assert.rejects(reading, /closed/);
@@ -292,7 +292,7 @@ describe("closing a viewer's document", () => {
     await settle();
     mock.timers.tick(0);
     await settle();
-    assert.equal(search.store.get().status, "idle", "the search publishes nothing after");
+    assert.equal(search.get().status, "idle", "the search publishes nothing after");
     assert.equal(viewer.session, null);
     // The session stays a second for a viewer that comes back, then closes.
     assert.equal(session?.signal.aborted, false);
@@ -334,7 +334,7 @@ describe("closing a viewer's document", () => {
     const viewer = new ViewerController();
     const { close: closeDocument } = show(viewer, { url: "/a.pdf" }, loader);
     await settle();
-    attachSearch(viewer).search("hello");
+    searchOf(viewer).get().search("hello");
     await settle();
     assert.deepEqual(textsRead, [0], "the search reads a page at a time");
     closeDocument();
@@ -409,17 +409,17 @@ describe("closing a viewer's document", () => {
     const viewer = new ViewerController();
     close.push(show(viewer, { url: "/a.pdf" }, loader).close);
     await settle();
-    const search = attachSearch(viewer);
-    search.search("hello");
+    const search = searchOf(viewer);
+    search.get().search("hello");
     await settle();
-    assert.equal(search.store.get().status, "done");
-    assert.equal(search.store.get().matches.length, 0);
-    search.search("hello");
+    assert.equal(search.get().status, "done");
+    assert.equal(search.get().matches.length, 0);
+    search.get().search("hello");
     await settle();
     mock.timers.tick(0);
     await settle();
-    assert.equal(search.store.get().status, "done");
-    assert.equal(search.store.get().matches.length, 1);
+    assert.equal(search.get().status, "done");
+    assert.equal(search.get().matches.length, 1);
     assert.equal(attempts, 2);
   });
 
@@ -1284,6 +1284,17 @@ describe("a viewer's viewport", () => {
     assert.equal(viewStates.length, 2);
     assert.equal(viewStates[1]?.page, 2);
     assert.equal(viewStates[1]?.scale, 2);
+
+    // Updating callbacks alone via setCallbacks() swaps handlers without calling configure().
+    const configureCalls = context.mock.method(viewer, "configure");
+    const replacedPages: number[] = [];
+    binding.setCallbacks({
+      ...callbacks,
+      page: (value: number) => void replacedPages.push(value),
+    });
+    assert.equal(configureCalls.mock.calls.length, 0);
+    viewer.goToPage(3);
+    assert.deepEqual(replacedPages, [3]);
 
     // Unsettled scroll flushes through bindControls when the session stops before viewport detach.
     const statesBeforeScroll = viewStates.length;

@@ -431,6 +431,7 @@ import {
 import * as parapdfExports from "parapdf";
 
 for (const removed of [
+  "PdfThumbnail",
   "searchOf",
   "attachSearch",
   "historyOf",

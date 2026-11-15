@@ -2,9 +2,7 @@
 
 import { createSlotKey } from "../../document/store.ts";
 import type { ViewerController } from "../../view/viewer.ts";
-import { type AttachThumbnailOptions, ThumbnailRenderer } from "./renderer.ts";
-
-export type { AttachThumbnailOptions };
+import { ThumbnailRenderer } from "./renderer.ts";
 
 /** Each viewer's thumbnails, while any is attached. */
 const THUMBNAILS_SLOT = createSlotKey<{
@@ -14,18 +12,15 @@ const THUMBNAILS_SLOT = createSlotKey<{
 }>("parapdf.thumbnails");
 
 /**
- * Draw page `pageIndex` of `viewer`'s document into `canvas` as a thumbnail
- * `width` CSS pixels wide while it is near the visible part of its scroll
- * container, at a lower priority than the pages in the viewport; returns
- * the function that releases it. `<PdfThumbnail>` and `<PdfThumbnails>` call
- * this.
+ * Place and draw page `pageIndex` of `viewer`'s document inside `host` as a
+ * thumbnail `width` CSS pixels wide, at a lower priority than the pages in the
+ * viewport; returns the function that releases it into the kept-canvas pool.
  */
 export function attachThumbnail(
   viewer: ViewerController,
   pageIndex: number,
-  canvas: HTMLCanvasElement,
+  host: HTMLElement,
   width: number,
-  options?: AttachThumbnailOptions,
 ): () => void {
   const held = viewer.slot(THUMBNAILS_SLOT, () => {
     const renderer = new ThumbnailRenderer({
@@ -52,7 +47,7 @@ export function attachThumbnail(
     return { renderer, count: 0, detach };
   });
   held.count++;
-  const release = held.renderer.attach(pageIndex, canvas, width, options);
+  const release = held.renderer.attach(pageIndex, host, width);
   let released = false;
   return () => {
     if (released) return;

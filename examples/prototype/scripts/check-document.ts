@@ -107,9 +107,12 @@ interface Demo {
   };
   __parapdf?: Parapdf;
   __history?: {
-    store: { get(): { canGoBack: boolean; canGoForward: boolean } };
-    back(): void;
-    forward(): void;
+    get(): {
+      canGoBack: boolean;
+      canGoForward: boolean;
+      back(): void;
+      forward(): void;
+    };
   };
   __annotations?: {
     store: { get(): { state: unknown } };
@@ -132,7 +135,7 @@ const state = (page: Page) =>
     const demo = window as unknown as Demo;
     const viewer = demo.__viewer?.store.get();
     if (!viewer) return undefined;
-    const history = demo.__history?.store.get();
+    const history = demo.__history?.get();
     return {
       ...viewer,
       permissions: demo.__session?.state.permissions ?? null,
@@ -284,7 +287,7 @@ try {
       inView(zoomed, 100, clicked?.scale) && close(zoomed?.y, 792 - 500, 1),
       JSON.stringify(zoomed),
     );
-    await page.evaluate(() => (window as unknown as Demo).__history?.back());
+    await page.evaluate(() => (window as unknown as Demo).__history?.get().back());
     await page.waitForTimeout(100);
     const back = await state(page);
     check(
@@ -296,7 +299,7 @@ try {
         !back.canGoBack,
       JSON.stringify({ page: back?.currentPage, mode: back?.zoomMode, scale: back?.scale }),
     );
-    await page.evaluate(() => (window as unknown as Demo).__history?.forward());
+    await page.evaluate(() => (window as unknown as Demo).__history?.get().forward());
     await page.waitForTimeout(100);
     const forward = await state(page);
     const forwardCorner = await corner(page);
@@ -310,7 +313,7 @@ try {
         !forward.canGoForward,
       JSON.stringify({ page: forward?.currentPage, scale: forward?.scale, ...forwardCorner }),
     );
-    await page.evaluate(() => (window as unknown as Demo).__history?.back());
+    await page.evaluate(() => (window as unknown as Demo).__history?.get().back());
     const kept = await go(1);
     check(
       "an XYZ destination with a zoom of 0 keeps the zoom",
@@ -355,7 +358,7 @@ try {
       JSON.stringify({ scale: fitR.state?.scale, rectScale, ...fitR.corner }),
     );
     for (let step = 0; step < 5; step++)
-      await page.evaluate(() => (window as unknown as Demo).__history?.back());
+      await page.evaluate(() => (window as unknown as Demo).__history?.get().back());
     await page.waitForTimeout(100);
     const first = await state(page);
     check(
@@ -1101,7 +1104,7 @@ try {
       const viewer = (window as unknown as Demo).__viewer;
       return {
         view: viewer?.viewState() ?? null,
-        back: (window as unknown as Demo).__history?.store.get().canGoBack,
+        back: (window as unknown as Demo).__history?.get().canGoBack,
       };
     });
     check(

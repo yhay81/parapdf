@@ -46,13 +46,13 @@ async function searchFor(page: Page, query: string): Promise<number> {
   await input.press("Enter");
   await page.waitForFunction(
     (query) => {
-      const state = window.__search?.store.get();
+      const state = window.__search?.get();
       return state?.query === query && state.status === "done";
     },
     query,
     { timeout: 60_000 },
   );
-  return page.evaluate(() => window.__search?.store.get().matches.length ?? 0);
+  return page.evaluate(() => window.__search?.get().matches.length ?? 0);
 }
 
 /** The index can finish before the selected page has built its text layer. */
@@ -488,7 +488,7 @@ try {
     );
   check("result count is announced", announced, `expected ${expectedSummary}`);
   await page.getByRole("searchbox", { name: "Find in document" }).press("Enter");
-  const second = await page.evaluate(() => window.__search?.store.get().current);
+  const second = await page.evaluate(() => window.__search?.get().current);
   check("Enter moves to the next match", second === 1, `current=${second}`);
   check(
     "the next match is highlighted",
@@ -517,18 +517,18 @@ try {
     const search = window.__search;
     if (!search) throw new Error("Search is not attached");
     return new Promise<number>((resolve) => {
-      const unsubscribe = search.store.subscribe(() => {
-        const { current, pagesSearched, status } = search.store.get();
+      const unsubscribe = search.subscribe(() => {
+        const { current, pagesSearched, status, previous } = search.get();
         if (current < 0 && status !== "done") return;
         unsubscribe();
-        search.previous();
+        previous();
         resolve(pagesSearched);
       });
-      search.search("a");
+      search.get().search("a");
     });
   });
   check("search selects a match after reading the current page", firstBatch === 1);
-  await page.waitForFunction(() => window.__search?.store.get().status === "done");
+  await page.waitForFunction(() => window.__search?.get().status === "done");
   const selectedRun = await page.evaluate(() => {
     const highlight = CSS.highlights.get("parapdf-search-current");
     const [range] = highlight ?? [];
@@ -1030,11 +1030,11 @@ try {
     const parapdf = window.__parapdf;
     const search = window.__search;
     if (!session || !parapdf || !search) return null;
-    search.search("appropriations");
-    while (search.store.get().status !== "done") {
+    search.get().search("appropriations");
+    while (search.get().status !== "done") {
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
-    const { matches } = search.store.get();
+    const { matches } = search.get();
     const match = matches.at(-1);
     if (!match) return null;
     const { text } = await parapdf.getText(session, {

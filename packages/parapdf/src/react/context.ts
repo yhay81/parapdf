@@ -1,6 +1,13 @@
 "use client";
 
-import { createContext, use, useCallback, useContext, useRef, useSyncExternalStore } from "react";
+import {
+  createContext,
+  use,
+  useLayoutEffect,
+  useReducer,
+  useRef,
+  useSyncExternalStore,
+} from "react";
 import { browser } from "react-dom";
 import {
   type PdfSession,
@@ -67,8 +74,8 @@ export const PageContext = createContext<{
  * `<PdfDocument>`, instantiating `<PdfDocument>`'s default viewer on first use.
  */
 export function useOptionalViewer(viewer?: Viewer): ViewerController {
-  const contextValue = useContext(ViewerContext);
   if (viewer) return controllerOf(viewer);
+  const contextValue = use(ViewerContext);
   if (!contextValue) {
     throw new Error(
       "useViewer must be used inside <PdfDocument> or <PdfView>, or pass a Viewer from useCreateViewer()",
@@ -77,39 +84,85 @@ export function useOptionalViewer(viewer?: Viewer): ViewerController {
   return contextValue instanceof ViewerController ? contextValue : contextValue.get();
 }
 
+interface KeyedSliceState<T, S> {
+  readonly store: ReadableStore<T>;
+  readonly keys: readonly PropertyKey[];
+  readonly subscribe: (onStoreChange: () => void) => () => void;
+  dirty: boolean;
+  client: SelectedCache<T, S> | null;
+  server: SelectedCache<T, S> | null;
+}
+
 /** Read a derived slice of `store`, waking React only when one of `keys` changed. */
 export function useStoreKeys<T, S>(
   store: ReadableStore<T>,
   keys: readonly PropertyKey[],
   selector: (state: T) => S,
 ): S {
-  const clientCacheRef = useRef<{ store: ReadableStore<T>; value: S } | null>(null);
-  const serverCacheRef = useRef<{ store: ReadableStore<T>; value: S } | null>(null);
-  const subscribe = useCallback(
-    (onStoreChange: () => void) => subscribeKeys(store, keys, onStoreChange),
-    [store, keys],
-  );
+  const ref = useRef<KeyedSliceState<T, S> | null>(null);
+  const ensure = (): KeyedSliceState<T, S> => {
+    let state = ref.current;
+    if (!state || state.store !== store || state.keys !== keys) {
+      const created: KeyedSliceState<T, S> = {
+        store,
+        keys,
+        subscribe: (onStoreChange) =>
+          subscribeKeys(store, keys, () => {
+            created.dirty = true;
+            onStoreChange();
+          }),
+        dirty: false,
+        client: null,
+        server: null,
+      };
+      state = created;
+      ref.current = state;
+    }
+    return state;
+  };
+  const sliceState = ensure();
   return useSyncExternalStore(
-    subscribe,
+    sliceState.subscribe,
     () => {
-      const next = selector(store.get());
-      const prev = clientCacheRef.current;
-      if (prev && prev.store === store && shallowEqual(prev.value, next)) {
-        return prev.value;
-      }
-      clientCacheRef.current = { store, value: next };
-      return next;
+      const state = ensure();
+      const dirty = state.dirty;
+      state.dirty = false;
+      state.client = selectCached(state.client, store.get(), selector, dirty);
+      return state.client.value;
     },
     () => {
-      const next = selector(store.get());
-      const prev = serverCacheRef.current;
-      if (prev && prev.store === store && shallowEqual(prev.value, next)) {
-        return prev.value;
-      }
-      serverCacheRef.current = { store, value: next };
-      return next;
+      const state = ensure();
+      state.server = selectCached(state.server, store.get(), selector);
+      return state.server.value;
     },
   );
+}
+
+/**
+ * Subscribe in `useLayoutEffect` so synchronous layout-phase producers (warm
+ * session opening, declarative overlays) flush into the same commit before paint.
+ */
+export function useLayoutSnapshot<S>(
+  subscribe: ((onStoreChange: () => void) => () => void) | null,
+  getSnapshot: () => S,
+  getServerSnapshot: () => S,
+  isEqual: (a: S, b: S) => boolean = Object.is,
+): S {
+  const [, rerender] = useReducer((count: number) => count + 1, 0);
+  const snapshot =
+    typeof window === "undefined" || !subscribe ? getServerSnapshot() : getSnapshot();
+  const shownRef = useRef<S>(snapshot);
+  shownRef.current = snapshot;
+  useLayoutEffect(() => {
+    if (!subscribe) return;
+    const check = () => {
+      if (!isEqual(shownRef.current, getSnapshot())) rerender();
+    };
+    const unsubscribe = subscribe(check);
+    check();
+    return unsubscribe;
+  }, [subscribe, getSnapshot, isEqual]);
+  return snapshot;
 }
 
 function isPlainObject(value: object): boolean {
@@ -236,8 +289,9 @@ export function selectCached<T, S>(
   previous: SelectedCache<T, S> | null,
   raw: T,
   selector: (state: T) => S,
+  force = false,
 ): SelectedCache<T, S> {
-  if (previous && Object.is(previous.raw, raw) && previous.selector === selector) {
+  if (!force && previous && Object.is(previous.raw, raw) && previous.selector === selector) {
     return previous;
   }
   const next = selector(raw);
@@ -360,15 +414,15 @@ export function useStoreSlice<T extends object, S>(
  * the answer to its password request, pdf.js's document, and its signal.
  */
 export function useSession(): PdfSession {
-  const session = useContext(SessionContext);
+  const session = use(SessionContext);
   if (!session) throw new Error("useSession must be used inside <PdfDocument>");
   return session;
 }
 
 /** `session` when given, otherwise the session of the nearest `<PdfDocument>`. */
 export function useOptionalSession(session?: PdfSession): PdfSessionController {
-  const contextSession = useContext(SessionContext);
   if (session) return sessionControllerOf(session);
+  const contextSession = use(SessionContext);
   if (!contextSession) {
     throw new Error("useSession must be used inside <PdfDocument>, or pass a PdfSession");
   }
@@ -383,9 +437,10 @@ export function useOptionalSession(session?: PdfSession): PdfSessionController {
  * browser without reporting an error.
  */
 const SESSION_READS_KEYS: readonly PropertyKey[] = ["status", "passwordReason"];
+const getOpeningState = (): DocumentState => OPENING;
 
 export function useSessionData(hook: string): PdfSessionController {
-  const session = useContext(SessionContext);
+  const session = use(SessionContext);
   if (!session) throw new Error("useSession must be used inside <PdfDocument>");
   use(browser(() => `${hook} reads the document, which only the browser opens`));
   // What settled empty while the document waited for a password is read
@@ -405,11 +460,11 @@ export function useSessionData(hook: string): PdfSessionController {
 export function useDocumentState<T>(selector: (state: DocumentState) => T): T;
 export function useDocumentState(): DocumentState;
 export function useDocumentState<T>(selector?: (state: DocumentState) => T): DocumentState | T {
-  const session = useContext(SessionContext);
+  const session = use(SessionContext);
   if (!session) throw new Error("useSession must be used inside <PdfDocument>");
   // The server opened no document. A later root may hydrate after another
   // root already opened the same source; its first snapshot must match the HTML.
-  return useStoreSlice(session.stateStore, () => OPENING, selector);
+  return useStoreSlice(session.stateStore, getOpeningState, selector);
 }
 
 /**

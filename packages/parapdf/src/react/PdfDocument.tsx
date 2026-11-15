@@ -138,10 +138,11 @@ const SessionLeaseMount = memo(function SessionLeaseMount({
   // mounted leaves its document to close (document/registry.ts).
   useLayoutEffect(() => session.connect(), [session]);
   useLayoutEffect(() => holder?.connect(), [holder]);
-  // The prompt changes what the session shows, not the document.
-  useLayoutEffect(() => session.setPasswordPrompt(passwordPrompt), [session, passwordPrompt]);
-  useLayoutEffect(() => session.setOpenAttachment(onOpenAttachment), [session, onOpenAttachment]);
-  // A new fragment moves the viewers where it points, as a link would.
-  useLayoutEffect(() => session.setFragment(fragment), [session, fragment]);
+  // The prompt, attachment handler, and URL fragment update the live session without reopening.
+  useLayoutEffect(() => {
+    session.setPasswordPrompt(passwordPrompt);
+    session.setOpenAttachment(onOpenAttachment);
+    session.setFragment(fragment);
+  }, [session, passwordPrompt, onOpenAttachment, fragment]);
   return null;
 });

@@ -7,20 +7,25 @@
 import { PdfSessionController } from "../../../packages/parapdf/src/document/pdf-session.ts";
 import type { PdfjsLoader } from "../../../packages/parapdf/src/document/registry.ts";
 import type { PdfSource } from "../../../packages/parapdf/src/document/session.ts";
+import type { ReadableStore } from "../../../packages/parapdf/src/document/store.ts";
 import { annotationSlot } from "../../../packages/parapdf/src/features/annotation-slot.ts";
 import type { AnnotationEditing } from "../../../packages/parapdf/src/features/annotations.ts";
-import { type History, historyOf } from "../../../packages/parapdf/src/features/history.ts";
-import { type Search, searchOf } from "../../../packages/parapdf/src/features/search/index.ts";
+import { type HistoryControls, historyOf } from "../../../packages/parapdf/src/features/history.ts";
+import {
+  type SearchControls,
+  searchOf,
+} from "../../../packages/parapdf/src/features/search/index.ts";
 import { getSelection } from "../../../packages/parapdf/src/features/selection.ts";
 import { controllerOf, type ViewerController } from "../../../packages/parapdf/src/view/viewer.ts";
+
+export type HistoryStore = ReadableStore<HistoryControls>;
+export type SearchStore = ReadableStore<SearchControls>;
 
 export {
   type AnnotationEditing,
   controllerOf,
   getSelection,
-  type History,
   historyOf,
-  type Search,
   searchOf,
   type ViewerController,
 };

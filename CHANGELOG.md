@@ -6,6 +6,30 @@ change the API.
 
 ## Unreleased
 
+- Remove standalone `PdfThumbnail`, move kept thumbnail `<canvas>` elements
+  without copying pixels, skip context subscriptions on explicit handles, and
+  simplify React/controller store and effect plumbing:
+  - **Breaking**: Remove standalone `PdfThumbnail` and `PdfThumbnailProps`. Use
+    `<PdfThumbnails>` (with its `children` render prop when customizing item
+    markup).
+  - Have `ThumbnailRenderer` own `<canvas class="parapdf-thumbnail">` elements
+    directly inside `<PdfThumbnails>`'s host slots, detach unmounted `<canvas>`
+    nodes from React's `<li>` subtrees when pooling them in `#kept`, and move
+    kept `<canvas>` elements directly into remounted hosts with zero `drawImage`
+    copies, zero transient double pixel buffers, and half the per-item React
+    fibers.
+  - Resolve `ViewerContext` and `SessionContext` with React 19 `use()` only when
+    no explicit `viewer` or `session` argument is given, skip `useStoreKeys()`
+    selector calls when `store.get()` is unchanged and no subscribed key fired,
+    swap pre-allocated key sets in `Store.publish()`, and fold
+    `PdfSessionController` onto a single `stateStore` that preserves changed keys
+    when `passwordPrompt` is disabled.
+  - Separate callback updates (`binding.setCallbacks()`) from option and
+    controlled-prop sync in `<PdfViewer>`, switch `overlays.ts` and `outline.ts`
+    from `createElement` to `react/jsx-runtime`, share `useLayoutSnapshot`
+    across layout-phase subscriptions, and collapse internal search, history,
+    print, form, and annotation slot plumbing onto their controller stores.
+
 - Hold `onViewStateChange` until controlled `<PdfViewer>` props settle, restore
   pre-divergence scroll coordinates on rejected controlled mutations, eliminate
   per-snapshot proxy closures, and merge thumbnail store subscriptions:

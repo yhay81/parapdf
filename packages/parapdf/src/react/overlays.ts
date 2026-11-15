@@ -2,23 +2,21 @@
 
 import {
   type CSSProperties,
-  createElement,
-  Fragment,
   type ReactNode,
   type Ref,
   use,
   useCallback,
   useLayoutEffect,
   useMemo,
-  useReducer,
   useRef,
 } from "react";
+import { Fragment, jsx } from "react/jsx-runtime";
 import { createPortal } from "react-dom";
 import type { PageSize } from "../document/session.ts";
 import { createSlotKey } from "../document/store.ts";
 import type { Rotation } from "../pdfjs/draw.ts";
 import type { Viewer, ViewerController } from "../view/viewer.ts";
-import { PageContext, useOptionalViewer } from "./context.ts";
+import { PageContext, useLayoutSnapshot, useOptionalViewer } from "./context.ts";
 
 export interface OverlayRenderer {
   readonly id: string;
@@ -202,6 +200,9 @@ export interface PdfPageOverlayProps {
   children?: ReactNode;
 }
 
+const getNullTarget = (): PortalTarget | null => null;
+const getInactiveOverlays = (): OverlayActivity => INACTIVE_OVERLAYS;
+
 /**
  * Renders `children` through a portal into page `page`'s overlay layer above
  * its canvas and text while that page is in the viewer's mounted window, and
@@ -213,24 +214,19 @@ export function PdfPageOverlay({ page, viewer, children }: PdfPageOverlayProps):
   const store = overlayStoreOf(resolved);
   const pageIndex = Number.isFinite(page) ? Math.trunc(page) : -1;
   const active = pageIndex >= 0 && hasOverlayNode(children);
-  const [, rerender] = useReducer((count: number) => count + 1, 0);
-  const target = typeof window === "undefined" || !active ? null : store.portalTarget(pageIndex);
-  const shownRef = useRef<PortalTarget | null>(target);
-  shownRef.current = target;
-
-  useLayoutEffect(() => {
-    if (!active) return;
-    const release = store.claimPortal(pageIndex);
-    const check = () => {
-      if (store.portalTarget(pageIndex) !== shownRef.current) rerender();
-    };
-    check();
-    const unsubscribe = store.subscribePortal(pageIndex, check);
-    return () => {
-      unsubscribe();
-      release();
-    };
-  }, [store, pageIndex, active]);
+  const subscribePortal = useCallback(
+    (onStoreChange: () => void) => {
+      const release = store.claimPortal(pageIndex);
+      const unsubscribe = store.subscribePortal(pageIndex, onStoreChange);
+      return () => {
+        unsubscribe();
+        release();
+      };
+    },
+    [store, pageIndex],
+  );
+  const getTarget = useCallback(() => store.portalTarget(pageIndex), [store, pageIndex]);
+  const target = useLayoutSnapshot(active ? subscribePortal : null, getTarget, getNullTarget);
 
   const pageContext = useMemo(
     () => (target ? { pageIndex, size: target.size } : null),
@@ -238,7 +234,7 @@ export function PdfPageOverlay({ page, viewer, children }: PdfPageOverlayProps):
   );
 
   if (!target || !pageContext || !active) return null;
-  return createPortal(createElement(PageContext, { value: pageContext }, children), target.layer);
+  return createPortal(jsx(PageContext, { value: pageContext, children }), target.layer);
 }
 
 export interface PdfPageOverlaysProps {
@@ -313,22 +309,19 @@ export function PdfPageRect({
   }
   const { size } = page;
   if (!size || size.width === 0 || size.height === 0) return null;
-  return createElement(
-    "div",
-    {
-      ref,
-      className,
-      style: {
-        position: "absolute",
-        left: `${(x / size.width) * 100}%`,
-        top: `${(y / size.height) * 100}%`,
-        width: `${(width / size.width) * 100}%`,
-        height: `${(height / size.height) * 100}%`,
-        ...style,
-      },
+  return jsx("div", {
+    ref,
+    className,
+    style: {
+      position: "absolute",
+      left: `${(x / size.width) * 100}%`,
+      top: `${(y / size.height) * 100}%`,
+      width: `${(width / size.width) * 100}%`,
+      height: `${(height / size.height) * 100}%`,
+      ...style,
     },
     children,
-  );
+  });
 }
 
 /**
@@ -338,18 +331,7 @@ export function PdfPageRect({
  */
 export function useOverlayActivity(viewer: ViewerController): OverlayActivity {
   const store = overlayStoreOf(viewer);
-  const [, rerender] = useReducer((count: number) => count + 1, 0);
-  const activity = typeof window === "undefined" ? INACTIVE_OVERLAYS : store.getActivity();
-  const shownRef = useRef(activity);
-  shownRef.current = activity;
-  useLayoutEffect(() => {
-    const check = () => {
-      if (store.getActivity() !== shownRef.current) rerender();
-    };
-    check();
-    return store.subscribeActive(check);
-  }, [store]);
-  return activity;
+  return useLayoutSnapshot(store.subscribeActive, store.getActivity, getInactiveOverlays);
 }
 
 export interface PdfPageOverlayLayerProps {
@@ -394,7 +376,7 @@ export function PdfPageOverlayLayer({
     const nodes: ReactNode[] = [];
     for (const entry of renderers) {
       const node = entry.render(index);
-      if (hasOverlayNode(node)) nodes.push(createElement(Fragment, { key: entry.id }, node));
+      if (hasOverlayNode(node)) nodes.push(jsx(Fragment, { children: node }, entry.id));
     }
     if (nodes.length > 0) {
       rendered = nodes;
@@ -413,17 +395,14 @@ export function PdfPageOverlayLayer({
 
   if (!hasRendered && !hasPortal) return null;
   const turned = rotation % 180 !== 0;
-  return createElement(
-    "div",
-    {
-      ref: attachLayer,
-      className: "parapdf-overlay-layer",
-      "data-main-rotation": String(rotation),
-      style: {
-        width: turned ? height : width,
-        height: turned ? width : height,
-      },
+  return jsx("div", {
+    ref: attachLayer,
+    className: "parapdf-overlay-layer",
+    "data-main-rotation": String(rotation),
+    style: {
+      width: turned ? height : width,
+      height: turned ? width : height,
     },
-    hasRendered ? createElement(PageContext, { value: pageContext }, rendered) : null,
-  );
+    children: hasRendered ? jsx(PageContext, { value: pageContext, children: rendered }) : null,
+  });
 }

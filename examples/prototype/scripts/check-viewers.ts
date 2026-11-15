@@ -113,8 +113,8 @@ async function checkViews(url: string) {
     assert.equal(
       await page.evaluate(() => {
         const search = window.__split!.searches[0]!;
-        search.search("lorem");
-        return search.store.get().status;
+        search.get().search("lorem");
+        return search.get().status;
       }),
       "idle",
       "searching a detached viewport does not leave it searching forever",
@@ -131,11 +131,11 @@ async function checkViews(url: string) {
 
     // Start long work in both viewers, then close only the first.
     await page.evaluate(() => {
-      for (const search of window.__split!.searches) search!.search("lorem");
+      for (const search of window.__split!.searches) search!.get().search("lorem");
     });
     await page.locator('[data-viewer="0"]').getByRole("button", { name: "Close viewer" }).click();
     await page.waitForFunction(
-      () => window.__split!.searches[1]!.store.get().status === "done",
+      () => window.__split!.searches[1]!.get().status === "done",
       undefined,
       { timeout: 60_000 },
     );
@@ -146,7 +146,7 @@ async function checkViews(url: string) {
         right: right!.store.get().layout === null ? "idle" : "shown",
         leftAborted: left!.signal.aborted,
         rightAborted: right!.signal.aborted,
-        matches: window.__split!.searches[1]!.store.get().matches.length,
+        matches: window.__split!.searches[1]!.get().matches.length,
         destroys: window.__lifecycle!.stats.destroys,
       };
     });

@@ -81,14 +81,12 @@ export interface AnnotationSlot {
   editing: AnnotationEditing | null;
   removeViewportGuard: (() => void) | null;
   mount(
-    attach: (viewer: ViewerController, options?: AnnotationEditingOptions) => AnnotationEditing,
+    attach: (viewer: ViewerController, options: AnnotationEditingOptions) => AnnotationEditing,
     labels: Partial<AnnotationLabels> | undefined,
   ): () => void;
   updateLabels(labels: Partial<AnnotationLabels> | undefined): void;
   bindControls(
-    attach: (viewer: ViewerController, options?: AnnotationEditingOptions) => AnnotationEditing,
-    initialLabels: Partial<AnnotationLabels> | undefined,
-    initialBinding: AnnotationToolBinding,
+    attach: (viewer: ViewerController, options: AnnotationEditingOptions) => AnnotationEditing,
     onDiverge: () => void,
   ): AnnotationEditorControlBinding;
   detachNow(): void;
@@ -118,10 +116,7 @@ export function annotationSlot(viewer: ViewerController): AnnotationSlot {
     const initialControls: AnnotationControls = { ...STOPPED, ...methods };
     const store = new Store<AnnotationControls>(initialControls);
 
-    let unsubscribeEditing: (() => void) | null = null;
     const detachNow = () => {
-      unsubscribeEditing?.();
-      unsubscribeEditing = null;
       if (!slot.editing) return;
       slot.removeViewportGuard?.();
       slot.removeViewportGuard = null;
@@ -154,12 +149,7 @@ export function annotationSlot(viewer: ViewerController): AnnotationSlot {
             },
           });
           slot.labels = labels;
-          const created = attach(viewer, { ...(labels ? { labels } : {}), store });
-          slot.editing = created;
-          if (created.store !== store) {
-            store.set(created.store.get());
-            unsubscribeEditing = created.store.subscribe(() => store.set(created.store.get()));
-          }
+          slot.editing = attach(viewer, { ...(labels ? { labels } : {}), store });
         } else if (!sameAnnotationLabels(labels, slot.labels)) {
           slot.labels = labels;
           slot.editing.setLabels(labels ?? {});
@@ -182,19 +172,29 @@ export function annotationSlot(viewer: ViewerController): AnnotationSlot {
         slot.labels = labels;
         slot.editing.setLabels(labels ?? {});
       },
-      bindControls(attach, initialLabels, initialBinding, onDiverge) {
-        let currentBinding = initialBinding;
-        const unmount = slot.mount(attach, initialLabels);
-        const toolBinding = bindAnnotationTool(viewer, slot, () => currentBinding, onDiverge);
+      bindControls(attach, onDiverge) {
+        let currentBinding: AnnotationToolBinding = {};
+        let unmount: (() => void) | null = null;
+        let toolBinding: {
+          applyControlled(tool: AnnotationTool | undefined): void;
+          disconnect(): void;
+        } | null = null;
         return {
           sync(labels, nextBinding) {
-            slot.updateLabels(labels);
             currentBinding = nextBinding;
-            toolBinding.applyControlled(nextBinding.tool);
+            if (!unmount) {
+              unmount = slot.mount(attach, labels);
+              toolBinding = bindAnnotationTool(viewer, slot, () => currentBinding, onDiverge);
+              return;
+            }
+            slot.updateLabels(labels);
+            toolBinding?.applyControlled(nextBinding.tool);
           },
           disconnect() {
-            toolBinding.disconnect();
-            unmount();
+            toolBinding?.disconnect();
+            toolBinding = null;
+            unmount?.();
+            unmount = null;
           },
         };
       },

@@ -10,6 +10,7 @@ import {
 } from "../src/features/annotation-slot.ts";
 import {
   type AnnotationEditing,
+  type AnnotationEditingOptions,
   type AnnotationEditingStore,
   attachAnnotationEditing,
 } from "../src/features/annotations.ts";
@@ -46,7 +47,7 @@ const READY_STYLES: AnnotationStyles = {
 };
 
 function fakeEditing() {
-  const store = new Store<AnnotationEditingStore>({
+  let store = new Store<AnnotationEditingStore>({
     tool: "none",
     state: null,
     styles: null,
@@ -56,7 +57,9 @@ function fakeEditing() {
   let detached = 0;
 
   const editing: AnnotationEditing = {
-    store,
+    get store() {
+      return store;
+    },
     async setTool(tool) {
       setToolCalls.push(tool);
       store.set({ tool });
@@ -83,7 +86,13 @@ function fakeEditing() {
 
   return {
     editing,
-    store,
+    attach(_viewer: ViewerController, options: AnnotationEditingOptions): AnnotationEditing {
+      store = options.store as unknown as Store<AnnotationEditingStore>;
+      return editing;
+    },
+    get store() {
+      return store;
+    },
     setLabelsCalls,
     setToolCalls,
     get detached() {
@@ -170,14 +179,14 @@ describe("annotationSlot and useAnnotations", () => {
       const fake = fakeEditing();
       const { scroller, content } = fakeViewport();
       const detach = viewer.attachViewport(scroller, content);
-      const unmount = slot.mount(() => fake.editing, undefined);
+      const unmount = slot.mount(fake.attach, undefined);
       fake.open();
       detach();
       unmount();
       await settle();
 
       const reattach = viewer.attachViewport(scroller, content);
-      const remount = slot.mount(() => fake.editing, undefined);
+      const remount = slot.mount(fake.attach, undefined);
       await settle();
       assert.equal(fake.detached, 0, "the same React commit restores the editor's owner");
       assert.equal(slot.editing, fake.editing);
@@ -202,7 +211,7 @@ describe("annotationSlot and useAnnotations", () => {
     assert.deepEqual([...tracked.tracked], ["setTool", "undo"]);
 
     const fake = fakeEditing();
-    const unmount = slot.mount(() => fake.editing, undefined);
+    const unmount = slot.mount(fake.attach, undefined);
     fake.open();
     void fake.editing.setTool("highlight");
 
@@ -241,12 +250,8 @@ describe("annotationSlot and useAnnotations", () => {
     const fake = fakeEditing();
     let diverged = 0;
     const heard: AnnotationTool[] = [];
-    const control = slot.bindControls(
-      () => fake.editing,
-      { highlight: "Marker" },
-      { tool: "ink", onToolChange: (t) => heard.push(t) },
-      () => diverged++,
-    );
+    const control = slot.bindControls(fake.attach, () => diverged++);
+    control.sync({ highlight: "Marker" }, { tool: "ink", onToolChange: (t) => heard.push(t) });
 
     fake.open();
     assert.equal(slot.store.get().tool, "ink");
@@ -273,8 +278,8 @@ describe("annotationSlot and useAnnotations", () => {
       const detachViewport = viewer.attachViewport(scroller, content);
 
       // StrictMode mounts twice and cleans up the first mount synchronously before microtasks run.
-      const unmount1 = slot.mount(() => fake.editing, undefined);
-      const unmount2 = slot.mount(() => fake.editing, undefined);
+      const unmount1 = slot.mount(fake.attach, undefined);
+      const unmount2 = slot.mount(fake.attach, undefined);
       unmount1();
       await settle();
       assert.equal(fake.detached, 0);
@@ -296,7 +301,7 @@ describe("annotationSlot and useAnnotations", () => {
 
       // Mounting again on the live viewport, then unmounting <PdfAnnotationEditor> while viewport stays mounted:
       const fake2 = fakeEditing();
-      const unmount3 = slot.mount(() => fake2.editing, undefined);
+      const unmount3 = slot.mount(fake2.attach, undefined);
       fake2.open();
       unmount3();
       await settle();
@@ -313,7 +318,7 @@ describe("bindAnnotationTool", () => {
     const viewer = new ViewerController();
     const slot = annotationSlot(viewer);
     const fake = fakeEditing();
-    const unmount = slot.mount(() => fake.editing, undefined);
+    const unmount = slot.mount(fake.attach, undefined);
 
     let controlled: AnnotationTool | undefined = "highlight";
     const heard: AnnotationTool[] = [];
@@ -360,7 +365,7 @@ describe("bindAnnotationTool", () => {
     const viewer = new ViewerController();
     const slot = annotationSlot(viewer);
     const fake = fakeEditing();
-    const unmount = slot.mount(() => fake.editing, undefined);
+    const unmount = slot.mount(fake.attach, undefined);
     const { loader } = fakePdfjs(async () => fakeDocument().proxy);
     const { close } = show(viewer, { url: "/one.pdf" }, loader);
     await settle();

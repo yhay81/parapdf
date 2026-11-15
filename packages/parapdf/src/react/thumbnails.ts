@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useContext, useMemo, useSyncExternalStore } from "react";
+import { type ReactNode, use, useMemo, useSyncExternalStore } from "react";
 import type { PdfSessionController } from "../document/pdf-session.ts";
 import type { DocumentSession, PageSize } from "../document/session.ts";
 import type { ReadableStore } from "../document/store.ts";
@@ -42,7 +42,7 @@ export interface ThumbnailItem {
   readonly ariaLabel: string;
   /** Navigates to or selects this page. */
   select(): void;
-  /** The `<PdfThumbnail>` element for this page at `width`. */
+  /** The rendered thumbnail element for this page at `width`. */
   readonly thumbnail: ReactNode;
 }
 
@@ -308,8 +308,7 @@ export function useOptionalPageLabels(
   viewer: ViewerController,
   hasExternalViewer = false,
 ): readonly string[] | null {
-  const contextSession = useContext(SessionContext);
-  const pdfSession = hasExternalViewer ? null : contextSession;
+  const pdfSession = hasExternalViewer ? null : use(SessionContext);
   const store = useMemo(() => createPageLabelsStore(viewer, pdfSession), [viewer, pdfSession]);
   return useSyncExternalStore(store.subscribe, store.get, getNullSnapshot);
 }

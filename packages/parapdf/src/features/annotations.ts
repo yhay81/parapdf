@@ -1,7 +1,7 @@
 "use client";
 
 import type { DocumentSession } from "../document/session.ts";
-import { type ReadableStore, Store } from "../document/store.ts";
+import type { ReadableStore } from "../document/store.ts";
 import type { Rotation } from "../pdfjs/draw.ts";
 import { createPdfjsAnnotationEditor } from "../pdfjs/editor.ts";
 import type {
@@ -29,8 +29,8 @@ export interface AnnotationEditingStoreWriter extends ReadableStore<AnnotationEd
 export interface AnnotationEditingOptions {
   /** The accessible names of the editor's controls, by default in English. */
   labels?: Partial<AnnotationLabels>;
-  /** Shared reactive store (such as `AnnotationSlot.store`) to write directly into. */
-  store?: AnnotationEditingStoreWriter;
+  /** Shared reactive store (`AnnotationSlot.store`) written directly into. */
+  store: AnnotationEditingStoreWriter;
 }
 
 export interface AnnotationEditingStore {
@@ -163,21 +163,12 @@ export const ANNOTATION_LABELS: AnnotationLabels = {
 
 const STOPPED: AnnotationEditingStore = { tool: "none", state: null, styles: null };
 
-/**
- * Let the reader create annotations on `viewer`'s pages, once its document
- * is open in an attached viewport and permits annotating
- * (`enforcePermissions()`). A viewport that detaches keeps them for the
- * next one, and in the document meanwhile. A viewer that lets go of the
- * document takes them out of it and keeps them for when it shows the
- * session again; one that forgets the session drops them. `detach()` undoes it.
- */
 export function attachAnnotationEditing(
   viewer: ViewerController,
-  options: AnnotationEditingOptions = {},
+  options: AnnotationEditingOptions,
 ): AnnotationEditing {
   let labels = { ...ANNOTATION_LABELS, ...options.labels };
-  const store: AnnotationEditingStoreWriter =
-    options.store ?? new Store<AnnotationEditingStore>(STOPPED);
+  const { store } = options;
   /** Edits the open document's annotations once the document and the viewport are there. */
   let editor: AnnotationEditor | null = null;
   /**

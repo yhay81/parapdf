@@ -1,8 +1,7 @@
 "use client";
 
-import { memo, useEffectEvent, useLayoutEffect, useRef } from "react";
+import { memo, useLayoutEffect, useRef } from "react";
 import type { FormChange } from "../features/forms/fields.ts";
-import { onViewerFormChange } from "../features/forms/index.ts";
 import { attachFormLayers, type FormLayers } from "../features/forms/layers.ts";
 import type { Viewer } from "../view/viewer.ts";
 import { useOptionalViewer } from "./context.ts";
@@ -36,20 +35,11 @@ export const PdfForms = /*#__PURE__*/ memo(function PdfForms({
   onChange,
 }: PdfFormsProps): null {
   const viewer = useOptionalViewer(externalViewer);
-  const layersRef = useRef<FormLayers | null>(null);
-  const initialScripts = useRef(scripts);
-  initialScripts.current = scripts;
-  const appliedScripts = useRef(scripts);
-  const hasOnChange = Boolean(onChange);
-  const handleChange = useEffectEvent((change: FormChange) => {
-    onChange?.(change);
-  });
+  const layersRef = useRef<{ viewer: typeof viewer; layers: FormLayers } | null>(null);
 
   useLayoutEffect(() => {
-    const startScripts = initialScripts.current;
-    appliedScripts.current = startScripts;
-    const layers = attachFormLayers(viewer, { scripts: startScripts });
-    layersRef.current = layers;
+    const layers = attachFormLayers(viewer);
+    layersRef.current = { viewer, layers };
     return () => {
       layersRef.current = null;
       layers.detach();
@@ -57,15 +47,9 @@ export const PdfForms = /*#__PURE__*/ memo(function PdfForms({
   }, [viewer]);
 
   useLayoutEffect(() => {
-    if (!hasOnChange) return;
-    return onViewerFormChange(viewer, (change) => handleChange(change));
-  }, [viewer, hasOnChange]);
-
-  useLayoutEffect(() => {
-    if (scripts === appliedScripts.current) return;
-    appliedScripts.current = scripts;
-    layersRef.current?.setScripts(scripts);
-  }, [scripts]);
+    const entry = layersRef.current;
+    if (entry?.viewer === viewer) entry.layers.sync(scripts, onChange);
+  }, [viewer, scripts, onChange]);
 
   return null;
 });

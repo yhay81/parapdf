@@ -138,7 +138,7 @@ const left = (page: Page) =>
   page.evaluate(() => {
     const viewer = window.__viewer;
     const view = viewer?.viewState();
-    const search = window.__search?.store.get();
+    const search = window.__search?.get();
     if (!viewer || !view || !search) return null;
     const storage = viewer.session?.proxy.annotationStorage as
       | Iterable<[string, unknown]>
@@ -463,8 +463,8 @@ async function checkHiding(
   const named = (what: string) => `${what} (${where}, the viewer's owner ${owner} it)`;
   // What a reader leaves behind: a finished search, a place and a way of
   // showing it, and an annotation of their own.
-  await page.evaluate(() => window.__search?.search("the"));
-  const searched = await comes(page, () => window.__search?.store.get().status === "done", 60_000);
+  await page.evaluate(() => window.__search?.get().search("the"));
+  const searched = await comes(page, () => window.__search?.get().status === "done", 60_000);
   await page.evaluate(() => {
     const viewer = window.__viewer;
     viewer?.setScale(1.5);
@@ -584,8 +584,8 @@ async function checkReplacedFile(browser: Browser, base: string, replace: () => 
     `${base}?lifetimes=activity&annotations=1&count=1&engine=${engine}&file=latest.pdf`,
   );
   try {
-    await page.evaluate(() => window.__search?.search("the"));
-    await page.waitForFunction(() => window.__search?.store.get().status === "done");
+    await page.evaluate(() => window.__search?.get().search("the"));
+    await page.waitForFunction(() => window.__search?.get().status === "done");
     await page.waitForFunction(() => window.__annotations?.store.get().state != null);
     const marked = await page.evaluate(async () => {
       const canvas = document.createElement("canvas");
@@ -595,7 +595,7 @@ async function checkReplacedFile(browser: Browser, base: string, replace: () => 
         pageIndex: 0,
         altText: "Only in the first document",
       });
-      return added && (window.__search?.store.get().matches.length ?? 0) > 0;
+      return added && (window.__search?.get().matches.length ?? 0) > 0;
     });
     check("the first PDF has a stamp and a completed search", marked === true);
     await page.evaluate(() => window.__lifetimes?.show?.(false));
@@ -623,7 +623,7 @@ async function checkReplacedFile(browser: Browser, base: string, replace: () => 
         const annotations = await (await saved.getPage(1)).getAnnotations();
         return {
           edited: window.__annotations?.export().length,
-          matches: window.__search?.store.get().matches.length,
+          matches: window.__search?.get().matches.length,
           stamps: annotations.filter((item) => item.subtype === "Stamp").length,
         };
       } finally {
@@ -727,7 +727,7 @@ try {
     // Search all 1,000 pages and close the viewer while it runs, along with
     // the page-size pass and any renders still in flight.
     await page.evaluate(() => {
-      window.__search?.search("lorem");
+      window.__search?.get().search("lorem");
     });
     await call(page, "unmount");
     await page.waitForTimeout(2500);

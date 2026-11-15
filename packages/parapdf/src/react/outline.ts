@@ -1,13 +1,7 @@
 "use client";
 
-import {
-  type CSSProperties,
-  createElement,
-  memo,
-  type ReactNode,
-  useCallback,
-  useState,
-} from "react";
+import { type CSSProperties, memo, type ReactNode, useCallback, useState } from "react";
+import { jsx, jsxs } from "react/jsx-runtime";
 import type { OutlineNode } from "../document/session.ts";
 import type { ViewerStoreKey } from "../view/state.ts";
 import type { Viewer } from "../view/viewer.ts";
@@ -96,7 +90,7 @@ export function outlineItemStyle(
  */
 export function PdfOutline(props: PdfOutlineProps): ReactNode {
   const outline = useOutline();
-  return createElement(OutlineTree, { ...props, items: outline });
+  return jsx(OutlineTree, { ...props, items: outline });
 }
 
 export interface OutlineTreeProps extends PdfOutlineProps {
@@ -153,15 +147,12 @@ export function OutlineTree({
   );
 
   if (items.length === 0) return null;
-  return createElement(
-    "nav",
-    {
-      id,
-      className: className ? `parapdf-outline ${className}` : "parapdf-outline",
-      style,
-      "aria-label": label,
-    },
-    createElement(OutlineBranch, {
+  return jsx("nav", {
+    id,
+    className: className ? `parapdf-outline ${className}` : "parapdf-outline",
+    style,
+    "aria-label": label,
+    children: jsx(OutlineBranch, {
       items,
       depth: 0,
       viewer,
@@ -172,7 +163,7 @@ export function OutlineTree({
       onNavigate,
       renderItem,
     }),
-  );
+  });
 }
 
 interface OutlineBranchProps {
@@ -198,27 +189,28 @@ function OutlineBranch({
   onNavigate,
   renderItem,
 }: OutlineBranchProps): ReactNode {
-  return createElement(
-    "ol",
-    null,
-    items.map((item, index) => {
+  return jsx("ol", {
+    children: items.map((item, index) => {
       const hasChildren = item.items.length > 0;
       const tracksToggle = hasChildren || renderItem !== undefined;
-      return createElement(OutlineEntry, {
-        key: `${index}:${item.title}`,
-        item,
-        depth,
-        viewer,
-        externalLinks,
-        defaultExpanded,
-        expanded: tracksToggle && toggled.has(item) ? !defaultExpanded : defaultExpanded,
-        subtreeToggled: hasChildren ? toggled : EMPTY_TOGGLED,
-        onToggle,
-        onNavigate,
-        renderItem,
-      });
+      return jsx(
+        OutlineEntry,
+        {
+          item,
+          depth,
+          viewer,
+          externalLinks,
+          defaultExpanded,
+          expanded: tracksToggle && toggled.has(item) ? !defaultExpanded : defaultExpanded,
+          subtreeToggled: hasChildren ? toggled : EMPTY_TOGGLED,
+          onToggle,
+          onNavigate,
+          renderItem,
+        },
+        `${index}:${item.title}`,
+      );
     }),
-  );
+  });
 }
 
 interface OutlineEntryProps {
@@ -257,31 +249,25 @@ const OutlineEntry = /*#__PURE__*/ memo(function OutlineEntry({
   const textStyle = outlineItemStyle(item);
   const link = item.url
     ? externalLinks === "disabled"
-      ? createElement("a", { "aria-disabled": "true", style: textStyle }, item.title)
-      : createElement(
-          "a",
-          {
-            href: item.url,
-            target: "_blank",
-            rel: "noopener noreferrer nofollow",
-            style: textStyle,
-          },
-          item.title,
-        )
-    : createElement(
-        "button",
-        {
-          type: "button",
-          disabled: item.dest === null,
-          onClick: () => void activate(),
+      ? jsx("a", { "aria-disabled": "true", style: textStyle, children: item.title })
+      : jsx("a", {
+          href: item.url,
+          target: "_blank",
+          rel: "noopener noreferrer nofollow",
           style: textStyle,
-        },
-        item.title,
-      );
+          children: item.title,
+        })
+    : jsx("button", {
+        type: "button",
+        disabled: item.dest === null,
+        onClick: () => void activate(),
+        style: textStyle,
+        children: item.title,
+      });
 
   const childList =
     hasChildren && expanded
-      ? createElement(OutlineBranch, {
+      ? jsx(OutlineBranch, {
           items: item.items,
           depth: depth + 1,
           viewer,
@@ -295,10 +281,8 @@ const OutlineEntry = /*#__PURE__*/ memo(function OutlineEntry({
       : null;
 
   if (renderItem) {
-    return createElement(
-      "li",
-      null,
-      renderItem(item, {
+    return jsx("li", {
+      children: renderItem(item, {
         depth,
         hasChildren,
         expanded,
@@ -308,24 +292,21 @@ const OutlineEntry = /*#__PURE__*/ memo(function OutlineEntry({
         link,
         children: childList,
       }),
-    );
+    });
   }
-  return createElement(
-    "li",
-    null,
-    hasChildren
-      ? createElement(
-          "button",
-          {
+  return jsxs("li", {
+    children: [
+      hasChildren
+        ? jsx("button", {
             type: "button",
             "aria-expanded": expanded,
             "aria-label": `${expanded ? "Collapse" : "Expand"} ${item.title}`,
             onClick: toggle,
-          },
-          expanded ? "−" : "+",
-        )
-      : null,
-    link,
-    childList,
-  );
+            children: expanded ? "−" : "+",
+          })
+        : null,
+      link,
+      childList,
+    ],
+  });
 });
