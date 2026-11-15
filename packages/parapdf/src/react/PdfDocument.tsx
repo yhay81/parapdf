@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useLayoutEffect, useState } from "react";
+import { memo, type ReactNode, useLayoutEffect, useState } from "react";
 import { type AttachmentHandler, PdfSessionController } from "../document/pdf-session.ts";
 import { sourceKey, splitFragment } from "../document/registry.ts";
 import type { PdfSource } from "../document/session.ts";
@@ -119,7 +119,7 @@ export function PdfDocument({
  * fragment run in `useLayoutEffect` before any descendant's layout or passive
  * effects (`<PdfViewer>`, `submitPassword`, session actions).
  */
-function SessionLeaseMount({
+const SessionLeaseMount = memo(function SessionLeaseMount({
   session,
   holder,
   passwordPrompt,
@@ -144,4 +144,4 @@ function SessionLeaseMount({
   // A new fragment moves the viewers where it points, as a link would.
   useLayoutEffect(() => session.setFragment(fragment), [session, fragment]);
   return null;
-}
+});

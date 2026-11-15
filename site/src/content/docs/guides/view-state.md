@@ -52,6 +52,7 @@ function Reader({ url }: { url: string }) {
 
 `onViewStateChange` stays silent when the document opens, coalesces scrolls
 until they settle (including intra-page scrolls) rather than firing per frame,
+waits for controlled view props to settle so rejected values never fire,
 and flushes any unsettled scroll on `pagehide` and when `PdfViewer` unmounts.
 A viewer whose `PdfViewer` unmounts and mounts again returns to where it was on
 its own.

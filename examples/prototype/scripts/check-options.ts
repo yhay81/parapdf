@@ -939,21 +939,49 @@ try {
       reported.pages.at(-1) === 9,
     JSON.stringify({ rotation: takenUp.rotation, reported }),
   );
-  await live.evaluate(() =>
-    (window as unknown as Demo).__setViewerProps({ zoom: 1.5, onZoomChange: undefined }),
-  );
+  await live.evaluate(() => {
+    const demo = window as unknown as Demo;
+    demo.__viewStates = [];
+    demo.__setViewerProps({
+      zoom: 1.5,
+      onZoomChange: undefined,
+      onViewStateChange: (vs: ViewState) => demo.__viewStates?.push(vs),
+    });
+  });
   await live
     .waitForFunction(() => window.__viewer?.store.get().scale === 1.5, null, { timeout: 5_000 })
     .catch(() => {});
+  await live.evaluate(() => {
+    const demo = window as unknown as Demo;
+    demo.__viewer.goToPage(0);
+    demo.__viewStates = [];
+  });
   await settle(live);
-  const controlledZoom = await viewState(live);
-  await live.evaluate(() => (window as unknown as Demo).__viewer.zoomBy(1.25));
+  const controlledZoom = await live.evaluate(() => {
+    const scroller = document.querySelector(".parapdf-viewport") as HTMLElement;
+    const state = (window as unknown as Demo).__viewer.store.get();
+    return { scale: state.scale, zoomMode: state.zoomMode, scrollTop: scroller.scrollTop };
+  });
+  await live.evaluate(() => (window as unknown as Demo).__viewer.zoomBy(0.75));
   await frames(live);
   await settle(live);
-  const zoomBack = await viewState(live);
+  const zoomBack = await live.evaluate(() => {
+    const demo = window as unknown as Demo;
+    const scroller = document.querySelector(".parapdf-viewport") as HTMLElement;
+    const state = demo.__viewer.store.get();
+    return {
+      scale: state.scale,
+      scrollTop: scroller.scrollTop,
+      emittedViewStates: demo.__viewStates?.length ?? 0,
+    };
+  });
   check(
-    "a controlled zoom shows its scale, and returns to it",
-    controlledZoom.scale === 1.5 && controlledZoom.zoomMode === "custom" && zoomBack.scale === 1.5,
+    "a controlled zoom shows its scale, and returns to it without scroll drift or unaccepted ViewState emissions",
+    controlledZoom.scale === 1.5 &&
+      controlledZoom.zoomMode === "custom" &&
+      zoomBack.scale === 1.5 &&
+      Math.abs(zoomBack.scrollTop - controlledZoom.scrollTop) <= 1 &&
+      zoomBack.emittedViewStates === 0,
     JSON.stringify({ controlledZoom, zoomBack }),
   );
   const dynamicOverlays = await live.evaluate(async () => {

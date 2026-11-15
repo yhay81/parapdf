@@ -1237,10 +1237,53 @@ describe("a viewer's viewport", () => {
     assert.deepEqual(zoomed, [3]);
     assert.equal(diverges, 1, "clamping inside sync() never loops onDiverge");
 
-    // Imperative viewer change while controlled notifies onZoomChange and onDiverge so React can reconcile.
+    // Imperative viewer change while controlled notifies onZoomChange and onDiverge so React can reconcile,
+    // without emitting a transient unaccepted ViewState before sync() settles it.
+    assert.equal(viewStates.length, 0);
     viewer.setScale(2);
     assert.deepEqual(zoomed, [3, 2]);
     assert.equal(diverges, 2);
+    assert.equal(viewStates.length, 0, "diverged controlled zoom holds back unaccepted ViewState");
+
+    // Rejecting zoom=2 (re-syncing zoom=3) restores scale=3 with zero spurious onViewStateChange calls.
+    binding.sync(
+      { maxScale: 3, initialScale: 3, initialRotation: 90 },
+      { zoom: 3, rotation: 90 },
+      callbacks,
+    );
+    assert.equal(viewer.store.get().scale, 3);
+    assert.equal(scroller.scrollLeft, 0);
+    assert.equal(scroller.scrollTop, 0);
+    assert.equal(viewStates.length, 0, "rejected controlled zoom never emits ViewState");
+
+    // Accepting zoom=2 in sync() emits onViewStateChange once with the settled controlled state.
+    viewer.setScale(2);
+    assert.deepEqual(zoomed, [3, 2, 2]);
+    assert.equal(diverges, 3);
+    assert.equal(viewStates.length, 0);
+    binding.sync(
+      { maxScale: 3, initialScale: 2, initialRotation: 90 },
+      { zoom: 2, rotation: 90 },
+      callbacks,
+    );
+    assert.equal(viewStates.length, 1, "accepted controlled zoom emits settled ViewState once");
+    assert.equal(viewStates[0]?.scale, 2);
+
+    // Compound destination jump changing page + rejected controlled zoom (0.75 * 96/72 = 1 !== 2) emits once after reconciliation.
+    await viewer.goToDestination([2, { name: "XYZ" }, 0, 500, 0.75]);
+    assert.equal(
+      viewStates.length,
+      1,
+      "compound jump holds ViewState while controlled zoom diverged",
+    );
+    binding.sync(
+      { maxScale: 3, initialScale: 2, initialRotation: 90 },
+      { zoom: 2, rotation: 90 },
+      callbacks,
+    );
+    assert.equal(viewStates.length, 2);
+    assert.equal(viewStates[1]?.page, 2);
+    assert.equal(viewStates[1]?.scale, 2);
 
     // Unsettled scroll flushes through bindControls when the session stops before viewport detach.
     const statesBeforeScroll = viewStates.length;

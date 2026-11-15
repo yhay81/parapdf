@@ -164,12 +164,28 @@ describe("getter-tracked snapshots", () => {
     );
   });
 
-  it("supports object spread and Object.keys cleanly", () => {
+  it("supports object spread and Object.keys cleanly without leaking carrier fields", () => {
     const snap = createTrackedSnapshot({ currentPage: 1, pageCount: 8, rotation: 90 });
-    const copy = { ...snap.proxy };
+    const proxyRecord = snap.proxy as Record<string, unknown>;
+    assert.equal("raw" in snap.proxy, false);
+    assert.equal("tracked" in snap.proxy, false);
+    assert.equal("fallback" in snap.proxy, false);
+    assert.equal("proxy" in snap.proxy, false);
+    assert.equal(proxyRecord.raw, undefined);
+    assert.equal(Object.getOwnPropertyDescriptor(snap.proxy, "raw"), undefined);
+
+    const fresh = createTrackedSnapshot({ currentPage: 1, pageCount: 8, rotation: 90 });
+    const copy = { ...fresh.proxy };
     assert.deepEqual(copy, { currentPage: 1, pageCount: 8, rotation: 90 });
-    assert.deepEqual(Object.keys(snap.proxy), ["currentPage", "pageCount", "rotation"]);
-    assert.deepEqual([...snap.tracked], ["currentPage", "pageCount", "rotation"]);
+    assert.deepEqual(Object.keys(fresh.proxy), ["currentPage", "pageCount", "rotation"]);
+    assert.deepEqual(Reflect.ownKeys(fresh.proxy), ["currentPage", "pageCount", "rotation"]);
+    assert.deepEqual([...fresh.tracked], ["currentPage", "pageCount", "rotation"]);
+
+    const nullProto = Object.assign(Object.create(null) as { raw: string }, { raw: "own-raw" });
+    const nullSnap = createTrackedSnapshot(nullProto);
+    assert.equal(Object.getPrototypeOf(nullSnap.proxy), null);
+    assert.equal(nullSnap.proxy.raw, "own-raw");
+    assert.equal("raw" in nullSnap.proxy, true);
   });
 
   it("publishes exact changedKeys on Store across single set and multi-step update/publish", () => {

@@ -12,7 +12,7 @@ import {
 } from "react";
 import type { PageSize } from "../document/session.ts";
 import type { Rotation } from "../pdfjs/draw.ts";
-import type { ViewerStoreKey } from "../view/state.ts";
+import type { ViewerState, ViewerStoreKey } from "../view/state.ts";
 import type { Viewer, ViewerController } from "../view/viewer.ts";
 import { useOptionalViewer, useStoreKeys } from "./context.ts";
 import { ThumbnailCanvas } from "./PdfThumbnail.tsx";
@@ -108,10 +108,21 @@ function windowFromScrollMetrics(
   return { first: range.first, last: range.last };
 }
 
-const PAGE_COUNT_KEYS: readonly ViewerStoreKey[] = ["pageCount"];
-const ROTATION_KEYS: readonly ViewerStoreKey[] = ["rotation"];
-const SIZES_KEYS: readonly ViewerStoreKey[] = ["sizes"];
-const CURRENT_PAGE_KEYS: readonly ViewerStoreKey[] = ["currentPage"];
+const THUMBNAIL_VIEWER_KEYS: readonly ViewerStoreKey[] = [
+  "pageCount",
+  "rotation",
+  "sizes",
+  "currentPage",
+];
+
+function selectThumbnailViewerState(state: ViewerState) {
+  return {
+    pageCount: state.pageCount,
+    rotation: state.rotation,
+    sizes: state.layout?.sizes,
+    currentPage: state.currentPage,
+  };
+}
 
 /**
  * The pages of `viewer`'s document as a window-virtualized navigation list,
@@ -132,10 +143,11 @@ export function PdfThumbnails({
   style,
 }: PdfThumbnailsProps) {
   const viewer = useOptionalViewer(externalViewer);
-  const pageCount = useStoreKeys(viewer.store, PAGE_COUNT_KEYS, (state) => state.pageCount);
-  const rotation = useStoreKeys(viewer.store, ROTATION_KEYS, (state) => state.rotation);
-  const sizes = useStoreKeys(viewer.store, SIZES_KEYS, () => viewer.store.sizes);
-  const currentPage = useStoreKeys(viewer.store, CURRENT_PAGE_KEYS, (state) => state.currentPage);
+  const { pageCount, rotation, sizes, currentPage } = useStoreKeys(
+    viewer.store,
+    THUMBNAIL_VIEWER_KEYS,
+    selectThumbnailViewerState,
+  );
   const pageLabels = useOptionalPageLabels(viewer, externalViewer !== undefined);
 
   const navRef = useRef<HTMLElement>(null);

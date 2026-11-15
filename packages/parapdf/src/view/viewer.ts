@@ -168,6 +168,19 @@ const viewValuesOf = (state: ViewerState): ControlledViewValues => ({
 });
 
 const VIEW_CONTROL_KEYS = ["zoom", "rotation", "spread", "scrollMode", "tool"] as const;
+
+interface PreDivergeSnapshot {
+  readonly scale: number;
+  readonly zoomMode: ZoomMode;
+  readonly rotation: Rotation;
+  readonly spread: SpreadMode;
+  readonly scrollMode: ScrollMode;
+  readonly direction: Direction;
+  readonly gap: number;
+  readonly currentPage: number;
+  readonly scrollLeft: number;
+  readonly scrollTop: number;
+}
 const BOUND_CONTROL_KEYS: readonly ViewerStoreKey[] = [
   "layout",
   "scale",
@@ -321,6 +334,11 @@ export class ViewerController implements Viewer {
   #lastViewState: ViewState | null = null;
   #batchingView = 0;
   #viewDirty = false;
+  #boundControls = 0;
+  #controlDiverged = false;
+  #flushingView = false;
+  #navigated = false;
+  #preDiverge: PreDivergeSnapshot | null = null;
   #sizes: PageSize[] = [];
   /** The hosts of the mounted pages, by page. */
   #pageHosts = new Map<number, HTMLElement>();
@@ -420,7 +438,12 @@ export class ViewerController implements Viewer {
 
   /** Flush any unreported `viewState()` change (for `pagehide` or viewport unmount). */
   flushViewState(): void {
-    this.#notifyViewState();
+    this.#flushingView = true;
+    try {
+      this.#notifyViewState();
+    } finally {
+      this.#flushingView = false;
+    }
   }
 
   /** Subscribe to zoom-preview transform updates without a DOM `MutationObserver`. */
@@ -443,13 +466,41 @@ export class ViewerController implements Viewer {
 
   /** Run a compound view update and emit at most one `onViewStateChange` when it finishes. */
   batchView<T>(fn: () => T): T {
+    const outer = this.#batchingView === 0;
+    let snapshot: PreDivergeSnapshot | null = null;
+    if (outer) {
+      this.#navigated = false;
+      const scroller = this.#scroller;
+      const state = this.store.get();
+      if (this.#boundControls > 0 && !this.#controlDiverged && scroller && state.layout) {
+        snapshot = {
+          scale: state.scale,
+          zoomMode: state.zoomMode,
+          rotation: state.rotation,
+          spread: state.spread,
+          scrollMode: state.scrollMode,
+          direction: state.direction,
+          gap: this.#gap,
+          currentPage: state.currentPage,
+          scrollLeft: scroller.scrollLeft,
+          scrollTop: scroller.scrollTop,
+        };
+      }
+    }
     this.#batchingView++;
     try {
       return fn();
     } finally {
-      if (--this.#batchingView === 0 && this.#viewDirty) {
-        this.#viewDirty = false;
-        this.#notifyViewState();
+      if (--this.#batchingView === 0) {
+        if (snapshot) {
+          this.#preDiverge = this.#controlDiverged && !this.#navigated ? snapshot : null;
+        } else if (this.#navigated) {
+          this.#preDiverge = null;
+        }
+        if (this.#viewDirty) {
+          this.#viewDirty = false;
+          this.#notifyViewState();
+        }
       }
     }
   }
@@ -462,6 +513,7 @@ export class ViewerController implements Viewer {
   #notifyViewState(): void {
     if (this.#batchingView > 0 || this.#viewStateListeners.size === 0) return;
     if (this.#gestures.zooming()) return;
+    if (this.#controlDiverged && !this.#flushingView) return;
     const scroller = this.#scroller;
     if (!scroller || (scroller.clientWidth === 0 && scroller.clientHeight === 0)) return;
     const next = this.viewState();
@@ -547,6 +599,7 @@ export class ViewerController implements Viewer {
    * callbacks without echoing controlled updates or re-rendering the viewport.
    */
   bindControls(onDiverge: () => void): ViewerControlBinding {
+    this.#boundControls++;
     let currentControlled: Partial<ControlledViewValues> = {};
     let currentCallbacks: ViewControlCallbacks = {};
     let reported: ControlledViewValues | null = null;
@@ -601,7 +654,10 @@ export class ViewerController implements Viewer {
         page = state.currentPage;
         currentCallbacks.page?.(page);
       }
-      if (differs) onDiverge();
+      if (differs) {
+        this.#controlDiverged = true;
+        onDiverge();
+      }
     });
 
     const unsubscribeViewState = this.onViewStateChange((view) => {
@@ -621,11 +677,36 @@ export class ViewerController implements Viewer {
           ...(reported ?? viewValuesOf(before)),
           ...controlled,
         };
+        const wasDiverged = this.#controlDiverged;
+        const preDiverge = this.#preDiverge;
+        this.#controlDiverged = false;
+        this.#preDiverge = null;
         inSync = true;
         try {
           this.batchView(() => {
+            if (wasDiverged) this.#viewDirty = true;
             this.configure(options);
             this.applyControlled(controlled);
+            const scroller = this.#scroller;
+            const restored = this.store.get();
+            if (
+              wasDiverged &&
+              preDiverge &&
+              scroller &&
+              restored.layout &&
+              Object.is(restored.scale, preDiverge.scale) &&
+              restored.zoomMode === preDiverge.zoomMode &&
+              restored.rotation === preDiverge.rotation &&
+              restored.spread === preDiverge.spread &&
+              restored.scrollMode === preDiverge.scrollMode &&
+              restored.direction === preDiverge.direction &&
+              this.#gap === preDiverge.gap
+            ) {
+              scroller.scrollLeft = preDiverge.scrollLeft;
+              scroller.scrollTop = preDiverge.scrollTop;
+              this.store.set({ currentPage: preDiverge.currentPage });
+              this.#update();
+            }
           });
         } finally {
           inSync = false;
@@ -639,6 +720,9 @@ export class ViewerController implements Viewer {
         };
       },
       disconnect: () => {
+        this.#boundControls = Math.max(0, this.#boundControls - 1);
+        this.#controlDiverged = false;
+        this.#preDiverge = null;
         if (hasWindowEvents && typeof window.removeEventListener === "function") {
           window.removeEventListener("pagehide", onPageHide);
         }
@@ -926,6 +1010,7 @@ export class ViewerController implements Viewer {
     this.#selection.clear();
     this.#gestures.drop();
     this.#input.release();
+    this.#preDiverge = null;
     // Whatever the viewport shows next starts with its own opening or
     // position. The old pages' dimensions and scroll offsets outlive their
     // React hosts.
@@ -1450,6 +1535,7 @@ export class ViewerController implements Viewer {
     current = index,
   ): void {
     this.#changeView(() => {
+      this.#navigated = true;
       const next = showPage(layout, index);
       if (next !== layout) {
         this.#sizeContent(next);
@@ -1850,7 +1936,9 @@ export class ViewerController implements Viewer {
       }
       this.#applyLayout(scale, page);
       this.store.set({ scale });
+      const prevNavigated = this.#navigated;
       this.goToPage(page);
+      this.#navigated = prevNavigated;
     });
   }
 
@@ -1903,7 +1991,11 @@ export class ViewerController implements Viewer {
     if (scale === null) return;
     this.#markFitted(scroller);
     this.#zoomTo(scale);
-    if (mode === "fit-page") this.goToPage(page);
+    if (mode === "fit-page") {
+      const prevNavigated = this.#navigated;
+      this.goToPage(page);
+      this.#navigated = prevNavigated;
+    }
   }
 
   /** `fitScale()` for this viewer's pages, arrangement, viewport, and limits. */

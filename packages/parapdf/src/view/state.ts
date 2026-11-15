@@ -70,16 +70,10 @@ export type ViewerStoreKey = keyof ViewerState | "sizes" | "externalLinks";
  * before notifying listeners.
  */
 export class ViewerStore extends Store<ViewerState> {
-  #sizes: readonly PageSize[] | undefined;
   #externalLinks: "new-tab" | "disabled" = "new-tab";
 
-  constructor(initial: ViewerState) {
-    super(initial);
-    this.#sizes = initial.layout?.sizes;
-  }
-
   get sizes(): readonly PageSize[] | undefined {
-    return this.#sizes;
+    return this.get().layout?.sizes;
   }
 
   get externalLinks(): "new-tab" | "disabled" {
@@ -90,19 +84,17 @@ export class ViewerStore extends Store<ViewerState> {
     subscribeKeys(this, keys, listener);
 
   override set(patch: Partial<ViewerState>): void {
+    const prevSizes = this.sizes;
     const hasLayout = "layout" in patch;
     const full =
       hasLayout && patch.pageCount === undefined
         ? { ...patch, pageCount: patch.layout?.sizes.length ?? 0 }
         : patch;
     const stateChanged = this.update(full);
-    const nextSizes = hasLayout ? patch.layout?.sizes : this.#sizes;
-    const sizesChanged = hasLayout && !Object.is(this.#sizes, nextSizes);
-    if (sizesChanged) {
-      this.#sizes = nextSizes;
+    if (hasLayout && !Object.is(prevSizes, this.sizes)) {
       this.markChanged("sizes");
     }
-    if (stateChanged || sizesChanged) this.publish();
+    if (stateChanged) this.publish();
   }
 
   setExternalLinks(externalLinks: "new-tab" | "disabled"): void {

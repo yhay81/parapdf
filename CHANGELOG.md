@@ -6,6 +6,22 @@ change the API.
 
 ## Unreleased
 
+- Hold `onViewStateChange` until controlled `<PdfViewer>` props settle, restore
+  pre-divergence scroll coordinates on rejected controlled mutations, eliminate
+  per-snapshot proxy closures, and merge thumbnail store subscriptions:
+  - Suppress transient `onViewStateChange` emissions while controlled `zoom`,
+    `rotation`, `spread`, or `scrollMode` props are diverged (still flushing on
+    `pagehide` and unmount), restore exact scroll offsets and `currentPage` when
+    a non-navigation controlled mutation is rejected near a scroll boundary, and
+    emit a single settled `ViewState` once `<PdfViewer>` accepts or reconciles
+    the prop (including compound destination jumps).
+  - Replace per-snapshot `{}` dummy targets and four closure allocations in
+    `createTrackedSnapshot()` with a single module-level `TRACKED_PROXY_HANDLER`,
+    cache `useStoreKeys()` selections with `shallowEqual`, collapse
+    `<PdfThumbnails>` and `<PdfThumbnail>` onto one `viewer.store` subscription
+    each, derive `ViewerStore.sizes` directly from `layout?.sizes`, and memoize
+    `<SessionLeaseMount>`.
+
 - Store feature and React state directly in typed controller and session slots,
   share `useSave()` and `usePrint()` stores across consumers, flush page
   overlays in layout effects with zero per-page subscriptions, preserve nested

@@ -169,8 +169,11 @@ store per-viewer feature state directly on `viewer.slot(key, create)`
 `keptPixels`, `firstPaintAt`, `hasPixels()`, `blankFraction()`, `sharpness()`)
 stay on `ViewerController`. `ViewerController.bindControls()` owns live option
 updates, controlled view prop synchronization without callback echoes,
-divergence notification, and `pagehide` / session-stop `ViewState` flushing,
-and `#start()` lays out warm sessions synchronously before `open()` returns.
+divergence notification, pre-divergence scroll restoration on rejected
+controlled mutations, settled `ViewState` holding while controlled props are
+diverged, and `pagehide` / session-stop `ViewState` flushing,
+and `#start()` lays out warm sessions synchronously before `open()` returns
+(decisions 0041 and 0045).
 
 - `layout.ts`: pure and immutable per zoom (typed arrays, rows, spreads,
   scroll modes, direction). `zoom.ts` and `navigation.ts` hold the pure
@@ -327,13 +330,13 @@ of its own, and detaching it undoes what it added. The core imports no feature.
 `react/` is the only module that uses React, and every module that touches
 the DOM declares `"use client"`.
 
-- `PdfDocument` opens or joins a session as it renders, holds it in a first-child
-  `<SessionLeaseMount>` `useLayoutEffect`, provides a lazy default `Viewer`
-  (`LazyViewerHolder`, instantiating `ViewerController` only when `useViewer()`,
-  `<PdfViewer>`, or another default-viewer hook reads it so document-only and
-  `<PdfView>` trees allocate none) through `ViewerContext` (or provides the
-  `viewer` prop given to it), and renders its children at once; nothing suspends
-  before the first page draws (decision 0043). A source with another URL, headers,
+- `PdfDocument` opens or joins a session as it renders, holds it in a memoized
+  first-child `<SessionLeaseMount>` `useLayoutEffect`, provides a lazy default
+  `Viewer` (`LazyViewerHolder`, instantiating `ViewerController` only when
+  `useViewer()`, `<PdfViewer>`, or another default-viewer hook reads it so
+  document-only and `<PdfView>` trees allocate none) through `ViewerContext` (or
+  provides the `viewer` prop given to it), and renders its children at once;
+  nothing suspends before the first page draws (decisions 0043 and 0045). A source with another URL, headers,
   bytes, transport, or password opens another; a new fragment moves its viewers
   as a link would.
 - `PdfView` provides an independent `Viewer` scope inside a `PdfDocument`
@@ -435,9 +438,10 @@ the DOM declares `"use client"`.
   so `PdfViewer` and `PdfThumbnails` render synchronously before the first
   paint (decisions 0041, 0042, and 0044).
 - `PdfThumbnails` and `PdfThumbnail` draw the viewer's document at a lower
-  priority, reading unrotated page dimensions via `useStoreKeys(viewer.store,
-  ["sizes"], …)` so scrolling and zooming never wake them (decisions 0040 and
-  0043). `PdfThumbnails` passes primitive page
+  priority, subscribing once each to `viewer.store` via shallow-cached
+  `useStoreKeys()` (`["pageCount", "rotation", "sizes", "currentPage"]` and
+  `["rotation", "sizes"]`) so intra-page scrolling and zooming never wake them
+  (decisions 0040, 0043, and 0045). `PdfThumbnails` passes primitive page
   dimensions, `rotation`, and `virtualized` directly to a zero-subscription
   `ThumbnailCanvas` (attached via a React 19 ref cleanup callback and backed by
   `ThumbnailRenderer`'s bounded LRU kept-canvas pool) rather than subscribing
@@ -467,12 +471,14 @@ the DOM declares `"use client"`.
   `Store.update()` reports changed property keys to listeners so `useStoreSlice`
   skips waking React when an update touches only untracked keys (decision 0042);
   called without
-  a selector, they track the fields read during rendering (dropping fields no
-  longer read in inactive branches, while keeping a pre-render fallback set
-  until the next render reads the proxy) so unread updates cause no re-render;
+  a selector, they track the fields read during rendering through a single
+  module-level `TRACKED_PROXY_HANDLER` with zero per-snapshot closure allocations
+  (dropping fields no longer read in inactive branches, while keeping a
+  pre-render fallback set until the next render reads the proxy) so unread
+  updates cause no re-render;
   called with a selector, they compare the selected value shallowly (`Object.is`,
-  array elements, or own properties of plain objects) (decisions 0033, 0035, and
-  0044).
+  array elements, or own properties of plain objects) (decisions 0033, 0035,
+  0044, and 0045).
   `useSearch()`, `useHistory()`, `useAnnotations()`, `useSave()`, and
   `usePrint()` keep their action methods referentially stable per controller
   slot, sharing live `saving` (including standalone `save()` / `download()` calls)

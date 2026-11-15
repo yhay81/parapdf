@@ -8,8 +8,7 @@ import type { Viewer, ViewerController } from "../view/viewer.ts";
 import { useOptionalViewer, useStoreKeys } from "./context.ts";
 import { thumbnailCanvasHeight } from "./thumbnails.ts";
 
-const SIZES_KEYS: readonly ViewerStoreKey[] = ["sizes"];
-const ROTATION_KEYS: readonly ViewerStoreKey[] = ["rotation"];
+const THUMBNAIL_KEYS: readonly ViewerStoreKey[] = ["sizes", "rotation"];
 
 export interface PdfThumbnailProps {
   /**
@@ -99,8 +98,10 @@ export function PdfThumbnail({
   style,
 }: PdfThumbnailProps) {
   const viewer = useOptionalViewer(externalViewer);
-  const size = useStoreKeys(viewer.store, SIZES_KEYS, () => viewer.store.sizes?.[pageIndex]);
-  const rotation = useStoreKeys(viewer.store, ROTATION_KEYS, (state) => state.rotation);
+  const { size, rotation } = useStoreKeys(viewer.store, THUMBNAIL_KEYS, (state) => ({
+    size: state.layout?.sizes[pageIndex],
+    rotation: state.rotation,
+  }));
 
   return (
     <ThumbnailCanvas

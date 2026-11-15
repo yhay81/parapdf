@@ -83,14 +83,32 @@ export function useStoreKeys<T, S>(
   keys: readonly PropertyKey[],
   selector: (state: T) => S,
 ): S {
+  const clientCacheRef = useRef<{ store: ReadableStore<T>; value: S } | null>(null);
+  const serverCacheRef = useRef<{ store: ReadableStore<T>; value: S } | null>(null);
   const subscribe = useCallback(
     (onStoreChange: () => void) => subscribeKeys(store, keys, onStoreChange),
     [store, keys],
   );
   return useSyncExternalStore(
     subscribe,
-    () => selector(store.get()),
-    () => selector(store.get()),
+    () => {
+      const next = selector(store.get());
+      const prev = clientCacheRef.current;
+      if (prev && prev.store === store && shallowEqual(prev.value, next)) {
+        return prev.value;
+      }
+      clientCacheRef.current = { store, value: next };
+      return next;
+    },
+    () => {
+      const next = selector(store.get());
+      const prev = serverCacheRef.current;
+      if (prev && prev.store === store && shallowEqual(prev.value, next)) {
+        return prev.value;
+      }
+      serverCacheRef.current = { store, value: next };
+      return next;
+    },
   );
 }
 
@@ -153,39 +171,45 @@ interface SliceState<T extends object, S> {
   selectedServer: SelectedCache<T, S> | null;
 }
 
+const TRACKED_PROXY_HANDLER: ProxyHandler<TrackedSnapshot<object>> = {
+  get(target, property) {
+    target.tracked.add(property);
+    return Reflect.get(target.raw, property, target.raw);
+  },
+  has(target, property) {
+    target.tracked.add(property);
+    return Reflect.has(target.raw, property);
+  },
+  ownKeys(target) {
+    const keys = Reflect.ownKeys(target.raw);
+    for (const key of keys) target.tracked.add(key);
+    return keys;
+  },
+  getOwnPropertyDescriptor(target, property) {
+    target.tracked.add(property);
+    const descriptor = Reflect.getOwnPropertyDescriptor(target.raw, property);
+    return descriptor ? { ...descriptor, configurable: true } : undefined;
+  },
+  getPrototypeOf(target) {
+    return Reflect.getPrototypeOf(target.raw);
+  },
+};
+
 export function createTrackedSnapshot<T extends object>(
   raw: T,
   fallback: ReadonlySet<PropertyKey> | null = null,
 ): TrackedSnapshot<T> {
-  const tracked = new Set<PropertyKey>();
-  const snapshot: {
-    raw: T;
-    proxy?: T;
-    readonly tracked: Set<PropertyKey>;
-    readonly fallback: ReadonlySet<PropertyKey> | null;
-  } = { raw, tracked, fallback };
-  const proxy = new Proxy({} as T, {
-    get(_target, property) {
-      tracked.add(property);
-      return Reflect.get(snapshot.raw, property, snapshot.raw);
-    },
-    has(_target, property) {
-      tracked.add(property);
-      return Reflect.has(snapshot.raw, property);
-    },
-    ownKeys() {
-      const keys = Reflect.ownKeys(snapshot.raw);
-      for (const key of keys) tracked.add(key);
-      return keys;
-    },
-    getOwnPropertyDescriptor(_target, property) {
-      tracked.add(property);
-      const descriptor = Reflect.getOwnPropertyDescriptor(snapshot.raw, property);
-      return descriptor ? { ...descriptor, configurable: true } : undefined;
-    },
-  });
-  snapshot.proxy = proxy;
-  return snapshot as TrackedSnapshot<T>;
+  const snapshot: TrackedSnapshot<T> = {
+    raw,
+    proxy: undefined as unknown as T,
+    tracked: new Set<PropertyKey>(),
+    fallback,
+  };
+  (snapshot as { proxy: T }).proxy = new Proxy(
+    snapshot as unknown as TrackedSnapshot<object>,
+    TRACKED_PROXY_HANDLER,
+  ) as unknown as T;
+  return snapshot;
 }
 
 export function activeTracked<T extends object>(
