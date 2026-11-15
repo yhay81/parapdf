@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it, mock } from "node:test";
+import { PdfSessionController } from "../src/document/pdf-session.ts";
 import type { DocumentSession, PdfInitialView } from "../src/document/session.ts";
 import { Store } from "../src/document/store.ts";
 import {
@@ -256,7 +257,7 @@ describe("a URL's open parameters", () => {
 
 describe("following URL fragments", () => {
   it("cancels superseded moves and follows changes made while unavailable", async () => {
-    const source = new Store({ fragment: "page=1" });
+    const source = new PdfSessionController({ url: "/frag.pdf#page=1" });
     const moves: { destination: Destination; signal: AbortSignal }[] = [];
     let extension: ViewerExtension | null = null;
     const viewer = {
@@ -281,19 +282,19 @@ describe("following URL fragments", () => {
     let detach = followFragments(viewer, source);
     const first = ready();
     assert.equal(moves.length, 0, "the opening already applied this fragment");
-    source.set({ fragment: "page=2" });
-    source.set({ fragment: "page=3" });
+    source.setFragment("page=2");
+    source.setFragment("page=3");
     assert.equal(moves[0]?.signal.aborted, true);
     assert.equal(moves[1]?.signal.aborted, false);
     await settle();
     first.abort();
-    source.set({ fragment: "page=4" });
+    source.setFragment("page=4");
     assert.equal(moves.length, 2, "wait until the viewport is ready");
     ready();
     await settle();
     assert.deepEqual(moves[2]?.destination, [3, { name: "XYZ" }, null, null, null]);
     detach();
-    source.set({ fragment: "page=5" });
+    source.setFragment("page=5");
     detach = followFragments(viewer, source);
     ready();
     await settle();

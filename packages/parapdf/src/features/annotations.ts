@@ -2,6 +2,7 @@
 
 import type { DocumentSession } from "../document/session.ts";
 import { type ReadableStore, Store } from "../document/store.ts";
+import type { Rotation } from "../pdfjs/draw.ts";
 import { createPdfjsAnnotationEditor } from "../pdfjs/editor.ts";
 import type {
   AnnotationAltText,
@@ -15,8 +16,11 @@ import type {
   SignatureInput,
 } from "../pdfjs/editor-types.ts";
 import { linked } from "../view/signals.ts";
+import type { ViewerStoreKey } from "../view/state.ts";
 import type { ViewerController } from "../view/viewer.ts";
 import { onEnforcementChange, permits } from "./permissions.ts";
+
+const EDITOR_VIEW_KEYS: readonly ViewerStoreKey[] = ["layout", "currentPage"];
 
 export interface AnnotationEditingStoreWriter extends ReadableStore<AnnotationEditingStore> {
   set(patch: Partial<AnnotationEditingStore>): void;
@@ -181,8 +185,10 @@ export function attachAnnotationEditing(
    * code loads, and what the editor reports afterwards.
    */
   let control: AbortController | null = null;
-  /** The page the editor was last told is current. */
+  /** The page and view transform the editor was last told of. */
   let editorPage = -1;
+  let editorScale = 0;
+  let editorRotation: Rotation | -1 = -1;
   /**
    * Annotations kept while no viewport is attached or the viewer has let
    * go of the document, which the next editor shows again.
@@ -247,6 +253,8 @@ export function attachAnnotationEditing(
     );
     created = editing;
     editor = editing;
+    editorScale = layout?.scale ?? scale;
+    editorRotation = layout?.rotation ?? rotation;
     const { currentPage } = viewer.store.get();
     editorPage = currentPage;
     editing.setCurrentPage(currentPage);
@@ -317,14 +325,18 @@ export function attachAnnotationEditing(
   /** The editor follows the zoom, turns, and the current page as they are published. */
   const followView = () => {
     if (!editor) return;
-    const { layout, currentPage } = viewer.store.hot.get();
-    if (layout) editor.setView(layout.scale, layout.rotation);
+    const { layout, currentPage } = viewer.store.get();
+    if (layout && (layout.scale !== editorScale || layout.rotation !== editorRotation)) {
+      editorScale = layout.scale;
+      editorRotation = layout.rotation;
+      editor.setView(layout.scale, layout.rotation);
+    }
     if (currentPage !== editorPage) {
       editorPage = currentPage;
       editor.setCurrentPage(currentPage);
     }
   };
-  const unsubscribe = viewer.store.hot.subscribe(followView);
+  const unsubscribe = viewer.store.subscribeKeys(EDITOR_VIEW_KEYS, followView);
   const unsubscribePermissions = onEnforcementChange(viewer, () => {
     if (permits(viewer, "annotate")) start();
     else stop(true);

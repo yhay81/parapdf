@@ -3,7 +3,6 @@
 // NOTICE.md.
 
 import type { DocumentSession, PdfInitialView, PdfPageLayout } from "../document/session.ts";
-import type { ReadableStore } from "../document/store.ts";
 import {
   type Destination,
   type ResolvedDestination,
@@ -135,14 +134,18 @@ export async function goToFragment(
   }
 }
 
-type FragmentSource = ReadableStore<{ fragment: string }>;
+export interface FragmentSource {
+  readonly fragment: string;
+  onFragmentChange(listener: () => void): () => void;
+}
+
 /** The fragment a viewer last applied, kept while its viewport is hidden. */
 const fragments = new WeakMap<ViewerController, { source: FragmentSource; seen: string }>();
 
 function fragmentState(viewer: ViewerController, source: FragmentSource) {
   let state = fragments.get(viewer);
   if (!state || state.source !== source) {
-    state = { source, seen: source.get().fragment };
+    state = { source, seen: source.fragment };
     fragments.set(viewer, state);
   }
   return state;
@@ -151,7 +154,7 @@ function fragmentState(viewer: ViewerController, source: FragmentSource) {
 /** Remember the fragment the initial opening is about to apply. */
 export function openingFragment(viewer: ViewerController, source: FragmentSource): string {
   const state = fragmentState(viewer, source);
-  state.seen = source.get().fragment;
+  state.seen = source.fragment;
   return state.seen;
 }
 
@@ -163,7 +166,7 @@ export function followFragments(viewer: ViewerController, source: FragmentSource
   const move = () => {
     pending?.abort();
     pending = null;
-    const fragment = source.get().fragment;
+    const { fragment } = source;
     if (!ready || ready.aborted || fragment === state.seen) return;
     pending = linked(ready);
     const { signal } = pending;
@@ -171,7 +174,7 @@ export function followFragments(viewer: ViewerController, source: FragmentSource
       if (!signal.aborted) state.seen = fragment;
     });
   };
-  const unsubscribe = source.subscribe(move);
+  const unsubscribe = source.onFragmentChange(move);
   const detach = viewer.extend({
     ready(_session, signal) {
       ready = signal;

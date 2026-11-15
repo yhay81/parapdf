@@ -65,20 +65,20 @@ describe("a PdfSession's source and fragment", () => {
     for (const source of [url, data, ranged]) {
       const session = new PdfSessionController(source);
       assert.equal(session.source, source);
-      assert.equal(session.fragment.get().fragment, "");
+      assert.equal(session.fragment, "");
     }
   });
 
   it("keeps everything after the URL's first # as its fragment, and the rest of the source", () => {
     const session = new PdfSessionController({ url: "/a.pdf?v=1#nameddest=a#b", password: "x" });
     assert.deepEqual(session.source, { url: "/a.pdf?v=1", password: "x" });
-    assert.equal(session.fragment.get().fragment, "nameddest=a#b");
+    assert.equal(session.fragment, "nameddest=a#b");
   });
 
   it("tells the fragment's readers of a new fragment only", () => {
     const session = new PdfSessionController({ url: "/a.pdf#page=2" });
     const heard: string[] = [];
-    session.fragment.subscribe(() => heard.push(session.fragment.get().fragment));
+    session.onFragmentChange(() => heard.push(session.fragment));
     session.setFragment("page=2");
     session.setFragment("page=3");
     session.setFragment("page=3");

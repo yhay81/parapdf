@@ -2,9 +2,12 @@
 
 import { type CSSProperties, createElement, type ReactNode, useCallback, useState } from "react";
 import type { OutlineNode } from "../document/session.ts";
+import type { ViewerStoreKey } from "../view/state.ts";
 import type { Viewer } from "../view/viewer.ts";
-import { useOptionalViewer, useSelected } from "./context.ts";
+import { useOptionalViewer, useStoreKeys } from "./context.ts";
 import { useOutline } from "./data.ts";
+
+const EXTERNAL_LINKS_KEYS: readonly ViewerStoreKey[] = ["externalLinks"];
 
 /** State and pre-wired elements passed to `<PdfOutline renderItem>` for each bookmark. */
 export interface OutlineItemHelpers {
@@ -105,7 +108,11 @@ export function OutlineTree({
   style,
 }: OutlineTreeProps): ReactNode {
   const viewer = useOptionalViewer(externalViewer);
-  const externalLinks = useSelected(viewer.externalLinksStore, (state) => state.externalLinks);
+  const externalLinks = useStoreKeys(
+    viewer.store,
+    EXTERNAL_LINKS_KEYS,
+    () => viewer.store.externalLinks,
+  );
   if (items.length === 0) return null;
   return createElement(
     "nav",

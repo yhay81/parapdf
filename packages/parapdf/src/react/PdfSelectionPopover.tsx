@@ -3,6 +3,7 @@
 import { type CSSProperties, type ReactNode, useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import type { PdfSelection } from "../features/selection.ts";
+import type { ViewerStoreKey } from "../view/state.ts";
 import type { Viewer } from "../view/viewer.ts";
 import { useOptionalViewer } from "./context.ts";
 import {
@@ -38,6 +39,7 @@ export interface PdfSelectionPopoverProps {
 }
 
 const EDITABLE_CONTROLS = "input, textarea, select, [contenteditable]";
+const POPOVER_STORE_KEYS: readonly ViewerStoreKey[] = ["layout", "first", "last"];
 
 /**
  * Renders floating selection UI (such as a highlight or copy toolbar) outside
@@ -145,16 +147,7 @@ export function PdfSelectionPopover({
     win?.addEventListener("pointerup", onPointerEnd, { passive: true });
     win?.addEventListener("pointercancel", onPointerEnd, { passive: true });
     win?.addEventListener("blur", onPointerEnd);
-    const unsubscribeStore = resolved.store.subscribe((changedKeys) => {
-      if (
-        !changedKeys ||
-        changedKeys.has("layout") ||
-        changedKeys.has("first") ||
-        changedKeys.has("last")
-      ) {
-        update();
-      }
-    });
+    const unsubscribeStore = resolved.store.subscribeKeys(POPOVER_STORE_KEYS, update);
     const unsubscribePreview = resolved.onPreviewChange(update);
 
     let resizeObserver: ResizeObserver | null = null;

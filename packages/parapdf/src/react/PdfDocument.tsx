@@ -5,8 +5,8 @@ import { type AttachmentHandler, PdfSessionController } from "../document/pdf-se
 import { sourceKey, splitFragment } from "../document/registry.ts";
 import type { PdfSource } from "../document/session.ts";
 import { preloadPdfjs } from "../pdfjs/loader.ts";
-import { controllerOf, type Viewer, ViewerController } from "../view/viewer.ts";
-import { SessionContext, ViewerContext } from "./context.ts";
+import { controllerOf, type Viewer, type ViewerController } from "../view/viewer.ts";
+import { LazyViewerHolder, SessionContext, ViewerContext } from "./context.ts";
 import { preloadSourceFetch } from "./preload.ts";
 
 export interface PdfDocumentProps {
@@ -23,7 +23,7 @@ export interface PdfDocumentProps {
    * The default viewer `<PdfDocument>` gives its children through
    * `useViewer()`, from `useCreateViewer()`, when a component above
    * `<PdfDocument>` acts through it; without it, `<PdfDocument>` creates one
-   * of its own.
+   * of its own on demand.
    */
   viewer?: Viewer;
   /**
@@ -88,14 +88,10 @@ export function PdfDocument({
     setHeld(current);
   }
   const { session } = current;
-  const [ownViewer, setOwnViewer] = useState<ViewerController | null>(() =>
-    externalViewer ? null : new ViewerController(),
-  );
-  let activeViewer = externalViewer ? controllerOf(externalViewer) : ownViewer;
-  if (!activeViewer) {
-    activeViewer = new ViewerController();
-    setOwnViewer(activeViewer);
-  }
+  const [holder] = useState(() => new LazyViewerHolder());
+  const contextViewer: ViewerController | LazyViewerHolder = externalViewer
+    ? controllerOf(externalViewer)
+    : holder;
   // The document starts to open as the provider renders, not once React
   // has mounted it: what its children read of it (`useOutline()` and the
   // like) arrives while a transition or a Suspense boundary above the
@@ -107,30 +103,31 @@ export function PdfDocument({
     <SessionContext value={session}>
       <SessionLeaseMount
         session={session}
-        ownViewer={externalViewer ? null : ownViewer}
+        holder={externalViewer ? null : holder}
         passwordPrompt={passwordPrompt}
         onOpenAttachment={onOpenAttachment}
         fragment={fragment}
       />
-      <ViewerContext value={activeViewer}>{children}</ViewerContext>
+      <ViewerContext value={contextViewer}>{children}</ViewerContext>
     </SessionContext>
   );
 }
 
 /**
- * Leaf sibling placed before `<PdfDocument>`'s children so `session.connect()`
- * and `ownViewer.hold()` run in `useLayoutEffect` before any descendant's
- * layout or passive effects (`<PdfViewer>`, `submitPassword`, session actions).
+ * Leaf sibling placed before `<PdfDocument>`'s children so `session.connect()`,
+ * the default viewer's `hold()`, password prompt, attachment handler, and URL
+ * fragment run in `useLayoutEffect` before any descendant's layout or passive
+ * effects (`<PdfViewer>`, `submitPassword`, session actions).
  */
 function SessionLeaseMount({
   session,
-  ownViewer,
+  holder,
   passwordPrompt,
   onOpenAttachment,
   fragment,
 }: {
   session: PdfSessionController;
-  ownViewer: ViewerController | null;
+  holder: LazyViewerHolder | null;
   passwordPrompt: boolean;
   onOpenAttachment: AttachmentHandler | undefined;
   fragment: string;
@@ -140,7 +137,7 @@ function SessionLeaseMount({
   // instead of opening it again, and a provider React rendered but never
   // mounted leaves its document to close (document/registry.ts).
   useLayoutEffect(() => session.connect(), [session]);
-  useLayoutEffect(() => ownViewer?.hold(), [ownViewer]);
+  useLayoutEffect(() => holder?.connect(), [holder]);
   // The prompt changes what the session shows, not the document.
   useLayoutEffect(() => session.setPasswordPrompt(passwordPrompt), [session, passwordPrompt]);
   useLayoutEffect(() => session.setOpenAttachment(onOpenAttachment), [session, onOpenAttachment]);

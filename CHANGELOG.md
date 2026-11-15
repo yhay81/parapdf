@@ -6,6 +6,27 @@ change the API.
 
 ## Unreleased
 
+- Consolidate `ViewerStore` and `externalLinks` into a single key-filtered store,
+  instantiate `<PdfDocument>`'s default `ViewerController` lazily, and simplify
+  session fragment and secondary-data subscriptions:
+  - Replace `ViewerStore`'s four internal `Store` instances (`#all`, `#hot`,
+    `#cold`, `#sizes`) and `ViewerController`'s `externalLinks` `Store` with one
+    key-filtered `ViewerStore`, switching `<PdfViewer>`, `<PdfThumbnails>`,
+    `<PdfThumbnail>`, `<PdfOutline>`, `<PdfSelectionPopover>`, controlled-prop
+    and focus bindings, annotation editing, and form scripting to exact
+    key-filtered subscriptions (`subscribeKeys` / `useStoreKeys`) so mounted
+    window shifts no longer wake `currentPage`, controlled-prop, or annotation
+    listeners.
+  - Allocate `<PdfDocument>`'s default `ViewerController` on first use via
+    `LazyViewerHolder` so document-only (`useSession()`, `useDocumentState()`,
+    `useOutline()`, `getText()`, `save()`) and `<PdfView>` subtrees create zero
+    unused `ViewerController` instances.
+  - Replace `PdfSessionController.#fragment`'s `Store` with direct string state
+    and `onFragmentChange()`, merge `<ViewerControlSync>`'s fragment and
+    `viewer.open(session)` setup into one `[viewer, session]` `useLayoutEffect`,
+    and subscribe `useSessionData` only to `["status", "passwordReason"]` so
+    streaming download `progress` updates never wake Suspense data hooks.
+
 - Render `<PdfPageOverlays>` directly in JSX, eliminate per-item store
   subscriptions and sidebar scroll reflows on `<PdfPageRect>` and
   `<PdfThumbnails>`, defer `<PdfSelectionPopover>` drag commits, and filter

@@ -3,9 +3,13 @@
 import { type CSSProperties, useCallback } from "react";
 import { attachThumbnail } from "../features/thumbnails/index.ts";
 import type { Rotation } from "../pdfjs/draw.ts";
+import type { ViewerStoreKey } from "../view/state.ts";
 import type { Viewer, ViewerController } from "../view/viewer.ts";
-import { useOptionalViewer, useSelected } from "./context.ts";
+import { useOptionalViewer, useStoreKeys } from "./context.ts";
 import { thumbnailCanvasHeight } from "./thumbnails.ts";
+
+const SIZES_KEYS: readonly ViewerStoreKey[] = ["sizes"];
+const ROTATION_KEYS: readonly ViewerStoreKey[] = ["rotation"];
 
 export interface PdfThumbnailProps {
   /**
@@ -95,8 +99,8 @@ export function PdfThumbnail({
   style,
 }: PdfThumbnailProps) {
   const viewer = useOptionalViewer(externalViewer);
-  const size = useSelected(viewer.store.sizes, (state) => state.sizes?.[pageIndex]);
-  const rotation = useSelected(viewer.store.cold, (state) => state.rotation);
+  const size = useStoreKeys(viewer.store, SIZES_KEYS, () => viewer.store.sizes?.[pageIndex]);
+  const rotation = useStoreKeys(viewer.store, ROTATION_KEYS, (state) => state.rotation);
 
   return (
     <ThumbnailCanvas

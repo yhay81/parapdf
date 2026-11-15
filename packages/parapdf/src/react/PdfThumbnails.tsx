@@ -12,8 +12,9 @@ import {
 } from "react";
 import type { PageSize } from "../document/session.ts";
 import type { Rotation } from "../pdfjs/draw.ts";
+import type { ViewerStoreKey } from "../view/state.ts";
 import type { Viewer, ViewerController } from "../view/viewer.ts";
-import { useOptionalViewer, useSelected } from "./context.ts";
+import { useOptionalViewer, useStoreKeys } from "./context.ts";
 import { ThumbnailCanvas } from "./PdfThumbnail.tsx";
 import {
   computeThumbnailOffsets,
@@ -107,6 +108,11 @@ function windowFromScrollMetrics(
   return { first: range.first, last: range.last };
 }
 
+const PAGE_COUNT_KEYS: readonly ViewerStoreKey[] = ["pageCount"];
+const ROTATION_KEYS: readonly ViewerStoreKey[] = ["rotation"];
+const SIZES_KEYS: readonly ViewerStoreKey[] = ["sizes"];
+const CURRENT_PAGE_KEYS: readonly ViewerStoreKey[] = ["currentPage"];
+
 /**
  * The pages of `viewer`'s document as a window-virtualized navigation list,
  * each item showing a thumbnail and the page's label (from the PDF's
@@ -126,10 +132,10 @@ export function PdfThumbnails({
   style,
 }: PdfThumbnailsProps) {
   const viewer = useOptionalViewer(externalViewer);
-  const pageCount = useSelected(viewer.store.cold, (state) => state.pageCount);
-  const rotation = useSelected(viewer.store.cold, (state) => state.rotation);
-  const sizes = useSelected(viewer.store.sizes, (state) => state.sizes);
-  const currentPage = useSelected(viewer.store.hot, (state) => state.currentPage);
+  const pageCount = useStoreKeys(viewer.store, PAGE_COUNT_KEYS, (state) => state.pageCount);
+  const rotation = useStoreKeys(viewer.store, ROTATION_KEYS, (state) => state.rotation);
+  const sizes = useStoreKeys(viewer.store, SIZES_KEYS, () => viewer.store.sizes);
+  const currentPage = useStoreKeys(viewer.store, CURRENT_PAGE_KEYS, (state) => state.currentPage);
   const pageLabels = useOptionalPageLabels(viewer, externalViewer !== undefined);
 
   const navRef = useRef<HTMLElement>(null);

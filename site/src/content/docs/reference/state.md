@@ -32,23 +32,23 @@ the current `ViewerState` snapshot, and `PdfViewer`'s `onViewStateChange`
 reports settled `ViewState` snapshots for persistence (see [Keeping the
 view](/guides/view-state/)).
 
-The viewer's hot and cold stores publish apart when the document is laid out,
-the mounted pages or the current page change, or the view does; scrolling and
-zoom gestures change nothing in them per frame.
+The viewer's store publishes the fields that changed when the document is laid
+out, the mounted pages or the current page change, or the view does; scrolling
+and zoom gestures change nothing in it per frame.
 
-| Field | Part | Meaning |
-|---|---|---|
-| `layout` | hot | The pages laid out at the current zoom, null until a document shows: their sizes in PDF points (`layout.sizes`), boxes, rows, and the content's size. |
-| `first`, `last` | hot | The mounted pages: those in view and `overscan` beyond each edge. |
-| `currentPage` | hot | The zero-based page being read: the one nearest the viewport's center, except that the current page stays current while all of it is in view, as in pdf.js. `goToPage()`, links, `back()`, and search make the page they show current. |
-| `scale` | hot | CSS pixels per PDF point. |
-| `zoomMode` | hot | `"fit-width"`, `"fit-page"`, or `"auto"` while the page is fitted as the viewport resizes or the view turns, otherwise `"custom"`. |
-| `pageCount` | cold | Pages in the viewer's laid-out document, 0 while none shows. |
-| `rotation` | cold | The clockwise rotation of every page: 0, 90, 180, or 270. |
-| `spread` | cold | `"none"`, `"odd"`, or `"even"` (see [Scroll modes and spreads](/guides/layout/)). |
-| `scrollMode` | cold | `"vertical"`, `"horizontal"`, `"wrapped"`, or `"page"`. |
-| `tool` | cold | What a mouse drag does: `"select"` text, or scroll the document with the `"hand"`. |
-| `direction` | cold | The order of pages in a row, `"ltr"` or `"rtl"`: `PdfViewer`'s `direction`, or the document's `/ViewerPreferences /Direction` (see [Right to left](/guides/layout/#right-to-left)). |
+| Field | Meaning |
+|---|---|
+| `layout` | The pages laid out at the current zoom, null until a document shows: their sizes in PDF points (`layout.sizes`), boxes, rows, and the content's size. |
+| `first`, `last` | The mounted pages: those in view and `overscan` beyond each edge. |
+| `currentPage` | The zero-based page being read: the one nearest the viewport's center, except that the current page stays current while all of it is in view, as in pdf.js. `goToPage()`, links, `back()`, and search make the page they show current. |
+| `scale` | CSS pixels per PDF point. |
+| `zoomMode` | `"fit-width"`, `"fit-page"`, or `"auto"` while the page is fitted as the viewport resizes or the view turns, otherwise `"custom"`. |
+| `pageCount` | Pages in the viewer's laid-out document, 0 while none shows. |
+| `rotation` | The clockwise rotation of every page: 0, 90, 180, or 270. |
+| `spread` | `"none"`, `"odd"`, or `"even"` (see [Scroll modes and spreads](/guides/layout/)). |
+| `scrollMode` | `"vertical"`, `"horizontal"`, `"wrapped"`, or `"page"`. |
+| `tool` | What a mouse drag does: `"select"` text, or scroll the document with the `"hand"`. |
+| `direction` | The order of pages in a row, `"ltr"` or `"rtl"`: `PdfViewer`'s `direction`, or the document's `/ViewerPreferences /Direction` (see [Right to left](/guides/layout/#right-to-left)). |
 
 ## Document state
 

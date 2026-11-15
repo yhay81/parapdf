@@ -24,7 +24,7 @@ import {
 import type { PageColors, Rotation } from "../pdfjs/draw.ts";
 import type { Direction, Layout, PdfPagePoint, ScrollMode, SpreadMode } from "../view/layout.ts";
 import type { ViewerOptions } from "../view/options.ts";
-import type { PointerTool } from "../view/state.ts";
+import type { PointerTool, ViewerStoreKey } from "../view/state.ts";
 import type { ViewState } from "../view/view-state.ts";
 import type {
   ControlledViewValues,
@@ -380,7 +380,6 @@ const ViewerControlSync = memo(function ViewerControlSync({
   maxCanvasPixels,
   maxKeptPixels,
 }: ViewerControlProps): null {
-  const { fragment } = session;
   // A change the application did not take up renders only this leaf again,
   // returning the viewer to the controlled value without re-rendering the viewport.
   const [reconcileCount, reconcile] = useReducer((count: number) => count + 1, 0);
@@ -419,7 +418,7 @@ const ViewerControlSync = memo(function ViewerControlSync({
         initialView,
         initialViewState,
         ...explicit,
-        fragment: () => openingFragment(viewer, fragment),
+        fragment: () => openingFragment(viewer, session),
       }),
       textLayer,
       annotationLayer,
@@ -457,7 +456,7 @@ const ViewerControlSync = memo(function ViewerControlSync({
     bindingRef.current?.sync(options, controlled, callbacks);
   }, [
     viewer,
-    fragment,
+    session,
     reconcileCount,
     zoom,
     defaultZoom,
@@ -497,24 +496,23 @@ const ViewerControlSync = memo(function ViewerControlSync({
     maxKeptPixels,
   ]);
 
-  // A new fragment of the source's URL moves the viewer where it points.
+  // Follow the session's URL fragment and open the session, laying out synchronously when warm.
   useLayoutEffect(() => {
-    return followFragments(viewer, fragment);
-  }, [viewer, fragment]);
-
-  // The viewer shows the session until it closes, laying out synchronously when warm.
-  useLayoutEffect(() => {
+    const stopFragments = followFragments(viewer, session);
     viewer.open(session);
+    return stopFragments;
   }, [viewer, session]);
 
   return null;
 });
 
 /**
- * Subscribes to `viewer.store.hot` in `useLayoutEffect` so warm sessions opened
- * in `<ViewerControlSync>`'s layout effect flush `<ViewerPages>` synchronously
- * before the browser paints, while allocating nothing on `currentPage` updates.
+ * Subscribes to `viewer.store` page-window keys in `useLayoutEffect` so warm
+ * sessions opened in `<ViewerControlSync>`'s layout effect flush `<ViewerPages>`
+ * synchronously before the browser paints, without waking on `currentPage`,
+ * `tool`, or `externalLinks` updates.
  */
+const PAGE_WINDOW_KEYS: readonly ViewerStoreKey[] = ["layout", "first", "last"];
 const EMPTY_WINDOW: { layout: Layout | null; first: number; last: number } = {
   layout: null,
   first: 0,
@@ -523,21 +521,21 @@ const EMPTY_WINDOW: { layout: Layout | null; first: number; last: number } = {
 
 function usePageWindow(viewer: ViewerController) {
   const [, rerender] = useReducer((count: number) => count + 1, 0);
-  const state = typeof window === "undefined" ? EMPTY_WINDOW : viewer.store.hot.get();
+  const state = typeof window === "undefined" ? EMPTY_WINDOW : viewer.store.get();
   const windowRef = useRef({ layout: state.layout, first: state.first, last: state.last });
   windowRef.current.layout = state.layout;
   windowRef.current.first = state.first;
   windowRef.current.last = state.last;
   useLayoutEffect(() => {
     const check = () => {
-      const next = viewer.store.hot.get();
+      const next = viewer.store.get();
       const prev = windowRef.current;
       if (next.layout !== prev.layout || next.first !== prev.first || next.last !== prev.last) {
         rerender();
       }
     };
     check();
-    return viewer.store.hot.subscribe(check);
+    return viewer.store.subscribeKeys(PAGE_WINDOW_KEYS, check);
   }, [viewer]);
   return windowRef.current;
 }

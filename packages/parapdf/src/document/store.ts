@@ -43,6 +43,10 @@ export class Store<T extends object> implements ReadableStore<T> {
     return true;
   }
 
+  markChanged(key: PropertyKey): void {
+    this.#pendingKeys.add(key);
+  }
+
   publish(): void {
     if (this.#listeners.size === 0) {
       this.#pendingKeys.clear();
@@ -58,4 +62,25 @@ export class Store<T extends object> implements ReadableStore<T> {
   set(patch: Partial<T>): void {
     if (this.update(patch)) this.publish();
   }
+}
+
+/** Subscribe a listener that runs only when `changedKeys` is unknown or intersects `keys`. */
+export function subscribeKeys(
+  store: ReadableStore<unknown>,
+  keys: readonly PropertyKey[],
+  listener: () => void,
+): () => void {
+  return store.subscribe((changedKeys) => {
+    if (changedKeys) {
+      let hit = false;
+      for (let index = 0; index < keys.length; index++) {
+        if (changedKeys.has(keys[index] as PropertyKey)) {
+          hit = true;
+          break;
+        }
+      }
+      if (!hit) return;
+    }
+    listener();
+  });
 }

@@ -88,10 +88,10 @@ describe("a session's document state", () => {
     assert.equal(opens, 1);
     assert.equal(first.proxy, second.proxy);
     assert.deepEqual(first.source, { url: "/fragment.pdf" });
-    assert.equal(first.fragment.get().fragment, "page=2");
+    assert.equal(first.fragment, "page=2");
     first.setFragment("page=4");
-    assert.equal(first.fragment.get().fragment, "page=4");
-    assert.equal(second.fragment.get().fragment, "page=3");
+    assert.equal(first.fragment, "page=4");
+    assert.equal(second.fragment, "page=3");
   });
 
   it("is the session's, published to every provider and viewer of it", async () => {
@@ -1107,7 +1107,7 @@ describe("a viewer's viewport", () => {
     );
     session.start();
     const viewer = new ViewerController({
-      opening: initialViewOpening({ fragment: () => session.fragment.get().fragment }),
+      opening: initialViewOpening({ fragment: () => session.fragment }),
     });
     const scroller = new Scroller();
     mount(viewer, scroller, session);

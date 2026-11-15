@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, use, useContext, useRef, useSyncExternalStore } from "react";
+import { createContext, use, useCallback, useContext, useRef, useSyncExternalStore } from "react";
 import { browser } from "react-dom";
 import {
   type PdfSession,
@@ -9,14 +9,52 @@ import {
 } from "../document/pdf-session.ts";
 import { type DocumentState, OPENING } from "../document/registry.ts";
 import type { PageSize } from "../document/session.ts";
-import type { ReadableStore } from "../document/store.ts";
+import { type ReadableStore, subscribeKeys } from "../document/store.ts";
 import type { ViewerState } from "../view/state.ts";
-import { controllerOf, type Viewer, type ViewerController } from "../view/viewer.ts";
+import { controllerOf, type Viewer, ViewerController } from "../view/viewer.ts";
 
 export const SessionContext = createContext<PdfSessionController | null>(null);
 
-/** The viewer of the nearest `<PdfView>` or `<PdfDocument>`. */
-export const ViewerContext = createContext<ViewerController | null>(null);
+/**
+ * Holds `<PdfDocument>`'s default `ViewerController` lazily so document-only
+ * subtrees (`useSession()`, `useDocumentState()`, `useOutline()`, `getText()`,
+ * `save()`) and `<PdfView>` panes allocate no unused `ViewerController`.
+ */
+export class LazyViewerHolder {
+  #viewer: ViewerController | null = null;
+  #release: (() => void) | null = null;
+  #connected = false;
+
+  get(): ViewerController {
+    let viewer = this.#viewer;
+    if (!viewer) {
+      viewer = new ViewerController();
+      this.#viewer = viewer;
+      if (this.#connected) this.#release = viewer.hold();
+    }
+    return viewer;
+  }
+
+  get peek(): ViewerController | null {
+    return this.#viewer;
+  }
+
+  connect(): () => void {
+    this.#connected = true;
+    if (this.#viewer && !this.#release) {
+      this.#release = this.#viewer.hold();
+    }
+    return () => {
+      this.#connected = false;
+      const release = this.#release;
+      this.#release = null;
+      release?.();
+    };
+  }
+}
+
+/** The viewer (or lazy default viewer holder) of the nearest `<PdfView>` or `<PdfDocument>`. */
+export const ViewerContext = createContext<ViewerController | LazyViewerHolder | null>(null);
 
 /** The page index and unturned PDF size of the `<PdfPageOverlay>` or `<PdfPageOverlays>` subtree. */
 export const PageContext = createContext<{
@@ -26,23 +64,31 @@ export const PageContext = createContext<{
 
 /**
  * `viewer` when given, otherwise the viewer of the nearest `<PdfView>` or
- * `<PdfDocument>`.
+ * `<PdfDocument>`, instantiating `<PdfDocument>`'s default viewer on first use.
  */
 export function useOptionalViewer(viewer?: Viewer): ViewerController {
-  const contextViewer = useContext(ViewerContext);
+  const contextValue = useContext(ViewerContext);
   if (viewer) return controllerOf(viewer);
-  if (!contextViewer) {
+  if (!contextValue) {
     throw new Error(
       "useViewer must be used inside <PdfDocument> or <PdfView>, or pass a Viewer from useCreateViewer()",
     );
   }
-  return contextViewer;
+  return contextValue instanceof ViewerController ? contextValue : contextValue.get();
 }
 
-/** One slice of a store; the component renders again only when it changes. */
-export function useSelected<T, S>(store: ReadableStore<T>, selector: (state: T) => S): S {
+/** Read a derived slice of `store`, waking React only when one of `keys` changed. */
+export function useStoreKeys<T, S>(
+  store: ReadableStore<T>,
+  keys: readonly PropertyKey[],
+  selector: (state: T) => S,
+): S {
+  const subscribe = useCallback(
+    (onStoreChange: () => void) => subscribeKeys(store, keys, onStoreChange),
+    [store, keys],
+  );
   return useSyncExternalStore(
-    store.subscribe,
+    subscribe,
     () => selector(store.get()),
     () => selector(store.get()),
   );
@@ -198,25 +244,29 @@ export function useStoreSlice<T extends object, S>(
         store,
         subscribe: (onStoreChange) =>
           store.subscribe((changedKeys) => {
-            if (
-              !created.hasSelector &&
-              changedKeys &&
-              created.trackedClient &&
-              !created.pendingNotify
-            ) {
-              const tracked = activeTracked(created.trackedClient);
-              let hit = false;
-              if (tracked) {
-                for (const key of changedKeys) {
-                  if (tracked.has(key)) {
-                    hit = true;
-                    break;
+            if (!created.pendingNotify) {
+              if (
+                created.hasSelector &&
+                created.selectedClient &&
+                Object.is(created.selectedClient.raw, store.get())
+              ) {
+                return;
+              }
+              if (!created.hasSelector && changedKeys && created.trackedClient) {
+                const tracked = activeTracked(created.trackedClient);
+                let hit = false;
+                if (tracked) {
+                  for (const key of changedKeys) {
+                    if (tracked.has(key)) {
+                      hit = true;
+                      break;
+                    }
                   }
                 }
-              }
-              if (!hit) {
-                created.trackedClient.raw = store.get();
-                return;
+                if (!hit) {
+                  created.trackedClient.raw = store.get();
+                  return;
+                }
               }
             }
             created.pendingNotify = true;
@@ -308,6 +358,8 @@ export function useOptionalSession(session?: PdfSession): PdfSessionController {
  * renders its fallback, and React renders the hook's component in the
  * browser without reporting an error.
  */
+const SESSION_READS_KEYS: readonly PropertyKey[] = ["status", "passwordReason"];
+
 export function useSessionData(hook: string): PdfSessionController {
   const session = useContext(SessionContext);
   if (!session) throw new Error("useSession must be used inside <PdfDocument>");
@@ -315,7 +367,7 @@ export function useSessionData(hook: string): PdfSessionController {
   // What settled empty while the document waited for a password is read
   // anew once it is answered, and so is everything once the provider holds
   // the document opened again: render again to read it.
-  useSelected(session.stateStore, () => session.reads);
+  useStoreKeys(session.stateStore, SESSION_READS_KEYS, () => session.reads);
   return session;
 }
 

@@ -123,9 +123,10 @@ document opens (decisions 0041 and 0042).
   the document fails and while the document waits for a password, to be read
   anew once it is answered. It opens, closes, and releases nothing itself:
   `PdfDocument` starts its session as it renders, and mounts a leaf
-  `<SessionLeaseMount>` before its children so `session.connect()`, the owned
-  viewer's `hold()`, password prompt, attachment handler, and URL fragment
-  apply in `useLayoutEffect` before any child effect runs (decision 0041). It
+  `<SessionLeaseMount>` before its children so `session.connect()`, the lazy
+  default viewer holder's `connect()`, password prompt, attachment handler, and
+  URL fragment (`session.fragment`, `session.onFragmentChange()`) apply in
+  `useLayoutEffect` before any child effect runs (decisions 0041 and 0043). It
   follows the registry's session its render started and then the one its
   provider holds, which is another once the first closed. `PdfDocument`'s
   `onOpenAttachment` sets how embedded files opened from the session are
@@ -171,12 +172,14 @@ and `#start()` lays out warm sessions synchronously before `open()` returns.
   `viewer.onSelectionDragChange()` expose mounted page hosts and primary-button
   text-drag transitions to internal `features/` and `react/` callers without
   DOM queries.
-- `state.ts`: the viewer's store, view state only. Hot state changes while
-  the reader scrolls or zooms (layout, mounted window, current page, scale,
-  zoom mode); cold state does not (page count, rotation, spreads, scroll
-  mode, tool, direction); `sizes` publishes unrotated page dimensions only
-  when they change (document open, non-uniform `#measurePages`, and close).
-  They are subscribed to apart (decision 0040).
+- `state.ts`: the viewer's single key-filtered store (`ViewerStore`), view state
+  only. Every `set()` reports the exact changed keys (`ViewerState` fields,
+  unrotated page `"sizes"` when `layout?.sizes` changes, and `"externalLinks"`
+  when the viewer's external link target changes), allocating nothing when
+  values stay equal or no listener is attached; `react/`, `features/`, and
+  controller bindings subscribe to exact keys via `subscribeKeys()` and
+  `useStoreKeys()` so window shifts, page changes, zoom commits, and option
+  changes wake only their own readers (decisions 0040, 0042, and 0043).
 - `options.ts`: the viewer's options. Those the renderer is built with
   (layers, colors, budgets, concurrency) rebuild it as a detach and
   reattach would, keeping position and edits; the others apply at once.
@@ -309,11 +312,14 @@ of its own, and detaching it undoes what it added. The core imports no feature.
 the DOM declares `"use client"`.
 
 - `PdfDocument` opens or joins a session as it renders, holds it in a first-child
-  `<SessionLeaseMount>` `useLayoutEffect`, provides a default `Viewer` through
-  `ViewerContext` (or provides the `viewer` prop given to it), and renders its
-  children at once; nothing suspends before the first page draws. A source with
-  another URL, headers, bytes, transport, or password opens another; a new
-  fragment moves its viewers as a link would.
+  `<SessionLeaseMount>` `useLayoutEffect`, provides a lazy default `Viewer`
+  (`LazyViewerHolder`, instantiating `ViewerController` only when `useViewer()`,
+  `<PdfViewer>`, or another default-viewer hook reads it so document-only and
+  `<PdfView>` trees allocate none) through `ViewerContext` (or provides the
+  `viewer` prop given to it), and renders its children at once; nothing suspends
+  before the first page draws (decision 0043). A source with another URL, headers,
+  bytes, transport, or password opens another; a new fragment moves its viewers
+  as a link would.
 - `PdfView` provides an independent `Viewer` scope inside a `PdfDocument`
   so split panes compose the same controls, thumbnails, and `PdfViewer`
   without prop plumbing. `useViewer()` reads the nearest `ViewerContext`;
@@ -349,12 +355,15 @@ the DOM declares `"use client"`.
   `viewer.bindControls(reconcile)`: rejected controlled changes re-render only
   `<ViewerControlSync>`, parent renders that change only `children` or `style`
   skip `<ViewerControlSync>` entirely, `memo(ViewerPages)` subscribes to
-  `viewer.store.hot` in `useLayoutEffect` (`usePageWindow`) so warm sessions
-  flush `<PdfPage>` hosts and canvases synchronously before the first browser
-  paint, static `.parapdf-pages` and `.parapdf-pages > section` styles live in
-  `VIEWER_CSS`, and each `memo(PdfPage)` registers its `<section>` host with a
-  React 19 ref cleanup callback rather than a per-page `useLayoutEffect`
-  (decisions 0040, 0041, and 0042).
+  `viewer.store.subscribeKeys(["layout", "first", "last"])` in `useLayoutEffect`
+  (`usePageWindow`) so warm sessions flush `<PdfPage>` hosts and canvases
+  synchronously before the first browser paint, `<ViewerControlSync>` merges
+  `followFragments(viewer, session)` and `viewer.open(session)` into a single
+  `[viewer, session]` `useLayoutEffect`, static `.parapdf-pages` and
+  `.parapdf-pages > section` styles live in `VIEWER_CSS`, and each
+  `memo(PdfPage)` registers its `<section>` host with a React 19 ref cleanup
+  callback rather than a per-page `useLayoutEffect` (decisions 0040, 0041, 0042,
+  and 0043).
   `children` renders
   inside the viewport container so declarative feature components (`PdfForms`,
   `PdfAnnotationEditor`, `PdfAutoLinks`, `PdfPermissions`) mount synchronously
@@ -401,8 +410,9 @@ the DOM declares `"use client"`.
   ahead of `PdfDocument` mounting so `PdfViewer` and `PdfThumbnails` render
   synchronously before the first paint.
 - `PdfThumbnails` and `PdfThumbnail` draw the viewer's document at a lower
-  priority, reading unrotated page dimensions from `viewer.store.sizes` outside
-  `viewer.store.hot` (decision 0040). `PdfThumbnails` passes primitive page
+  priority, reading unrotated page dimensions via `useStoreKeys(viewer.store,
+  ["sizes"], …)` so scrolling and zooming never wake them (decisions 0040 and
+  0043). `PdfThumbnails` passes primitive page
   dimensions, `rotation`, and `virtualized` directly to a zero-subscription
   `ThumbnailCanvas` (attached via a React 19 ref cleanup callback and backed by
   `ThumbnailRenderer`'s bounded LRU kept-canvas pool) rather than subscribing
@@ -420,10 +430,10 @@ the DOM declares `"use client"`.
   Active-page alignment follows measured item chrome, width, and rotation;
   failed label reads retain numeric labels.
   `PdfOutline` renders `<nav><ol>…</ol></nav>` over `useOutline()`, following
-  the viewer's live `externalLinks` store (`viewer.externalLinks`), providing
-  expand/collapse controls for nested entries, and honoring optional
-  `renderItem` customization (decision 0037). `PdfPageRect` places content in
-  PDF points.
+  the viewer's `"externalLinks"` key on `viewer.store` (`viewer.externalLinks`),
+  providing expand/collapse controls for nested entries, and honoring optional
+  `renderItem` customization (decisions 0037 and 0043). `PdfPageRect` places
+  content in PDF points.
 - `useViewState()`, `useDocumentState()`, `useSearch()`, `useHistory()`, and
   `useAnnotations()` read stores through `useSyncExternalStore`
   (`useStoreSlice`), and `useLayers()` subscribes directly to `LayerState`:
@@ -440,7 +450,9 @@ the DOM declares `"use client"`.
   saving and print-progress state with clean abort/unmount cancellation. They
   reconcile that state when React reconnects their effects after Activity hides. The
   document's data is read with `use()` under the application's Suspense
-  boundaries.
+  boundaries (`useSessionData`, subscribing only to `["status", "passwordReason"]`
+  on `session.stateStore` so streaming download `progress` updates never wake
+  secondary data hooks).
 - On the server the viewer renders an empty viewport, a URL source's
   preload goes into the head, and the data hooks throw through
   `use(browser())` so the nearest Suspense boundary renders its fallback

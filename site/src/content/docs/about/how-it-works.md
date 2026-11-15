@@ -79,10 +79,11 @@ into view mount and draw before the fingers lift.
 
 ## React stays out of the hot path
 
-Each viewer publishes its view state in two parts: the hot part, which
-changes while the reader scrolls or zooms (layout, mounted window, current
-page, scale, zoom mode), apart from the cold part (page count, rotation,
-spread, scroll mode, direction, tool). While the reader scrolls or pinches,
+Each viewer publishes its view state in a single key-filtered store: every
+update reports the exact fields that changed (layout, mounted window, current
+page, scale, zoom mode, page count, rotation, spread, scroll mode, direction,
+tool, and unrotated page sizes), so readers subscribe only to the fields they
+read. While the reader scrolls or pinches,
 the viewer computes every frame but publishes only changes, and `PdfViewer`
 selects only the mounted window and the layout: a scroll across several pages
 commits React a few times, not once a frame. `PdfViewer`'s change callbacks

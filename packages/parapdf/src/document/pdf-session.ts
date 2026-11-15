@@ -11,7 +11,7 @@ import {
   splitFragment,
 } from "./registry.ts";
 import type { DocumentSession, PdfSource } from "./session.ts";
-import { type ReadableStore, Store, type StoreListener } from "./store.ts";
+import type { ReadableStore, StoreListener } from "./store.ts";
 
 /**
  * A session's document state as a provider that shows no password prompt
@@ -137,7 +137,8 @@ export class PdfSessionController implements PdfSession {
   /** Optional handler `<PdfDocument onOpenAttachment>` sets for embedded files. */
   #openAttachment: AttachmentHandler | undefined;
   /** Where its URL's fragment says to open, which changes without opening the document again. */
-  readonly #fragment: Store<{ fragment: string }>;
+  #fragment: string;
+  readonly #fragmentListeners = new Set<() => void>();
 
   constructor(
     source: PdfSource,
@@ -149,7 +150,7 @@ export class PdfSessionController implements PdfSession {
     sessionControllers.add(this);
     const [url, hash] = "url" in source ? splitFragment(source.url) : ["", ""];
     this.source = "url" in source && source.url !== url ? { ...source, url } : source;
-    this.#fragment = new Store({ fragment: hash });
+    this.#fragment = hash;
     this.#pdfjs = pdfjs;
     this.#prompt = passwordPrompt;
     this.#awaitHold();
@@ -322,12 +323,22 @@ export class PdfSessionController implements PdfSession {
    * The fragment of this session's URL, without its "#": where `<PdfDocument>`'s
    * source says to open, which its viewers follow when it changes.
    */
-  get fragment(): ReadableStore<{ fragment: string }> {
+  get fragment(): string {
     return this.#fragment;
   }
 
   /** Point this session's fragment elsewhere: a new fragment of `<PdfDocument>`'s source. */
   setFragment(hash: string): void {
-    this.#fragment.set({ fragment: hash });
+    if (this.#fragment === hash) return;
+    this.#fragment = hash;
+    for (const listener of [...this.#fragmentListeners]) listener();
+  }
+
+  /** Subscribe to changes of this session's URL fragment. */
+  onFragmentChange(listener: () => void): () => void {
+    this.#fragmentListeners.add(listener);
+    return () => {
+      this.#fragmentListeners.delete(listener);
+    };
   }
 }

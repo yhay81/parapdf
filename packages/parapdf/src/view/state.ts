@@ -1,5 +1,5 @@
 import type { PageSize } from "../document/session.ts";
-import { type ReadableStore, Store, type StoreListener } from "../document/store.ts";
+import { Store, subscribeKeys } from "../document/store.ts";
 import type { Rotation } from "../pdfjs/draw.ts";
 import type { Direction, Layout, ScrollMode, SpreadMode } from "./layout.ts";
 
@@ -60,82 +60,55 @@ export type FitMode = "fit-width" | "fit-page" | "auto";
 
 export type PointerTool = "select" | "hand";
 
-export type HotViewState = Pick<
-  ViewerState,
-  "layout" | "first" | "last" | "currentPage" | "scale" | "zoomMode"
->;
-export type ColdViewState = Pick<
-  ViewerState,
-  "pageCount" | "rotation" | "spread" | "scrollMode" | "tool" | "direction"
->;
-
-export interface PageSizesState {
-  sizes: readonly PageSize[] | undefined;
-}
+/** Keys reported to key-filtered `ViewerStore` listeners. */
+export type ViewerStoreKey = keyof ViewerState | "sizes" | "externalLinks";
 
 /**
- * A viewer's view state: its hot, cold, and page-size parts, published apart,
- * and all fields together. Patches are atomic across every subscription surface.
+ * A viewer's single key-filtered store: publishes `ViewerState` along with
+ * derived unrotated `sizes` (`"sizes"` only when `layout?.sizes` changes) and
+ * `externalLinks` (`"externalLinks"`), installing all snapshots atomically
+ * before notifying listeners.
  */
-export class ViewerStore implements ReadableStore<ViewerState> {
-  readonly #all: Store<ViewerState>;
-  readonly #hot: Store<HotViewState>;
-  readonly #cold: Store<ColdViewState>;
-  readonly #sizes: Store<PageSizesState>;
-  readonly hot: ReadableStore<HotViewState>;
-  readonly cold: ReadableStore<ColdViewState>;
-  readonly sizes: ReadableStore<PageSizesState>;
+export class ViewerStore extends Store<ViewerState> {
+  #sizes: readonly PageSize[] | undefined;
+  #externalLinks: "new-tab" | "disabled" = "new-tab";
 
   constructor(initial: ViewerState) {
-    this.#all = new Store(initial);
-    const {
-      layout,
-      pageCount,
-      first,
-      last,
-      currentPage,
-      scale,
-      zoomMode,
-      rotation,
-      spread,
-      scrollMode,
-      tool,
-      direction,
-    } = initial;
-    this.hot = this.#hot = new Store({ layout, first, last, currentPage, scale, zoomMode });
-    this.cold = this.#cold = new Store({
-      pageCount,
-      rotation,
-      spread,
-      scrollMode,
-      tool,
-      direction,
-    });
-    this.sizes = this.#sizes = new Store({ sizes: layout?.sizes });
+    super(initial);
+    this.#sizes = initial.layout?.sizes;
   }
 
-  get = (): ViewerState => this.#all.get();
-  subscribe = (listener: StoreListener): (() => void) => this.#all.subscribe(listener);
+  get sizes(): readonly PageSize[] | undefined {
+    return this.#sizes;
+  }
 
-  set(patch: Partial<ViewerState>): void {
+  get externalLinks(): "new-tab" | "disabled" {
+    return this.#externalLinks;
+  }
+
+  subscribeKeys = (keys: readonly ViewerStoreKey[], listener: () => void): (() => void) =>
+    subscribeKeys(this, keys, listener);
+
+  override set(patch: Partial<ViewerState>): void {
+    const hasLayout = "layout" in patch;
     const full =
-      "layout" in patch && patch.pageCount === undefined
+      hasLayout && patch.pageCount === undefined
         ? { ...patch, pageCount: patch.layout?.sizes.length ?? 0 }
         : patch;
-    if (!this.#all.update(full)) return;
-    const hot: Partial<HotViewState> = {};
-    const cold: Partial<ColdViewState> = {};
-    for (const key of Object.keys(full) as (keyof ViewerState)[]) {
-      if (key in this.#hot.get()) Object.assign(hot, { [key]: full[key] });
-      else if (key in this.#cold.get()) Object.assign(cold, { [key]: full[key] });
+    const stateChanged = this.update(full);
+    const nextSizes = hasLayout ? patch.layout?.sizes : this.#sizes;
+    const sizesChanged = hasLayout && !Object.is(this.#sizes, nextSizes);
+    if (sizesChanged) {
+      this.#sizes = nextSizes;
+      this.markChanged("sizes");
     }
-    const hotChanged = this.#hot.update(hot);
-    const coldChanged = this.#cold.update(cold);
-    const sizesChanged =
-      "layout" in full ? this.#sizes.update({ sizes: full.layout?.sizes }) : false;
-    this.#all.publish();
-    if (hotChanged) this.#hot.publish();
-    if (coldChanged) this.#cold.publish();
-    if (sizesChanged) this.#sizes.publish();
+    if (stateChanged || sizesChanged) this.publish();
+  }
+
+  setExternalLinks(externalLinks: "new-tab" | "disabled"): void {
+    if (this.#externalLinks === externalLinks) return;
+    this.#externalLinks = externalLinks;
+    this.markChanged("externalLinks");
+    this.publish();
   }
 }

@@ -1,22 +1,24 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createElement } from "react";
+import { createElement, useContext } from "react";
 import { renderToString } from "react-dom/server";
 import {
   type PdfSession,
   PdfSessionController,
   sessionControllerOf,
 } from "../src/document/pdf-session.ts";
-import { Store } from "../src/document/store.ts";
+import { Store, subscribeKeys } from "../src/document/store.ts";
 import { useAnnotations } from "../src/react/annotations.ts";
 import {
   activeTracked,
   createTrackedSnapshot,
   hasTrackedChange,
+  LazyViewerHolder,
   SessionContext,
   selectCached,
   shallowEqual,
   useDocumentState,
+  useSession,
   useViewState,
   ViewerContext,
 } from "../src/react/context.ts";
@@ -27,18 +29,17 @@ import { useSelection } from "../src/react/selection.ts";
 import { useCreateViewer, useViewer } from "../src/react/viewer.ts";
 import { computeLayout } from "../src/view/layout.ts";
 import { controllerOf, type Viewer, ViewerController } from "../src/view/viewer.ts";
-import { LETTER } from "./fake-pdfjs.ts";
+import { fakeDocument, fakePdfjs, LETTER, settle } from "./fake-pdfjs.ts";
 
 describe("ViewerStore pageCount", () => {
-  it("starts at 0 and publishes on cold only when the document's page count changes", () => {
+  it("starts at 0 and publishes pageCount only when the document's page count changes", () => {
     const viewer = new ViewerController();
     assert.equal(viewer.store.get().pageCount, 0);
-    assert.equal(viewer.store.cold.get().pageCount, 0);
 
-    let hotPublishes = 0;
-    let coldPublishes = 0;
-    viewer.store.hot.subscribe(() => hotPublishes++);
-    viewer.store.cold.subscribe(() => coldPublishes++);
+    let layoutPublishes = 0;
+    let pageCountPublishes = 0;
+    viewer.store.subscribeKeys(["layout", "scale"], () => layoutPublishes++);
+    viewer.store.subscribeKeys(["pageCount"], () => pageCountPublishes++);
 
     const threePages = [LETTER, LETTER, LETTER];
     const layout1 = computeLayout(threePages, 1, {
@@ -52,11 +53,10 @@ describe("ViewerStore pageCount", () => {
     });
     viewer.store.set({ layout: layout1 });
     assert.equal(viewer.store.get().pageCount, 3);
-    assert.equal(viewer.store.cold.get().pageCount, 3);
-    assert.equal(hotPublishes, 1);
-    assert.equal(coldPublishes, 1);
+    assert.equal(layoutPublishes, 1);
+    assert.equal(pageCountPublishes, 1);
 
-    // Zooming produces a new Layout with the same page count: cold stays quiet.
+    // Zooming produces a new Layout with the same page count: pageCount listeners stay quiet.
     const layout2 = computeLayout(threePages, 1.5, {
       gap: 12,
       rotation: 0,
@@ -68,15 +68,14 @@ describe("ViewerStore pageCount", () => {
     });
     viewer.store.set({ layout: layout2, scale: 1.5 });
     assert.equal(viewer.store.get().pageCount, 3);
-    assert.equal(hotPublishes, 2);
-    assert.equal(coldPublishes, 1);
+    assert.equal(layoutPublishes, 2);
+    assert.equal(pageCountPublishes, 1);
 
     // Closing resets layout to null and pageCount to 0.
     viewer.store.set({ layout: null, first: 0, last: -1 });
     assert.equal(viewer.store.get().pageCount, 0);
-    assert.equal(viewer.store.cold.get().pageCount, 0);
-    assert.equal(hotPublishes, 3);
-    assert.equal(coldPublishes, 2);
+    assert.equal(layoutPublishes, 3);
+    assert.equal(pageCountPublishes, 2);
   });
 });
 
@@ -196,6 +195,31 @@ describe("getter-tracked snapshots", () => {
 
     unsub();
   });
+
+  it("subscribeKeys ignores unrelated keys such as streaming progress while firing on matching or unkeyed publishes", () => {
+    const store = new Store({
+      status: "loading",
+      passwordReason: null as "need" | "incorrect" | null,
+      progress: null as { loaded: number; total: number | null } | null,
+    });
+    let calls = 0;
+    const unsub = subscribeKeys(store, ["status", "passwordReason"], () => {
+      calls++;
+    });
+
+    store.set({ progress: { loaded: 1024, total: 8192 } });
+    store.set({ progress: { loaded: 4096, total: 8192 } });
+    assert.equal(calls, 0);
+
+    store.set({ status: "password", passwordReason: "need" });
+    assert.equal(calls, 1);
+
+    // Unkeyed publish() (such as session #follow or failed-read retry) always wakes subscribeKeys.
+    store.publish();
+    assert.equal(calls, 2);
+
+    unsub();
+  });
 });
 
 function ContextToolbar({ seen }: { seen: Viewer[] }) {
@@ -225,6 +249,35 @@ function StandaloneViewerApp({ created }: { created: Viewer[] }) {
 
 function BareViewerConsumer() {
   useViewer();
+  return null;
+}
+
+function DocOnlyProbe({
+  customViewer,
+  slots,
+}: {
+  customViewer: Viewer;
+  slots: (ViewerController | LazyViewerHolder | null)[];
+}) {
+  const session = useSession();
+  const docState = useDocumentState();
+  const tool = useViewState((s) => s.tool, customViewer);
+  slots.push(useContext(ViewerContext));
+  return createElement("span", null, `${session.source ? "ok" : "no"}:${docState.status}:${tool}`);
+}
+
+function DefaultViewerProbe({
+  resolvedViewers,
+  slots,
+}: {
+  resolvedViewers: Viewer[];
+  slots: (ViewerController | LazyViewerHolder | null)[];
+}) {
+  const first = useViewer();
+  const second = useViewer();
+  assert.equal(first, second);
+  resolvedViewers.push(first);
+  slots.push(useContext(ViewerContext));
   return null;
 }
 
@@ -270,5 +323,76 @@ describe("ViewerContext, useCreateViewer, and optional viewer hooks", () => {
       () => renderToString(createElement(BareViewerConsumer)),
       /useViewer must be used inside/,
     );
+  });
+
+  it("allocates <PdfDocument>'s default ViewerController lazily and holds it across Activity hide/show", async () => {
+    const slots: (ViewerController | LazyViewerHolder | null)[] = [];
+    const customViewer = new ViewerController();
+    customViewer.setTool("hand");
+    const docSession = new PdfSessionController({ url: "/lazy-doc.pdf" });
+    const docOnlyHolder = new LazyViewerHolder();
+
+    assert.equal(
+      renderToString(
+        createElement(
+          SessionContext,
+          { value: docSession },
+          createElement(
+            ViewerContext,
+            { value: docOnlyHolder },
+            createElement(DocOnlyProbe, { customViewer, slots }),
+          ),
+        ),
+      ),
+      "<span>ok:loading:hand</span>",
+    );
+    assert.equal(slots[0], docOnlyHolder);
+    assert.equal(docOnlyHolder.peek, null, "document-only trees allocate zero ViewerControllers");
+
+    const resolvedViewers: Viewer[] = [];
+    const activeHolder = new LazyViewerHolder();
+    renderToString(
+      createElement(
+        SessionContext,
+        { value: docSession },
+        createElement(
+          ViewerContext,
+          { value: activeHolder },
+          createElement(DefaultViewerProbe, { resolvedViewers, slots }),
+        ),
+      ),
+    );
+    assert.equal(slots[1], activeHolder);
+    assert.ok(resolvedViewers[0] instanceof ViewerController);
+    assert.equal(activeHolder.peek, resolvedViewers[0]);
+
+    // Verify LazyViewerHolder connect/disconnect lifetime across initial mount, dynamic get(), and Activity hide/show.
+    const { loader } = fakePdfjs(async () => fakeDocument().proxy);
+    const session = new PdfSessionController({ url: "/holder-life.pdf" }, { pdfjs: loader });
+    const releaseSession = session.connect();
+    try {
+      const holder = new LazyViewerHolder();
+      let disconnectHolder = holder.connect();
+      assert.equal(holder.peek, null);
+
+      const viewer = holder.get();
+      assert.equal(holder.peek, viewer);
+      viewer.open(session);
+      await settle();
+      assert.ok(viewer.session, "viewer shows session while holder is connected");
+
+      // Hiding (<Activity>) releases the viewer's hold on the session while keeping the viewer instance.
+      disconnectHolder();
+      assert.equal(viewer.session, null);
+      assert.equal(holder.peek, viewer);
+
+      // Showing again reconnects the same viewer to the session.
+      disconnectHolder = holder.connect();
+      await settle();
+      assert.ok(viewer.session, "viewer reconnects when holder connects again");
+      disconnectHolder();
+    } finally {
+      releaseSession();
+    }
   });
 });

@@ -21,11 +21,11 @@ import { ViewerController } from "../src/view/viewer.ts";
 import { fakeDocument, fakePdfjs, LETTER, settle } from "./fake-pdfjs.ts";
 
 describe("thumbnailCanvasHeight", () => {
-  it("publishes viewer.store.sizes only on open, non-uniform size updates, and close, ignoring scroll and zoom commits", () => {
+  it("publishes viewer.store sizes key only on open, non-uniform size updates, and close, ignoring scroll and zoom commits", () => {
     const viewer = new ViewerController();
     let notifications = 0;
-    const unsub = viewer.store.sizes.subscribe(() => notifications++);
-    assert.equal(viewer.store.sizes.get().sizes, undefined);
+    const unsub = viewer.store.subscribeKeys(["sizes"], () => notifications++);
+    assert.equal(viewer.store.sizes, undefined);
 
     const uniformSizes = [LETTER, LETTER, LETTER];
     const layoutAt1 = computeLayout(uniformSizes, 1, {
@@ -39,7 +39,7 @@ describe("thumbnailCanvasHeight", () => {
     });
     viewer.store.set({ layout: layoutAt1, scale: 1, first: 0, last: 1 });
     assert.equal(notifications, 1);
-    assert.equal(viewer.store.sizes.get().sizes, uniformSizes);
+    assert.equal(viewer.store.sizes, uniformSizes);
 
     // Scroll window shifts, currentPage flips, zoom commits sharing `uniformSizes`, and cold tool/rotation updates must not notify sizes subscribers:
     viewer.store.set({ first: 1, last: 2, currentPage: 1 });
@@ -69,12 +69,12 @@ describe("thumbnailCanvasHeight", () => {
     });
     viewer.store.set({ layout: mixedLayout });
     assert.equal(notifications, 2);
-    assert.equal(viewer.store.sizes.get().sizes, mixedSizes);
+    assert.equal(viewer.store.sizes, mixedSizes);
 
     // Closing the document clears sizes once:
     viewer.store.set({ layout: null, first: 0, last: -1 });
     assert.equal(notifications, 3);
-    assert.equal(viewer.store.sizes.get().sizes, undefined);
+    assert.equal(viewer.store.sizes, undefined);
 
     unsub();
   });
@@ -431,14 +431,13 @@ describe("ThumbnailRenderer virtualized mode and kept canvases", () => {
 describe("viewer.externalLinks and PdfOutline", () => {
   it("tracks live externalLinks option updates on Viewer", () => {
     const viewer = new ViewerController();
-    const store = viewer.externalLinksStore;
     let notifications = 0;
-    const unsub = store.subscribe(() => notifications++);
+    const unsub = viewer.store.subscribeKeys(["externalLinks"], () => notifications++);
     assert.equal(viewer.externalLinks, "new-tab");
 
     viewer.configure({ externalLinks: "disabled" });
     assert.equal(viewer.externalLinks, "disabled");
-    assert.equal(store.get().externalLinks, "disabled");
+    assert.equal(viewer.store.externalLinks, "disabled");
     assert.equal(notifications, 1);
 
     viewer.configure({ externalLinks: "disabled" });

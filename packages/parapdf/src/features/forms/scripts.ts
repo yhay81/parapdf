@@ -9,7 +9,7 @@ import type { AnnotationLayerScripting } from "../../pdfjs/annotation-layer.ts";
 import { type DocumentScripting, startScripting } from "../../pdfjs/scripting.ts";
 import { filenameFromUrl } from "../../view/files.ts";
 import { ZOOM_STEP } from "../../view/input.ts";
-import type { FitMode } from "../../view/state.ts";
+import type { FitMode, ViewerStoreKey } from "../../view/state.ts";
 import type { ViewerController } from "../../view/viewer.ts";
 import { PDF_TO_CSS } from "../../view/zoom.ts";
 
@@ -54,15 +54,17 @@ const ZOOM_MODES: Readonly<Record<string, FitMode>> = {
 const target = (run: Running): ViewerController | undefined =>
   (run.last ?? run.viewers.values().next().value)?.viewer;
 
+const CURRENT_PAGE_KEYS: readonly ViewerStoreKey[] = ["currentPage"];
+
 /** The sandbox's PageOpen and PageClose follow the current page of the first viewer. */
 function follow(run: Running): void {
   run.unfollow();
   const leader = run.viewers.values().next().value;
   if (!leader) return;
-  const { hot } = leader.viewer.store;
-  const show = () => run.scripting.showPage(hot.get().currentPage);
+  const { store } = leader.viewer;
+  const show = () => run.scripting.showPage(store.get().currentPage);
   show();
-  run.unfollow = hot.subscribe(show);
+  run.unfollow = store.subscribeKeys(CURRENT_PAGE_KEYS, show);
 }
 
 /**

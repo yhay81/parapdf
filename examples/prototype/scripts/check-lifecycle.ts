@@ -149,7 +149,7 @@ const left = (page: Page) =>
       rotation: view.rotation,
       x: view.x,
       y: view.y,
-      tool: viewer.store.cold.get().tool,
+      tool: viewer.store.get().tool,
       search: `${search.status} ${search.matches.length} ${search.current}`,
       annotations: window.__annotations?.export().length ?? -1,
       // The editors in the document's own storage: one each, not one more per time shown.

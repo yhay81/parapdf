@@ -6,7 +6,6 @@
 
 import type { PdfSessionController } from "../document/pdf-session.ts";
 import type { DocumentPermissions, DocumentSession, PageSize } from "../document/session.ts";
-import { type ReadableStore, Store } from "../document/store.ts";
 import type {
   AnnotationLayerHandle,
   AnnotationLayerScripting,
@@ -80,6 +79,7 @@ import {
   type PointerTool,
   type ViewerState,
   ViewerStore,
+  type ViewerStoreKey,
   type ZoomMode,
 } from "./state.ts";
 import { sameViewState, toShownView, type ViewState, viewStateAt } from "./view-state.ts";
@@ -167,6 +167,17 @@ const viewValuesOf = (state: ViewerState): ControlledViewValues => ({
 });
 
 const VIEW_CONTROL_KEYS = ["zoom", "rotation", "spread", "scrollMode", "tool"] as const;
+const BOUND_CONTROL_KEYS: readonly ViewerStoreKey[] = [
+  "layout",
+  "scale",
+  "zoomMode",
+  "rotation",
+  "spread",
+  "scrollMode",
+  "tool",
+  "currentPage",
+];
+const CURRENT_PAGE_KEYS: readonly ViewerStoreKey[] = ["currentPage"];
 
 /**
  * Imperative controller of one `<PdfViewer>` viewport (`useViewer()`,
@@ -238,9 +249,6 @@ export class ViewerController implements Viewer {
   });
   /** The options as set, which the renderer and the next opening read. */
   #options: ViewerOptions = {};
-  readonly #externalLinks = new Store<{ externalLinks: "new-tab" | "disabled" }>({
-    externalLinks: "new-tab",
-  });
   #gap = 12;
   #overscan = 2;
   #destinationZoom = true;
@@ -298,12 +306,7 @@ export class ViewerController implements Viewer {
 
   /** How external links open in this viewer (`"new-tab"` or `"disabled"`). */
   get externalLinks(): "new-tab" | "disabled" {
-    return this.#externalLinks.get().externalLinks;
-  }
-
-  /** Reactive store of `externalLinks` for `<PdfOutline>`. */
-  get externalLinksStore(): ReadableStore<{ externalLinks: "new-tab" | "disabled" }> {
-    return this.#externalLinks;
+    return this.store.externalLinks;
   }
 
   /** Whether a feature (such as an active annotation drawing tool) claimed pointer drags. */
@@ -452,7 +455,7 @@ export class ViewerController implements Viewer {
     this.#options = options;
     const externalLinks = options.externalLinks ?? "new-tab";
     this.#links.externalLinks = externalLinks;
-    this.#externalLinks.set({ externalLinks });
+    this.store.setExternalLinks(externalLinks);
     this.#destinationZoom = options.destinationZoom ?? true;
     const minScale = options.minScale ?? 0.25;
     const maxScale = options.maxScale ?? 10;
@@ -525,7 +528,7 @@ export class ViewerController implements Viewer {
     let laidOut = this.store.get().layout !== null;
     let inSync = false;
 
-    const unsubscribeStore = this.store.subscribe(() => {
+    const unsubscribeStore = this.store.subscribeKeys(BOUND_CONTROL_KEYS, () => {
       const state = this.store.get();
       const view = viewValuesOf(state);
       const last = reported ?? view;
@@ -1280,7 +1283,7 @@ export class ViewerController implements Viewer {
    */
   #followFocus(): () => void {
     let page = this.store.get().currentPage;
-    return this.store.subscribe(() => {
+    return this.store.subscribeKeys(CURRENT_PAGE_KEYS, () => {
       const { currentPage } = this.store.get();
       if (currentPage === page) return;
       page = currentPage;

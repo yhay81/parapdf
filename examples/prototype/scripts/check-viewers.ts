@@ -75,7 +75,7 @@ async function checkViews(url: string) {
     );
     assert.deepEqual(
       await page.evaluate(() => {
-        const state = window.__split!.viewers[1]!.store.cold.get();
+        const state = window.__split!.viewers[1]!.store.get();
         return { rotation: state.rotation, tool: state.tool };
       }),
       { rotation: 0, tool: "select" },
