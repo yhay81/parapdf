@@ -1440,6 +1440,71 @@ try {
     );
     await context.close();
   }
+
+  // --- preloadDocument() warms #nameddest= fragments so mounting opens at the named destination before first paint ---
+  {
+    const context = await launched.browser.newContext({
+      viewport: { width: 1280, height: 900 },
+      deviceScaleFactor: 2,
+    });
+    const page = await context.newPage();
+    await restoreScaleFactor(page, `${baseUrl}calibrate.html`);
+    const preloadErrors: string[] = [];
+    page.on("pageerror", (error) => preloadErrors.push(error.message));
+    await page.goto(
+      demo("file=synthetic-navigation.pdf&fragment=nameddest%3Dpage-4&unmounted=1&count=1"),
+    );
+    await page.waitForFunction(() => Boolean(window.__parapdf && window.__lifecycle));
+    await page.evaluate(() => {
+      window.__parapdf?.preloadDocument("/corpus/synthetic-navigation.pdf#nameddest=page-4");
+    });
+    await page.waitForFunction(
+      () =>
+        window.__lifecycle?.stats.opens === 1 &&
+        performance
+          .getEntriesByType("resource")
+          .some((entry) => entry.name.endsWith("synthetic-navigation.pdf")),
+      undefined,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(500);
+    const namedFirstFrame = await page.evaluate(
+      () =>
+        new Promise<{
+          laidOut: boolean;
+          pageIndex: number;
+          zoomMode: string;
+          pagesMounted: number;
+          hasCanvas: boolean;
+        }>((resolve) => {
+          const observer = new MutationObserver(() => {
+            if (!document.querySelector(".parapdf-viewport")) return;
+            observer.disconnect();
+            const state = window.__viewer?.store.get();
+            resolve({
+              laidOut: state?.layout !== null && state?.layout !== undefined,
+              pageIndex: state?.currentPage ?? -1,
+              zoomMode: state?.zoomMode ?? "",
+              pagesMounted: document.querySelectorAll("section[data-page]").length,
+              hasCanvas: document.querySelector(".parapdf-pages canvas") !== null,
+            });
+          });
+          observer.observe(document.body, { childList: true, subtree: true });
+          window.__lifecycle?.mount();
+        }),
+    );
+    check(
+      "preloadDocument() warms #nameddest= so mounting lays out at the named destination before the first frame",
+      namedFirstFrame.laidOut &&
+        namedFirstFrame.pageIndex === 3 &&
+        namedFirstFrame.zoomMode === "fit-width" &&
+        namedFirstFrame.pagesMounted > 0 &&
+        namedFirstFrame.hasCanvas &&
+        preloadErrors.length === 0,
+      JSON.stringify({ ...namedFirstFrame, preloadErrors }),
+    );
+    await context.close();
+  }
 } finally {
   await launched.close();
   await server.close();

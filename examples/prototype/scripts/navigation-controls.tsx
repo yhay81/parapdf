@@ -58,18 +58,31 @@ export async function checkNavigationControls() {
     const browsed = scroller?.scrollTop === 0;
 
     const leaf = { title: "Child", dest: null, url: null, bold: false, italic: false, items: [] };
+    const sub = { ...leaf, title: "Subsection", items: [leaf] };
     flushSync(() =>
       root.render(
         <OutlineTree
           viewer={viewer}
-          defaultExpanded={false}
-          items={[{ ...leaf, title: "Chapter", items: [leaf] }]}
+          defaultExpanded={true}
+          items={[{ ...leaf, title: "Chapter", items: [sub] }]}
         />,
       ),
     );
-    const toggle = element.querySelector<HTMLButtonElement>('button[aria-expanded="false"]');
-    flushSync(() => toggle?.click());
-    const expanded = element.textContent?.includes("Child") === true;
+    flushSync(() =>
+      element.querySelector<HTMLButtonElement>('button[aria-label="Collapse Subsection"]')?.click(),
+    );
+    flushSync(() =>
+      element.querySelector<HTMLButtonElement>('button[aria-label="Collapse Chapter"]')?.click(),
+    );
+    flushSync(() =>
+      element.querySelector<HTMLButtonElement>('button[aria-label="Expand Chapter"]')?.click(),
+    );
+    const expanded =
+      element.textContent?.includes("Subsection") === true &&
+      element.textContent?.includes("Child") === false &&
+      element
+        .querySelector('button[aria-label="Expand Subsection"]')
+        ?.getAttribute("aria-expanded") === "false";
     return { opened, rotated, resized, browsed, expanded, openedMs, mountedItems };
   } finally {
     flushSync(() => root.unmount());

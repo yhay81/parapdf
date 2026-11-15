@@ -34,7 +34,7 @@ import type {
   Zoom,
 } from "../view/viewer.ts";
 import { useOptionalSession, useOptionalViewer, ViewerContext } from "./context.ts";
-import { PdfPageOverlayLayer, useOverlayActivity } from "./overlays.ts";
+import { type OverlayRenderer, PdfPageOverlayLayer, useOverlayActivity } from "./overlays.ts";
 import { VIEWER_CSS } from "./styles.ts";
 
 export type { Zoom } from "../view/viewer.ts";
@@ -572,7 +572,8 @@ const ViewerPages = memo(function ViewerPages({
         size={layout.sizes[index]}
         scale={layout.scale}
         rotation={layout.rotation}
-        overlaysActive={overlayActivity.allPages || overlayActivity.portalPages.has(index)}
+        overlayRenderers={overlayActivity.renderers}
+        hasPortalOverlay={overlayActivity.portalPages.has(index)}
       />,
     );
   }
@@ -600,7 +601,8 @@ interface PdfPageProps {
   /** CSS pixels per PDF point; the DOM layers apply the page's user-space unit to it. */
   scale: number;
   rotation: Rotation;
-  overlaysActive: boolean;
+  overlayRenderers: readonly OverlayRenderer[];
+  hasPortalOverlay: boolean;
 }
 
 const PdfPage = memo(function PdfPage({
@@ -618,7 +620,8 @@ const PdfPage = memo(function PdfPage({
   size,
   scale,
   rotation,
-  overlaysActive,
+  overlayRenderers,
+  hasPortalOverlay,
 }: PdfPageProps) {
   // The renderer prepends the page's canvases and layers at the start of the
   // section, leaving React's .parapdf-overlay-layer child at the end.
@@ -655,7 +658,7 @@ const PdfPage = memo(function PdfPage({
         } as CSSProperties
       }
     >
-      {overlaysActive ? (
+      {overlayRenderers.length > 0 || hasPortalOverlay ? (
         <PdfPageOverlayLayer
           viewer={viewer}
           index={index}
@@ -663,6 +666,8 @@ const PdfPage = memo(function PdfPage({
           rotation={rotation}
           width={width}
           height={height}
+          renderers={overlayRenderers}
+          hasPortal={hasPortalOverlay}
         />
       ) : null}
     </section>

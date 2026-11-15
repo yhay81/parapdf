@@ -108,11 +108,11 @@ export { PdfThumbnail, type PdfThumbnailProps } from "./react/PdfThumbnail.tsx";
 export { PdfThumbnails, type PdfThumbnailsProps } from "./react/PdfThumbnails.tsx";
 export { PdfView, type PdfViewProps } from "./react/PdfView.tsx";
 export { PdfViewer, type PdfViewerProps, type Zoom } from "./react/PdfViewer.tsx";
-export { preloadDocument } from "./react/preload.ts";
+export { type PreloadDocumentOptions, preloadDocument } from "./react/preload.ts";
 export { type PrintControls, type PrintProgress, usePrint } from "./react/print.ts";
 export { type SaveControls, useSave } from "./react/save.ts";
 export { type SearchControls, useSearch } from "./react/search.ts";
-export { useSelection } from "./react/selection.ts";
+export { type SelectionOptions, useSelection } from "./react/selection.ts";
 export type { ThumbnailItem } from "./react/thumbnails.ts";
 export { useCreateViewer, useViewer } from "./react/viewer.ts";
 export type {

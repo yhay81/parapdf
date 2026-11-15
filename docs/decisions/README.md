@@ -50,6 +50,7 @@ it. A new choice gets a new record, numbered next.
 | [0041](0041-tighten-react-runtime.md) | Warm-mount synchronous layout, controller-owned React synchronization, unified feature stores, and narrower Viewer | adopted |
 | [0042](0042-jsx-overlays-and-keyed-stores.md) | JSX-direct page overlays, settled selection popovers, kept virtualized thumbnails, and key-filtered stores | adopted |
 | [0043](0043-single-viewer-store-and-lazy-viewer.md) | Single key-filtered ViewerStore, lazy PdfDocument default viewer, and direct fragment synchronization | adopted |
+| [0044](0044-controller-slots-and-layout-overlays.md) | Typed controller slots, shared action stores, layout-phase overlays, and warm named destinations | adopted |
 
 ## Template
 

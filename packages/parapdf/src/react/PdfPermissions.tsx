@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect } from "react";
+import { memo, useLayoutEffect } from "react";
 import { enforcePermissions } from "../features/permissions.ts";
 import type { Viewer } from "../view/viewer.ts";
 import { useOptionalViewer } from "./context.ts";
@@ -21,8 +21,10 @@ export interface PdfPermissionsProps {
  * annotations cannot be created, and form fields can be filled in only with
  * permission to fill forms. `useDocumentState()` always reports permissions.
  */
-export function PdfPermissions({ viewer: externalViewer }: PdfPermissionsProps): null {
+export const PdfPermissions = /*#__PURE__*/ memo(function PdfPermissions({
+  viewer: externalViewer,
+}: PdfPermissionsProps): null {
   const viewer = useOptionalViewer(externalViewer);
   useLayoutEffect(() => enforcePermissions(viewer), [viewer]);
   return null;
-}
+});

@@ -5,12 +5,14 @@ import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { PdfSessionController } from "../src/document/pdf-session.ts";
 import { getAttachmentContent, openAttachment } from "../src/features/attachments.ts";
+import { save, saveOf } from "../src/features/download.ts";
 import { getFormFields, setFormValues } from "../src/features/forms/index.ts";
 import { historyOf } from "../src/features/history.ts";
 import { setLayerVisible } from "../src/features/layers.ts";
 import { enforcePermissions } from "../src/features/permissions.ts";
-import { createPrintController, type PrintState } from "../src/features/print/index.ts";
+import { createPrintController, type PrintState, printOf } from "../src/features/print/index.ts";
 import { searchOf } from "../src/features/search/index.ts";
+import { useAnnotations } from "../src/react/annotations.ts";
 import {
   activeTracked,
   createTrackedSnapshot,
@@ -187,6 +189,8 @@ describe("public React-first surface (decision 0035)", () => {
       "PrintControls",
       "PrintProgress",
       "usePrint",
+      "PreloadDocumentOptions",
+      "SelectionOptions",
       "save",
       "download",
       "getText",
@@ -433,11 +437,112 @@ describe("useSave, usePrint, useSearch, and useHistory", () => {
     const explicitHtml = renderToString(
       createElement(() => {
         const saveState = useSave(session);
+        const isSaving = useSave((s) => s.saving, session);
         const printState = usePrint(viewer);
-        return createElement("span", null, `${saveState.saving}:${printState.printing}`);
+        const isPrinting = usePrint((p) => p.printing, viewer);
+        const tool = useAnnotations((a) => a.tool, viewer);
+        return createElement(
+          "span",
+          null,
+          `${saveState.saving}:${isSaving}:${printState.printing}:${isPrinting}:${tool}`,
+        );
       }),
     );
-    assert.equal(explicitHtml, "<span>false:false</span>");
+    assert.equal(explicitHtml, "<span>false:false:false:false:none</span>");
+  });
+
+  it("shares saving state across save() and saveOf(session) while keeping action references stable", async () => {
+    let releaseSave = () => {};
+    const gate = new Promise<void>((resolve) => {
+      releaseSave = resolve;
+    });
+    const doc = fakeDocument({
+      pages: [LETTER],
+      proxy: {
+        getData: async () => {
+          await gate;
+          return new Uint8Array([37, 80, 68, 70]);
+        },
+      },
+    });
+    const session = new PdfSessionController(
+      { url: "/shared-save.pdf" },
+      { pdfjs: fakePdfjs(async () => doc.proxy).loader },
+    );
+    const disconnect = session.connect();
+    await settle();
+
+    const slot = saveOf(session);
+    const initial = slot.store.get();
+    const actionSnap = createTrackedSnapshot(initial);
+    const { save: saveFn, download: downloadFn } = actionSnap.proxy;
+    assert.equal(initial.saving, false);
+
+    // Standalone save(session) flips the session's shared SaveSlot store to saving: true!
+    const pending = save(session);
+    await settle();
+    const during = slot.store.get();
+    assert.equal(during.saving, true);
+    assert.equal(during.save, saveFn);
+    assert.equal(during.download, downloadFn);
+    assert.equal(hasTrackedChange(initial, during, activeTracked(actionSnap)), false);
+
+    releaseSave();
+    const bytes = await pending;
+    assert.deepEqual(bytes, new Uint8Array([37, 80, 68, 70]));
+    assert.equal(slot.store.get().saving, false);
+
+    disconnect();
+  });
+
+  it("shares printOf(viewer) state across holders and cancels preparation only when the last holder disconnects", async (t) => {
+    const env = mockPrintEnvironment(t);
+    const doc = fakeDocument({ pages: [LETTER, LETTER] });
+    const viewer = new ViewerController();
+    const { close } = show(
+      viewer,
+      { url: "/shared-print.pdf" },
+      fakePdfjs(async () => doc.proxy).loader,
+    );
+    t.after(close);
+    await settle();
+
+    const slot = printOf(viewer);
+    const holdToolbar = slot.hold();
+    const holdMenu = slot.hold();
+    const actionSnap = createTrackedSnapshot(slot.store.get());
+    const { print: printFn, cancel: cancelFn } = actionSnap.proxy;
+
+    const job1 = printFn();
+    await settle();
+    assert.equal(slot.store.get().printing, true);
+    assert.deepEqual(slot.store.get().progress, { done: 0, total: 2 });
+    assert.equal(
+      hasTrackedChange(actionSnap.raw, slot.store.get(), activeTracked(actionSnap)),
+      false,
+    );
+
+    // Unmounting a secondary holder (e.g. closing dropdown menu) leaves preparation running!
+    holdMenu();
+    assert.equal(slot.store.get().printing, true);
+    doc.drawings[0]?.resolve();
+    await settle();
+    assert.deepEqual(slot.store.get().progress, { done: 1, total: 2 });
+    doc.drawings[1]?.resolve();
+    await job1;
+    assert.equal(env.prints(), 1);
+    assert.equal(slot.store.get().printing, false);
+
+    // Disconnecting the LAST holder (e.g. <Activity mode="hidden">) cancels in-flight preparation cleanly!
+    const job2 = printFn();
+    await settle();
+    assert.equal(slot.store.get().printing, true);
+    holdToolbar();
+    assert.equal(slot.store.get().printing, false);
+    assert.equal(slot.store.get().progress, null);
+    await job2;
+    assert.equal(env.prints(), 1);
+    void cancelFn;
   });
 
   it("tracks progress, supports clean cancel() and dispose(), and propagates errors in createPrintController", async (t) => {

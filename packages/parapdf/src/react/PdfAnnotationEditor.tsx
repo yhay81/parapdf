@@ -1,10 +1,10 @@
 "use client";
 
-import { useLayoutEffect, useReducer, useRef } from "react";
+import { memo, useLayoutEffect, useReducer, useRef } from "react";
 import {
+  type AnnotationEditorControlBinding,
   type AnnotationToolBinding,
   annotationSlot,
-  bindAnnotationTool,
 } from "../features/annotation-slot.ts";
 import { attachAnnotationEditing } from "../features/annotations.ts";
 import type { AnnotationLabels, AnnotationTool } from "../pdfjs/editor-types.ts";
@@ -42,7 +42,7 @@ export interface PdfAnnotationEditorProps {
  * images, and signatures (`useAnnotations()`). `save()` and `print()` include
  * them along with those other viewers of the same document create.
  */
-export function PdfAnnotationEditor({
+export const PdfAnnotationEditor = /*#__PURE__*/ memo(function PdfAnnotationEditor({
   viewer: externalViewer,
   labels,
   tool,
@@ -51,32 +51,42 @@ export function PdfAnnotationEditor({
 }: PdfAnnotationEditorProps) {
   const viewer = useOptionalViewer(externalViewer);
   const slot = annotationSlot(viewer);
-  const initialLabels = useRef(labels);
-  initialLabels.current = labels;
-  const bindingRef = useRef<AnnotationToolBinding>({ tool, defaultTool, onToolChange });
-  const controllerRef = useRef<ReturnType<typeof bindAnnotationTool> | null>(null);
-  const [, reconcile] = useReducer((count: number) => count + 1, 0);
-
-  useLayoutEffect(() => slot.mount(attachAnnotationEditing, initialLabels.current), [slot]);
+  const initialRef = useRef<{
+    labels: Partial<AnnotationLabels> | undefined;
+    binding: AnnotationToolBinding;
+  }>({ labels, binding: { tool, defaultTool, onToolChange } });
+  initialRef.current = { labels, binding: { tool, defaultTool, onToolChange } };
+  const controlRef = useRef<AnnotationEditorControlBinding | null>(null);
+  const justBoundRef = useRef(false);
+  const [reconcileCount, reconcile] = useReducer((count: number) => count + 1, 0);
 
   useLayoutEffect(() => {
-    const controller = bindAnnotationTool(viewer, slot, () => bindingRef.current, reconcile);
-    controllerRef.current = controller;
+    justBoundRef.current = true;
+    const control = slot.bindControls(
+      attachAnnotationEditing,
+      initialRef.current.labels,
+      initialRef.current.binding,
+      reconcile,
+    );
+    controlRef.current = control;
     return () => {
-      controllerRef.current = null;
-      controller.disconnect();
+      controlRef.current = null;
+      control.disconnect();
     };
-  }, [slot, viewer]);
+  }, [slot]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reconcileCount intentionally re-runs sync when a controlled tool change was rejected by the application.
   useLayoutEffect(() => {
-    slot.updateLabels(labels);
-    bindingRef.current = { tool, defaultTool, onToolChange };
-    controllerRef.current?.applyControlled(tool);
-  });
+    if (justBoundRef.current) {
+      justBoundRef.current = false;
+      return;
+    }
+    controlRef.current?.sync(labels, { tool, defaultTool, onToolChange });
+  }, [slot, reconcileCount, labels, tool, defaultTool, onToolChange]);
 
   return (
     <style href="parapdf-editor" precedence="parapdf">
       {EDITOR_CSS}
     </style>
   );
-}
+});

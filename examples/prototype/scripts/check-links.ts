@@ -66,9 +66,11 @@ function rotatedPages(): string {
         `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Rotate ${rotation} /Resources << >> ${rotation === 0 ? "/Annots [7 0 R]" : ""} >>`,
     ),
     "<< /Type /Annot /Subtype /Link /Rect [72 700 172 740] /Border [0 0 0] /A << /S /Named /N /NextPage >> >>",
-    "<< /Type /Outlines /First 9 0 R /Last 10 0 R /Count 2 >>",
-    "<< /Title (Go to page 3) /Parent 8 0 R /Next 10 0 R /Dest [5 0 R /Fit] /F 2 >>",
+    "<< /Type /Outlines /First 9 0 R /Last 10 0 R /Count 4 >>",
+    "<< /Title (Go to page 3) /Parent 8 0 R /Next 10 0 R /First 11 0 R /Last 11 0 R /Count 2 /Dest [5 0 R /Fit] /F 2 >>",
     "<< /Title (External spec) /Parent 8 0 R /Prev 9 0 R /A << /S /URI /URI (https://example.org/spec) >> >>",
+    "<< /Title (Subsection) /Parent 9 0 R /First 12 0 R /Last 12 0 R /Count 1 /Dest [4 0 R /Fit] >>",
+    "<< /Title (Deep leaf) /Parent 11 0 R /Dest [3 0 R /Fit] >>",
   ];
   let pdf = "%PDF-1.7\n";
   const offsets = [0];
@@ -307,6 +309,27 @@ try {
       outlineAfterDisable.ariaDisabled === "true" &&
       outlineAfterDisable.currentPage === 2,
     JSON.stringify({ outlineBeforeDisable, outlineAfterDisable }),
+  );
+  await rotatedOutline.getByRole("button", { name: "Collapse Subsection" }).click();
+  await rotatedOutline.getByRole("button", { name: "Collapse Go to page 3" }).click();
+  await rotatedOutline.getByRole("button", { name: "Expand Go to page 3" }).click();
+  const preservedNestedOutline = await rotated.evaluate(() => {
+    const subToggle = document.querySelector(
+      '.parapdf-outline button[aria-label="Expand Subsection"]',
+    );
+    const text = document.querySelector(".parapdf-outline")?.textContent ?? "";
+    return {
+      subExpanded: subToggle?.getAttribute("aria-expanded") ?? null,
+      hasSubsection: text.includes("Subsection"),
+      hasDeepLeaf: text.includes("Deep leaf"),
+    };
+  });
+  check(
+    "collapsing and re-expanding a parent outline branch preserves nested branch state",
+    preservedNestedOutline.subExpanded === "false" &&
+      preservedNestedOutline.hasSubsection &&
+      !preservedNestedOutline.hasDeepLeaf,
+    JSON.stringify(preservedNestedOutline),
   );
   const destinations = await rotated.evaluate(async () => {
     // The loaded session, which resolves destinations for the viewer.

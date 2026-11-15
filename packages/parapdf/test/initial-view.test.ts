@@ -162,6 +162,62 @@ describe("a viewer's opening", () => {
     assert.equal(state.scrollMode, "vertical");
     assert.equal(state.layout?.spread, "even");
   });
+
+  it("resolves string named destinations in /OpenAction and returns synchronous openings when destinations are warm", async () => {
+    const document = fakeDocument({
+      pages: [LETTER, LETTER, LETTER, LETTER],
+      proxy: {
+        getOpenAction: async () => new Map([["dest", "chapter-3"]]),
+        getDestination: async (name: string) =>
+          name === "chapter-3" ? [2, { name: "XYZ" }, 90, 592, 1.5] : null,
+      },
+    });
+    const loader = fakePdfjs(async () => document.proxy).loader;
+    const warmHolder = new PdfSessionController({ url: "/named-open.pdf" }, { pdfjs: loader });
+    close.push(warmHolder.connect());
+    await settle();
+    const doc = warmHolder.openDocument();
+    assert.ok(doc);
+    const initial = await doc.initialView();
+    assert.deepEqual(initial.destination, {
+      pageIndex: 2,
+      x: 90,
+      y: 200,
+      view: { fit: "zoom", zoom: 1.5 },
+    });
+    await doc.pageSizes();
+    await doc.permissions();
+    await doc.direction();
+    await doc.resolveDestination("chapter-3");
+    await doc.resolveDestination([1, { name: "XYZ" }, 40, 692, 2]);
+
+    // Named fragment #nameddest=chapter-3 resolves synchronously without returning a Promise!
+    const namedOpening = initialViewOpening({
+      fragment: () => "nameddest=chapter-3",
+    });
+    assert.ok(namedOpening);
+    const syncNamed = namedOpening(doc);
+    assert.ok(!(syncNamed instanceof Promise), "warm named destination resolves synchronously");
+    assert.equal(syncNamed?.view?.target?.pageIndex, 2);
+    assert.equal(syncNamed?.view?.target?.x, 90);
+    assert.equal(syncNamed?.view?.target?.y, 200);
+    assert.deepEqual(syncNamed?.view?.target?.view, { fit: "zoom", zoom: 1.5 });
+
+    // Coordinate fragment #page=2&zoom=200,40,692 also resolves synchronously when page 1 is warm!
+    const coordOpening = initialViewOpening({
+      fragment: () => "page=2&zoom=200,40,692",
+    });
+    assert.ok(coordOpening);
+    const syncCoord = coordOpening(doc);
+    assert.ok(
+      !(syncCoord instanceof Promise),
+      "warm coordinate destination resolves synchronously",
+    );
+    assert.equal(syncCoord?.view?.target?.pageIndex, 1);
+    assert.equal(syncCoord?.view?.target?.x, 40);
+    assert.equal(syncCoord?.view?.target?.y, 100);
+    assert.deepEqual(syncCoord?.view?.target?.view, { fit: "zoom", zoom: 2 });
+  });
 });
 
 describe("a URL's open parameters", () => {
@@ -260,8 +316,19 @@ describe("following URL fragments", () => {
     const source = new PdfSessionController({ url: "/frag.pdf#page=1" });
     const moves: { destination: Destination; signal: AbortSignal }[] = [];
     let extension: ViewerExtension | null = null;
+    const slots = new Map<symbol, unknown>();
     const viewer = {
       store: new Store({ currentPage: 0 }),
+      slot<T>(key: symbol, create: () => T): T {
+        if (!slots.has(key)) slots.set(key, create());
+        return slots.get(key) as T;
+      },
+      peekSlot<T>(key: symbol): T | undefined {
+        return slots.get(key) as T | undefined;
+      },
+      clearSlot(key: symbol): void {
+        slots.delete(key);
+      },
       extend(next: ViewerExtension) {
         extension = next;
         return () => {

@@ -1,15 +1,17 @@
 "use client";
 
+import { createSlotKey } from "../../document/store.ts";
 import type { ViewerController } from "../../view/viewer.ts";
 import { type AttachThumbnailOptions, ThumbnailRenderer } from "./renderer.ts";
 
 export type { AttachThumbnailOptions };
 
 /** Each viewer's thumbnails, while any is attached. */
-const renderers = new WeakMap<
-  ViewerController,
-  { renderer: ThumbnailRenderer; count: number; detach(): void }
->();
+const THUMBNAILS_SLOT = createSlotKey<{
+  renderer: ThumbnailRenderer;
+  count: number;
+  detach(): void;
+}>("parapdf.thumbnails");
 
 /**
  * Draw page `pageIndex` of `viewer`'s document into `canvas` as a thumbnail
@@ -25,8 +27,7 @@ export function attachThumbnail(
   width: number,
   options?: AttachThumbnailOptions,
 ): () => void {
-  let entry = renderers.get(viewer);
-  if (!entry) {
+  const held = viewer.slot(THUMBNAILS_SLOT, () => {
     const renderer = new ThumbnailRenderer({
       renderer: () => viewer.renderer,
       pageSize: (index) => viewer.store.get().layout?.sizes[index],
@@ -48,10 +49,8 @@ export function attachThumbnail(
         renderer.refresh();
       },
     });
-    entry = { renderer, count: 0, detach };
-    renderers.set(viewer, entry);
-  }
-  const held = entry;
+    return { renderer, count: 0, detach };
+  });
   held.count++;
   const release = held.renderer.attach(pageIndex, canvas, width, options);
   let released = false;
@@ -67,7 +66,7 @@ export function attachThumbnail(
       if (held.count > 0) return;
       held.renderer.reset();
       held.detach();
-      if (renderers.get(viewer) === held) renderers.delete(viewer);
+      viewer.clearSlot(THUMBNAILS_SLOT, held);
     });
   };
 }

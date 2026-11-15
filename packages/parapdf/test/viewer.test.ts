@@ -7,6 +7,7 @@ import { initialViewOpening } from "../src/features/initial-view.ts";
 import { attachSearch } from "../src/features/search/index.ts";
 import { getText } from "../src/features/text/index.ts";
 import type { Rotation } from "../src/pdfjs/draw.ts";
+import { preloadDocumentWith } from "../src/react/preload.ts";
 import type { ViewerOptions } from "../src/view/options.ts";
 import type { ViewState } from "../src/view/view-state.ts";
 import { ViewerController, type Zoom } from "../src/view/viewer.ts";
@@ -1145,6 +1146,48 @@ describe("a viewer's viewport", () => {
     assert.equal(secondViewer.viewState()?.y, 96);
 
     releaseWarmup();
+
+    // 3. preloadDocumentWith warms URL #nameddest= and explicit coordinate destinations for synchronous open().
+    const namedLoader = fakePdfjs(
+      async () =>
+        fakeDocument({
+          pages: Array.from({ length: 5 }, () => LETTER),
+          proxy: {
+            getDestination: async (name: string) =>
+              name === "chapter-3" ? [2, { name: "XYZ" }, 90, 592, 1.5] : null,
+          },
+        }).proxy,
+    ).loader;
+    preloadDocumentWith("/warm-named.pdf#nameddest=chapter-3", namedLoader, () => {}, {
+      destinations: [[1, { name: "XYZ" }, 40, 692, 2]],
+    });
+    await settle();
+
+    const namedSession = new PdfSessionController(
+      { url: "/warm-named.pdf#nameddest=chapter-3" },
+      { pdfjs: namedLoader },
+    );
+    namedSession.start();
+    const namedViewer = new ViewerController({
+      opening: initialViewOpening({ fragment: () => namedSession.fragment }),
+    });
+    mount(namedViewer, new Scroller(), namedSession);
+    assert.ok(namedViewer.store.get().layout, "warm named destination lays out synchronously");
+    assert.equal(namedViewer.store.get().currentPage, 2);
+    assert.equal(namedViewer.store.get().scale, 2);
+
+    const coordSession = new PdfSessionController(
+      { url: "/warm-named.pdf#page=2&zoom=200,40,692" },
+      { pdfjs: namedLoader },
+    );
+    coordSession.start();
+    const coordViewer = new ViewerController({
+      opening: initialViewOpening({ fragment: () => coordSession.fragment }),
+    });
+    mount(coordViewer, new Scroller(), coordSession);
+    assert.ok(coordViewer.store.get().layout, "warm coordinate destination lays out synchronously");
+    assert.equal(coordViewer.store.get().currentPage, 1);
+    assert.equal(coordViewer.store.get().scale, (2 * 96) / 72);
   });
 
   it("binds controlled view props without echoing callbacks, reconciles rejected values, and flushes on stop", async (context) => {

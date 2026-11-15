@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getSelection, type PdfSelection } from "../features/selection.ts";
-import type { Viewer, ViewerController } from "../view/viewer.ts";
+import { type Viewer, ViewerController } from "../view/viewer.ts";
 import { useOptionalViewer } from "./context.ts";
 
 const samePoint = (a: PdfSelection["start"], b: PdfSelection["start"]): boolean =>
@@ -217,22 +217,43 @@ function useViewerSelection(resolved: ViewerController, settleDrag: boolean): Pd
   return selection;
 }
 
-/**
- * Internal hook for `<PdfSelectionPopover>`: suppresses DOM range measurements
- * and React commits during primary-button selection drags and commits once on
- * pointer release, while still updating on keyboard or programmatic selections.
- */
-export function useSettledSelection(viewer?: Viewer): PdfSelection | null {
-  return useViewerSelection(useOptionalViewer(viewer), true);
+export interface SelectionOptions {
+  /**
+   * When true, suppresses DOM range measurements and React state commits while
+   * the reader drags a primary-button text selection and commits once on
+   * pointer release (default `false`, which follows drags at most once a frame).
+   * Keyboard and programmatic selections still update immediately.
+   */
+  settleDrag?: boolean;
+}
+
+function isSelectionOptions(
+  value: Viewer | SelectionOptions | undefined,
+): value is SelectionOptions {
+  if (typeof value !== "object" || value === null || ViewerController.is(value)) return false;
+  const proto = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null) return false;
+  for (const key of Object.keys(value)) {
+    if (key !== "settleDrag") return false;
+  }
+  return true;
 }
 
 /**
  * The text selected in `viewer`, or in the viewer of the nearest `<PdfView>`
  * or `<PdfDocument>`, the rectangles it covers on its pages, and a virtual
  * `anchor` whose `getBoundingClientRect()` follows scroll, zoom, and rotation;
- * null when nothing is selected there. It follows the selection at most once a
- * frame while the reader drags.
+ * null when nothing is selected there. By default it follows drags at most once
+ * a frame; pass `{ settleDrag: true }` to wait for pointer release.
  */
-export function useSelection(viewer?: Viewer): PdfSelection | null {
-  return useViewerSelection(useOptionalViewer(viewer), false);
+export function useSelection(viewer?: Viewer, options?: SelectionOptions): PdfSelection | null;
+export function useSelection(options: SelectionOptions): PdfSelection | null;
+export function useSelection(
+  viewerOrOptions?: Viewer | SelectionOptions,
+  maybeOptions?: SelectionOptions,
+): PdfSelection | null {
+  const optionsFirst = maybeOptions === undefined && isSelectionOptions(viewerOrOptions);
+  const viewer = optionsFirst ? undefined : (viewerOrOptions as Viewer | undefined);
+  const options = optionsFirst ? viewerOrOptions : maybeOptions;
+  return useViewerSelection(useOptionalViewer(viewer), Boolean(options?.settleDrag));
 }

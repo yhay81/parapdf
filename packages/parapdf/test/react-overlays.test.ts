@@ -322,12 +322,13 @@ describe("OverlayStore, PdfPageOverlay, PdfPageOverlays, and PdfPageRect", () =>
     const viewer = new ViewerController();
     const store = overlayStoreOf(viewer);
     let updates = 0;
-    const unsub = store.subscribeRenderers(() => updates++);
+    const unsub = store.subscribeActive(() => updates++);
     const renderFn = (i: number) => (i === 0 ? "hit" : null);
 
     store.setRenderer("r1", renderFn);
     const firstSnapshot = store.getRenderers();
     assert.equal(firstSnapshot.length, 1);
+    assert.equal(store.getActivity().renderers, firstSnapshot);
     assert.equal(updates, 1);
 
     // Re-registering the same render callback is a no-op, preserving memo(PdfPage) bailouts.
@@ -337,59 +338,69 @@ describe("OverlayStore, PdfPageOverlay, PdfPageOverlays, and PdfPageRect", () =>
 
     store.removeRenderer("r1");
     assert.equal(store.getRenderers().length, 0);
+    assert.equal(store.getActivity().renderers.length, 0);
     assert.equal(updates, 2);
     unsub();
   });
 
-  it("tracks per-page portalPages and allPages activity without redundant notifications", () => {
+  it("tracks per-page portalPages and renderers activity without redundant notifications or Set reallocations", () => {
     const viewer = new ViewerController();
     const store = overlayStoreOf(viewer);
-    const snapshots: { allPages: boolean; portals: number[] }[] = [];
+    const snapshots: { renderers: number; portals: number[] }[] = [];
     const unsub = store.subscribeActive(() => {
       const activity = store.getActivity();
-      snapshots.push({ allPages: activity.allPages, portals: [...activity.portalPages] });
+      snapshots.push({
+        renderers: activity.renderers.length,
+        portals: [...activity.portalPages],
+      });
     });
 
     assert.equal(store.isActive(), false);
-    assert.equal(store.getActivity().allPages, false);
+    assert.equal(store.getActivity().renderers.length, 0);
     assert.equal(store.getActivity().portalPages.size, 0);
     assert.equal(store.hasLayer(0), false);
+    const emptyRenderers = store.getActivity().renderers;
 
-    // First portal claim on page 0 activates only page 0; a second claim on page 0 does not re-notify.
+    // First portal claim on page 0 activates only page 0 and keeps the empty renderers array reference;
+    // a second claim on page 0 does not re-notify.
     const release0A = store.claimPortal(0);
     const release0B = store.claimPortal(0);
     assert.equal(store.isActive(), true);
-    assert.deepEqual(snapshots, [{ allPages: false, portals: [0] }]);
+    assert.equal(store.getActivity().renderers, emptyRenderers);
+    assert.deepEqual(snapshots, [{ renderers: 0, portals: [0] }]);
 
-    // Claiming page 1 adds page 1 to portalPages.
+    // Claiming page 1 adds page 1 to portalPages while still preserving emptyRenderers identity.
     const release1 = store.claimPortal(1);
+    assert.equal(store.getActivity().renderers, emptyRenderers);
+    const portalSetBeforeRenderer = store.getActivity().portalPages;
     assert.deepEqual(snapshots, [
-      { allPages: false, portals: [0] },
-      { allPages: false, portals: [0, 1] },
+      { renderers: 0, portals: [0] },
+      { renderers: 0, portals: [0, 1] },
     ]);
 
-    // Adding a dynamic renderer sets allPages: true; replacing its callback keeps the same activity snapshot.
+    // Adding or updating a dynamic renderer publishes the new renderers array while reusing portalPages Set identity.
     store.setRenderer("r1", () => "badge-a");
-    const activeAll = store.getActivity();
+    assert.equal(store.getActivity().portalPages, portalSetBeforeRenderer);
     store.setRenderer("r1", () => "badge-b");
-    assert.equal(store.getActivity(), activeAll);
+    assert.equal(store.getActivity().portalPages, portalSetBeforeRenderer);
     assert.deepEqual(snapshots, [
-      { allPages: false, portals: [0] },
-      { allPages: false, portals: [0, 1] },
-      { allPages: true, portals: [0, 1] },
+      { renderers: 0, portals: [0] },
+      { renderers: 0, portals: [0, 1] },
+      { renderers: 1, portals: [0, 1] },
+      { renderers: 1, portals: [0, 1] },
     ]);
 
     // Releasing one of two claims on page 0 leaves page 0 claimed without notifying; releasing the second drops page 0.
     release0A();
-    assert.equal(snapshots.length, 3);
+    assert.equal(snapshots.length, 4);
     release0B();
     release1();
-    assert.deepEqual(snapshots.at(-1), { allPages: true, portals: [] });
+    assert.deepEqual(snapshots.at(-1), { renderers: 1, portals: [] });
 
     // Removing the last renderer restores the inactive singleton.
     store.removeRenderer("r1");
     assert.equal(store.isActive(), false);
-    assert.deepEqual(snapshots.at(-1), { allPages: false, portals: [] });
+    assert.deepEqual(snapshots.at(-1), { renderers: 0, portals: [] });
 
     unsub();
   });
@@ -719,6 +730,63 @@ describe("preloadDocument", () => {
       assert.equal(session.state.pageCount, 4);
       const disconnect = session.connect();
       assert.equal(opened, 1);
+
+      disconnect();
+      await new Promise((resolve) => setTimeout(resolve, 1050));
+    }));
+
+  it("warms URL fragment named destinations and options.destinations so warm viewers lay out synchronously at them", () =>
+    withBrowserGlobals(async () => {
+      const refMap = new Map<string, number>([
+        ["3R", 2],
+        ["4R", 3],
+      ]);
+      const { loader } = fakePdfjs(async () => {
+        const doc = fakeDocument({
+          pages: [LETTER, LETTER, LETTER, LETTER],
+          proxy: {
+            getPageIndex: async (ref: unknown) => {
+              const key = (ref as { key?: string } | null)?.key ?? "";
+              const found = refMap.get(key);
+              if (found === undefined) throw new Error(`Unknown ref ${key}`);
+              return found;
+            },
+            getDestination: async (name: string) => {
+              if (name === "sec-3") return [{ key: "3R" }, { name: "XYZ" }, 72, 500, 1.5];
+              if (name === "sec-4") return [{ key: "4R" }, { name: "FitH" }, 600];
+              return null;
+            },
+          },
+        });
+        return doc.proxy;
+      });
+
+      preloadDocumentWith("/named-warm.pdf#nameddest=sec-3", loader, () => {}, {
+        destinations: ["sec-4", [1, { name: "XYZ" }, 50, 700, 2]],
+      });
+      await settle();
+      await settle();
+
+      const session = new PdfSessionController(
+        { url: "/named-warm.pdf#nameddest=sec-3" },
+        { pdfjs: loader },
+      );
+      const disconnect = session.connect();
+      const openDoc = session.openDocument();
+      assert.ok(openDoc);
+      assert.deepEqual(openDoc.knownDestination("sec-3"), {
+        pageIndex: 2,
+        x: 72,
+        y: 792 - 500,
+        view: { fit: "zoom", zoom: 1.5 },
+      });
+      assert.deepEqual(openDoc.knownDestination("sec-4"), {
+        pageIndex: 3,
+        x: null,
+        y: 792 - 600,
+        view: { fit: "width" },
+      });
+      assert.ok(openDoc.knownPage(1), "explicit coordinate destination page is warmed");
 
       disconnect();
       await new Promise((resolve) => setTimeout(resolve, 1050));

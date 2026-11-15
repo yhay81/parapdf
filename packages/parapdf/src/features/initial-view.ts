@@ -3,6 +3,7 @@
 // NOTICE.md.
 
 import type { DocumentSession, PdfInitialView, PdfPageLayout } from "../document/session.ts";
+import { createSlotKey } from "../document/store.ts";
 import {
   type Destination,
   type ResolvedDestination,
@@ -107,13 +108,17 @@ async function firstResolved(
   return null;
 }
 
-/** Synchronous fast path when no destination requires named or page-viewport lookup. */
+/** Synchronous fast path when every destination is already known or needs no page lookup. */
 function firstResolvedSync(
-  pageCount: number,
+  session: DocumentSession,
   destinations: readonly Destination[],
 ): ResolvedDestination | null | undefined {
+  const { pageCount } = session;
   for (const dest of destinations) {
-    const target = resolveDestinationSync(pageCount, dest);
+    const target =
+      typeof dest === "string"
+        ? session.knownDestination(dest)
+        : resolveDestinationSync(pageCount, dest, (index) => session.knownPage(index));
     if (target === undefined) return undefined;
     if (target && target.pageIndex >= 0 && target.pageIndex < pageCount) return target;
   }
@@ -140,13 +145,14 @@ export interface FragmentSource {
 }
 
 /** The fragment a viewer last applied, kept while its viewport is hidden. */
-const fragments = new WeakMap<ViewerController, { source: FragmentSource; seen: string }>();
+const FRAGMENT_SLOT = createSlotKey<{ source: FragmentSource; seen: string }>("parapdf.fragment");
 
 function fragmentState(viewer: ViewerController, source: FragmentSource) {
-  let state = fragments.get(viewer);
+  let state = viewer.peekSlot(FRAGMENT_SLOT);
   if (!state || state.source !== source) {
     state = { source, seen: source.fragment };
-    fragments.set(viewer, state);
+    viewer.clearSlot(FRAGMENT_SLOT);
+    viewer.slot(FRAGMENT_SLOT, () => state as { source: FragmentSource; seen: string });
   }
   return state;
 }
@@ -280,7 +286,7 @@ export function initialViewOpening(
       (options.initialView === "document" ? view?.destination?.pageIndex : undefined) ??
       0;
     const destinations = fragment ? fragmentDestinations(fragment(), page) : [];
-    const syncLinked = firstResolvedSync(session.pageCount, destinations);
+    const syncLinked = firstResolvedSync(session, destinations);
     if (syncLinked !== undefined) {
       return openingOf(view, session.pageCount, options, syncLinked);
     }

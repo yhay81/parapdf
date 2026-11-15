@@ -247,13 +247,13 @@ outside them when given one; those that take none read the nearest
 | `useLayers()` | The layers (optional content) and which show, following `setLayerVisible()` in any viewer of the document. |
 | `useFormFields()` | The form fields with their values as first read; `getFormFields()` reads them again (see [Forms](/guides/forms/)). |
 | `useInitialView()` | How the document asks to be shown: its /OpenAction destination, /PageLayout, and /PageMode; null when it cannot be read (see [Keeping the view](/guides/view-state/)). |
-| `useSave(session?)` | `{ save, download, saving }` for the nearest `PdfDocument`'s `PdfSession` (or `session`), with `saving` true while a save or download is running (see [Forms, printing, and saving](/guides/forms/)). |
-| `usePrint(viewer?)` | `{ print, printing, progress, cancel }` for the viewer, tracking `{ done, total }` while pages render for printing and cancelling cleanly via `cancel()` or unmount (see [Forms, printing, and saving](/guides/forms/)). |
+| `useSave(session?)`, `useSave(selector, session?)` | `{ save, download, saving }` for the nearest `PdfDocument`'s `PdfSession` (or `session`), shared across callers and standalone `save()` / `download()` calls, tracking read fields or comparing `selector`'s result shallowly (see [Forms, printing, and saving](/guides/forms/)). |
+| `usePrint(viewer?)`, `usePrint(selector, viewer?)` | `{ print, printing, progress, cancel }` shared across callers of the viewer, tracking `{ done, total }` while pages render for printing, tracking read fields or comparing `selector`'s result shallowly, and cancelling cleanly via `cancel()` or when the last `usePrint()` holder unmounts (see [Forms, printing, and saving](/guides/forms/)). |
 | `useSearch(viewer?)`, `useSearch(selector, viewer?)` | The viewer's search state with referentially stable `search(query, options)`, `next()`, `previous()`, and `clear()`, tracking read fields when called without `selector` and comparing `selector`'s result shallowly otherwise (see [Search](/guides/search/)). |
 | `useHistory(viewer?)`, `useHistory(selector, viewer?)` | Referentially stable `back()` and `forward()` with `canGoBack` and `canGoForward` for the viewer's link and outline jumps, tracking read fields or comparing `selector`'s result shallowly (see [Navigation](/guides/navigation/)). |
-| `useAnnotations(viewer?)` | The annotation tool, state, and styles with the methods that change them (`AnnotationControls`). Always non-null (`state` and `styles` are null until `PdfAnnotationEditor` starts editing), tracking read fields so components reading only methods never re-render on annotation changes (see [Annotations](/guides/annotations/)). |
+| `useAnnotations(viewer?)`, `useAnnotations(selector, viewer?)` | The annotation tool, state, and styles with the methods that change them (`AnnotationControls`). Always non-null (`state` and `styles` are null until `PdfAnnotationEditor` starts editing), tracking read fields or comparing `selector`'s result shallowly so components reading only methods never re-render on annotation changes (see [Annotations](/guides/annotations/)). |
 | `useFormChange(listener, viewer?)` | Nothing: calls `listener` with `{ name, value }` for each value the reader enters into a form field, as they type. Needs `PdfForms`. |
-| `useSelection(viewer?)` | The selection in the viewer (`text`, `pages`, `start`, `end`, and a virtual `anchor` whose `getBoundingClientRect()` follows scroll, zoom, and rotation), or null; it follows a drag at most once a frame (see [Text, selections, and overlays](/guides/text/)). |
+| `useSelection(viewer?, options?)`, `useSelection(options)` | The selection in the viewer (`text`, `pages`, `start`, `end`, and a virtual `anchor` whose `getBoundingClientRect()` follows scroll, zoom, and rotation), or null; it follows a drag at most once a frame by default, or commits once on pointer release with `{ settleDrag: true }` (see [Text, selections, and overlays](/guides/text/)). |
 
 The seven hooks of the document's data suspend until it is read: render
 them under a `<Suspense>` boundary of your own, apart from the viewer. A
@@ -294,7 +294,7 @@ tree-shaken out of your bundle.
 | Export | |
 |---|---|
 | `configurePdfjs(config)` | Changes how pdf.js loads, before the first `PdfDocument` renders (see [Configuring pdf.js](/setup/pdfjs/)). |
-| `preloadDocument(source)` | Starts loading pdf.js, preloading `source`'s URL (outside WebKit and header-carrying requests), and warming `source` in the shared document registry ahead of `PdfDocument` mounting (for example on route hover) so `PdfViewer` lays out synchronously before the first paint. |
+| `preloadDocument(source, options?)` | Starts loading pdf.js, preloading `source`'s URL (outside WebKit and header-carrying requests), and warming `source` (including URL fragment destinations and any `options.destinations`) in the shared document registry ahead of `PdfDocument` mounting (for example on route hover) so `PdfViewer` lays out synchronously before the first paint. |
 | `preloadPdfjs()` | Starts loading pdf.js and its worker early without opening a document. |
 | `pdfjsVersion` | The version of pdf.js the package ships. |
 | `legacyBuild` | From `parapdf/legacy`: pdf.js's legacy build, for `configurePdfjs({ build })`. |

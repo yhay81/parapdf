@@ -1,6 +1,13 @@
 "use client";
 
-import { type CSSProperties, createElement, type ReactNode, useCallback, useState } from "react";
+import {
+  type CSSProperties,
+  createElement,
+  memo,
+  type ReactNode,
+  useCallback,
+  useState,
+} from "react";
 import type { OutlineNode } from "../document/session.ts";
 import type { ViewerStoreKey } from "../view/state.ts";
 import type { Viewer } from "../view/viewer.ts";
@@ -8,6 +15,7 @@ import { useOptionalViewer, useStoreKeys } from "./context.ts";
 import { useOutline } from "./data.ts";
 
 const EXTERNAL_LINKS_KEYS: readonly ViewerStoreKey[] = ["externalLinks"];
+const EMPTY_TOGGLED: ReadonlySet<OutlineNode> = new Set<OutlineNode>();
 
 /** State and pre-wired elements passed to `<PdfOutline renderItem>` for each bookmark. */
 export interface OutlineItemHelpers {
@@ -113,6 +121,37 @@ export function OutlineTree({
     EXTERNAL_LINKS_KEYS,
     () => viewer.store.externalLinks,
   );
+  const [toggledState, setToggledState] = useState<{
+    items: readonly OutlineNode[];
+    defaultExpanded: boolean;
+    toggled: ReadonlySet<OutlineNode>;
+  }>({ items, defaultExpanded, toggled: EMPTY_TOGGLED });
+
+  const toggled =
+    toggledState.items === items && toggledState.defaultExpanded === defaultExpanded
+      ? toggledState.toggled
+      : EMPTY_TOGGLED;
+
+  const toggleItem = useCallback(
+    (node: OutlineNode) => {
+      setToggledState((prev) => {
+        const base =
+          prev.items === items && prev.defaultExpanded === defaultExpanded
+            ? prev.toggled
+            : EMPTY_TOGGLED;
+        const next = new Set(base);
+        if (next.has(node)) next.delete(node);
+        else next.add(node);
+        return {
+          items,
+          defaultExpanded,
+          toggled: next.size === 0 ? EMPTY_TOGGLED : next,
+        };
+      });
+    },
+    [items, defaultExpanded],
+  );
+
   if (items.length === 0) return null;
   return createElement(
     "nav",
@@ -128,6 +167,8 @@ export function OutlineTree({
       viewer,
       externalLinks,
       defaultExpanded,
+      toggled,
+      onToggle: toggleItem,
       onNavigate,
       renderItem,
     }),
@@ -140,6 +181,8 @@ interface OutlineBranchProps {
   viewer: Viewer;
   externalLinks: "new-tab" | "disabled";
   defaultExpanded: boolean;
+  toggled: ReadonlySet<OutlineNode>;
+  onToggle: (node: OutlineNode) => void;
   onNavigate: ((item: OutlineNode) => boolean | Promise<boolean>) | undefined;
   renderItem: ((item: OutlineNode, helpers: OutlineItemHelpers) => ReactNode) | undefined;
 }
@@ -150,24 +193,31 @@ function OutlineBranch({
   viewer,
   externalLinks,
   defaultExpanded,
+  toggled,
+  onToggle,
   onNavigate,
   renderItem,
 }: OutlineBranchProps): ReactNode {
   return createElement(
     "ol",
     null,
-    items.map((item, index) =>
-      createElement(OutlineEntry, {
+    items.map((item, index) => {
+      const hasChildren = item.items.length > 0;
+      const tracksToggle = hasChildren || renderItem !== undefined;
+      return createElement(OutlineEntry, {
         key: `${index}:${item.title}`,
         item,
         depth,
         viewer,
         externalLinks,
         defaultExpanded,
+        expanded: tracksToggle && toggled.has(item) ? !defaultExpanded : defaultExpanded,
+        subtreeToggled: hasChildren ? toggled : EMPTY_TOGGLED,
+        onToggle,
         onNavigate,
         renderItem,
-      }),
-    ),
+      });
+    }),
   );
 }
 
@@ -177,21 +227,26 @@ interface OutlineEntryProps {
   viewer: Viewer;
   externalLinks: "new-tab" | "disabled";
   defaultExpanded: boolean;
+  expanded: boolean;
+  subtreeToggled: ReadonlySet<OutlineNode>;
+  onToggle: (node: OutlineNode) => void;
   onNavigate: ((item: OutlineNode) => boolean | Promise<boolean>) | undefined;
   renderItem: ((item: OutlineNode, helpers: OutlineItemHelpers) => ReactNode) | undefined;
 }
 
-function OutlineEntry({
+const OutlineEntry = /*#__PURE__*/ memo(function OutlineEntry({
   item,
   depth,
   viewer,
   externalLinks,
   defaultExpanded,
+  expanded,
+  subtreeToggled,
+  onToggle,
   onNavigate,
   renderItem,
 }: OutlineEntryProps): ReactNode {
-  const [expanded, setExpanded] = useState(defaultExpanded);
-  const toggle = useCallback(() => setExpanded((open) => !open), []);
+  const toggle = useCallback(() => onToggle(item), [onToggle, item]);
   const activate = useCallback(async () => {
     if (item.url) return false;
     if (onNavigate) return Boolean(await onNavigate(item));
@@ -232,6 +287,8 @@ function OutlineEntry({
           viewer,
           externalLinks,
           defaultExpanded,
+          toggled: subtreeToggled,
+          onToggle,
           onNavigate,
           renderItem,
         })
@@ -271,4 +328,4 @@ function OutlineEntry({
     link,
     childList,
   );
-}
+});

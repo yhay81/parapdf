@@ -85,11 +85,14 @@ once, then the real ones in the background), and the document's data, each
 read once: page labels, outline, metadata, attachments, comments,
 permissions, the initial view, optional content, and the text read for
 search and `getText()`. Resolved page sizes, permissions, direction, initial
-view, page labels, and optional-content layers are also exposed synchronously (`knownPageSizes`,
-`knownPermissions`, `knownDirection`, `knownInitialView`, `knownPageLabels`, `loadedLayers`) so a
-viewer or thumbnail list joining a warm session renders without awaiting microtasks, and
-the registry eagerly kicks off `pageSizes()` and `direction()` alongside `permissions()` when a
-document opens (decisions 0041 and 0042).
+view, page labels, optional-content layers, resolved named destinations, and
+loaded pages are also exposed synchronously (`knownPageSizes`,
+`knownPermissions`, `knownDirection`, `knownInitialView`, `knownPageLabels`,
+`loadedLayers`, `knownDestination()`, `knownPage()`) so a viewer or thumbnail
+list joining a warm session renders without awaiting microtasks, `/OpenAction`
+string named destinations resolve through `resolveDestination()`, and the
+registry eagerly kicks off `pageSizes()` and `direction()` alongside
+`permissions()` when a document opens (decisions 0041, 0042, and 0044).
 
 - A source is a URL (with request headers and credentials), bytes, or a
   `PDFDataRangeTransport`. A URL is identified without its fragment, which
@@ -117,7 +120,13 @@ document opens (decisions 0041 and 0042).
   `PdfDocument`: its `source`, synchronous `state` (`DocumentState` snapshot),
   `submitPassword()`, pdf.js's `proxy` once ready, and its `signal`, while
   `react/` and `features/` resolve the backing `PdfSessionController` via
-  `sessionControllerOf(session)` (decision 0039). `PdfSessionController` holds
+  `sessionControllerOf(session)` using a private-field brand check
+  (`PdfSessionController.is()`) with zero module-level `WeakSet`s (decisions
+  0039 and 0044). Both `DocumentSession` and `PdfSessionController` also expose
+  typed `SlotKey<T>` slots (`createSlotKey<T>()` in `store.ts`, `slot()`,
+  `peekSlot()`, `clearSlot()`) so session-scoped features store their state
+  directly on the session or controller without module-level `WeakMap`s while
+  keeping downward-only imports intact. `PdfSessionController` holds
   the reactive `stateStore` (`useDocumentState()`) and `read()`, whose promises
   for `useOutline()` and the other Suspense hooks settle empty when the read or
   the document fails and while the document waits for a password, to be read
@@ -152,7 +161,10 @@ position, zoom, rotation, spreads, scroll mode, direction, and tool; several
 may show one session. Applications see the narrow `Viewer` interface (`state`
 snapshot, `scroller`, `content`, `externalLinks`, and navigation/view methods),
 while `react/` and `features/` resolve the backing `ViewerController` through
-`controllerOf(viewer)` (decisions 0038 and 0041); internal positions
+`controllerOf(viewer)` (`ViewerController.is()` private-field brand check) and
+store per-viewer feature state directly on `viewer.slot(key, create)`
+(`SlotKey<T>`) with zero module-level `WeakMap`s or `WeakSet`s (decisions 0038,
+0041, and 0044); internal positions
 (`position()`, `restorePosition()`) and diagnostic measures (`stats`,
 `keptPixels`, `firstPaintAt`, `hasPixels()`, `blankFraction()`, `sharpness()`)
 stay on `ViewerController`. `ViewerController.bindControls()` owns live option
@@ -273,12 +285,15 @@ of its own, and detaching it undoes what it added. The core imports no feature.
   `attachThumbnail`, `enforcePermissions`, `annotationSlot`,
   `getSelection`, `getViewState`, `setViewState`) stays internal to the package
   (decisions 0035 and 0041). Each stateful feature owns its single reactive
-  store or listener registry directly in `features/` (`Store<SearchControls>`,
-  `Store<HistoryControls>`, `annotation-slot.ts`'s `Store<AnnotationControls>`
-  and `bindAnnotationTool()`, `onViewerFormChange()`, and
-  `createPrintController()`), so `react/` subscribes directly without wrapper
-  stores or relay `WeakMap`s while keeping `annotations.ts`, `pdfjs/editor*.ts`,
-  and `forms/layers.ts` in lazy chunks.
+  store or listener registry directly in a typed `SlotKey<T>` slot on
+  `ViewerController`, `PdfSessionController`, or `DocumentSession`
+  (`Store<SearchControls>`, `Store<HistoryControls>`, `Store<SaveControls>`,
+  `Store<PrintControls>` with reference-counted `hold()`,
+  `annotation-slot.ts`'s `Store<AnnotationControls>` and `bindControls()`, and
+  `onViewerFormChange()`), so `react/` subscribes directly without wrapper
+  stores or module-level `WeakMap`s while keeping `annotations.ts`,
+  `pdfjs/editor*.ts`, and `forms/layers.ts` in lazy chunks (decisions 0041 and
+  0044).
 - Form scripts are off by default and load only for a document that has
   some: pdf.js's QuickJS sandbox, one per session, started after the first
   paint (decision 0016), sending pdf.js's viewer's document events around
@@ -287,8 +302,9 @@ of its own, and detaching it undoes what it added. The core imports no feature.
   pdf.js's viewer finds them and added to the annotation layer.
 - The initial view applies `/OpenAction`, `/PageLayout`, `/PageMode`, a
   URL's open parameters (`page`, `zoom`, `nameddest`; decision 0023), and
-  `initialViewState`, once per document, resolving explicit numeric parameters
-  and `initialViewState` synchronously (`resolveDestinationSync`) when warm.
+  `initialViewState`, once per document, resolving warm numeric, coordinate,
+  and named destinations and `initialViewState` synchronously
+  (`resolveDestinationSync`) before `open()` returns (decisions 0041 and 0044).
 - Download and save take the whole document or chosen pages, through
   pdf.js's `extractPages()`, with the form values and annotations.
 - Search ports pdf.js's find normalization (`text-search.ts`), CJK
@@ -366,49 +382,58 @@ the DOM declares `"use client"`.
   and 0043).
   `children` renders
   inside the viewport container so declarative feature components (`PdfForms`,
-  `PdfAnnotationEditor`, `PdfAutoLinks`, `PdfPermissions`) mount synchronously
-  with `useLayoutEffect` before the browser paints, without async layout
-  deferrals. `PdfAnnotationEditor` renders its `<style
-  precedence="parapdf">` directly, controls or initializes the active tool
-  (`tool`, `defaultTool`, `onToolChange`) in `useLayoutEffect` via
-  `bindAnnotationTool()`, and preserves kept snapshots when
+  `PdfAnnotationEditor`, `PdfAutoLinks`, `PdfPermissions`, each wrapped in
+  `memo`) mount synchronously with `useLayoutEffect` before the browser paints,
+  without async layout deferrals. `PdfAnnotationEditor` renders its `<style
+  precedence="parapdf">` directly, synchronizes its attachment, labels
+  (`sameAnnotationLabels`), and controlled or initial tool (`tool`,
+  `defaultTool`, `onToolChange`) through `annotationSlot(viewer).bindControls()`
+  in a single `useLayoutEffect`, and preserves kept snapshots when
   hidden with its viewport (`<Activity>` or unmounting `PdfViewer`) while
   detaching immediately when removed from an attached viewport (decisions
-  0034 and 0041). Cleanup waits until the commit finishes so a sibling editor can
-  mount after the viewport and reclaim its kept annotations. `useAnnotations()`
-  subscribes directly to `annotationSlot(viewer)`'s `Store<AnnotationControls>`,
-  whose action methods stay referentially stable.
+  0034, 0041, and 0044). Cleanup waits until the commit finishes so a sibling
+  editor can mount after the viewport and reclaim its kept annotations.
+  `useAnnotations()` subscribes directly to `annotationSlot(viewer)`'s
+  `Store<AnnotationControls>`, whose action methods stay referentially stable.
   `PdfPageOverlay` (single-page, RSC-compatible plain `children`) and
   `PdfPageOverlays` (evaluated inside each page's `memo(PdfPage)` so mounted
   pages stay memoized as the window shifts) render into `<PdfPageOverlayLayer>`,
   placed directly as JSX at the end of `<section>` inside `memo(PdfPage)`:
-  `PdfPageOverlays` renders inline without portaling, while `PdfPageOverlay`
-  portals into the `.parapdf-overlay-layer` element published by a React 19 ref
-  cleanup callback (`store.attachLayer`). When neither produces content for a
+  `ViewerPages` subscribes to `OverlayStore` in `useLayoutEffect`
+  (`useOverlayActivity`) and passes `overlayRenderers` and `hasPortalOverlay`
+  down to `memo(PdfPage)` with zero per-page overlay store subscriptions, while
+  `PdfPageOverlay` claims and subscribes to its target page's
+  `.parapdf-overlay-layer` element (`store.attachLayer`) in `useLayoutEffect`
+  so both child and sibling overlays flush synchronously before the first paint.
+  When neither produces content for a
   page, `<PdfPageOverlayLayer>` returns `null` so zero `.parapdf-overlay-layer`
   nodes exist in the DOM, and `OverlayStore` tracks per-page overlay activity so
   pages without an active renderer or portal claim mount no
   `<PdfPageOverlayLayer>` at all; `PageContext` carries `{ pageIndex, size }` so
   `PdfPageRect` positions children with zero `viewer.store` subscriptions, and
-  renderer identities stay unique across viewers (decisions 0036, 0040, and
-  0042). `PdfViewer`'s `onPageClick` and
+  renderer identities stay unique across viewers (decisions 0036, 0040, 0042,
+  and 0044). `PdfViewer`'s `onPageClick` and
   `viewer.pointAt()` map client coordinates back to unturned PDF points
   (`PdfPageRect`'s coordinates) across rotations, zoom previews, and
   `/UserUnit` pages. `PdfSelectionPopover` portals floating selection UI to
   `document.body` outside page `contain: "strict"` clipping, suppresses range
-  reads and React commits during primary-button selection drags
-  (`useSettledSelection` over `viewer.onSelectionDragChange()`), commits once on
+  reads and React commits during primary-button selection drags via
+  `useSelection(viewer, { settleDrag: true })`, commits once on
   release while keeping its DOM listeners, store subscription, and
   `ResizeObserver` attached across selection updates, and tracks scroll and zoom
   previews (`viewer.onPreviewChange()`) imperatively without per-frame React
   state commits or DOM `MutationObserver`s;
-  `useSelection()` also provides a virtual `selection.anchor` for external
-  popover libraries (short-circuiting unchanged single-range endpoints and
-  skipping redundant state dispatches). `preloadDocument(source)` starts loading pdf.js,
+  `useSelection(viewer?, options?)` (`SelectionOptions`: `{ settleDrag?: boolean }`)
+  also provides a virtual `selection.anchor` for external popover libraries
+  (short-circuiting unchanged single-range endpoints and skipping redundant
+  state dispatches). `preloadDocument(source, options?)` (`PreloadDocumentOptions`:
+  `{ destinations?: readonly Destination[] }`) starts loading pdf.js,
   preloading `source`'s URL, and warming `source`'s initial page dimensions,
-  permissions, direction, initial view, and page labels in the shared registry
-  ahead of `PdfDocument` mounting so `PdfViewer` and `PdfThumbnails` render
-  synchronously before the first paint.
+  permissions, direction, initial view, page labels, URL fragment destinations
+  (including `#nameddest=` and coordinate fragments), and any explicit
+  `options.destinations` in the shared registry ahead of `PdfDocument` mounting
+  so `PdfViewer` and `PdfThumbnails` render synchronously before the first
+  paint (decisions 0041, 0042, and 0044).
 - `PdfThumbnails` and `PdfThumbnail` draw the viewer's document at a lower
   priority, reading unrotated page dimensions via `useStoreKeys(viewer.store,
   ["sizes"], …)` so scrolling and zooming never wake them (decisions 0040 and
@@ -431,12 +456,14 @@ the DOM declares `"use client"`.
   failed label reads retain numeric labels.
   `PdfOutline` renders `<nav><ol>…</ol></nav>` over `useOutline()`, following
   the viewer's `"externalLinks"` key on `viewer.store` (`viewer.externalLinks`),
-  providing expand/collapse controls for nested entries, and honoring optional
-  `renderItem` customization (decisions 0037 and 0043). `PdfPageRect` places
+  preserving nested expand/collapse state across parent toggles in `OutlineTree`
+  with memoized `OutlineEntry` items, and honoring optional `renderItem`
+  customization (decisions 0037, 0043, and 0044). `PdfPageRect` places
   content in PDF points.
-- `useViewState()`, `useDocumentState()`, `useSearch()`, `useHistory()`, and
-  `useAnnotations()` read stores through `useSyncExternalStore`
-  (`useStoreSlice`), and `useLayers()` subscribes directly to `LayerState`:
+- `useViewState()`, `useDocumentState()`, `useSearch()`, `useHistory()`,
+  `useAnnotations()`, `useSave()`, and `usePrint()` read controller-owned stores
+  through `useSyncExternalStore` (`useStoreSlice`), and `useLayers()` subscribes
+  directly to `LayerState`:
   `Store.update()` reports changed property keys to listeners so `useStoreSlice`
   skips waking React when an update touches only untracked keys (decision 0042);
   called without
@@ -444,11 +471,14 @@ the DOM declares `"use client"`.
   longer read in inactive branches, while keeping a pre-render fallback set
   until the next render reads the proxy) so unread updates cause no re-render;
   called with a selector, they compare the selected value shallowly (`Object.is`,
-  array elements, or own properties of plain objects) (decisions 0033 and 0035).
-  `useSearch()` and `useHistory()` keep their action methods referentially
-  stable per feature instance, and `useSave()` and `usePrint()` expose reactive
-  saving and print-progress state with clean abort/unmount cancellation. They
-  reconcile that state when React reconnects their effects after Activity hides. The
+  array elements, or own properties of plain objects) (decisions 0033, 0035, and
+  0044).
+  `useSearch()`, `useHistory()`, `useAnnotations()`, `useSave()`, and
+  `usePrint()` keep their action methods referentially stable per controller
+  slot, sharing live `saving` (including standalone `save()` / `download()` calls)
+  across `PdfSessionController` consumers and live `printing` / `progress` across
+  `ViewerController` consumers while cancelling print preparation only when the
+  last `usePrint()` holder hides or unmounts (decision 0044). The
   document's data is read with `use()` under the application's Suspense
   boundaries (`useSessionData`, subscribing only to `["status", "passwordReason"]`
   on `session.stateStore` so streaming download `progress` updates never wake

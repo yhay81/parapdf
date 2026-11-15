@@ -10,7 +10,7 @@ import {
   computePopoverPosition,
   type PopoverBox,
   type PopoverPlacement,
-  useSettledSelection,
+  useSelection,
 } from "./selection.ts";
 
 export type { PopoverPlacement };
@@ -55,7 +55,7 @@ export function PdfSelectionPopover({
   children,
 }: PdfSelectionPopoverProps) {
   const resolved = useOptionalViewer(viewer);
-  const selection = useSettledSelection(resolved);
+  const selection = useSelection(resolved, { settleDrag: true });
   const popoverRef = useRef<HTMLDivElement>(null);
   const latestRef = useRef({ selection, placement, offset });
   latestRef.current = { selection, placement, offset };

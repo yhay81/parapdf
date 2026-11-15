@@ -6,6 +6,7 @@
 
 import type { PdfSessionController } from "../document/pdf-session.ts";
 import type { DocumentPermissions, DocumentSession, PageSize } from "../document/session.ts";
+import type { SlotKey } from "../document/store.ts";
 import type {
   AnnotationLayerHandle,
   AnnotationLayerScripting,
@@ -217,14 +218,12 @@ export interface Viewer {
   pointAt(point: { clientX: number; clientY: number }): PdfPagePoint | null;
 }
 
-const controllers = new WeakSet<ViewerController>();
-
 /** Resolve a public `Viewer` handle to its internal `ViewerController`. */
 export function controllerOf(viewer: Viewer): ViewerController {
-  if (!controllers.has(viewer as ViewerController)) {
+  if (!ViewerController.is(viewer)) {
     throw new TypeError("Expected a Viewer created by ParaPDF");
   }
-  return viewer as ViewerController;
+  return viewer;
 }
 
 /**
@@ -233,6 +232,10 @@ export function controllerOf(viewer: Viewer): ViewerController {
  * forms, annotation editing, and the rest) attach through `extend()`.
  */
 export class ViewerController implements Viewer {
+  static is(value: unknown): value is ViewerController {
+    return typeof value === "object" && value !== null && #shown in value;
+  }
+
   readonly store = new ViewerStore({
     layout: null,
     pageCount: 0,
@@ -370,10 +373,33 @@ export class ViewerController implements Viewer {
     resetScale: () => this.resetScale(),
   });
 
+  #slots: Record<symbol, unknown> | null = null;
+
   constructor(options: ViewerOptions = {}) {
-    controllers.add(this);
     this.configure(options);
     this.#resetView();
+  }
+
+  /** Lazily initialize or read feature-owned state directly on this controller. */
+  slot<T>(key: SlotKey<T>, create: () => T): T {
+    this.#slots ??= Object.create(null) as Record<symbol, unknown>;
+    const slots = this.#slots;
+    let value = slots[key] as T | undefined;
+    if (value === undefined) {
+      value = create();
+      slots[key] = value;
+    }
+    return value;
+  }
+
+  peekSlot<T>(key: SlotKey<T>): T | undefined {
+    return this.#slots?.[key] as T | undefined;
+  }
+
+  clearSlot<T>(key: SlotKey<T>, expected?: T): void {
+    if (this.#slots && (expected === undefined || this.#slots[key] === expected)) {
+      delete this.#slots[key];
+    }
   }
 
   /**

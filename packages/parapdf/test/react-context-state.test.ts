@@ -323,6 +323,34 @@ describe("ViewerContext, useCreateViewer, and optional viewer hooks", () => {
       () => renderToString(createElement(BareViewerConsumer)),
       /useViewer must be used inside/,
     );
+
+    // useSelection accepts SelectionOptions alone (with context), (viewer, options), and rejects bogus Viewer objects.
+    const selViewer = new ViewerController();
+    assert.equal(
+      renderToString(
+        createElement(
+          ViewerContext,
+          { value: selViewer },
+          createElement(() => {
+            assert.equal(useSelection({ settleDrag: true }), null);
+            assert.equal(useSelection({}), null);
+            assert.equal(useSelection(selViewer, { settleDrag: true }), null);
+            return createElement("span", null, "sel-ok");
+          }),
+        ),
+      ),
+      "<span>sel-ok</span>",
+    );
+    assert.throws(
+      () =>
+        renderToString(
+          createElement(() => {
+            useSelection({ bogus: true } as unknown as Viewer);
+            return null;
+          }),
+        ),
+      TypeError,
+    );
   });
 
   it("allocates <PdfDocument>'s default ViewerController lazily and holds it across Activity hide/show", async () => {

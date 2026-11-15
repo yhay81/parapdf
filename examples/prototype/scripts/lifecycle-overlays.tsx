@@ -241,6 +241,33 @@ export async function checkOverlayLifetimes() {
     flushSync(() => root.render(renderers(viewer)));
     flushSync(() => root.render(renderers(other)));
     const moved = overlayStoreOf(other).getRenderers().length === 2;
+
+    // 4. Fresh warm mount: both a child <PdfPageOverlay> inside <PdfViewer> and a sibling
+    //    <PdfPageOverlay> after <PdfViewer> portal synchronously in layout effects before first paint.
+    const { session: warmSession, viewer: warmViewer } = setupLaidOutViewer(4);
+    warmViewer.store.set({ first: 0, last: 2 });
+    flushSync(() =>
+      root.render(
+        <SessionContext value={warmSession}>
+          <ViewerContext value={warmViewer}>
+            <PdfViewer overscan={1} style={{ width: 800, height: 600 }}>
+              <PdfPageOverlay page={0}>
+                <span data-child-portal>Child overlay</span>
+              </PdfPageOverlay>
+            </PdfViewer>
+            <PdfPageOverlay page={1}>
+              <span data-sibling-portal>Sibling overlay</span>
+            </PdfPageOverlay>
+          </ViewerContext>
+        </SessionContext>,
+      ),
+    );
+    const beforePaintMount =
+      element.querySelector('section[data-page="1"] [data-child-portal]') !== null &&
+      element.querySelector('section[data-page="2"] [data-sibling-portal]') !== null &&
+      element.querySelector('section[data-page="3"]') !== null &&
+      element.querySelector('section[data-page="3"] .parapdf-overlay-layer') === null;
+
     return {
       idleSkipped,
       isolatedWindowCommit,
@@ -251,6 +278,7 @@ export async function checkOverlayLifetimes() {
       hiddenCleaned,
       restored,
       moved,
+      beforePaintMount,
       diagnostics,
     };
   } finally {

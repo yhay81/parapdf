@@ -378,8 +378,8 @@ export function useSessionData(hook: string): PdfSessionController {
  * of them changes; called with `selector`, it compares the selected value
  * shallowly.
  */
-export function useDocumentState(): DocumentState;
 export function useDocumentState<T>(selector: (state: DocumentState) => T): T;
+export function useDocumentState(): DocumentState;
 export function useDocumentState<T>(selector?: (state: DocumentState) => T): DocumentState | T {
   const session = useContext(SessionContext);
   if (!session) throw new Error("useSession must be used inside <PdfDocument>");
@@ -396,8 +396,8 @@ export function useDocumentState<T>(selector?: (state: DocumentState) => T): Doc
  * when one of them changes; called with `selector`, it compares the selected
  * value shallowly.
  */
-export function useViewState(viewer?: Viewer): ViewerState;
 export function useViewState<T>(selector: (state: ViewerState) => T, viewer?: Viewer): T;
+export function useViewState(viewer?: Viewer): ViewerState;
 export function useViewState<T>(
   selectorOrViewer?: ((state: ViewerState) => T) | Viewer,
   maybeViewer?: Viewer,

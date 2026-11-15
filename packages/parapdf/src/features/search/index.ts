@@ -1,7 +1,7 @@
 "use client";
 
 import type { DocumentSession } from "../../document/session.ts";
-import { type ReadableStore, Store } from "../../document/store.ts";
+import { createSlotKey, type ReadableStore, Store } from "../../document/store.ts";
 import { linked } from "../../view/signals.ts";
 import type { ViewerController } from "../../view/viewer.ts";
 import { SearchHighlights } from "./highlights.ts";
@@ -71,7 +71,8 @@ const yieldToMain = (): Promise<void> => {
  * Each session's page indexes, by the options that shape them
  * ("case-sensitive diacritics"), shared by the searches of its viewers.
  */
-const indexes = new WeakMap<DocumentSession, Map<string, Map<number, Promise<PageIndex>>>>();
+const SEARCH_INDEX_SLOT =
+  createSlotKey<Map<string, Map<number, Promise<PageIndex>>>>("parapdf.searchIndexes");
 
 /** Page `pageIndex`'s index for `options`, read once per session unless the read fails. */
 export function pageIndex(
@@ -80,11 +81,7 @@ export function pageIndex(
   options: SearchOptions,
 ): Promise<PageIndex> {
   const key = `${Boolean(options.caseSensitive)} ${Boolean(options.matchDiacritics)}`;
-  let byOptions = indexes.get(session);
-  if (!byOptions) {
-    byOptions = new Map();
-    indexes.set(session, byOptions);
-  }
+  const byOptions = session.slot(SEARCH_INDEX_SLOT, () => new Map());
   let pages = byOptions.get(key);
   if (!pages) {
     pages = new Map();
@@ -297,20 +294,17 @@ export function attachSearch(viewer: ViewerController, onDetach?: () => void): S
 }
 
 /** Each viewer's own search, which `useSearch()` shows. */
-const shared = new WeakMap<ViewerController, Search>();
+const SEARCH_SLOT = createSlotKey<Search>("parapdf.search");
 
 /**
  * `viewer`'s own search, which `useSearch()` shows: attached at the
  * first call, and kept until its `detach()`.
  */
 export function searchOf(viewer: ViewerController): Search {
-  let search = shared.get(viewer);
-  if (!search) {
+  return viewer.slot(SEARCH_SLOT, () => {
     const own = attachSearch(viewer, () => {
-      if (shared.get(viewer) === own) shared.delete(viewer);
+      viewer.clearSlot(SEARCH_SLOT, own);
     });
-    shared.set(viewer, own);
-    search = own;
-  }
-  return search;
+    return own;
+  });
 }

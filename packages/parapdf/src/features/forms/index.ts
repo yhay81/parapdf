@@ -4,26 +4,24 @@ import {
   sessionControllerOf,
 } from "../../document/pdf-session.ts";
 import type { DocumentSession } from "../../document/session.ts";
+import { createSlotKey } from "../../document/store.ts";
 import type { ViewerController } from "../../view/viewer.ts";
 import { createFormAccess, type FormChange, type FormField, type FormValue } from "./fields.ts";
 
 export type { FormChange, FormField, FormFieldType, FormValue } from "./fields.ts";
 
 /** Each session's form fields, read once for every viewer of it. */
-const access = new WeakMap<DocumentSession, ReturnType<typeof createFormAccess>>();
+const FORM_ACCESS_SLOT = createSlotKey<ReturnType<typeof createFormAccess>>("parapdf.formAccess");
 
 /** Listeners subscribed to form field edits per viewer (`<PdfForms onChange>`, `useFormChange()`). */
-const viewerListeners = new WeakMap<ViewerController, Set<(change: FormChange) => void>>();
+const FORM_LISTENERS_SLOT =
+  createSlotKey<Set<(change: FormChange) => void>>("parapdf.formListeners");
 
 export function onViewerFormChange(
   viewer: ViewerController,
   listener: (change: FormChange) => void,
 ): () => void {
-  let set = viewerListeners.get(viewer);
-  if (!set) {
-    set = new Set();
-    viewerListeners.set(viewer, set);
-  }
+  const set = viewer.slot(FORM_LISTENERS_SLOT, () => new Set());
   set.add(listener);
   return () => {
     set.delete(listener);
@@ -31,23 +29,20 @@ export function onViewerFormChange(
 }
 
 export function hasViewerFormListeners(viewer: ViewerController): boolean {
-  return (viewerListeners.get(viewer)?.size ?? 0) > 0;
+  return (viewer.peekSlot(FORM_LISTENERS_SLOT)?.size ?? 0) > 0;
 }
 
 export function notifyViewerFormChange(viewer: ViewerController, change: FormChange): void {
-  const set = viewerListeners.get(viewer);
+  const set = viewer.peekSlot(FORM_LISTENERS_SLOT);
   if (!set) return;
   for (const listener of [...set]) listener(change);
 }
 
 /** The form fields of `session`, read and set through pdf.js's annotation storage. */
 export function formsOf(session: DocumentSession): ReturnType<typeof createFormAccess> {
-  let forms = access.get(session);
-  if (!forms) {
-    forms = createFormAccess(session.proxy, (index) => session.page(index));
-    access.set(session, forms);
-  }
-  return forms;
+  return session.slot(FORM_ACCESS_SLOT, () =>
+    createFormAccess(session.proxy, (index) => session.page(index)),
+  );
 }
 
 /** The fields as first read by this provider, or an empty list when opening failed. */

@@ -179,9 +179,14 @@ describe("attachAutoLinks", () => {
   });
 
   /** A document whose pages read `items`, with no links of their own. */
-  const documentOf = (...items: string[]) =>
-    ({
+  const documentOf = (...items: string[]) => {
+    const slots = new Map<symbol, unknown>();
+    return {
       pdfjs: { pdfjs: { AnnotationType: { LINK: 2 } } },
+      slot<T>(key: symbol, create: () => T): T {
+        if (!slots.has(key)) slots.set(key, create());
+        return slots.get(key) as T;
+      },
       text: async () => ({
         items,
         endsLine: items.map(() => true),
@@ -195,7 +200,8 @@ describe("attachAutoLinks", () => {
           convertToPdfPoint: (x: number, y: number) => [x, 100 - y],
         }),
       }),
-    }) as unknown as DocumentSession;
+    } as unknown as DocumentSession;
+  };
 
   /** A text layer of `items`, a span each; an empty one is in no layer, as pdf.js builds it. */
   const textLayer = (...items: string[]): TextLayerHandle => {

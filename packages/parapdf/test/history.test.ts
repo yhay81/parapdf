@@ -18,8 +18,19 @@ const at = (pageIndex: number): ViewerPosition => ({
 function fakeViewer() {
   const extensions = new Set<ViewerExtension>();
   const restored: number[] = [];
+  const slots = new Map<symbol, unknown>();
   let position: ViewerPosition | null = at(0);
   const viewer = {
+    slot<T>(key: symbol, create: () => T): T {
+      if (!slots.has(key)) slots.set(key, create());
+      return slots.get(key) as T;
+    },
+    peekSlot<T>(key: symbol): T | undefined {
+      return slots.get(key) as T | undefined;
+    },
+    clearSlot(key: symbol): void {
+      slots.delete(key);
+    },
     extend(extension: ViewerExtension) {
       extensions.add(extension);
       return () => extensions.delete(extension);

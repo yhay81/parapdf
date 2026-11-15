@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect } from "react";
+import { memo, useLayoutEffect } from "react";
 import { attachAutoLinks } from "../features/auto-links.ts";
 import type { Viewer } from "../view/viewer.ts";
 import { useOptionalViewer } from "./context.ts";
@@ -19,8 +19,10 @@ export interface PdfAutoLinksProps {
  * already links. Needs `textLayer` and `annotationLayer` on `<PdfViewer>`, and
  * follows its `externalLinks` policy.
  */
-export function PdfAutoLinks({ viewer: externalViewer }: PdfAutoLinksProps): null {
+export const PdfAutoLinks = /*#__PURE__*/ memo(function PdfAutoLinks({
+  viewer: externalViewer,
+}: PdfAutoLinksProps): null {
   const viewer = useOptionalViewer(externalViewer);
   useLayoutEffect(() => attachAutoLinks(viewer), [viewer]);
   return null;
-}
+});

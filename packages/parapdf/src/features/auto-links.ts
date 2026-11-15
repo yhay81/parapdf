@@ -6,6 +6,7 @@
 
 import type * as Pdfjs from "pdfjs-dist";
 import type { DocumentSession } from "../document/session.ts";
+import { createSlotKey } from "../document/store.ts";
 import type { AnnotationLayerHandle } from "../pdfjs/annotation-layer.ts";
 import type { TextLayerHandle } from "../pdfjs/text.ts";
 import type { ViewerController } from "../view/viewer.ts";
@@ -190,7 +191,7 @@ function linkPosition(
 }
 
 /** Each session's pages' links, read once and shared by its viewers. */
-const found = new WeakMap<DocumentSession, Map<number, Promise<FoundLink[]>>>();
+const AUTO_LINKS_SLOT = createSlotKey<Map<number, Promise<FoundLink[]>>>("parapdf.autoLinks");
 
 // pdf.js keeps added links in the annotation layer even after their DOM is
 // removed. Reuse those elements when the feature is turned on again.
@@ -198,11 +199,7 @@ const added = new WeakMap<AnnotationLayerHandle, HTMLElement[]>();
 let nextId = 0;
 
 function pageLinks(session: DocumentSession, pageIndex: number): Promise<FoundLink[]> {
-  let pages = found.get(session);
-  if (!pages) {
-    pages = new Map();
-    found.set(session, pages);
-  }
+  const pages = session.slot(AUTO_LINKS_SLOT, () => new Map());
   let links = pages.get(pageIndex);
   if (!links) {
     const read = pages;

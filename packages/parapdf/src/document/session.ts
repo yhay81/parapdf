@@ -3,11 +3,12 @@ import {
   type Destination,
   type ResolvedDestination,
   resolveDestination,
-  resolveExplicit,
+  resolveDestinationSync,
 } from "../pdfjs/destinations.ts";
 import { LayerState } from "../pdfjs/layers.ts";
 import type { LoadedPdfjs } from "../pdfjs/loader.ts";
 import { type PageText, readPageText } from "../pdfjs/text.ts";
+import type { SlotKey } from "./store.ts";
 
 /** Page size in PDF points (1/72 in), rotation already applied. */
 export interface PageSize {
@@ -261,9 +262,6 @@ const toOutline = (items: readonly PdfjsOutlineItem[] | null): OutlineNode[] =>
 /** Pages whose sizes the background pass asks pdf.js's worker for at a time. */
 const MEASURED_PAGES = 64;
 
-/** How each session closes, which only the registry asks for (`closeSession()`). */
-const closers = new WeakMap<DocumentSession, () => Promise<void>>();
-
 /** The document's events around saving and printing, named as its scripts know them. */
 export type OutputEvent = "WillSave" | "DidSave" | "WillPrint" | "DidPrint";
 
@@ -285,9 +283,12 @@ export class DocumentSession {
   /** Aborted once the session closes. */
   readonly signal: AbortSignal;
   readonly #pages = new Map<number, Promise<Pdfjs.PDFPageProxy>>();
+  readonly #knownPages = new Map<number, Pdfjs.PDFPageProxy>();
   /** How many viewers show each page now (see `holdPage()`). */
   readonly #holds = new Map<number, number>();
   readonly #texts = new Map<number, Promise<PageText>>();
+  readonly #destinationReads = new Map<string, Promise<ResolvedDestination | null>>();
+  readonly #knownDestinations = new Map<string, ResolvedDestination | null>();
   /**
    * What the session read from the document, by what it is, for every
    * viewer: kept while the read succeeds, and asked for again after it fails.
@@ -297,6 +298,8 @@ export class DocumentSession {
   readonly #commits = new Set<() => unknown>();
   /** The password that opened this document, for reopening its saved bytes when extracting pages. */
   readonly #password: string | undefined;
+  readonly #close: () => Promise<void>;
+  #slots: Record<symbol, unknown> | null = null;
   /** What hears the document being saved and printed; see `output()`. */
   readonly #outputs = new Set<(event: OutputEvent) => Promise<void>>();
   /** What hears the document's content change, such as form values; see `invalidateContent()`. */
@@ -324,12 +327,19 @@ export class DocumentSession {
     this.pageCount = proxy.numPages;
     this.signal = controller.signal;
     this.#password = password;
-    closers.set(this, () => {
+    this.#close = () => {
       controller.abort();
       this.#pages.clear();
+      this.#knownPages.clear();
       this.#texts.clear();
+      this.#destinationReads.clear();
+      this.#knownDestinations.clear();
       return loadingTask.destroy();
-    });
+    };
+  }
+
+  static close(session: DocumentSession): Promise<void> {
+    return session.#close();
   }
 
   /**
@@ -422,9 +432,20 @@ export class DocumentSession {
     let page = this.#pages.get(pageIndex);
     if (!page) {
       page = this.proxy.getPage(pageIndex + 1);
+      page.then(
+        (loaded) => {
+          if (!this.signal.aborted) this.#knownPages.set(pageIndex, loaded);
+        },
+        () => {},
+      );
       this.#pages.set(pageIndex, page);
     }
     return page;
+  }
+
+  /** Synchronously known `PDFPageProxy` once `page(pageIndex)` has resolved. */
+  knownPage(pageIndex: number): Pdfjs.PDFPageProxy | undefined {
+    return this.#knownPages.get(pageIndex);
   }
 
   /** The page's size in PDF points with its own rotation applied. */
@@ -569,11 +590,9 @@ export class DocumentSession {
         this.proxy.getPageLayout(),
         this.proxy.getPageMode(),
       ]);
-      const dest = openAction?.get("dest");
+      const dest = openAction?.get("dest") as Destination | undefined;
       const resolved: PdfInitialView = {
-        destination: dest
-          ? await resolveExplicit(this.proxy, (index) => this.page(index), dest).catch(() => null)
-          : null,
+        destination: dest ? await this.resolveDestination(dest).catch(() => null) : null,
         pageLayout: PAGE_LAYOUTS.has(pageLayout) ? (pageLayout as PdfPageLayout) : null,
         pageMode: PAGE_MODES.has(pageMode) ? (pageMode as PdfPageMode) : null,
       };
@@ -756,8 +775,39 @@ export class DocumentSession {
     for (const listener of [...this.#contentListeners]) listener();
   }
 
+  /** Synchronously known named destination once `resolveDestination(name)` has resolved. */
+  knownDestination(name: string): ResolvedDestination | null | undefined {
+    return this.#knownDestinations.get(name);
+  }
+
   /** Where a named or explicit destination points; null when it points nowhere. */
   resolveDestination(dest: Destination): Promise<ResolvedDestination | null> {
+    if (typeof dest === "string") {
+      if (this.#knownDestinations.has(dest)) {
+        return Promise.resolve(this.#knownDestinations.get(dest) ?? null);
+      }
+      let reading = this.#destinationReads.get(dest);
+      if (!reading) {
+        const started = resolveDestination(this.proxy, (index) => this.page(index), dest).then(
+          (resolved) => {
+            if (!this.signal.aborted) {
+              this.#knownDestinations.set(dest, resolved);
+              this.#destinationReads.delete(dest);
+            }
+            return resolved;
+          },
+          (error: unknown) => {
+            if (this.#destinationReads.get(dest) === started) this.#destinationReads.delete(dest);
+            throw error;
+          },
+        );
+        reading = started;
+        this.#destinationReads.set(dest, started);
+      }
+      return reading;
+    }
+    const sync = resolveDestinationSync(this.pageCount, dest, (index) => this.knownPage(index));
+    if (sync !== undefined) return Promise.resolve(sync);
     return resolveDestination(this.proxy, (index) => this.page(index), dest);
   }
 
@@ -826,6 +876,28 @@ export class DocumentSession {
     return this.proxy.annotationStorage.size > 0 ? this.proxy.saveDocument() : this.proxy.getData();
   }
 
+  /** Lazily initialize or read feature-owned state directly on this session. */
+  slot<T>(key: SlotKey<T>, create: () => T): T {
+    this.#slots ??= Object.create(null) as Record<symbol, unknown>;
+    const slots = this.#slots;
+    let value = slots[key] as T | undefined;
+    if (value === undefined) {
+      value = create();
+      slots[key] = value;
+    }
+    return value;
+  }
+
+  peekSlot<T>(key: SlotKey<T>): T | undefined {
+    return this.#slots?.[key] as T | undefined;
+  }
+
+  clearSlot<T>(key: SlotKey<T>, expected?: T): void {
+    if (this.#slots && (expected === undefined || this.#slots[key] === expected)) {
+      delete this.#slots[key];
+    }
+  }
+
   /** `read()`'s promise, shared until it fails: the next caller then reads again. */
   #once<T>(what: string, read: () => Promise<T>): Promise<T> {
     let reading = this.#reads.get(what) as Promise<T> | undefined;
@@ -846,5 +918,5 @@ export class DocumentSession {
  * registry's to do, once no viewer uses the session.
  */
 export function closeSession(session: DocumentSession): Promise<void> {
-  return closers.get(session)?.() ?? Promise.resolve();
+  return DocumentSession.close(session);
 }

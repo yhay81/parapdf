@@ -35,14 +35,17 @@ covers only mounted pages; to copy a range longer than those, read it with
 
 ## Selections and popovers
 
-`useSelection(viewer?)` returns the text selected in the viewer, the rectangles
-it covers in the PDF points `PdfPageRect` takes, and a virtual `anchor` whose
-`getBoundingClientRect()` follows scroll, zoom, and rotation; null when nothing
-is selected there. It follows the selection at most once a frame while the
-reader drags:
+`useSelection(viewer?, options?)` returns the text selected in the viewer, the
+rectangles it covers in the PDF points `PdfPageRect` takes, and a virtual
+`anchor` whose `getBoundingClientRect()` follows scroll, zoom, and rotation;
+null when nothing is selected there. By default it follows the selection at most
+once a frame while the reader drags; pass `{ settleDrag: true }` when your UI
+(such as an external Floating UI or Radix popover) should wait until pointer
+release before measuring ranges and committing React state:
 
 ```tsx
 const selection = useSelection();
+const settled = useSelection({ settleDrag: true });
 // { text: "…", pages: [{ pageIndex: 0, rects: [{ x, y, width, height }] }], start, end, anchor } or null
 ```
 

@@ -159,9 +159,11 @@ import {
   PdfView,
   PdfViewer,
   type PdfViewerProps,
+  type PreloadDocumentOptions,
   preloadDocument,
   preloadPdfjs,
   type SelectionAnchor,
+  type SelectionOptions,
   type ThumbnailItem,
   useAnnotations,
   useCreateViewer,
@@ -182,7 +184,8 @@ import {
 
 configurePdfjs({ enableHWA: true, documentOptions: { withCredentials: true } });
 preloadPdfjs();
-preloadDocument("/manual.pdf");
+const preloadOpts: PreloadDocumentOptions = { destinations: ["sec-1"] };
+preloadDocument("/manual.pdf#nameddest=sec-1", preloadOpts);
 const options: PdfViewerProps = { defaultZoom: "fit-width", maxCanvasPixels: 50_000_000 };
 
 export function Reader() {
@@ -272,15 +275,22 @@ function Toolbar() {
   const search = useSearch();
   const history = useHistory();
   const { save, saving } = useSave();
+  const isSaving: boolean = useSave((s) => s.saving);
   const { print, printing, progress, cancel } = usePrint();
+  const isPrinting: boolean = usePrint((p) => p.printing);
   const annotations = useAnnotations();
+  const activeTool: AnnotationTool = useAnnotations((a) => a.tool);
   const { currentPage, pageCount } = useViewState();
   const slice = useViewState((state) => ({ page: state.currentPage, scale: state.scale }));
   const { status } = useDocumentState();
   const pages: number = useDocumentState((state) => state.pageCount);
   useFormChange(() => {});
-    const selection = useSelection();
-    void selection?.anchor;
+  const selectionOpts: SelectionOptions = { settleDrag: true };
+  const selection = useSelection(selectionOpts);
+  void selection?.anchor;
+  void isSaving;
+  void isPrinting;
+  void activeTool;
   const proxy = session.proxy;
   const sessionStatus: string = session.state.status;
   const snapshotPage: number = viewer.state.currentPage;

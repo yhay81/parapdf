@@ -1,4 +1,4 @@
-import { type ReadableStore, Store } from "../document/store.ts";
+import { createSlotKey, type ReadableStore, Store } from "../document/store.ts";
 import type { ViewerPosition } from "../view/navigation.ts";
 import type { ViewerController } from "../view/viewer.ts";
 
@@ -130,20 +130,17 @@ export function attachHistory(viewer: ViewerController, onDetach?: () => void): 
 }
 
 /** Each viewer's own history, which `useHistory()` shows. */
-const shared = new WeakMap<ViewerController, History>();
+const HISTORY_SLOT = createSlotKey<History>("parapdf.history");
 
 /**
  * `viewer`'s own history, which `useHistory()` shows: attached at the
  * first call, and kept until its `detach()`.
  */
 export function historyOf(viewer: ViewerController): History {
-  let history = shared.get(viewer);
-  if (!history) {
+  return viewer.slot(HISTORY_SLOT, () => {
     const own = attachHistory(viewer, () => {
-      if (shared.get(viewer) === own) shared.delete(viewer);
+      viewer.clearSlot(HISTORY_SLOT, own);
     });
-    shared.set(viewer, own);
-    history = own;
-  }
-  return history;
+    return own;
+  });
 }

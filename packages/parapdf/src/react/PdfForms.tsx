@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffectEvent, useLayoutEffect, useRef } from "react";
+import { memo, useEffectEvent, useLayoutEffect, useRef } from "react";
 import type { FormChange } from "../features/forms/fields.ts";
 import { onViewerFormChange } from "../features/forms/index.ts";
 import { attachFormLayers, type FormLayers } from "../features/forms/layers.ts";
@@ -30,7 +30,7 @@ export interface PdfFormsProps {
  * document, which `save()` writes them into; needs `annotationLayer` on
  * `<PdfViewer>`.
  */
-export function PdfForms({
+export const PdfForms = /*#__PURE__*/ memo(function PdfForms({
   viewer: externalViewer,
   scripts = false,
   onChange,
@@ -68,4 +68,4 @@ export function PdfForms({
   }, [scripts]);
 
   return null;
-}
+});

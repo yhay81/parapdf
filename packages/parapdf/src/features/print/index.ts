@@ -1,5 +1,6 @@
 "use client";
 
+import { createSlotKey, type ReadableStore, Store } from "../../document/store.ts";
 import { linked } from "../../view/signals.ts";
 import { controllerOf, type Viewer, type ViewerController } from "../../view/viewer.ts";
 import { permits } from "../permissions.ts";
@@ -15,6 +16,16 @@ export interface PrintProgress {
 export interface PrintState {
   readonly printing: boolean;
   readonly progress: PrintProgress | null;
+}
+
+export interface PrintControls extends PrintState {
+  /**
+   * Prepare and print the document through the browser's print dialog.
+   * Calling `cancel()` stops page preparation cleanly without rejecting.
+   */
+  print(options?: PrintOptions): Promise<void>;
+  /** Abort page preparation in progress. */
+  cancel(): void;
 }
 
 export const IDLE_PRINT: PrintState = { printing: false, progress: null };
@@ -147,4 +158,40 @@ export function createPrintController(
       }
     },
   };
+}
+
+export interface PrintSlot {
+  readonly store: ReadableStore<PrintControls>;
+  readonly initialControls: PrintControls;
+  hold(): () => void;
+}
+
+const PRINT_SLOT = createSlotKey<PrintSlot>("parapdf.print");
+
+export function printOf(viewer: ViewerController): PrintSlot {
+  return viewer.slot(PRINT_SLOT, () => {
+    let holders = 0;
+    const controller = createPrintController(viewer, (next) => {
+      store.set(next);
+    });
+    const initialControls: PrintControls = {
+      ...IDLE_PRINT,
+      print: (options) => controller.print(options),
+      cancel: () => controller.cancel(),
+    };
+    const store = new Store<PrintControls>(initialControls);
+    return {
+      store,
+      initialControls,
+      hold() {
+        holders++;
+        let released = false;
+        return () => {
+          if (released) return;
+          released = true;
+          if (--holders === 0) controller.cancel();
+        };
+      },
+    };
+  });
 }

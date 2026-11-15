@@ -5,6 +5,7 @@
 // Foundation, Apache License 2.0, and changed for ParaPDF; see NOTICE.md.
 
 import type { DocumentSession } from "../../document/session.ts";
+import { createSlotKey } from "../../document/store.ts";
 import type { AnnotationLayerScripting } from "../../pdfjs/annotation-layer.ts";
 import { type DocumentScripting, startScripting } from "../../pdfjs/scripting.ts";
 import { filenameFromUrl } from "../../view/files.ts";
@@ -40,7 +41,7 @@ interface Running {
 }
 
 /** One sandbox per session, since it keeps the values of the document's fields. */
-const running = new WeakMap<DocumentSession, Running>();
+const FORM_SCRIPTS_SLOT = createSlotKey<Running>("parapdf.formScripts");
 
 /** The scripts' zoom requests (`this.zoomType`) as the viewer's zoom modes. */
 const ZOOM_MODES: Readonly<Record<string, FitMode>> = {
@@ -182,8 +183,7 @@ export function sameFieldValue(a: unknown, b: unknown): boolean {
  * viewer starts pdf.js's sandbox, the others share it.
  */
 export function joinScripting(session: DocumentSession, member: ScriptingViewer): JoinedScripting {
-  let run = running.get(session);
-  if (!run) {
+  const joined = session.slot(FORM_SCRIPTS_SLOT, () => {
     const pdf = member.viewer.pdfSession;
     const sourceName = pdf && "url" in pdf.source ? filenameFromUrl(pdf.source.url) : null;
     const started: Running = {
@@ -199,10 +199,8 @@ export function joinScripting(session: DocumentSession, member: ScriptingViewer)
     // Saving and printing, from a script or the application, send the
     // document's events around them (`save()`, `print()`).
     session.onOutput((event) => started.scripting.documentEvent(event), started.stop.signal);
-    run = started;
-    running.set(session, run);
-  }
-  const joined = run;
+    return started;
+  });
   joined.viewers.add(member);
   if (joined.viewers.size === 1) follow(joined);
   let left = false;
@@ -230,7 +228,7 @@ export function joinScripting(session: DocumentSession, member: ScriptingViewer)
       joined.unfollow();
       joined.stop.abort();
       joined.scripting.destroy();
-      running.delete(session);
+      session.clearSlot(FORM_SCRIPTS_SLOT, joined);
     },
   };
 }

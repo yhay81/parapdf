@@ -237,6 +237,11 @@ async function checkReaders(browser: Browser, dev: ViteDevServer, base: string):
       actions.save === true,
     );
     check("printing resets after its controls hide and cancel preparation", actions.print === true);
+    check(
+      "multiple useSave and usePrint consumers share live state and keep printing until the last holder hides",
+      actions.sharedSave === true && actions.sharedPrint === true,
+      JSON.stringify(actions),
+    );
     const overlays = await page.evaluate(async (url) => {
       const fixture: typeof import("./lifecycle-overlays.tsx") = await import(url);
       return fixture.checkOverlayLifetimes();
@@ -271,6 +276,10 @@ async function checkReaders(browser: Browser, dev: ViteDevServer, base: string):
     check("Activity hiding pages cleans up overlay hosts and layers", overlays.hiddenCleaned);
     check("dynamic overlays reconnect after Activity hides their page", overlays.restored);
     check("moving an overlay to another viewer preserves its existing overlays", overlays.moved);
+    check(
+      "child and sibling page overlays portal synchronously before the first paint",
+      overlays.beforePaintMount,
+    );
   } finally {
     await page.context().close();
   }

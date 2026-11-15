@@ -1,6 +1,6 @@
 "use client";
 
-import { Store } from "../document/store.ts";
+import { createSlotKey, Store } from "../document/store.ts";
 import type {
   AnnotationAltText,
   AnnotationLabels,
@@ -45,10 +45,32 @@ export function sameAnnotationLabels(
   b: Partial<AnnotationLabels> | undefined,
 ): boolean {
   if (a === b) return true;
-  const keys = new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})]);
-  return [...keys].every(
-    (key) => a?.[key as keyof AnnotationLabels] === b?.[key as keyof AnnotationLabels],
-  );
+  if (a) {
+    for (const key in a) {
+      if (
+        Object.hasOwn(a, key) &&
+        a[key as keyof AnnotationLabels] !== b?.[key as keyof AnnotationLabels]
+      ) {
+        return false;
+      }
+    }
+  }
+  if (b) {
+    for (const key in b) {
+      if (
+        Object.hasOwn(b, key) &&
+        b[key as keyof AnnotationLabels] !== a?.[key as keyof AnnotationLabels]
+      ) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+export interface AnnotationEditorControlBinding {
+  sync(labels: Partial<AnnotationLabels> | undefined, binding: AnnotationToolBinding): void;
+  disconnect(): void;
 }
 
 export interface AnnotationSlot {
@@ -63,101 +85,123 @@ export interface AnnotationSlot {
     labels: Partial<AnnotationLabels> | undefined,
   ): () => void;
   updateLabels(labels: Partial<AnnotationLabels> | undefined): void;
+  bindControls(
+    attach: (viewer: ViewerController, options?: AnnotationEditingOptions) => AnnotationEditing,
+    initialLabels: Partial<AnnotationLabels> | undefined,
+    initialBinding: AnnotationToolBinding,
+    onDiverge: () => void,
+  ): AnnotationEditorControlBinding;
   detachNow(): void;
 }
 
-const slots = new WeakMap<ViewerController, AnnotationSlot>();
+const ANNOTATION_SLOT = createSlotKey<AnnotationSlot>("parapdf.annotations");
 
 export function annotationSlot(viewer: ViewerController): AnnotationSlot {
-  const existing = slots.get(viewer);
-  if (existing) return existing;
-  const methods: Omit<AnnotationControls, keyof AnnotationEditingStore> = {
-    setTool: (tool) => (slot.editing ? slot.editing.setTool(tool) : Promise.resolve()),
-    setStyle: (tool, style) => slot.editing?.setStyle(tool, style),
-    undo: () => slot.editing?.undo(),
-    redo: () => slot.editing?.redo(),
-    deleteSelected: () => slot.editing?.deleteSelected(),
-    selectAll: () => slot.editing?.selectAll(),
-    setComment: (comment) => slot.editing?.setComment(comment) ?? false,
-    setAltText: (altText) => slot.editing?.setAltText(altText) ?? false,
-    addImage: (image, options) =>
-      slot.editing ? slot.editing.addImage(image, options) : Promise.resolve(false),
-    addSignature: (signature, options) =>
-      slot.editing ? slot.editing.addSignature(signature, options) : Promise.resolve(false),
-    export: () => slot.editing?.export() ?? [],
-    import: (annotations) => (slot.editing ? slot.editing.import(annotations) : Promise.resolve(0)),
-  };
-  const initialControls: AnnotationControls = { ...STOPPED, ...methods };
-  const store = new Store<AnnotationControls>(initialControls);
+  return viewer.slot(ANNOTATION_SLOT, () => {
+    const methods: Omit<AnnotationControls, keyof AnnotationEditingStore> = {
+      setTool: (tool) => (slot.editing ? slot.editing.setTool(tool) : Promise.resolve()),
+      setStyle: (tool, style) => slot.editing?.setStyle(tool, style),
+      undo: () => slot.editing?.undo(),
+      redo: () => slot.editing?.redo(),
+      deleteSelected: () => slot.editing?.deleteSelected(),
+      selectAll: () => slot.editing?.selectAll(),
+      setComment: (comment) => slot.editing?.setComment(comment) ?? false,
+      setAltText: (altText) => slot.editing?.setAltText(altText) ?? false,
+      addImage: (image, options) =>
+        slot.editing ? slot.editing.addImage(image, options) : Promise.resolve(false),
+      addSignature: (signature, options) =>
+        slot.editing ? slot.editing.addSignature(signature, options) : Promise.resolve(false),
+      export: () => slot.editing?.export() ?? [],
+      import: (annotations) =>
+        slot.editing ? slot.editing.import(annotations) : Promise.resolve(0),
+    };
+    const initialControls: AnnotationControls = { ...STOPPED, ...methods };
+    const store = new Store<AnnotationControls>(initialControls);
 
-  let unsubscribeEditing: (() => void) | null = null;
-  const detachNow = () => {
-    unsubscribeEditing?.();
-    unsubscribeEditing = null;
-    if (!slot.editing) return;
-    slot.removeViewportGuard?.();
-    slot.removeViewportGuard = null;
-    const current = slot.editing;
-    slot.editing = null;
-    slot.labels = undefined;
-    current.detach();
-    store.set(STOPPED);
-  };
+    let unsubscribeEditing: (() => void) | null = null;
+    const detachNow = () => {
+      unsubscribeEditing?.();
+      unsubscribeEditing = null;
+      if (!slot.editing) return;
+      slot.removeViewportGuard?.();
+      slot.removeViewportGuard = null;
+      const current = slot.editing;
+      slot.editing = null;
+      slot.labels = undefined;
+      current.detach();
+      store.set(STOPPED);
+    };
 
-  const detachIfUnmounted = () => {
-    if (slot.mounts === 0 && viewer.scroller !== null) detachNow();
-  };
+    const detachIfUnmounted = () => {
+      if (slot.mounts === 0 && viewer.scroller !== null) detachNow();
+    };
 
-  const slot: AnnotationSlot = {
-    store,
-    initialControls,
-    mounts: 0,
-    labels: undefined,
-    editing: null,
-    removeViewportGuard: null,
-    mount(attach, labels) {
-      slot.mounts++;
-      if (!slot.editing) {
-        // A sibling editor can mount after the viewport in the same commit.
-        // Wait for its layout effect before discarding the kept annotations.
-        slot.removeViewportGuard = viewer.extend({
-          viewport() {
-            if (slot.mounts === 0) queueMicrotask(detachIfUnmounted);
-          },
-        });
-        slot.labels = labels;
-        const created = attach(viewer, { ...(labels ? { labels } : {}), store });
-        slot.editing = created;
-        if (created.store !== store) {
-          store.set(created.store.get());
-          unsubscribeEditing = created.store.subscribe(() => store.set(created.store.get()));
+    const slot: AnnotationSlot = {
+      store,
+      initialControls,
+      mounts: 0,
+      labels: undefined,
+      editing: null,
+      removeViewportGuard: null,
+      mount(attach, labels) {
+        slot.mounts++;
+        if (!slot.editing) {
+          // A sibling editor can mount after the viewport in the same commit.
+          // Wait for its layout effect before discarding the kept annotations.
+          slot.removeViewportGuard = viewer.extend({
+            viewport() {
+              if (slot.mounts === 0) queueMicrotask(detachIfUnmounted);
+            },
+          });
+          slot.labels = labels;
+          const created = attach(viewer, { ...(labels ? { labels } : {}), store });
+          slot.editing = created;
+          if (created.store !== store) {
+            store.set(created.store.get());
+            unsubscribeEditing = created.store.subscribe(() => store.set(created.store.get()));
+          }
+        } else if (!sameAnnotationLabels(labels, slot.labels)) {
+          slot.labels = labels;
+          slot.editing.setLabels(labels ?? {});
         }
-      } else if (!sameAnnotationLabels(labels, slot.labels)) {
+        let released = false;
+        return () => {
+          if (released) return;
+          released = true;
+          slot.mounts--;
+          if (slot.mounts > 0) return;
+          // Defer past the commit so StrictMode remounts and simultaneous
+          // viewport hides (<Activity> or unmounting <PdfViewer>) keep the
+          // editor's snapshot on the viewer, while removing <PdfAnnotationEditor>
+          // from an attached viewport detaches editing immediately.
+          queueMicrotask(detachIfUnmounted);
+        };
+      },
+      updateLabels(labels) {
+        if (!slot.editing || sameAnnotationLabels(labels, slot.labels)) return;
         slot.labels = labels;
         slot.editing.setLabels(labels ?? {});
-      }
-      let released = false;
-      return () => {
-        if (released) return;
-        released = true;
-        slot.mounts--;
-        if (slot.mounts > 0) return;
-        // Defer past the commit so StrictMode remounts and simultaneous
-        // viewport hides (<Activity> or unmounting <PdfViewer>) keep the
-        // editor's snapshot on the viewer, while removing <PdfAnnotationEditor>
-        // from an attached viewport detaches editing immediately.
-        queueMicrotask(detachIfUnmounted);
-      };
-    },
-    updateLabels(labels) {
-      if (!slot.editing || sameAnnotationLabels(labels, slot.labels)) return;
-      slot.labels = labels;
-      slot.editing.setLabels(labels ?? {});
-    },
-    detachNow,
-  };
-  slots.set(viewer, slot);
-  return slot;
+      },
+      bindControls(attach, initialLabels, initialBinding, onDiverge) {
+        let currentBinding = initialBinding;
+        const unmount = slot.mount(attach, initialLabels);
+        const toolBinding = bindAnnotationTool(viewer, slot, () => currentBinding, onDiverge);
+        return {
+          sync(labels, nextBinding) {
+            slot.updateLabels(labels);
+            currentBinding = nextBinding;
+            toolBinding.applyControlled(nextBinding.tool);
+          },
+          disconnect() {
+            toolBinding.disconnect();
+            unmount();
+          },
+        };
+      },
+      detachNow,
+    };
+    return slot;
+  });
 }
 
 export interface AnnotationToolBinding {

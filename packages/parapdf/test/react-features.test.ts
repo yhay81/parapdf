@@ -231,20 +231,37 @@ describe("annotationSlot and useAnnotations", () => {
     assert.equal(sameAnnotationLabels(undefined, undefined), true);
     assert.equal(sameAnnotationLabels({ highlight: "Marker" }, { highlight: "Marker" }), true);
     assert.equal(sameAnnotationLabels({ highlight: "Marker" }, { highlight: "Pen" }), false);
+    assert.equal(
+      sameAnnotationLabels({ highlight: "Marker" }, { highlight: "Marker", ink: "Pen" }),
+      false,
+    );
 
     const viewer = new ViewerController();
     const slot = annotationSlot(viewer);
     const fake = fakeEditing();
-    const unmount = slot.mount(() => fake.editing, { highlight: "Marker" });
+    let diverged = 0;
+    const heard: AnnotationTool[] = [];
+    const control = slot.bindControls(
+      () => fake.editing,
+      { highlight: "Marker" },
+      { tool: "ink", onToolChange: (t) => heard.push(t) },
+      () => diverged++,
+    );
 
-    slot.updateLabels({ highlight: "Marker" });
+    fake.open();
+    assert.equal(slot.store.get().tool, "ink");
+    assert.equal(heard.length, 0);
+
+    control.sync({ highlight: "Marker" }, { tool: "ink", onToolChange: (t) => heard.push(t) });
     assert.deepEqual(fake.setLabelsCalls, []);
 
-    slot.updateLabels({ highlight: "Marker", ink: "Pen" });
-    slot.updateLabels(undefined);
+    control.sync({ highlight: "Marker", ink: "Pen" }, { tool: "highlight" });
+    assert.equal(slot.store.get().tool, "highlight");
+    control.sync(undefined, {});
     assert.deepEqual(fake.setLabelsCalls, [{ highlight: "Marker", ink: "Pen" }, {}]);
+    assert.equal(diverged, 0);
 
-    unmount();
+    control.disconnect();
   });
 
   it("survives StrictMode remounts and viewport hides, while detaching when removed from a live viewport", () =>
@@ -361,7 +378,7 @@ describe("bindAnnotationTool", () => {
 
     fake.open();
     assert.equal(slot.store.get().tool, "ink");
-    assert.deepEqual(heard, []);
+    assert.equal(heard.length, 0);
 
     // Reader switches to "none": uncontrolled mode allows it and reports onToolChange("none") without re-applying defaultTool.
     await fake.editing.setTool("none");

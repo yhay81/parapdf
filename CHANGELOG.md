@@ -6,6 +6,37 @@ change the API.
 
 ## Unreleased
 
+- Store feature and React state directly in typed controller and session slots,
+  share `useSave()` and `usePrint()` stores across consumers, flush page
+  overlays in layout effects with zero per-page subscriptions, preserve nested
+  `<PdfOutline>` expansion state, and warm named and coordinate destinations in
+  `preloadDocument()`:
+  - Replace module-level `WeakMap` and `WeakSet` feature tables across
+    `ViewerController`, `PdfSessionController`, and `DocumentSession` with
+    typed `SlotKey<T>` controller/session slots and private-field brand checks,
+    memorize `<PdfForms>`, `<PdfPermissions>`, `<PdfAutoLinks>`, and
+    `<PdfAnnotationEditor>`, and merge `<PdfAnnotationEditor>`'s attachment,
+    label, and controlled-tool synchronization into one `useLayoutEffect`.
+  - Back `useSave()` and `usePrint()` with controller-owned `Store<SaveControls>`
+    and `Store<PrintControls>` slots supporting selector overloads
+    (`useSave(selector, session?)`, `usePrint(selector, viewer?)`, and
+    `useAnnotations(selector, viewer?)`), sharing live `saving` and
+    `printing` / `progress` across multiple callers and cancelling print
+    preparation only when the last `usePrint()` holder hides or unmounts.
+  - Subscribe `ViewerPages` and `PdfPageOverlay` to `OverlayStore` in
+    `useLayoutEffect` and pass active overlay renderers and portal membership
+    down to `memo(PdfPage)` directly, eliminating per-page overlay store
+    subscriptions and flushing both child and sibling page overlays before the
+    first paint.
+  - Add `SelectionOptions` (`{ settleDrag?: boolean }`) to `useSelection()` to
+    suppress mid-drag range measurements and React commits when only settled
+    selections are needed, and preserve nested `<PdfOutline>` branch state when
+    collapsing and re-expanding ancestor branches.
+  - Resolve string named destinations in `/OpenAction`, cache resolved named
+    destinations and loaded pages on `DocumentSession` for synchronous warm
+    `resolveDestinationSync()`, and warm URL fragment destinations and
+    `PreloadDocumentOptions.destinations` in `preloadDocument(source, options?)`.
+
 - Consolidate `ViewerStore` and `externalLinks` into a single key-filtered store,
   instantiate `<PdfDocument>`'s default `ViewerController` lazily, and simplify
   session fragment and secondary-data subscriptions:

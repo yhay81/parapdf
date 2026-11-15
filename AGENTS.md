@@ -72,7 +72,8 @@ that matters for performance or direction gets a decision record.
   draws pages and builds layers with it (`src/pdfjs/`); document sessions,
   one per open document, shared by its viewers through a registry that
   publishes each session's document state and keeps what renders read of
-  it, and the `PdfSessionController` a `PdfDocument` starts as it renders and
+  it, typed feature slots (`SlotKey<T>` in `store.ts`), and the
+  `PdfSessionController` a `PdfDocument` starts as it renders and
   holds of it behind the narrow public `PdfSession` interface, which
   applications see (`src/document/`); one
   `ViewerController` per viewport behind the narrow public `Viewer` interface,

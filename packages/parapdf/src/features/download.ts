@@ -1,7 +1,12 @@
 "use client";
 
-import { type PdfSession, sessionControllerOf } from "../document/pdf-session.ts";
+import {
+  type PdfSession,
+  type PdfSessionController,
+  sessionControllerOf,
+} from "../document/pdf-session.ts";
 import type { PdfPageSelection } from "../document/session.ts";
+import { createSlotKey, type ReadableStore, Store } from "../document/store.ts";
 import { downloadBytes, filenameFromUrl } from "../view/files.ts";
 
 export interface SaveOptions {
@@ -21,6 +26,47 @@ export interface DownloadOptions extends SaveOptions {
   filename?: string;
 }
 
+export interface SaveControls {
+  /** Save the document's bytes, including form values and created annotations. */
+  save(options?: SaveOptions): Promise<Uint8Array | null>;
+  /** Save the document and hand it to the browser as a download. */
+  download(options?: DownloadOptions): Promise<void>;
+  /** True while `save()` or `download()` is running on this session. */
+  saving: boolean;
+}
+
+export interface SaveSlot {
+  readonly store: ReadableStore<SaveControls>;
+  readonly initialControls: SaveControls;
+  run<T>(work: () => Promise<T>): Promise<T>;
+}
+
+const SAVE_SLOT = createSlotKey<SaveSlot>("parapdf.save");
+
+export function saveOf(controller: PdfSessionController): SaveSlot {
+  return controller.slot(SAVE_SLOT, () => {
+    let pending = 0;
+    const initialControls: SaveControls = {
+      saving: false,
+      save: (options) => save(controller, options),
+      download: (options) => download(controller, options),
+    };
+    const store = new Store<SaveControls>(initialControls);
+    return {
+      store,
+      initialControls,
+      async run<T>(work: () => Promise<T>): Promise<T> {
+        if (++pending === 1) store.set({ saving: true });
+        try {
+          return await work();
+        } finally {
+          if (--pending === 0) store.set({ saving: false });
+        }
+      },
+    };
+  });
+}
+
 /**
  * The bytes of `session`'s document, or of the `pages` chosen, with what was
  * typed into its form fields and the annotations created in any of its
@@ -32,15 +78,18 @@ export async function save(
   session: PdfSession,
   { pages }: SaveOptions = {},
 ): Promise<Uint8Array | null> {
-  const doc = sessionControllerOf(session).openDocument();
+  const controller = sessionControllerOf(session);
+  const doc = controller.openDocument();
   if (!doc) return null;
-  // The text being typed counts, in every viewer, as it would once the
-  // reader clicks away.
-  await doc.commit();
-  await doc.output("WillSave");
-  const bytes = await doc.save(pages);
-  await doc.output("DidSave");
-  return bytes;
+  return saveOf(controller).run(async () => {
+    // The text being typed counts, in every viewer, as it would once the
+    // reader clicks away.
+    await doc.commit();
+    await doc.output("WillSave");
+    const bytes = await doc.save(pages);
+    await doc.output("DidSave");
+    return bytes;
+  });
 }
 
 /**
@@ -54,12 +103,15 @@ export async function download(
 ): Promise<void> {
   const controller = sessionControllerOf(session);
   const doc = controller.openDocument();
+  if (!doc) return;
   const sourceName = "url" in controller.source ? filenameFromUrl(controller.source.url) : null;
-  const bytes = await save(controller, { pages });
-  if (!bytes) return;
-  // A document whose metadata fails to read still downloads, under its URL.
-  // An empty name is none.
-  const served = filename ? null : await doc?.metadata().catch(() => null);
-  const name = filename || served?.filename || sourceName || "document.pdf";
-  downloadBytes(bytes, name, "application/pdf");
+  await saveOf(controller).run(async () => {
+    const bytes = await save(controller, { pages });
+    if (!bytes) return;
+    // A document whose metadata fails to read still downloads, under its URL.
+    // An empty name is none.
+    const served = filename ? null : await doc.metadata().catch(() => null);
+    const name = filename || served?.filename || sourceName || "document.pdf";
+    downloadBytes(bytes, name, "application/pdf");
+  });
 }

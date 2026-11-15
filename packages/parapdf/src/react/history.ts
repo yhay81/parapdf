@@ -12,8 +12,8 @@ export type { HistoryControls } from "../features/history.ts";
  * stable actions. Called without a selector, it tracks the fields read during
  * rendering; called with `selector`, it compares the selected value shallowly.
  */
-export function useHistory(viewer?: Viewer): HistoryControls;
 export function useHistory<T>(selector: (state: HistoryControls) => T, viewer?: Viewer): T;
+export function useHistory(viewer?: Viewer): HistoryControls;
 export function useHistory<T>(
   selectorOrViewer?: ((state: HistoryControls) => T) | Viewer,
   maybeViewer?: Viewer,

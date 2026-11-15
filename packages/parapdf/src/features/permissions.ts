@@ -1,6 +1,7 @@
 "use client";
 
 import type { DocumentPermissions } from "../document/session.ts";
+import { createSlotKey } from "../document/store.ts";
 import { controllerOf, type Viewer, type ViewerController } from "../view/viewer.ts";
 
 /** What a viewer that follows permissions asks the document for. */
@@ -22,15 +23,10 @@ interface Enforcement {
   listeners: Set<() => void>;
 }
 
-const policies = new WeakMap<ViewerController, Enforcement>();
+const PERMISSIONS_SLOT = createSlotKey<Enforcement>("parapdf.permissions");
 
 function policyOf(viewer: ViewerController): Enforcement {
-  let policy = policies.get(viewer);
-  if (!policy) {
-    policy = { holders: 0, listeners: new Set() };
-    policies.set(viewer, policy);
-  }
-  return policy;
+  return viewer.slot(PERMISSIONS_SLOT, () => ({ holders: 0, listeners: new Set() }));
 }
 
 /** Tell a feature when the application starts or stops enforcing permissions. */
@@ -46,7 +42,7 @@ export function onEnforcementChange(viewer: ViewerController, listener: () => vo
  */
 export function permits(viewer: Viewer, what: Permission): boolean {
   const controller = controllerOf(viewer);
-  return !policies.get(controller)?.holders || permitted(controller.permissions, what);
+  return !controller.peekSlot(PERMISSIONS_SLOT)?.holders || permitted(controller.permissions, what);
 }
 
 /**

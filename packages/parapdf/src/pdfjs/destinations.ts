@@ -86,14 +86,40 @@ function parseExplicitCoordinates(
   return { left, top, view, corner };
 }
 
+function applyPageCoordinates(
+  viewport: Pdfjs.PageViewport | undefined,
+  pageIndex: number,
+  coords: ExplicitCoordinates,
+): ResolvedDestination | undefined {
+  const { left, top, corner } = coords;
+  let { view } = coords;
+  const resolved = (x: number | null, y: number | null): ResolvedDestination =>
+    view ? { pageIndex, x, y, view } : { pageIndex, x, y };
+  if (left === null && top === null) return resolved(null, null);
+  if (!viewport) return undefined;
+  const [x = 0, y = 0] = viewport.convertToViewportPoint(left ?? 0, top ?? 0);
+  if (corner) {
+    // The rectangle's corners on the page as it shows, whichever way it turns.
+    const [cx = 0, cy = 0] = viewport.convertToViewportPoint(...corner);
+    view = { fit: "rect", width: Math.abs(cx - x), height: Math.abs(cy - y) };
+    return resolved(Math.min(x, cx), Math.min(y, cy));
+  }
+  const quarter = viewport.rotation % 180 !== 0;
+  return resolved(
+    (quarter ? top : left) === null ? null : x,
+    (quarter ? left : top) === null ? null : y,
+  );
+}
+
 /**
- * Resolve `dest` synchronously when it names a numeric page without page-space
- * coordinates (such as `#page=3` or `#zoom=page-fit`); returns `undefined` when
- * named-destination or page-viewport resolution is required.
+ * Resolve `dest` synchronously when it names a numeric page and either carries
+ * no page-space coordinates or `getKnownPage` already holds that page; returns
+ * `undefined` when named-destination or page-viewport loading is still required.
  */
 export function resolveDestinationSync(
   pageCount: number,
   dest: Destination,
+  getKnownPage?: (pageIndex: number) => Pdfjs.PDFPageProxy | undefined,
 ): ResolvedDestination | null | undefined {
   if (typeof dest === "string") return undefined;
   if (!Array.isArray(dest)) return null;
@@ -101,9 +127,9 @@ export function resolveDestinationSync(
   if (!Number.isInteger(target)) return target && typeof target === "object" ? undefined : null;
   const pageIndex = target as number;
   if (pageIndex < 0 || pageIndex >= pageCount) return null;
-  const { left, top, view } = parseExplicitCoordinates(mode, args);
-  if (left !== null || top !== null) return undefined;
-  return view ? { pageIndex, x: null, y: null, view } : { pageIndex, x: null, y: null };
+  const coords = parseExplicitCoordinates(mode, args);
+  const page = coords.left === null && coords.top === null ? undefined : getKnownPage?.(pageIndex);
+  return applyPageCoordinates(page?.getViewport({ scale: 1 }), pageIndex, coords);
 }
 
 /** An explicit destination's page, point, and view (PDF 32000-1, 12.3.2.2); null if it is not one. */
@@ -121,24 +147,12 @@ export async function resolveExplicit(
   } else return null;
   // A page not in the document is nowhere, as in pdf.js's viewer.
   if (pageIndex < 0 || pageIndex >= doc.numPages) return null;
-  const { left, top, view: parsedView, corner } = parseExplicitCoordinates(mode, args);
-  let view = parsedView;
-  const resolved = (x: number | null, y: number | null): ResolvedDestination =>
-    view ? { pageIndex, x, y, view } : { pageIndex, x, y };
-  if (left === null && top === null) return resolved(null, null);
-  const viewport = (await getPage(pageIndex)).getViewport({ scale: 1 });
-  const [x = 0, y = 0] = viewport.convertToViewportPoint(left ?? 0, top ?? 0);
-  if (corner) {
-    // The rectangle's corners on the page as it shows, whichever way it turns.
-    const [cx = 0, cy = 0] = viewport.convertToViewportPoint(...corner);
-    view = { fit: "rect", width: Math.abs(cx - x), height: Math.abs(cy - y) };
-    return resolved(Math.min(x, cx), Math.min(y, cy));
-  }
-  const quarter = viewport.rotation % 180 !== 0;
-  return resolved(
-    (quarter ? top : left) === null ? null : x,
-    (quarter ? left : top) === null ? null : y,
-  );
+  const coords = parseExplicitCoordinates(mode, args);
+  const viewport =
+    coords.left === null && coords.top === null
+      ? undefined
+      : (await getPage(pageIndex)).getViewport({ scale: 1 });
+  return applyPageCoordinates(viewport, pageIndex, coords) ?? null;
 }
 
 /** Where a named or explicit destination points; null when it points nowhere. */

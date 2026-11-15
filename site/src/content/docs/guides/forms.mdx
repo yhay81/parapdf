@@ -51,8 +51,11 @@ await download(session, { filename: "excerpt.pdf", pages: [{ excludePages: [3] }
 ```
 
 When React Activity hides action controls, saving can finish in the background
-and print preparation is cancelled. When shown again, the hooks report the
-current idle or pending state.
+and print preparation is cancelled once the last `usePrint()` holder hides or
+unmounts. Multiple `useSave()` and `usePrint()` callers share the session's or
+viewer's live state (and support selector functions such as
+`useSave((s) => s.saving)`). When shown again, the hooks report the current
+idle or pending state.
 
 ## Reading and filling the form
 

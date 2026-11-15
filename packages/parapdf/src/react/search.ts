@@ -14,8 +14,8 @@ export type { SearchControls } from "../features/search/index.ts";
  * re-render on match updates; called with `selector`, it compares the
  * selected value shallowly.
  */
-export function useSearch(viewer?: Viewer): SearchControls;
 export function useSearch<T>(selector: (state: SearchControls) => T, viewer?: Viewer): T;
+export function useSearch(viewer?: Viewer): SearchControls;
 export function useSearch<T>(
   selectorOrViewer?: ((state: SearchControls) => T) | Viewer,
   maybeViewer?: Viewer,

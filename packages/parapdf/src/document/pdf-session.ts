@@ -11,7 +11,7 @@ import {
   splitFragment,
 } from "./registry.ts";
 import type { DocumentSession, PdfSource } from "./session.ts";
-import type { ReadableStore, StoreListener } from "./store.ts";
+import type { ReadableStore, SlotKey, StoreListener } from "./store.ts";
 
 /**
  * A session's document state as a provider that shows no password prompt
@@ -91,14 +91,12 @@ export interface PdfSession {
   submitPassword(password: string | null): void;
 }
 
-const sessionControllers = new WeakSet<PdfSessionController>();
-
 /** Resolve the internal `PdfSessionController` backing a public `PdfSession` handle. */
 export function sessionControllerOf(session: PdfSession): PdfSessionController {
-  if (!sessionControllers.has(session as PdfSessionController)) {
+  if (!PdfSessionController.is(session)) {
     throw new TypeError("Expected a PdfSession from <PdfDocument> or useSession()");
   }
-  return session as PdfSessionController;
+  return session;
 }
 
 /**
@@ -110,6 +108,10 @@ export function sessionControllerOf(session: PdfSession): PdfSessionController {
  * session for it while mounted.
  */
 export class PdfSessionController implements PdfSession {
+  static is(value: unknown): value is PdfSessionController {
+    return typeof value === "object" && value !== null && #control in value;
+  }
+
   /** The source it shows, a URL without its fragment. */
   readonly source: PdfSource;
   /** Reactive store of status, progress, the password request, page count, and permissions. */
@@ -139,6 +141,7 @@ export class PdfSessionController implements PdfSession {
   /** Where its URL's fragment says to open, which changes without opening the document again. */
   #fragment: string;
   readonly #fragmentListeners = new Set<() => void>();
+  #slots: Record<symbol, unknown> | null = null;
 
   constructor(
     source: PdfSource,
@@ -147,7 +150,6 @@ export class PdfSessionController implements PdfSession {
       pdfjs = loadPdfjs,
     }: { passwordPrompt?: boolean; pdfjs?: PdfjsLoader } = {},
   ) {
-    sessionControllers.add(this);
     const [url, hash] = "url" in source ? splitFragment(source.url) : ["", ""];
     this.source = "url" in source && source.url !== url ? { ...source, url } : source;
     this.#fragment = hash;
@@ -340,5 +342,27 @@ export class PdfSessionController implements PdfSession {
     return () => {
       this.#fragmentListeners.delete(listener);
     };
+  }
+
+  /** Lazily initialize or read feature-owned state directly on this controller. */
+  slot<T>(key: SlotKey<T>, create: () => T): T {
+    this.#slots ??= Object.create(null) as Record<symbol, unknown>;
+    const slots = this.#slots;
+    let value = slots[key] as T | undefined;
+    if (value === undefined) {
+      value = create();
+      slots[key] = value;
+    }
+    return value;
+  }
+
+  peekSlot<T>(key: SlotKey<T>): T | undefined {
+    return this.#slots?.[key] as T | undefined;
+  }
+
+  clearSlot<T>(key: SlotKey<T>, expected?: T): void {
+    if (this.#slots && (expected === undefined || this.#slots[key] === expected)) {
+      delete this.#slots[key];
+    }
   }
 }

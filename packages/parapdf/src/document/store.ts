@@ -1,6 +1,13 @@
 /** Listener notified when a store publishes; receives changed keys when known. */
 export type StoreListener = (changedKeys?: ReadonlySet<PropertyKey>) => void;
 
+/** Typed symbol key for feature-owned state stored directly on a controller or session. */
+export type SlotKey<T> = symbol & { readonly __slot?: T };
+
+export function createSlotKey<T>(description: string): SlotKey<T> {
+  return Symbol(description) as SlotKey<T>;
+}
+
 /** An immutable snapshot and its subscriptions, without a public writer. */
 export interface ReadableStore<T> {
   get(): T;
