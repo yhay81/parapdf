@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ParaPDF social preview</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        width: 1280px;
+        height: 640px;
+        overflow: hidden;
+        background: #111b36;
+        color: #f7f9ff;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      main { position: relative; height: 100%; padding: 52px 56px; }
+      .brand { display: flex; align-items: center; gap: 14px; font-size: 30px; font-weight: 700; }
+      .brand svg { width: 44px; height: 44px; }
+      .category { margin: 44px 0 14px; color: #aebef4; font-size: 17px; letter-spacing: 2px; }
+      h1 { margin: 0; font-size: 62px; line-height: 1.08; letter-spacing: -2px; }
+      .description { width: 405px; margin-top: 24px; font-size: 22px; line-height: 1.5; color: #c7d1e6; }
+      .install { display: inline-block; margin-top: 23px; padding: 13px 19px; background: #24345b; border: 1px solid #40537f; border-radius: 10px; color: #e3eaff; font-size: 20px; }
+      .preview { position: absolute; left: 520px; top: 143px; width: 704px; margin: 0; }
+      .preview img { display: block; width: 704px; height: 352px; border-radius: 12px; border: 1px solid #50618b; }
+      figcaption { margin-top: 16px; color: #aebef4; font-size: 17px; text-align: center; }
+      footer { position: absolute; bottom: 42px; left: 56px; right: 56px; display: flex; justify-content: space-between; align-items: center; color: #aebef4; font-size: 18px; }
+      .repo { color: #e3eaff; font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="brand">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="ParaPDF logo">
+          <title>ParaPDF</title>
+          <rect x="10" y="3" width="17" height="22" rx="2.5" fill="#8aa4ff" />
+          <rect x="5" y="7" width="17" height="22" rx="2.5" fill="#3451d1" />
+          <path d="M9.5 13.5h8M9.5 17.5h8M9.5 21.5h5" stroke="#fff" stroke-width="2" stroke-linecap="round" />
+        </svg>
+        ParaPDF
+      </div>
+      <p class="category">REACT PDF VIEWER · BUILT ON PDF.JS</p>
+      <h1>Long PDFs.<br />Your React UI.</h1>
+      <p class="description">Virtualized pages. Search, forms,<br />and annotations. Open source.</p>
+      <code class="install">npm install parapdf</code>
+      <figure class="preview">
+        <img src="./demo.png" alt="ParaPDF's demo displaying page 500 of a 1,000-page PDF" />
+        <figcaption>Try 1,000 pages in the live demo. No account needed.</figcaption>
+      </figure>
+      <footer>
+        <span class="repo">github.com/yhay81/parapdf</span>
+        <span>TypeScript · Apache-2.0</span>
+      </footer>
+    </main>
+  </body>
+</html>
