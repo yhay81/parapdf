@@ -2,7 +2,15 @@
 
 Started November 16, 2026. This is a maintainer's experiment plan, not API
 documentation. The [site](https://parapdf.yhay81.com/) documents the released
-package. Current public baseline: **1 star, 0 forks, npm 0.8.0**.
+package. Latest snapshot (November 16, 12:42 UTC): **1 star, 0 forks, npm 0.9.0**.
+
+The [Japanese article](https://zenn.dev/yhay81/articles/202611-parapdf) is
+published. The maintainer has now authorized promotion on other media,
+including English-language channels. The next work is an English
+introduction on X and LinkedIn, then a technical article on Medium if an
+existing account is available. See the [publication log](publications.md),
+[social copy](social-posts.md), and [English article](launch.en.md).
+The social posts remain unpublished until account access is available.
 
 ## Audience and promise
 
@@ -37,15 +45,16 @@ readers, not a large one-day spike.
 | When | Action | Evidence to keep |
 | --- | --- | --- |
 | Day 0 | Improve the repository description, relevant topics, README, demo links, and preview assets. Capture a baseline. | Commit, live repository metadata, local snapshot |
-| Days 1–3 | Publish the Japanese technical article and one short post from the maintainer's accounts, after approving their exact text. Link to the working demo and repository. | Each post URL, date, and snapshot before/after |
+| Days 1–3 | Publish the Japanese technical article and one short introduction per selected existing account. Link to the working demo and repository. | Each post URL, date, and snapshot before/after |
 | Days 4–7 | Answer real setup questions; fix the most common obstacle. Use the replies to choose the next example. | Reproducible issues and documentation fixes |
 | Week 2 | Share one technical finding with the community that would use it. Show both wins and losses from the recorded comparison. | Article or discussion URL, qualified feedback |
 | Week 3 | Publish an example addressing the most common real request, if it fits the project's scope. | Working example and feedback from its requester |
 | Week 4 | Compare the experiment's snapshots and effort. Continue the channel that brought useful trials; revise or stop the others. | Net stars, non-overlapping visitor windows, trial reports, time spent |
 
-No posts, messages, or recurring jobs are sent by this plan. External
-publication needs a chosen account and approval of the finished text.
-The Japanese drafts are in [launch.ja.md](launch.ja.md).
+The plan itself sends no posts, messages, or recurring jobs. Publication
+was authorized by the maintainer; use existing accounts and verify each
+post before recording it as sent. Do not request the same content approval
+again. The Japanese article's source is tracked in [launch.ja.md](launch.ja.md).
 
 ## Distribution, in order
 
@@ -53,14 +62,21 @@ The Japanese drafts are in [launch.ja.md](launch.ja.md).
    homepage, and use relevant topics. The README should answer what it is,
    show it working, and make trying it obvious. A single star invitation
    belongs after those answers.
-2. **Zenn and the maintainer's existing social audience.** Start with the
-   technical article and a short demo link. Explain the implementation
-   problem, provide runnable code, and include one useful measurement.
-   Publish once, then respond to questions instead of repeating the link.
-3. **A relevant React community.** Read that community's current rules and
+2. **Zenn and the maintainer's existing social audience.** The technical
+   article is published. Next, introduce the demo in English on X and
+   LinkedIn, through supported account access. Explain the implementation
+   problem and link to the source. Keep benchmark claims qualified.
+   Publish once per channel; do not repeat the link or automate replies.
+3. **English long-form article.** Publish [launch.en.md](launch.en.md) on
+   Medium if account access is available, with its AI-assistance disclosure
+   and no paywall. DEV is excluded from this promotional campaign because
+   its AI-assisted content rules restrict promotion. r/opensource also
+   prohibits AI-generated content. Keep the rule links and channel-specific
+   decisions in [social-posts.md](social-posts.md).
+4. **A relevant React community.** Read that community's current rules and
    select its project-showcase venue before proposing a post. Do not put
    promotional issues in unrelated repositories or send unsolicited DMs.
-4. **Show HN, only with the maintainer personally participating.** Link to
+5. **Show HN, only with the maintainer personally participating.** Link to
    the usable demo, and let the maintainer write the title, explanation,
    and replies themselves. HN currently prohibits generated/AI-edited text
    and automated posting. Research notes are the demo URL, decisions
@@ -75,15 +91,21 @@ stars, or coordinate votes on another service.
 
 ## Claims and release checks
 
-- The featured comparison is historical: October 28, 2026, five runs,
-  Apple M2 Pro, Chromium 156, 1,000 pages, 3,600 CSS px/s for four seconds,
-  1280×900 at devicePixelRatio 2. Link to the
-  [raw report](../../examples/prototype/results/compare-react-pdf-1000-chromium.md).
+- Use the November 16, 2026 comparison of the exact 0.9.0 source, five runs
+  per condition in Chromium, Playwright WebKit and Firefox. The highlighted
+  condition is Apple M2 Pro, Chromium 158.0.8127.18, 1,000 pages,
+  3,600 CSS px/s for four seconds from the beginning, 1280×900 at
+  devicePixelRatio 2. Link to the
+  [full report](../../examples/prototype/results/compare-react-pdf-20261116.md).
 - Compare against **windowed react-pdf**, not just an all-pages-mounted
-  example. The 111 vs 249 MiB of canvas memory is about 55% less, and
-  24 vs 43 React commits is about 44% fewer. Also report the 7 vs 4 ms
-  main-thread loss at reading speed on the same 1,000-page document.
-  The two stacks use different pdf.js versions.
+  example. The 111 vs 249 MiB canvas estimate is about 55% less, and
+  25 vs 43 React commits is about 42% fewer. Report the 51 vs 17 ms
+  main-thread loss in the same highlighted condition. The two stacks
+  use different pdf.js versions (6.5.438 and 6.3.289).
+- First paint can be a low-resolution base. Canvas memory is sampled
+  after scrolling and visible blanks have filled, without waiting for
+  full refinement. Scroll-time blocking omits deferred work. Do not turn
+  either into a claim about total memory or equally sharp rendering.
 - Do not call canvas memory total memory, or Playwright WebKit Safari.
   Do not call the library universally faster or imply worker drawing is
   the default. Do not present an old measurement as a fresh test of `main`.
@@ -101,7 +123,7 @@ node .github/scripts/growth-snapshot.mjs
 ```
 
 Requires Node 24+ and an authenticated `gh` with repository traffic access.
-Run before each approved publication, the next day, and at each weekly
+Run before each publication, the next day, and at each weekly
 review. It only reads GitHub and npm; it creates no schedule. It saves a
 timestamped JSON file under ignored `.growth/`, with owner-only file
 permissions. Keep these private, since repository traffic requires
@@ -115,7 +137,9 @@ timestamp. Use the dates returned by each service: the APIs can lag.
 
 The initial snapshot was captured at `2026-11-16T02:57:44.295Z`, before
 changing repository metadata. Its private traffic data is intentionally
-not committed.
+not committed. The November 16 evening snapshot is recorded in
+[the publication log](publications.md); do not infer a promotional effect
+before external posts have actually been sent.
 
 - **Outcome:** net stars between snapshots, plus reports of actual trials.
 - **Discovery:** unique visitors and reported referrers. GitHub's traffic
