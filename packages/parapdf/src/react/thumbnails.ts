@@ -1,13 +1,12 @@
 "use client";
 
-import { type ReactNode, use, useMemo, useSyncExternalStore } from "react";
-import type { PdfSessionController } from "../document/pdf-session.ts";
+import type { ReactNode } from "react";
 import type { DocumentSession, PageSize } from "../document/session.ts";
-import type { ReadableStore } from "../document/store.ts";
+import { createSlotKey, type ReadableStore, Store } from "../document/store.ts";
 import type { Rotation } from "../pdfjs/draw.ts";
 import { clamp, turnedSize } from "../view/layout.ts";
 import type { ViewerController } from "../view/viewer.ts";
-import { SessionContext } from "./context.ts";
+import { useStoreKeys } from "./context.ts";
 
 /** A US Letter page's height over its width, until the page's own size is known. */
 const LETTER_RATIO = 11 / 8.5;
@@ -212,103 +211,60 @@ export function findThumbnailScroller(nav: HTMLElement): HTMLElement | null {
   return null;
 }
 
+export interface PageLabelsState {
+  readonly labels: readonly string[] | null;
+}
+
+const EMPTY_PAGE_LABELS: PageLabelsState = { labels: null };
+const PAGE_LABELS_KEYS: readonly PropertyKey[] = ["labels"];
+const PAGE_LABELS_SLOT = createSlotKey<ReadableStore<PageLabelsState>>("parapdf.pageLabels");
+
 /**
- * Create a non-suspending store of `pageLabels()` for `viewer` (and optional
- * `pdfSession` from context before `<PdfViewer>` attaches). Returns `null`
- * while opening, on the server, or when the PDF defines no page labels.
+ * Shared non-suspending store of `pageLabels()` for `viewer`, initialized on
+ * first `<PdfThumbnails>` mount. Resolves warm `knownPageLabels` synchronously
+ * during `prepare()` before layout publishes, and resets to `null` on close.
  */
-export function createPageLabelsStore(
-  viewer: ViewerController,
-  pdfSession: PdfSessionController | null,
-): ReadableStore<readonly string[] | null> {
-  const viewerDoc = (): DocumentSession | null =>
-    viewer.workSignal && !viewer.workSignal.aborted ? viewer.session : null;
-  const currentDoc = (): DocumentSession | null =>
-    viewerDoc() ?? pdfSession?.openDocument() ?? null;
-
-  let labels: readonly string[] | null = null;
-  const listeners = new Set<() => void>();
-  let stop: (() => void) | null = null;
-
-  const set = (next: readonly string[] | null) => {
-    if (Object.is(labels, next)) return;
-    labels = next;
-    for (const listener of [...listeners]) listener();
-  };
-
-  const start = () => {
-    const watch = new AbortController();
-    labels = currentDoc()?.knownPageLabels ?? null;
-
-    const sync = () => {
-      const fromViewer = viewerDoc();
-      const doc = fromViewer ?? pdfSession?.openDocument() ?? null;
-      if (!doc) {
-        set(null);
-        return;
-      }
-      if (!fromViewer && pdfSession) {
-        pdfSession.signal.addEventListener("abort", sync, { once: true, signal: watch.signal });
-      }
+export function pageLabelsOf(viewer: ViewerController): ReadableStore<PageLabelsState> {
+  return viewer.slot(PAGE_LABELS_SLOT, () => {
+    const store = new Store<PageLabelsState>(EMPTY_PAGE_LABELS);
+    let activeDoc: DocumentSession | null = null;
+    const syncDoc = (doc: DocumentSession) => {
+      activeDoc = doc;
       if (doc.knownPageLabels !== undefined) {
-        set(doc.knownPageLabels);
+        store.set({ labels: doc.knownPageLabels });
         return;
       }
-      set(null);
+      store.set(EMPTY_PAGE_LABELS);
       void doc.pageLabels().then(
         (resolved) => {
-          if (!watch.signal.aborted && currentDoc() === doc) set(resolved);
+          if (activeDoc === doc) store.set({ labels: resolved });
         },
         () => {
-          if (!watch.signal.aborted && currentDoc() === doc) set(null);
+          if (activeDoc === doc) store.set(EMPTY_PAGE_LABELS);
         },
       );
     };
-
-    const detachViewer = viewer.extend({
-      ready(_docSession, signal) {
-        sync();
-        signal.addEventListener("abort", sync, { once: true, signal: watch.signal });
+    viewer.extend({
+      prepare(doc) {
+        if (activeDoc === doc) return;
+        syncDoc(doc);
+      },
+      closed() {
+        activeDoc = null;
+        store.set(EMPTY_PAGE_LABELS);
       },
     });
-    const unsubSession = pdfSession
-      ? pdfSession.stateStore.subscribe((changedKeys) => {
-          if (!changedKeys || changedKeys.has("status")) sync();
-        })
-      : null;
-    sync();
-    return () => {
-      watch.abort();
-      detachViewer();
-      unsubSession?.();
-      labels = null;
-    };
-  };
-
-  return {
-    get: () => (stop ? labels : (currentDoc()?.knownPageLabels ?? null)),
-    subscribe(listener) {
-      listeners.add(listener);
-      if (listeners.size === 1) stop = start();
-      return () => {
-        if (listeners.delete(listener) && listeners.size === 0) {
-          const cleanup = stop;
-          stop = null;
-          cleanup?.();
-        }
-      };
-    },
-  };
+    if (!activeDoc) {
+      const warm = viewer.pdfSession?.openDocument();
+      if (warm) syncDoc(warm);
+    }
+    return store;
+  });
 }
 
-const getNullSnapshot = (): null => null;
+const selectPageLabels = (state: PageLabelsState): readonly string[] | null => state.labels;
 
 /** Non-suspending hook returning the PDF's `pageLabels` once resolved, or `null`. */
-export function useOptionalPageLabels(
-  viewer: ViewerController,
-  hasExternalViewer = false,
-): readonly string[] | null {
-  const pdfSession = hasExternalViewer ? null : use(SessionContext);
-  const store = useMemo(() => createPageLabelsStore(viewer, pdfSession), [viewer, pdfSession]);
-  return useSyncExternalStore(store.subscribe, store.get, getNullSnapshot);
+export function useOptionalPageLabels(viewer: ViewerController): readonly string[] | null {
+  return useStoreKeys(pageLabelsOf(viewer), PAGE_LABELS_KEYS, selectPageLabels);
 }

@@ -24,9 +24,10 @@ import {
 } from "../src/react/context.ts";
 import { useFormChange } from "../src/react/forms.ts";
 import { useHistory } from "../src/react/history.ts";
+import { usePermits } from "../src/react/permissions.ts";
 import { useSearch } from "../src/react/search.ts";
 import { useSelection } from "../src/react/selection.ts";
-import { useCreateViewer, useViewer } from "../src/react/viewer.ts";
+import { PdfView, useCreateViewer, useViewer } from "../src/react/viewer.ts";
 import { computeLayout } from "../src/view/layout.ts";
 import { controllerOf, type Viewer, ViewerController } from "../src/view/viewer.ts";
 import { fakeDocument, fakePdfjs, LETTER, settle } from "./fake-pdfjs.ts";
@@ -274,6 +275,101 @@ describe("getter-tracked snapshots", () => {
 
     unsub();
   });
+
+  it("keeps optional fields introduced in a batch and prunes them when reverted", () => {
+    const store = new Store<{ status: string; error?: string | undefined }>({ status: "idle" });
+    const batches: string[][] = [];
+    store.subscribe((keys) => batches.push([...(keys ?? [])].map(String)));
+
+    store.batch(() => store.set({ error: "Failed to open" }));
+    assert.deepEqual(store.get(), { status: "idle", error: "Failed to open" });
+    assert.deepEqual(batches, [["error"]]);
+
+    const before = store.get();
+    store.batch(() => {
+      store.set({ error: undefined });
+      store.set({ error: "Failed to open" });
+    });
+    assert.equal(store.get(), before);
+    assert.equal(batches.length, 1);
+
+    const empty = new Store<{ error?: string | undefined }>({});
+    const initial = empty.get();
+    let notifications = 0;
+    empty.subscribe(() => notifications++);
+    empty.batch(() => {
+      empty.set({ error: "Temporary" });
+      empty.set({ error: undefined });
+    });
+    assert.equal(empty.get(), initial);
+    assert.equal(notifications, 0);
+  });
+
+  it("coalesces multi-step Store.batch and ViewerStore.batch updates and prunes reverted keys", () => {
+    const store = new Store({ page: 0, scale: 1, tool: "select" as "select" | "hand" });
+    const baseSnapshot = store.get();
+    const batches: string[][] = [];
+    const unsub = store.subscribe((changedKeys) => {
+      batches.push([...(changedKeys ?? [])].map(String));
+    });
+
+    // Reverting every touched key inside a batch emits zero notifications and restores the original snapshot reference.
+    store.batch(() => {
+      store.set({ page: 3, scale: 2 });
+      store.batch(() => {
+        store.set({ page: 0, scale: 1 });
+      });
+    });
+    assert.equal(batches.length, 0);
+    assert.equal(store.get(), baseSnapshot);
+
+    // Multi-step mutations across nested batches publish once with only net changed keys.
+    store.batch(() => {
+      store.set({ page: 1, tool: "hand" });
+      store.batch(() => {
+        store.set({ page: 4, scale: 1.5 });
+        store.set({ tool: "select" });
+      });
+    });
+    assert.deepEqual(batches, [["page", "scale"]]);
+    assert.deepEqual(store.get(), { page: 4, scale: 1.5, tool: "select" });
+    unsub();
+
+    // ViewerStore tracks net "sizes" and "externalLinks" changes across batch boundaries.
+    const viewer = new ViewerController();
+    const viewerBatches: string[][] = [];
+    const unsubViewer = viewer.store.subscribe((changedKeys) => {
+      viewerBatches.push([...(changedKeys ?? [])].map(String));
+    });
+    const sizes = [LETTER, LETTER];
+    const layout = computeLayout(sizes, 1.5, {
+      gap: 12,
+      rotation: 0,
+      spread: "none",
+      scrollMode: "vertical",
+      direction: "ltr",
+      viewportWidth: 800,
+      page: 0,
+    });
+    viewer.store.batch(() => {
+      viewer.store.set({ layout, scale: 1 });
+      viewer.store.setExternalLinks("disabled");
+      viewer.store.setExternalLinks("new-tab");
+    });
+    assert.equal(viewerBatches.length, 1);
+    assert.ok(viewerBatches[0]?.includes("sizes"));
+    assert.equal(viewerBatches[0]?.includes("externalLinks"), false);
+
+    // Reverting layout back to null and back to the same sizes in a batch does not re-emit "sizes".
+    viewerBatches.length = 0;
+    viewer.store.batch(() => {
+      viewer.store.set({ layout: null });
+      viewer.store.set({ layout, scale: 2 });
+    });
+    assert.equal(viewerBatches.length, 1);
+    assert.deepEqual(viewerBatches[0], ["scale"]);
+    unsubViewer();
+  });
 });
 
 function ContextToolbar({ seen }: { seen: Viewer[] }) {
@@ -282,6 +378,10 @@ function ContextToolbar({ seen }: { seen: Viewer[] }) {
   const slice = useViewState((s) => ({ page: s.currentPage, scale: s.scale }));
   const { status } = useDocumentState();
   const docSlice = useDocumentState((s) => ({ status: s.status, pages: s.pageCount }));
+  const canPrint = usePermits("print");
+  const permits = usePermits();
+  assert.equal(canPrint, true);
+  assert.equal(permits.copy, true);
   useSearch();
   useHistory();
   useAnnotations();
@@ -297,6 +397,8 @@ function StandaloneViewerApp({ created }: { created: Viewer[] }) {
   created.push(external);
   const { tool } = useViewState(external);
   const scale = useViewState((s) => s.scale, external);
+  assert.equal(usePermits("annotate", external), true);
+  assert.equal(usePermits(external).fillForms, true);
   useSearch(external);
   return createElement("span", null, `${tool}:${scale}`);
 }
@@ -476,6 +578,40 @@ describe("ViewerContext, useCreateViewer, and optional viewer hooks", () => {
     } finally {
       releaseSession();
     }
+
+    // <PdfView> also uses LazyViewerHolder when no external viewer is passed, and unwraps external viewers directly.
+    const viewSlots: (ViewerController | LazyViewerHolder | null)[] = [];
+    renderToString(
+      createElement(
+        SessionContext,
+        { value: docSession },
+        createElement(
+          PdfView,
+          null,
+          createElement(DocOnlyProbe, { customViewer, slots: viewSlots }),
+        ),
+      ),
+    );
+    assert.ok(viewSlots[0] instanceof LazyViewerHolder);
+    assert.equal(
+      viewSlots[0].peek,
+      null,
+      "<PdfView> without viewer consumers allocates zero ViewerControllers",
+    );
+
+    const externalSlots: (ViewerController | LazyViewerHolder | null)[] = [];
+    renderToString(
+      createElement(
+        SessionContext,
+        { value: docSession },
+        createElement(
+          PdfView,
+          { viewer: customViewer },
+          createElement(DocOnlyProbe, { customViewer, slots: externalSlots }),
+        ),
+      ),
+    );
+    assert.equal(externalSlots[0], customViewer);
   });
 
   it("keeps setPasswordPrompt quiet outside password status and publishes exact keys on PdfSessionController.stateStore", () => {

@@ -148,7 +148,7 @@ export function PdfThumbnails({
     THUMBNAIL_VIEWER_KEYS,
     selectThumbnailViewerState,
   );
-  const pageLabels = useOptionalPageLabels(viewer, externalViewer !== undefined);
+  const pageLabels = useOptionalPageLabels(viewer);
 
   const navRef = useRef<HTMLElement>(null);
   const olRef = useRef<HTMLOListElement>(null);

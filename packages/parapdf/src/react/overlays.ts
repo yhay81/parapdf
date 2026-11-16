@@ -44,6 +44,18 @@ let nextRendererId = 0;
 const hasOverlayNode = (node: ReactNode): boolean =>
   node !== null && node !== undefined && node !== false;
 
+function notifyListeners(set: ReadonlySet<() => void>): void {
+  if (set.size === 0) return;
+  if (set.size === 1) {
+    for (const listener of set) {
+      listener();
+      break;
+    }
+    return;
+  }
+  for (const listener of [...set]) listener();
+}
+
 class OverlayStore {
   readonly #targets = new Map<number, PortalTarget>();
   readonly #portalCounts = new Map<number, number>();
@@ -88,7 +100,7 @@ class OverlayStore {
         : this.#activity.portalPages;
       this.#activity = { renderers, portalPages };
     }
-    for (const listener of [...this.#activeListeners]) listener();
+    notifyListeners(this.#activeListeners);
   }
 
   hasLayer(pageIndex: number): boolean {
@@ -138,8 +150,7 @@ class OverlayStore {
 
   #notifyPortal(pageIndex: number): void {
     const set = this.#portalListeners.get(pageIndex);
-    if (!set) return;
-    for (const listener of [...set]) listener();
+    if (set) notifyListeners(set);
   }
 
   portalTarget(pageIndex: number): PortalTarget | null {

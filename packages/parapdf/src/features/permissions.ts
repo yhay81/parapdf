@@ -1,11 +1,36 @@
 "use client";
 
 import type { DocumentPermissions } from "../document/session.ts";
-import { createSlotKey } from "../document/store.ts";
+import { createSlotKey, type ReadableStore, Store } from "../document/store.ts";
 import { controllerOf, type Viewer, type ViewerController } from "../view/viewer.ts";
 
 /** What a viewer that follows permissions asks the document for. */
 export type Permission = "print" | "copy" | "annotate" | "fillForms";
+
+/** Effective permission flags of a viewer (`true` unless `<PdfPermissions />` restricts them). */
+export interface PermitsState {
+  readonly print: boolean;
+  readonly copy: boolean;
+  readonly annotate: boolean;
+  readonly fillForms: boolean;
+}
+
+export const ALL_PERMITTED: PermitsState = {
+  print: true,
+  copy: true,
+  annotate: true,
+  fillForms: true,
+};
+
+function computePermitsState(permissions: DocumentPermissions | null): PermitsState {
+  if (!permissions) return ALL_PERMITTED;
+  return {
+    print: permissions.print,
+    copy: permissions.copy,
+    annotate: permissions.annotate,
+    fillForms: permissions.fillForms || permissions.annotate,
+  };
+}
 
 /**
  * Whether `permissions` permit `what`; everything while they are unknown.
@@ -20,13 +45,38 @@ export function permitted(permissions: DocumentPermissions | null, what: Permiss
 interface Enforcement {
   holders: number;
   stopCopyProtection?: () => void;
-  listeners: Set<() => void>;
+  readonly listeners: Set<() => void>;
+  readonly store: Store<PermitsState>;
+  sync(permissions: DocumentPermissions | null): void;
 }
 
 const PERMISSIONS_SLOT = createSlotKey<Enforcement>("parapdf.permissions");
 
 function policyOf(viewer: ViewerController): Enforcement {
-  return viewer.slot(PERMISSIONS_SLOT, () => ({ holders: 0, listeners: new Set() }));
+  return viewer.slot(PERMISSIONS_SLOT, () => {
+    const store = new Store<PermitsState>(ALL_PERMITTED);
+    const entry: Enforcement = {
+      holders: 0,
+      listeners: new Set(),
+      store,
+      sync(permissions) {
+        store.set(entry.holders > 0 ? computePermitsState(permissions) : ALL_PERMITTED);
+      },
+    };
+    viewer.extend({
+      prepare() {
+        entry.sync(viewer.permissions);
+      },
+      closed() {
+        entry.sync(null);
+      },
+    });
+    return entry;
+  });
+}
+
+export function permitsStoreOf(viewer: ViewerController): ReadableStore<PermitsState> {
+  return policyOf(viewer).store;
 }
 
 /** Tell a feature when the application starts or stops enforcing permissions. */
@@ -49,13 +99,14 @@ export function permits(viewer: Viewer, what: Permission): boolean {
  * Follow what `viewer`'s documents permit, as pdf.js does not by default:
  * without permission to copy, their text cannot be selected or copied,
  * though it stays readable by assistive technology and `getText()`; without
- * permission to print, `print()` fails; without permission to annotate,
- * annotations cannot be created, and form fields can be filled in only with
- * permission to fill forms. Returns the function that stops following them.
+ * permission to print, `usePrint()`'s `print()` fails; without permission to
+ * annotate, annotations cannot be created, and form fields can be filled in
+ * only with permission to fill forms. Returns the function that stops following them.
  */
 export function enforcePermissions(viewer: ViewerController): () => void {
   const policy = policyOf(viewer);
   if (++policy.holders === 1) {
+    policy.sync(viewer.permissions);
     policy.stopCopyProtection = protectCopy(viewer);
     for (const listener of policy.listeners) listener();
   }
@@ -64,6 +115,7 @@ export function enforcePermissions(viewer: ViewerController): () => void {
     if (released) return;
     released = true;
     if (--policy.holders !== 0) return;
+    policy.sync(null);
     policy.stopCopyProtection?.();
     delete policy.stopCopyProtection;
     for (const listener of policy.listeners) listener();

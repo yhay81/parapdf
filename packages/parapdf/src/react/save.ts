@@ -8,11 +8,11 @@ export type { SaveControls } from "../features/download.ts";
 
 /**
  * Save or download the document of `session`, or of the nearest
- * `<PdfDocument>`, with reactive `saving` state shared across `save()`,
- * `download()`, and every `useSave()` consumer of that session. Called without
- * a selector, it tracks the fields read during rendering so components reading
- * only `save` or `download` never re-render while saving; called with
- * `selector`, it compares the selected value shallowly.
+ * `<PdfDocument>`, with reactive `saving` state shared across every `useSave()`
+ * consumer of that session. Called without a selector, it tracks the fields
+ * read during rendering so components reading only `save` or `download` never
+ * re-render while saving; called with `selector`, it compares the selected
+ * value shallowly.
  */
 export function useSave<T>(selector: (state: SaveControls) => T, session?: PdfSession): T;
 export function useSave(session?: PdfSession): SaveControls;

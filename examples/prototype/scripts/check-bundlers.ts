@@ -12,7 +12,8 @@
  *
  * Usage: pnpm --filter @parapdf/bench corpus && pnpm --filter @parapdf/prototype check:bundlers
  * Environment: BROWSER (chromium, webkit, or firefox); BUNDLERS, a
- * comma-separated subset of webpack, rsbuild, next-turbopack, and next-webpack.
+ * comma-separated subset of webpack, rsbuild, next-turbopack, and next-webpack;
+ * BUNDLER_PORT (4185), a free port in the functional checks' 4179–4189 range.
  */
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { createReadStream, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -47,7 +48,10 @@ for (const name of selected) {
 // Inside the workspace, so that the applications resolve this package's
 // React, pdf.js, and bundlers, and Turbopack's root holds all of them.
 const appsDir = join(exampleDir, ".bundlers");
-const PORT = 4185;
+const PORT = Number(process.env.BUNDLER_PORT ?? 4185);
+if (!Number.isInteger(PORT) || PORT < 4179 || PORT > 4189) {
+  throw new Error("BUNDLER_PORT must be an integer from 4179 to 4189");
+}
 const launched = await launchBrowser();
 console.log(launched.label);
 

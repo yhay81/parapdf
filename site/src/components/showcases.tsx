@@ -1,5 +1,4 @@
 import {
-  download,
   type PageColors,
   PdfDocument,
   PdfForms,
@@ -13,6 +12,7 @@ import {
   useCreateViewer,
   useDocumentState,
   useFormChange,
+  useSave,
   useSelection,
   useSession,
   useViewer,
@@ -542,6 +542,7 @@ export function FormSyncShowcase() {
 function FormSyncContent() {
   const viewer = useViewer();
   const session = useSession();
+  const { download, saving } = useSave();
   const [record, setRecord] = useState<TaxpayerRecord>(ADA_RECORD);
   const [zipChecked, setZipChecked] = useState(false);
   const [syncNotice, setSyncNotice] = useState("Prefilled Form 1040 from React state");
@@ -609,7 +610,8 @@ function FormSyncContent() {
         <span className="spacer" />
         <button
           type="button"
-          onClick={() => void download(session, { filename: "f1040-filled.pdf" })}
+          disabled={saving}
+          onClick={() => void download({ filename: "f1040-filled.pdf" })}
         >
           Download filled PDF
         </button>

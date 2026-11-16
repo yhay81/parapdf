@@ -101,7 +101,7 @@ that matters for performance or direction gets a decision record.
   `PdfPermissions`), declarative page overlays (`PdfPageOverlay`,
   `PdfPageOverlays`, `PdfPageRect`), `PdfSelectionPopover`,
   `PdfThumbnails`, `PdfOutline`, `useViewer()`, `useCreateViewer()`,
-  `useSave()`, `usePrint()`, and the hooks (`src/react/`, `"use client"`); unit tests in Node, which stand in for pdf.js with
+  `useSave()`, `usePrint()`, `usePermits()`, and the hooks (`src/react/`, `"use client"`); unit tests in Node, which stand in for pdf.js with
   `test/fake-pdfjs.ts` and for the elements of a page the renderer builds
   with `test/fake-dom.ts` (`test/`).
   `scripts/pdfjs-files.ts`, run by `pnpm install` and `build`, copies
@@ -172,6 +172,8 @@ that matters for performance or direction gets a decision record.
   Rsbuild, and Next.js (Turbopack and webpack) ones under
   `examples/prototype/.bundlers/` (`BUNDLERS` picks some), whose versions
   the prototype's devDependencies pin; both share `scripts/bundle-app.ts`.
+  `BUNDLER_PORT` selects a free port from 4179 to 4189 for `check:bundlers`
+  (4185 by default) when another local check owns its usual port.
   `check:viewers` opens two viewers under one
   `PdfDocument` and checks independent view state, closing one while the
   other works, viewport-only detach/reattach, the provider releasing the

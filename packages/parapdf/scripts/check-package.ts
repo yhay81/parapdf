@@ -170,6 +170,7 @@ import {
   useDocumentState,
   useFormChange,
   useHistory,
+  usePermits,
   usePrint,
   useSave,
   useSearch,
@@ -278,6 +279,8 @@ function Toolbar() {
   const isSaving: boolean = useSave((s) => s.saving);
   const { print, printing, progress, cancel } = usePrint();
   const isPrinting: boolean = usePrint((p) => p.printing);
+  const canPrint: boolean = usePermits("print");
+  const { annotate: canAnnotate } = usePermits();
   const annotations = useAnnotations();
   const activeTool: AnnotationTool = useAnnotations((a) => a.tool);
   const { currentPage, pageCount } = useViewState();
@@ -290,6 +293,8 @@ function Toolbar() {
   void selection?.anchor;
   void isSaving;
   void isPrinting;
+  void canPrint;
+  void canAnnotate;
   void activeTool;
   const proxy = session.proxy;
   const sessionStatus: string = session.state.status;
@@ -421,6 +426,7 @@ import {
   useAnnotations,
   useDocumentState,
   useHistory,
+  usePermits,
   usePrint,
   useSave,
   useSearch,
@@ -438,6 +444,10 @@ for (const removed of [
   "attachHistory",
   "attachThumbnail",
   "enforcePermissions",
+  "permits",
+  "save",
+  "download",
+  "print",
   "useAnnotationEditing",
   "getSelection",
   "getViewState",
@@ -466,10 +476,12 @@ function Toolbar() {
   preloadDocument("/warm.pdf");
   const { saving } = useSave();
   const { printing } = usePrint();
+  const canPrint = usePermits("print");
+  const { copy: canCopy } = usePermits();
   const { tool } = useAnnotations();
   const { currentPage, pageCount } = useViewState();
   const { status } = useDocumentState();
-  return createElement("output", null, \`\${status}:\${currentPage}/\${pageCount}:\${tool}:\${saving}:\${printing}\`);
+  return createElement("output", null, \`\${status}:\${currentPage}/\${pageCount}:\${tool}:\${saving}:\${printing}:\${canPrint}:\${canCopy}\`);
 }
 
 process.stdout.write(
@@ -508,7 +520,7 @@ process.stdout.write(
     html.includes('aria-label="Manual"') &&
     html.includes('aria-label="Secondary"') &&
     html.includes('data-precedence="parapdf"') &&
-    html.includes("<output>loading:0/0:none:false:false</output>");
+    html.includes("<output>loading:0/0:none:false:false:true:true</output>");
   check("the components render on the server", rendered, rendered ? "" : html.slice(0, 200));
   check(
     "the server's page starts downloading the PDF",

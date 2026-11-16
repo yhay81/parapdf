@@ -14,8 +14,9 @@ description: What ParaPDF does not do yet, and what has not been verified.
 - A highlight fallback for browsers without the CSS Custom Highlight API,
   which find and scroll to matches without painting them.
 - Seeing other viewers' annotations while they edit. Viewers of one
-  document that edit annotations each show those they created; `save(session)`
-  and `print(viewer)` include every viewer's.
+  document that edit annotations each show those they created; `useSave()`
+  and `usePrint()` include every currently shown viewer's. An Activity-hidden
+  viewer's edits return to the shared document when it is shown again.
 - A controlled current page: `onPageChange` reports it and
   `viewer.goToPage()` sets it.
 

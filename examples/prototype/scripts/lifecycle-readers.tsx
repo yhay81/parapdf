@@ -1,5 +1,15 @@
-import { PdfDocument, useDocumentState, useOutline, useSession } from "parapdf";
+import {
+  PdfDocument,
+  PdfThumbnails,
+  PdfViewer,
+  preloadDocument,
+  useDocumentState,
+  useOutline,
+  useSession,
+  useViewState,
+} from "parapdf";
 import { Suspense, useEffect } from "react";
+import { flushSync } from "react-dom";
 import { createRoot, hydrateRoot } from "react-dom/client";
 import { configureEngine } from "../src/engines.ts";
 
@@ -54,4 +64,48 @@ export function mountOthers(markup: string): void {
       </PdfDocument>
     </Suspense>,
   );
+}
+
+function WarmToolbar() {
+  const { currentPage, pageCount } = useViewState();
+  const scale = useViewState((s) => s.scale);
+  return <output data-warm-toolbar={`${currentPage}/${pageCount}/${scale > 0}`} />;
+}
+
+/** Verify warm <PdfDocument> + <PdfViewer> settles useViewState and <PdfThumbnails> synchronously before paint. */
+export async function checkWarmMountPrePaint(): Promise<{
+  toolbar: string | null;
+  thumbs: number;
+  currentThumb: string | null;
+  sections: number;
+}> {
+  preloadDocument("/corpus/usrguide.pdf#page=2");
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  const element = container("warm-pre-paint");
+  const root = createRoot(element);
+  try {
+    flushSync(() => {
+      root.render(
+        <PdfDocument source="/corpus/usrguide.pdf#page=2">
+          <WarmToolbar />
+          <PdfThumbnails style={{ height: 320, overflow: "auto" }} />
+          <PdfViewer style={{ width: 800, height: 600 }} />
+        </PdfDocument>,
+      );
+    });
+    return {
+      toolbar:
+        element.querySelector("output[data-warm-toolbar]")?.getAttribute("data-warm-toolbar") ??
+        null,
+      thumbs: element.querySelectorAll("nav ol li").length,
+      currentThumb:
+        element
+          .querySelector('nav ol li button[aria-current="page"]')
+          ?.getAttribute("aria-label") ?? null,
+      sections: element.querySelectorAll(".parapdf-pages > section").length,
+    };
+  } finally {
+    flushSync(() => root.unmount());
+    element.remove();
+  }
 }

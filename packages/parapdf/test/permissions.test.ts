@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { DocumentPermissions } from "../src/document/session.ts";
 import { attachFormLayers } from "../src/features/forms/layers.ts";
-import { enforcePermissions, permits, permitted } from "../src/features/permissions.ts";
+import {
+  enforcePermissions,
+  permits,
+  permitsStoreOf,
+  permitted,
+} from "../src/features/permissions.ts";
 import { ViewerController } from "../src/view/viewer.ts";
 import { fakeDocument, fakePdfjs, settle, show } from "./fake-pdfjs.ts";
 
@@ -61,19 +66,64 @@ describe("permissions", () => {
     const flags = new Set([0x100, 0x200, 0x400]);
     const document = fakeDocument({ proxy: { getPermissions: async () => flags } });
     const viewer = new ViewerController();
+    const store = permitsStoreOf(viewer);
+    const changes: string[][] = [];
+    const unsubscribe = store.subscribe((changedKeys) => {
+      changes.push([...(changedKeys ?? [])].map(String));
+    });
+    assert.deepEqual(store.get(), {
+      print: true,
+      copy: true,
+      annotate: true,
+      fillForms: true,
+    });
     const { close } = show(viewer, { url: "/a.pdf" }, fakePdfjs(async () => document.proxy).loader);
     await settle();
     assert.equal(permits(viewer, "print"), true, "a viewer reports them only, by default");
+    assert.equal(changes.length, 0, "permitsStore stays quiet while <PdfPermissions /> is absent");
+
     const stop = enforcePermissions(viewer);
     assert.equal(permits(viewer, "print"), false);
     assert.equal(permits(viewer, "fillForms"), true);
+    assert.deepEqual(store.get(), {
+      print: false,
+      copy: false,
+      annotate: false,
+      fillForms: true,
+    });
+    assert.deepEqual(changes, [["print", "copy", "annotate"]]);
+
     const second = enforcePermissions(viewer);
     stop();
     stop();
     assert.equal(permits(viewer, "print"), false, "another caller still enforces permissions");
+    assert.equal(changes.length, 1);
+
     second();
     assert.equal(permits(viewer, "print"), true);
+    assert.deepEqual(store.get(), {
+      print: true,
+      copy: true,
+      annotate: true,
+      fillForms: true,
+    });
+    assert.deepEqual(changes, [
+      ["print", "copy", "annotate"],
+      ["print", "copy", "annotate"],
+    ]);
+
+    // Enforcing while closing resets permitsStore to ALL_PERMITTED before viewer.permissions clears.
+    const third = enforcePermissions(viewer);
+    assert.equal(store.get().print, false);
     close();
+    assert.deepEqual(store.get(), {
+      print: true,
+      copy: true,
+      annotate: true,
+      fillForms: true,
+    });
+    third();
+    unsubscribe();
     context.mock.timers.tick(1000);
     await settle();
   });

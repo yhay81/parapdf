@@ -19,7 +19,7 @@
  * each run), BEFORE (a build of the demo from before a change, measured in turn with them as
  * "before"), BEFORE_LABEL (its name in the report), OUTPUT (commit-<browser>).
  */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { arch, cpus, loadavg, platform, release } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -39,6 +39,10 @@ const exampleDir = fileURLToPath(new URL("..", import.meta.url));
 const resultsDir = join(exampleDir, "results");
 const browserName = browserFromEnv();
 const engine = process.env.ENGINE ?? "pdfjs";
+const prototypePackage = JSON.parse(readFileSync(join(exampleDir, "package.json"), "utf8")) as {
+  dependencies: Record<string, string>;
+};
+const versions = { pdfjs: prototypePackage.dependencies["pdfjs-dist"] };
 const runs = Number(process.env.RUNS ?? "3");
 const throttle = Number(process.env.THROTTLE ?? "1");
 const label = process.env.LABEL ?? "this build";
@@ -671,6 +675,7 @@ const environment = {
   cpu: `${cpus()[0]?.model ?? "unknown"} (${cpus().length} logical cores)`,
   browser: launched.label,
   engine,
+  versions,
   build: label,
   throttle,
   power,
@@ -695,6 +700,7 @@ const markdown = [
   `# ParaPDF runtime prototype: zoom commits, ${environment.browser}, ${label}`,
   "",
   `- Run at: ${environment.runAt}`,
+  `- Versions: pdfjs-dist ${versions.pdfjs}.`,
   `- Machine: ${environment.os}, ${environment.cpu}; ${environment.browser} (Playwright build, ${launched.headless ? "headless" : "headed"})${throttle > 1 ? `, CPU slowed down ${throttle} times through the DevTools protocol` : ""}; power: ${power.source === "ac" && !power.lowPowerMode ? "AC" : `**${power.source}; not comparable with AC runs**`}`,
   `- One-minute load average: ${environment.loadAverage.start.toFixed(1)} at the start, ${environment.loadAverage.end.toFixed(1)} at the end, on ${cpus().length} cores. The run ${turnTakingSummary()}.`,
   `- Method: ${file} in ${engine === "pdfjs" ? "pdf.js drawing on the main thread" : engine}, ${viewport.width}×${viewport.height} at devicePixelRatio 2, ${runs} runs of each scenario. A probe composites each visible page's canvases as the page shows them, hidden ones left out, after every frame's animation frame callbacks, at a quarter of its CSS size. Blank: none of the pixels the page shows in its visible part is darker than 250 where its settled drawing has ink. Down to its base: the page showed a detail canvas before the commit and shows none. Frames are summed over the runs; the longest is the most any page stayed so.`,

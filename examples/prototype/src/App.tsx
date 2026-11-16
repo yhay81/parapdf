@@ -1,5 +1,4 @@
 import {
-  download,
   type FormChange,
   getAttachmentContent,
   getFormFields,
@@ -17,10 +16,8 @@ import {
   PdfViewer,
   type PdfViewerProps,
   preloadDocument,
-  print,
   type ScrollMode,
   type SpreadMode,
-  save,
   setFormValues,
   setLayerVisible,
   useAttachments,
@@ -32,6 +29,7 @@ import {
   useMetadata,
   useOutline,
   usePageLabels,
+  usePermits,
   usePrint,
   useSave,
   useSession,
@@ -59,10 +57,13 @@ import {
   annotationEditingOf,
   attachViewport,
   controllerOf,
+  download,
   getSelection,
   type HistoryStore,
   historyOf,
+  print,
   type SearchStore,
+  save,
   searchOf,
   showWith,
   type ViewerController,
@@ -412,7 +413,6 @@ function DocumentShell() {
     <>
       <Toolbar
         sidebar={sidebar}
-        enforcePermissions={features.enforcePermissions}
         onToggleSidebar={(view) => setSidebar((open) => (open === view ? null : view))}
         onOpenSidebar={setSidebar}
         onPresent={presentation.present}
@@ -566,13 +566,11 @@ const PAGE_MODE_PANELS: Partial<Record<PdfPageMode, SidebarView>> = {
 
 function Toolbar({
   sidebar,
-  enforcePermissions,
   onToggleSidebar,
   onOpenSidebar,
   onPresent,
 }: {
   sidebar: SidebarView | null;
-  enforcePermissions: boolean;
   onToggleSidebar: (view: SidebarView) => void;
   onOpenSidebar: (view: SidebarView) => void;
   onPresent: () => void;
@@ -580,6 +578,7 @@ function Toolbar({
   const viewer = useViewer();
   const { print: startPrint, printing } = usePrint();
   const { download: startDownload, saving } = useSave();
+  const canPrint = usePermits("print");
   const navigation = useHistory();
   const { back, forward } = navigation;
 
@@ -597,12 +596,11 @@ function Toolbar({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [back, forward]);
   // Progress only while it loads: pdf.js may fetch the rest in the background after.
-  const { status, error, progress, pageCount, canPrint } = useDocumentState((state) => ({
+  const { status, error, progress, pageCount } = useDocumentState((state) => ({
     status: state.status,
     error: state.error,
     progress: state.status === "loading" ? state.progress : null,
     pageCount: state.pageCount,
-    canPrint: state.permissions?.print ?? true,
   }));
   const { currentPage: page, scale, zoomMode, spread, scrollMode, tool } = useViewState();
   const pageNumbers = `${page + 1} / ${pageCount}`;
@@ -709,7 +707,7 @@ function Toolbar({
           icon="print"
           label="Print"
           onClick={() => void startPrint()}
-          disabled={status !== "ready" || printing || (enforcePermissions && !canPrint)}
+          disabled={status !== "ready" || printing || !canPrint}
         />
         <IconButton
           icon="download"

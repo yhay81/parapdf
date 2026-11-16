@@ -103,22 +103,22 @@ specific PDF input.
 
 In ParaPDF, `setFormValues()` writes to pdf.js's form storage and live widgets
 at once, `useFormChange()` subscribes to edits the reader makes on the PDF,
-`<PdfPageRect>` places validation right over the field, and `download()` saves
-the filled PDF bytes in the browser. Edit either side below, or click **Try
-invalid ZIP**.
+`<PdfPageRect>` places validation right over the field, and `useSave()`'s
+`download()` saves the filled PDF bytes in the browser. Edit either side below,
+or click **Try invalid ZIP**.
 
 <FormSyncShowcase client:visible />
 
 ```tsx
 import {
-  download,
   PdfDocument,
   PdfForms,
   PdfViewer,
   setFormValues,
   useFormChange,
-  useViewer,
+  useSave,
   useSession,
+  useViewer,
 } from "parapdf";
 import { useState } from "react";
 
@@ -129,6 +129,7 @@ function TaxForm() {
 function TaxFormFields() {
   const viewer = useViewer();
   const session = useSession();
+  const { download } = useSave();
   const [firstName, setFirstName] = useState("Ada");
 
   useFormChange(({ name, value }) => {
@@ -148,7 +149,7 @@ function TaxFormFields() {
           });
         }}
       />
-      <button type="button" onClick={() => void download(session, { filename: "filled.pdf" })}>
+      <button type="button" onClick={() => void download({ filename: "filled.pdf" })}>
         Download filled PDF
       </button>
       <PdfViewer viewer={viewer} style={{ height: "85vh" }}>

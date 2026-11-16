@@ -36,7 +36,7 @@ Then:
 
 - without `copy`, the text cannot be selected or copied, though assistive
   technology and `getText()` still read it;
-- without `print`, `print()` fails;
+- without `print`, `usePrint()`'s `print()` fails;
 - without `annotate`, annotations cannot be created, even with
   `<PdfAnnotationEditor />`;
 - with `<PdfForms />`, fields can be filled in only with `fillForms` or `annotate`.
@@ -44,9 +44,11 @@ Then:
 Mounting or unmounting `<PdfPermissions />` applies to the open document immediately.
 Existing form values and annotations are kept when editing is restricted.
 
-`permits(viewer, what)` says whether the viewer allows `"print"`, `"copy"`,
-`"annotate"`, or `"fillForms"`, say to disable a print button: true when its
-document permits it, and always when the viewer does not follow permissions.
+`usePermits(what, viewer?)` says whether the viewer allows `"print"`, `"copy"`,
+`"annotate"`, or `"fillForms"`, say to disable a print button
+(`const canPrint = usePermits("print")`), and `usePermits(viewer?)` returns all
+four (`PermitsState`), tracking read fields: true when its document permits it,
+and always true when `<PdfPermissions />` is not mounted for the viewer.
 
 Permissions are advisory: a document that opens can be read whole by any
 program that ignores them, so they protect nothing an application must keep

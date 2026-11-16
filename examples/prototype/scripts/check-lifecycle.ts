@@ -225,6 +225,18 @@ async function checkReaders(browser: Browser, dev: ViteDevServer, base: string):
       unlocked,
       (await page.locator("#encrypted").textContent()) ?? "",
     );
+    const warmPrePaint = await page.evaluate(async (url) => {
+      const readers: typeof import("./lifecycle-readers.tsx") = await import(url);
+      return readers.checkWarmMountPrePaint();
+    }, url);
+    check(
+      "a warm mount settles useViewState and PdfThumbnails synchronously before paint alongside ViewerPages",
+      warmPrePaint.toolbar === `1/${count}/true` &&
+        warmPrePaint.thumbs > 0 &&
+        warmPrePaint.currentThumb?.includes("2") === true &&
+        warmPrePaint.sections > 0,
+      JSON.stringify(warmPrePaint),
+    );
     const actions = await page.evaluate(
       async ({ url, engine }) => {
         const fixture: typeof import("./lifecycle-actions.tsx") = await import(url);

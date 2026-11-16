@@ -191,8 +191,8 @@ function Comments() {
 
 ## Saving and keeping annotations
 
-Annotations go into the document's bytes that `save(session)`,
-`download(session)` (`useSave()`), and `print(viewer)` (`usePrint()`) use. To keep them apart from the
+Annotations go into the document's bytes that `useSave()`'s `save()` and
+`download()`, and `usePrint()`'s `print()`, use. To keep them apart from the
 PDF, say on a server, `annotations.export()` returns them as
 JSON-compatible data, and `annotations.import(saved)` adds them again where
 they were, after the same document opens again, without an undo step, and
@@ -227,7 +227,7 @@ its own annotations.
 ## Several viewers
 
 Viewers of one `PdfDocument` that edit annotations share its document.
-`save(session)`, `download(session)`, and `print(viewer)` include every
+`useSave()`'s `save()` and `download()`, and `usePrint()`'s `print()`, include every
 viewer's annotations, those of a viewer whose `PdfViewer` is unmounted too,
 and what is being typed in any of them; those of a viewer React hides
 (`<Activity>`) are left out until it is shown again. Each viewer shows the

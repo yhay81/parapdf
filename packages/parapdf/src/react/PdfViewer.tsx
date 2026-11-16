@@ -10,6 +10,7 @@ import {
   useCallback,
   useImperativeHandle,
   useLayoutEffect,
+  useMemo,
   useReducer,
   useRef,
 } from "react";
@@ -427,22 +428,14 @@ const ViewerControlSync = memo(function ViewerControlSync({
     onViewStateChange,
   ]);
 
-  // Options are live: the viewer compares them with those it has.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reconcileCount intentionally re-runs sync when a controlled prop change was rejected by the application.
-  useLayoutEffect(() => {
-    const initialScale = zoom ?? defaultZoom;
-    const initialRotation = rotation ?? defaultRotation;
-    const initialSpread = spread ?? defaultSpread;
-    const initialScrollMode = scrollMode ?? defaultScrollMode;
-    const initialTool = tool ?? defaultTool;
-    const options: ViewerOptions = {
-      initialScale,
-      initialRotation,
-      initialSpread,
-      initialScrollMode,
-      initialTool,
-      initialPage: defaultPage,
-      opening: initialViewOpening({
+  const initialScale = zoom ?? defaultZoom;
+  const initialRotation = rotation ?? defaultRotation;
+  const initialSpread = spread ?? defaultSpread;
+  const initialScrollMode = scrollMode ?? defaultScrollMode;
+  const initialTool = tool ?? defaultTool;
+  const opening = useMemo(
+    () =>
+      initialViewOpening({
         initialView,
         initialViewState,
         initialScale,
@@ -451,6 +444,29 @@ const ViewerControlSync = memo(function ViewerControlSync({
         initialPage: defaultPage,
         fragment: () => openingFragment(viewer, session),
       }),
+    [
+      viewer,
+      session,
+      initialView,
+      initialViewState,
+      initialScale,
+      initialSpread,
+      initialScrollMode,
+      defaultPage,
+    ],
+  );
+
+  // Options are live: the viewer compares them with those it has.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reconcileCount intentionally re-runs sync when a controlled prop change was rejected by the application.
+  useLayoutEffect(() => {
+    const options: ViewerOptions = {
+      initialScale,
+      initialRotation,
+      initialSpread,
+      initialScrollMode,
+      initialTool,
+      initialPage: defaultPage,
+      opening,
       textLayer,
       annotationLayer,
       destinationZoom,
@@ -479,21 +495,19 @@ const ViewerControlSync = memo(function ViewerControlSync({
     if (entry?.viewer === viewer) entry.binding.sync(options, controlled);
   }, [
     viewer,
-    session,
     reconcileCount,
     zoom,
-    defaultZoom,
+    initialScale,
     rotation,
-    defaultRotation,
+    initialRotation,
     spread,
-    defaultSpread,
+    initialSpread,
     scrollMode,
-    defaultScrollMode,
+    initialScrollMode,
     tool,
-    defaultTool,
+    initialTool,
     defaultPage,
-    initialView,
-    initialViewState,
+    opening,
     textLayer,
     annotationLayer,
     destinationZoom,

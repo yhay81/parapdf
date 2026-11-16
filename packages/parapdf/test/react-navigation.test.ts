@@ -11,8 +11,8 @@ import { OutlineTree, outlineItemStyle, PdfOutline } from "../src/react/outline.
 import {
   computeThumbnailOffsets,
   computeThumbnailRange,
-  createPageLabelsStore,
   findThumbnailScroller,
+  pageLabelsOf,
   scrollOffsetForThumbnail,
   thumbnailCanvasHeight,
 } from "../src/react/thumbnails.ts";
@@ -183,8 +183,8 @@ describe("findThumbnailScroller", () => {
   });
 });
 
-describe("createPageLabelsStore", () => {
-  it("keeps numeric labels when reading the PDF's labels fails", async () => {
+describe("pageLabelsOf", () => {
+  it("shares a single controller slot store across callers and keeps numeric labels when reading the PDF's labels fails", async () => {
     const doc = fakeDocument({
       pages: [LETTER],
       proxy: {
@@ -202,12 +202,13 @@ describe("createPageLabelsStore", () => {
     const releaseSession = session.connect();
     const releaseViewer = viewer.hold();
     viewer.open(session);
-    const store = createPageLabelsStore(viewer, null);
+    const store = pageLabelsOf(viewer);
+    assert.equal(pageLabelsOf(viewer), store);
     const unsubscribe = store.subscribe(() => {});
     try {
       await settle();
       await settle();
-      assert.equal(store.get(), null);
+      assert.equal(store.get().labels, null);
     } finally {
       unsubscribe();
       releaseViewer();
@@ -229,19 +230,19 @@ describe("createPageLabelsStore", () => {
     const releaseViewer = viewer.hold();
     viewer.open(session);
 
-    const store = createPageLabelsStore(viewer, session);
+    const store = pageLabelsOf(viewer);
     const seen: (readonly string[] | null)[] = [];
-    const unsubscribe = store.subscribe(() => seen.push(store.get()));
+    const unsubscribe = store.subscribe(() => seen.push(store.get().labels));
 
-    assert.equal(store.get(), null);
+    assert.equal(store.get().labels, null);
     await settle();
     await settle();
-    assert.deepEqual(store.get(), ["i", "ii", "1"]);
+    assert.deepEqual(store.get().labels, ["i", "ii", "1"]);
     assert.ok(seen.some((entry) => entry?.[0] === "i"));
 
     releaseViewer();
     releaseSession();
-    assert.equal(store.get(), null);
+    assert.equal(store.get().labels, null);
     unsubscribe();
   });
 
@@ -267,51 +268,16 @@ describe("createPageLabelsStore", () => {
     const releaseViewer = viewer.hold();
     viewer.open(session);
 
-    const store = createPageLabelsStore(viewer, session);
-    assert.deepEqual(store.get(), ["A-1", "A-2"]);
+    const store = pageLabelsOf(viewer);
+    assert.deepEqual(store.get().labels, ["A-1", "A-2"]);
     let notifications = 0;
     const unsubscribe = store.subscribe(() => notifications++);
-    assert.deepEqual(store.get(), ["A-1", "A-2"]);
+    assert.deepEqual(store.get().labels, ["A-1", "A-2"]);
     assert.equal(notifications, 0);
 
     unsubscribe();
     releaseViewer();
     releaseSession();
-  });
-
-  it("ignores download progress patches on pdfSession.stateStore", () => {
-    const viewer = new ViewerController();
-    let status: "loading" | "ready" = "loading";
-    let stateReads = 0;
-    const listeners = new Set<(changedKeys?: ReadonlySet<PropertyKey>) => void>();
-    const fakeSession = {
-      get state() {
-        stateReads++;
-        return { status };
-      },
-      openDocument: () => {
-        stateReads++;
-        return null;
-      },
-      stateStore: {
-        get: () => ({ status }),
-        subscribe(listener: (changedKeys?: ReadonlySet<PropertyKey>) => void) {
-          listeners.add(listener);
-          return () => listeners.delete(listener);
-        },
-      },
-    } as unknown as PdfSessionController;
-
-    const store = createPageLabelsStore(viewer, fakeSession);
-    const unsub = store.subscribe(() => {});
-    const afterStart = stateReads;
-    for (const listener of listeners) listener(new Set(["progress"]));
-    assert.equal(stateReads, afterStart);
-
-    status = "ready";
-    for (const listener of listeners) listener(new Set(["status"]));
-    assert.ok(stateReads > afterStart);
-    unsub();
   });
 });
 

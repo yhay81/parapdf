@@ -93,6 +93,15 @@ export class ExtensionSet {
 
   /** Tell each extension registered now, but one removed meanwhile, through `hear`. */
   #each(hear: (extension: ViewerExtension) => void): void {
+    const size = this.#extensions.size;
+    if (size === 0) return;
+    if (size === 1) {
+      for (const extension of this.#extensions) {
+        hear(extension);
+        break;
+      }
+      return;
+    }
     for (const extension of [...this.#extensions]) {
       if (this.#extensions.has(extension)) hear(extension);
     }

@@ -181,6 +181,10 @@ describe("public React-first surface (decision 0035)", () => {
       "Opening",
       "RenderStats",
       "ViewerPosition",
+      "save",
+      "download",
+      "print",
+      "permits",
     ];
     for (const name of removed) {
       assert.equal(specifiers.has(name), false, `${name} should not be exported`);
@@ -193,10 +197,10 @@ describe("public React-first surface (decision 0035)", () => {
       "PrintControls",
       "PrintProgress",
       "usePrint",
+      "PermitsState",
+      "usePermits",
       "PreloadDocumentOptions",
       "SelectionOptions",
-      "save",
-      "download",
       "getText",
       "getFormFields",
       "setFormValues",

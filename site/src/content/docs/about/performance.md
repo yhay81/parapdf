@@ -40,7 +40,9 @@ median across files (2026-10-18;
   pages on GPU-backed canvases blocked it for 4 ms in Chromium, 1 in
   WebKit, and 27 in Firefox, and for 21, 1, and 28 ms on CPU-backed
   canvases. pdf.js master's renderer worker on GPU-backed canvases brought
-  that to 0, 0, and 3 ms; it is not in a pdfjs-dist release yet.
+  that to 0, 0, and 3 ms. The worker was unreleased when these measurements
+  were taken; ParaPDF 0.9 now ships it with pdf.js 6.5.438 as an
+  [opt-in setting](/setup/pdfjs/).
 - **A hybrid** that drew scanned pages with hayro grew its WebAssembly
   memory by 51 to 103 MiB per scan without giving it back.
 

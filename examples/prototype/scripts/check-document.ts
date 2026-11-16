@@ -536,6 +536,8 @@ try {
           : null,
         copyPrevented: copy.defaultPrevented,
         printed,
+        printDisabled:
+          document.querySelector<HTMLButtonElement>('button[aria-label="Print"]')?.disabled ?? null,
         editing: (window as unknown as Demo).__annotations?.store.get().state ?? null,
         field: document.querySelector('.parapdf-annotation-layer input[name="comment"]') !== null,
       };
@@ -546,9 +548,10 @@ try {
       JSON.stringify(enforced),
     );
     check(
-      "without permission to print, print() fails",
-      enforced.printed?.includes("does not permit printing") === true,
-      String(enforced.printed),
+      "without permission to print, print() fails and usePermits disables Print",
+      enforced.printed?.includes("does not permit printing") === true &&
+        enforced.printDisabled === true,
+      JSON.stringify({ printed: enforced.printed, printDisabled: enforced.printDisabled }),
     );
     check(
       "without permission to annotate, annotations cannot be created",
@@ -560,16 +563,20 @@ try {
       (window as unknown as Demo).__setFeatures({ enforcePermissions: false }),
     );
     await page.waitForFunction(
-      () => (window as unknown as Demo).__annotations?.store.get().state != null,
+      () =>
+        (window as unknown as Demo).__annotations?.store.get().state != null &&
+        document.querySelector<HTMLButtonElement>('button[aria-label="Print"]')?.disabled === false,
     );
     await page.evaluate(() =>
       (window as unknown as Demo).__setFeatures({ enforcePermissions: true }),
     );
     await page.waitForFunction(
-      () => (window as unknown as Demo).__annotations?.store.get().state === null,
+      () =>
+        (window as unknown as Demo).__annotations?.store.get().state === null &&
+        document.querySelector<HTMLButtonElement>('button[aria-label="Print"]')?.disabled === true,
     );
     check(
-      "enabling and disabling enforcement updates the annotation editor on the open document",
+      "enabling and disabling enforcement updates usePermits and the annotation editor on the open document",
       true,
     );
     check(

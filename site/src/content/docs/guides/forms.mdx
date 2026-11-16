@@ -17,16 +17,15 @@ by its viewers, and a page keeps its values when it unmounts and mounts again.
 ## Saving and printing
 
 - `useSave(session?)` returns `{ save, download, saving }` for the nearest
-  `PdfDocument`'s session; outside React components, `save(session, { pages })`
-  resolves to the PDF's bytes with the values and the annotations created
-  written in, and `download(session, { filename, pages })` hands them to the
-  browser as a download, named by default as the server names the file, or else
-  after the document's URL. Both belong to the document session and work even
-  without a mounted `PdfViewer`. With `pages`, only the pages chosen are saved
-  (see below).
+  `PdfDocument`'s session (or `session`): `save({ pages })` resolves to the
+  PDF's bytes with the values and the annotations created written in, and
+  `download({ filename, pages })` hands them to the browser as a download, named
+  by default as the server names the file (`Content-Disposition`), or else after
+  the document's URL. Both belong to the document session and work even without
+  a mounted `PdfViewer`. With `pages`, only the pages chosen are saved (see
+  below).
 - `usePrint(viewer?)` returns `{ print, printing, progress, cancel }` for
-  React toolbars, and `print(viewer, { resolution, autoRotate, onProgress, signal })`
-  runs the same print job directly: it draws every
+  the viewer: `print({ resolution, autoRotate, onProgress, signal })` draws every
   page for printing, the typed values and the annotations created included,
   with the layers the viewer shows, at 150 dpi by default, and opens the
   browser's print dialog with only those pages, on sheets the size of the
@@ -43,11 +42,12 @@ chosen by `includePages` and `excludePages` (0-based indices and
 `[first, last]` ranges), or an `ImageBitmap` as a page (`image`). This document's pages keep the values
 typed and the annotations created.
 
-```ts
-const bytes = await save(session, {
+```tsx
+const { save, download } = useSave();
+const bytes = await save({
   pages: [{ includePages: [[0, 2]] }, { document: appendix, includePages: [0] }],
 });
-await download(session, { filename: "excerpt.pdf", pages: [{ excludePages: [3] }] });
+await download({ filename: "excerpt.pdf", pages: [{ excludePages: [3] }] });
 ```
 
 When React Activity hides action controls, saving can finish in the background

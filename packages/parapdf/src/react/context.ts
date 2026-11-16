@@ -89,6 +89,10 @@ interface KeyedSliceState<T, S> {
   readonly keys: readonly PropertyKey[];
   readonly subscribe: (onStoreChange: () => void) => () => void;
   dirty: boolean;
+  passiveActive: boolean;
+  layoutUnsub: (() => void) | null;
+  shown: S | undefined;
+  hasShown: boolean;
   client: SelectedCache<T, S> | null;
   server: SelectedCache<T, S> | null;
 }
@@ -99,19 +103,35 @@ export function useStoreKeys<T, S>(
   keys: readonly PropertyKey[],
   selector: (state: T) => S,
 ): S {
+  const [, rerender] = useReducer((count: number) => count + 1, 0);
+  const selectorRef = useRef(selector);
+  selectorRef.current = selector;
   const ref = useRef<KeyedSliceState<T, S> | null>(null);
   const ensure = (): KeyedSliceState<T, S> => {
     let state = ref.current;
     if (!state || state.store !== store || state.keys !== keys) {
+      state?.layoutUnsub?.();
       const created: KeyedSliceState<T, S> = {
         store,
         keys,
-        subscribe: (onStoreChange) =>
-          subscribeKeys(store, keys, () => {
+        subscribe: (onStoreChange) => {
+          created.passiveActive = true;
+          created.layoutUnsub?.();
+          created.layoutUnsub = null;
+          const unsubscribe = subscribeKeys(store, keys, () => {
             created.dirty = true;
             onStoreChange();
-          }),
+          });
+          return () => {
+            created.passiveActive = false;
+            unsubscribe();
+          };
+        },
         dirty: false,
+        passiveActive: false,
+        layoutUnsub: null,
+        shown: undefined,
+        hasShown: false,
         client: null,
         server: null,
       };
@@ -121,21 +141,57 @@ export function useStoreKeys<T, S>(
     return state;
   };
   const sliceState = ensure();
-  return useSyncExternalStore(
+  const snapshot = useSyncExternalStore(
     sliceState.subscribe,
     () => {
       const state = ensure();
       const dirty = state.dirty;
       state.dirty = false;
       state.client = selectCached(state.client, store.get(), selector, dirty);
+      state.shown = state.client.value;
+      state.hasShown = true;
       return state.client.value;
     },
     () => {
       const state = ensure();
       state.server = selectCached(state.server, store.get(), selector);
+      state.shown = state.server.value;
+      state.hasShown = true;
       return state.server.value;
     },
   );
+  // Bridge the gap before React 19's passive `useSyncExternalStore` subscription
+  // mounts (and on `<Activity>` reconnect) so layout-phase store updates flush
+  // into the same pre-paint commit.
+  useLayoutEffect(() => {
+    if (sliceState.passiveActive) return;
+    const check = () => {
+      if (sliceState.passiveActive || !sliceState.hasShown) return;
+      const next = selectCached(
+        sliceState.client,
+        sliceState.store.get(),
+        selectorRef.current,
+        sliceState.dirty,
+      );
+      if (!Object.is(sliceState.shown, next.value)) {
+        rerender();
+      } else {
+        sliceState.dirty = false;
+        sliceState.client = next;
+      }
+    };
+    sliceState.layoutUnsub?.();
+    sliceState.layoutUnsub = subscribeKeys(sliceState.store, sliceState.keys, () => {
+      sliceState.dirty = true;
+      check();
+    });
+    check();
+    return () => {
+      sliceState.layoutUnsub?.();
+      sliceState.layoutUnsub = null;
+    };
+  }, [sliceState]);
+  return snapshot;
 }
 
 /**
@@ -218,6 +274,11 @@ interface SliceState<T extends object, S> {
   readonly subscribe: (onStoreChange: () => void) => () => void;
   hasSelector: boolean;
   pendingNotify: boolean;
+  passiveActive: boolean;
+  layoutUnsub: (() => void) | null;
+  shownSelected: S | undefined;
+  hasShownSelected: boolean;
+  shownTracked: TrackedSnapshot<T> | null;
   trackedClient: TrackedSnapshot<T> | null;
   trackedServer: TrackedSnapshot<T> | null;
   selectedClient: SelectedCache<T, S> | null;
@@ -314,14 +375,21 @@ export function useStoreSlice<T extends object, S>(
   serverState: () => T,
   selector?: ((state: T) => S) | undefined,
 ): T | S {
+  const [, rerender] = useReducer((count: number) => count + 1, 0);
+  const selectorRef = useRef(selector);
+  selectorRef.current = selector;
   const ref = useRef<SliceState<T, S> | null>(null);
   const ensure = (): SliceState<T, S> => {
     let state = ref.current;
     if (!state || state.store !== store) {
+      state?.layoutUnsub?.();
       const created: SliceState<T, S> = {
         store,
-        subscribe: (onStoreChange) =>
-          store.subscribe((changedKeys) => {
+        subscribe: (onStoreChange) => {
+          created.passiveActive = true;
+          created.layoutUnsub?.();
+          created.layoutUnsub = null;
+          const unsubscribe = store.subscribe((changedKeys) => {
             if (!created.pendingNotify) {
               if (
                 created.hasSelector &&
@@ -349,9 +417,19 @@ export function useStoreSlice<T extends object, S>(
             }
             created.pendingNotify = true;
             onStoreChange();
-          }),
+          });
+          return () => {
+            created.passiveActive = false;
+            unsubscribe();
+          };
+        },
         hasSelector: Boolean(selector),
         pendingNotify: false,
+        passiveActive: false,
+        layoutUnsub: null,
+        shownSelected: undefined,
+        hasShownSelected: false,
+        shownTracked: null,
         trackedClient: null,
         trackedServer: null,
         selectedClient: null,
@@ -364,7 +442,7 @@ export function useStoreSlice<T extends object, S>(
     return state;
   };
   const sliceState = ensure();
-  return useSyncExternalStore(
+  const snapshot = useSyncExternalStore(
     sliceState.subscribe,
     () => {
       const state = ensure();
@@ -372,6 +450,9 @@ export function useStoreSlice<T extends object, S>(
       const raw = store.get();
       if (selector) {
         state.selectedClient = selectCached(state.selectedClient, raw, selector);
+        state.shownSelected = state.selectedClient.value;
+        state.hasShownSelected = true;
+        state.shownTracked = null;
         return state.selectedClient.value;
       }
       if (!state.trackedClient) {
@@ -389,6 +470,8 @@ export function useStoreSlice<T extends object, S>(
       } else {
         state.trackedClient.raw = raw;
       }
+      state.shownTracked = state.trackedClient;
+      state.hasShownSelected = false;
       return state.trackedClient.proxy;
     },
     () => {
@@ -396,6 +479,9 @@ export function useStoreSlice<T extends object, S>(
       const raw = serverState();
       if (selector) {
         state.selectedServer = selectCached(state.selectedServer, raw, selector);
+        state.shownSelected = state.selectedServer.value;
+        state.hasShownSelected = true;
+        state.shownTracked = null;
         return state.selectedServer.value;
       }
       if (!state.trackedServer || !Object.is(state.trackedServer.raw, raw)) {
@@ -404,9 +490,59 @@ export function useStoreSlice<T extends object, S>(
           state.trackedServer ? activeTracked(state.trackedServer) : null,
         );
       }
+      state.shownTracked = state.trackedServer;
+      state.hasShownSelected = false;
       return state.trackedServer.proxy;
     },
   );
+  useLayoutEffect(() => {
+    if (sliceState.passiveActive) return;
+    const check = (changedKeys?: ReadonlySet<PropertyKey>) => {
+      if (sliceState.passiveActive) return;
+      const raw = sliceState.store.get();
+      const currentSelector = selectorRef.current;
+      if (currentSelector) {
+        if (!sliceState.hasShownSelected) return;
+        if (sliceState.selectedClient && Object.is(sliceState.selectedClient.raw, raw)) return;
+        const next = selectCached(sliceState.selectedClient, raw, currentSelector);
+        if (!Object.is(sliceState.shownSelected, next.value)) {
+          rerender();
+        } else {
+          sliceState.selectedClient = next;
+        }
+        return;
+      }
+      const shown = sliceState.shownTracked;
+      if (!shown || Object.is(shown.raw, raw)) return;
+      const tracked = activeTracked(shown);
+      if (changedKeys && tracked) {
+        let hit = false;
+        for (const key of changedKeys) {
+          if (tracked.has(key)) {
+            hit = true;
+            break;
+          }
+        }
+        if (!hit) {
+          if (shown === sliceState.trackedClient) shown.raw = raw;
+          return;
+        }
+      }
+      if (hasTrackedChange(shown.raw, raw, tracked)) {
+        rerender();
+      } else if (shown === sliceState.trackedClient) {
+        shown.raw = raw;
+      }
+    };
+    sliceState.layoutUnsub?.();
+    sliceState.layoutUnsub = sliceState.store.subscribe(check);
+    check();
+    return () => {
+      sliceState.layoutUnsub?.();
+      sliceState.layoutUnsub = null;
+    };
+  }, [sliceState]);
+  return snapshot;
 }
 
 /**

@@ -197,10 +197,14 @@ and `#start()` lays out warm sessions synchronously before `open()` returns
   only. Every `set()` reports the exact changed keys (`ViewerState` fields,
   unrotated page `"sizes"` when `layout?.sizes` changes, and `"externalLinks"`
   when the viewer's external link target changes), allocating nothing when
-  values stay equal or no listener is attached; `react/`, `features/`, and
+  values stay equal or no listener is attached, and `Store.batch()` /
+  `ViewerStore.batch()` coalesce multi-step synchronous view transactions
+  (`open()`, `#showReady()`, `#jump()`, `show()`, `setRotation()`, `setSpread()`,
+  `setScrollMode()`, `setScale()`, `#zoomTo()`, `configure()`, `bindControls.sync()`)
+  into one atomic publish with reverted keys pruned; `react/`, `features/`, and
   controller bindings subscribe to exact keys via `subscribeKeys()` and
   `useStoreKeys()` so window shifts, page changes, zoom commits, and option
-  changes wake only their own readers (decisions 0040, 0042, and 0043).
+  changes wake only their own readers (decisions 0040, 0042, 0043, and 0047).
 - `options.ts`: the viewer's options. Those the renderer is built with
   (layers, colors, budgets, concurrency) rebuild it as a detach and
   reattach would, keeping position and edits; the others apply at once.
@@ -283,26 +287,31 @@ of its own, and detaching it undoes what it added. The core imports no feature.
   permission enforcement, search, print, and the other features are imported
   only by the components, hooks, or standalone functions that use them
   (`PdfForms`, `PdfAnnotationEditor`, `PdfAutoLinks`, `PdfPermissions`,
-  `useSearch()`, `useSave()`, `usePrint()`, `save()`, `getText()`, and so on),
+  `useSearch()`, `useSave()`, `usePrint()`, `usePermits()`, `getText()`, and so on),
   so bundlers exclude unused features statically with zero dead feature chunks
-  emitted on disk (decisions 0034 and 0035). Document-level operations (`save`,
-  `download`, `getText`, `getFormFields`, `setFormValues`, `setLayerVisible`,
+  emitted on disk (decisions 0034, 0035, and 0047). Stateless document-level
+  operations (`getText`, `getFormFields`, `setFormValues`, `setLayerVisible`,
   `getAttachmentContent`, `openAttachment`) take `PdfSession` as standalone
   functions rather than methods on `PdfSession`, keeping `PdfDocument` free of
-  optional feature code while working without a mounted `PdfViewer`. Low-level
-  feature plumbing (`searchOf`, `historyOf`, `printOf`, `attachThumbnail`,
+  optional feature code while working without a mounted `PdfViewer`, while
+  stateful action and permission flows belong exclusively to `useSave()`,
+  `usePrint()`, and `usePermits()`. Low-level
+  feature plumbing (`searchOf`, `historyOf`, `printOf`, `saveOf`, `save`,
+  `download`, `print`, `permits`, `permitsStoreOf`, `attachThumbnail`,
   `enforcePermissions`, `annotationSlot`, `getSelection`, `getViewState`,
-  `setViewState`) stays internal to the package (decisions 0035, 0041, and 0046).
+  `setViewState`) stays internal to the package (decisions 0035, 0041, 0046, and
+  0047).
   Each stateful feature owns its single reactive store or listener registry
   directly in a typed `SlotKey<T>` slot on `ViewerController`,
   `PdfSessionController`, or `DocumentSession` (`ReadableStore<SearchControls>`,
   `ReadableStore<HistoryControls>`, `Store<SaveControls>`, `Store<PrintControls>`
-  with reference-counted `hold()`, `annotation-slot.ts`'s
-  `Store<AnnotationControls>` and `bindControls()`, and `onViewerFormChange()`),
+  with reference-counted `hold()`, `Store<PermitsState>`, `Store<PageLabelsState>`,
+  `annotation-slot.ts`'s `Store<AnnotationControls>` and `bindControls()`, and
+  `onViewerFormChange()`),
   so `react/` subscribes directly without wrapper stores, imperative detach
   handles, or module-level `WeakMap`s while keeping `annotations.ts`,
   `pdfjs/editor*.ts`, and `forms/layers.ts` in lazy chunks (decisions 0041, 0044,
-  and 0046).
+  0046, and 0047).
 - Form scripts are off by default and load only for a document that has
   some: pdf.js's QuickJS sandbox, one per session, started after the first
   paint (decision 0016), sending pdf.js's viewer's document events around
@@ -347,13 +356,15 @@ the DOM declares `"use client"`.
   nothing suspends before the first page draws (decisions 0043 and 0045). A source with another URL, headers,
   bytes, transport, or password opens another; a new fragment moves its viewers
   as a link would.
-- `PdfView` provides an independent `Viewer` scope inside a `PdfDocument`
-  so split panes compose the same controls, thumbnails, and `PdfViewer`
-  without prop plumbing. `useViewer()` reads the nearest `ViewerContext`;
+- `PdfView` provides an independent lazy `Viewer` scope (`LazyViewerHolder`)
+  inside a `PdfDocument` so split panes compose the same controls, thumbnails,
+  and `PdfViewer` without prop plumbing and allocate zero `ViewerController`s
+  when passed an explicit `viewer` or when children read only document state.
+  `useViewer()` reads the nearest `ViewerContext`;
   `useCreateViewer()` creates a standalone `Viewer` for callers above
   `PdfDocument` or across panes (holding it in `useLayoutEffect`), and
   `PdfViewer` and `PdfView` forward a React 19 `ref` to their `Viewer`
-  (decisions 0033 and 0041).
+  (decisions 0033, 0041, and 0047).
 - The lifetimes are React's (decision 0032). A render may never mount, as
   under a Suspense boundary that waits or in a transition React abandons,
   so what a render needs of the document starts in the render and is kept
@@ -383,17 +394,18 @@ the DOM declares `"use client"`.
   `<ViewerControlSync>`, parent renders that change only `children` or `style`
   skip `<ViewerControlSync>` entirely, callback changes update in place via
   `binding.setCallbacks()` without calling `viewer.configure()` or re-running
-  opening rules, `memo(ViewerPages)` and `OverlayStore` consumers subscribe in
+  opening rules, `opening` is memoized across live option and control updates
+  (`useMemo`), `memo(ViewerPages)` and `OverlayStore` consumers subscribe in
   `useLayoutEffect` via shared `useLayoutSnapshot` (`usePageWindow`,
   `useOverlayActivity`, `PdfPageOverlay`) so warm sessions and overlays flush
   synchronously before the first browser paint, `<ViewerControlSync>` merges
   `followFragments(viewer, session)` and `viewer.open(session)` into a single
   `[viewer, session]` `useLayoutEffect`, static `.parapdf-pages` and
   `.parapdf-pages > section` styles live in `VIEWER_CSS`, `.ts` React modules
-  (`overlays.ts`, `outline.ts`) emit elements through `react/jsx-runtime` rather
-  than `createElement`, and each `memo(PdfPage)` registers its `<section>` host
-  with a React 19 ref cleanup callback rather than a per-page `useLayoutEffect`
-  (decisions 0040, 0041, 0042, 0043, and 0046).
+  (`overlays.ts`, `outline.ts`, `viewer.ts`) emit elements through
+  `react/jsx-runtime` rather than `createElement`, and each `memo(PdfPage)`
+  registers its `<section>` host with a React 19 ref cleanup callback rather than
+  a per-page `useLayoutEffect` (decisions 0040, 0041, 0042, 0043, 0046, and 0047).
   `children` renders
   inside the viewport container so declarative feature components (`PdfForms`,
   `PdfAnnotationEditor`, `PdfAutoLinks`, `PdfPermissions`, each wrapped in
@@ -464,7 +476,7 @@ the DOM declares `"use client"`.
   transparent spacers preserving stylesheet padding and flex `rowGap`,
   `aria-setsize` / `aria-posinset` on mounted `<li>` items, non-suspending
   `pageLabels` resolution reading warm `knownPageLabels` synchronously from a
-  single session-watch store, custom
+  shared `pageLabelsOf(viewer)` controller-slot store, custom
   `children?: (item: ThumbnailItem) => ReactNode`,
   and `block: "nearest"` auto-scroll of `currentPage` even when unmounted).
   Active-page alignment follows measured item chrome, width, and rotation;
@@ -476,9 +488,15 @@ the DOM declares `"use client"`.
   customization (decisions 0037, 0043, and 0044). `PdfPageRect` places
   content in PDF points.
 - `useViewState()`, `useDocumentState()`, `useSearch()`, `useHistory()`,
-  `useAnnotations()`, `useSave()`, and `usePrint()` read controller-owned stores
-  through `useSyncExternalStore` (`useStoreSlice`), and `useLayers()` subscribes
-  directly to `LayerState`:
+  `useAnnotations()`, `useSave()`, `usePrint()`, and `usePermits()` read
+  controller-owned stores through `useSyncExternalStore` (`useStoreSlice` and
+  `useStoreKeys`) paired with a layout-phase subscription baton active only
+  before `useSyncExternalStore`'s passive subscription mounts (or after an
+  `<Activity>` disconnect), so warm-mount layout-phase store updates settle
+  synchronously before first paint alongside `<ViewerPages>` while keeping a
+  single steady-state listener after passive mount and preserving SSR hydration
+  snapshots (`getServerSnapshot`), and `useLayers()` subscribes directly to
+  `LayerState` (decision 0047):
   `Store.update()` reports changed property keys to listeners so `useStoreSlice`
   skips waking React when an update touches only untracked keys (decision 0042);
   called without
@@ -489,13 +507,13 @@ the DOM declares `"use client"`.
   updates cause no re-render;
   called with a selector, they compare the selected value shallowly (`Object.is`,
   array elements, or own properties of plain objects) (decisions 0033, 0035,
-  0044, and 0045).
+  0044, 0045, and 0047).
   `useSearch()`, `useHistory()`, `useAnnotations()`, `useSave()`, and
   `usePrint()` keep their action methods referentially stable per controller
-  slot, sharing live `saving` (including standalone `save()` / `download()` calls)
-  across `PdfSessionController` consumers and live `printing` / `progress` across
-  `ViewerController` consumers while cancelling print preparation only when the
-  last `usePrint()` holder hides or unmounts (decision 0044). Context resolution
+  slot, sharing live `saving` across `PdfSessionController` consumers and live
+  `printing` / `progress` across `ViewerController` consumers while cancelling
+  print preparation only when the last `usePrint()` holder hides or unmounts
+  (decisions 0044 and 0047). Context resolution
   (`useOptionalViewer`, `useSession`, `useOptionalSession`) calls React 19's
   `use()` only after checking explicit `viewer` / `session` arguments so
   explicit-handle callers register zero context fiber dependencies (decision

@@ -14,12 +14,7 @@ export type {
   PdfSource,
 } from "./document/session.ts";
 export { getAttachmentContent, openAttachment } from "./features/attachments.ts";
-export {
-  type DownloadOptions,
-  download,
-  type SaveOptions,
-  save,
-} from "./features/download.ts";
+export type { DownloadOptions, SaveOptions } from "./features/download.ts";
 export {
   type FormChange,
   type FormField,
@@ -30,8 +25,8 @@ export {
 } from "./features/forms/index.ts";
 export type { InitialViewOptions } from "./features/initial-view.ts";
 export { setLayerVisible } from "./features/layers.ts";
-export { type Permission, permits } from "./features/permissions.ts";
-export { type PrintOptions, print } from "./features/print/index.ts";
+export type { Permission, PermitsState } from "./features/permissions.ts";
+export type { PrintOptions } from "./features/print/index.ts";
 export type { SearchState } from "./features/search/index.ts";
 export type { SearchMatch, SearchOptions, TextPosition } from "./features/search/text-search.ts";
 export type { PdfRect, PdfSelection, SelectionAnchor } from "./features/selection.ts";
@@ -105,15 +100,15 @@ export {
   type PopoverPlacement,
 } from "./react/PdfSelectionPopover.tsx";
 export { PdfThumbnails, type PdfThumbnailsProps } from "./react/PdfThumbnails.tsx";
-export { PdfView, type PdfViewProps } from "./react/PdfView.tsx";
 export { PdfViewer, type PdfViewerProps, type Zoom } from "./react/PdfViewer.tsx";
+export { usePermits } from "./react/permissions.ts";
 export { type PreloadDocumentOptions, preloadDocument } from "./react/preload.ts";
 export { type PrintControls, type PrintProgress, usePrint } from "./react/print.ts";
 export { type SaveControls, useSave } from "./react/save.ts";
 export { type SearchControls, useSearch } from "./react/search.ts";
 export { type SelectionOptions, useSelection } from "./react/selection.ts";
 export type { ThumbnailItem } from "./react/thumbnails.ts";
-export { useCreateViewer, useViewer } from "./react/viewer.ts";
+export { PdfView, type PdfViewProps, useCreateViewer, useViewer } from "./react/viewer.ts";
 export type {
   Direction,
   Layout,

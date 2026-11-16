@@ -63,6 +63,21 @@ export type PointerTool = "select" | "hand";
 /** Keys reported to key-filtered `ViewerStore` listeners. */
 export type ViewerStoreKey = keyof ViewerState | "sizes" | "externalLinks";
 
+export const INITIAL_VIEWER_STATE: ViewerState = {
+  layout: null,
+  pageCount: 0,
+  first: 0,
+  last: -1,
+  currentPage: 0,
+  scale: 1,
+  zoomMode: "fit-width",
+  tool: "select",
+  rotation: 0,
+  spread: "none",
+  scrollMode: "vertical",
+  direction: "ltr",
+};
+
 /**
  * A viewer's single key-filtered store: publishes `ViewerState` along with
  * derived unrotated `sizes` (`"sizes"` only when `layout?.sizes` changes) and
@@ -71,6 +86,11 @@ export type ViewerStoreKey = keyof ViewerState | "sizes" | "externalLinks";
  */
 export class ViewerStore extends Store<ViewerState> {
   #externalLinks: "new-tab" | "disabled" = "new-tab";
+  #batchExternalLinks: "new-tab" | "disabled" | null = null;
+
+  constructor(value: ViewerState = INITIAL_VIEWER_STATE) {
+    super(value);
+  }
 
   get sizes(): readonly PageSize[] | undefined {
     return this.get().layout?.sizes;
@@ -83,6 +103,22 @@ export class ViewerStore extends Store<ViewerState> {
   subscribeKeys = (keys: readonly ViewerStoreKey[], listener: () => void): (() => void) =>
     subscribeKeys(this, keys, listener);
 
+  override batch<R>(fn: () => R): R {
+    const outer = !this.batching;
+    if (outer) this.#batchExternalLinks = this.#externalLinks;
+    return super.batch(fn);
+  }
+
+  protected override finalizeBatch(base: ViewerState): void {
+    if (!Object.is(base.layout?.sizes, this.sizes)) this.markChanged("sizes");
+    else this.unmarkChanged("sizes");
+    const prevLinks = this.#batchExternalLinks;
+    this.#batchExternalLinks = null;
+    if (prevLinks !== null && prevLinks === this.#externalLinks) {
+      this.unmarkChanged("externalLinks");
+    }
+  }
+
   override set(patch: Partial<ViewerState>): void {
     const prevSizes = this.sizes;
     const hasLayout = "layout" in patch;
@@ -91,16 +127,17 @@ export class ViewerStore extends Store<ViewerState> {
         ? { ...patch, pageCount: patch.layout?.sizes.length ?? 0 }
         : patch;
     const stateChanged = this.update(full);
-    if (hasLayout && !Object.is(prevSizes, this.sizes)) {
+    const sizesChanged = hasLayout && !Object.is(prevSizes, this.sizes);
+    if (sizesChanged) {
       this.markChanged("sizes");
     }
-    if (stateChanged) this.publish();
+    if ((stateChanged || sizesChanged) && !this.batching) this.publish();
   }
 
   setExternalLinks(externalLinks: "new-tab" | "disabled"): void {
     if (this.#externalLinks === externalLinks) return;
     this.#externalLinks = externalLinks;
     this.markChanged("externalLinks");
-    this.publish();
+    if (!this.batching) this.publish();
   }
 }

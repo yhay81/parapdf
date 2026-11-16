@@ -6,393 +6,115 @@ change the API.
 
 ## Unreleased
 
-- Remove standalone `PdfThumbnail`, move kept thumbnail `<canvas>` elements
-  without copying pixels, skip context subscriptions on explicit handles, and
-  simplify React/controller store and effect plumbing:
-  - **Breaking**: Remove standalone `PdfThumbnail` and `PdfThumbnailProps`. Use
-    `<PdfThumbnails>` (with its `children` render prop when customizing item
-    markup).
-  - Have `ThumbnailRenderer` own `<canvas class="parapdf-thumbnail">` elements
-    directly inside `<PdfThumbnails>`'s host slots, detach unmounted `<canvas>`
-    nodes from React's `<li>` subtrees when pooling them in `#kept`, and move
-    kept `<canvas>` elements directly into remounted hosts with zero `drawImage`
-    copies, zero transient double pixel buffers, and half the per-item React
-    fibers.
-  - Resolve `ViewerContext` and `SessionContext` with React 19 `use()` only when
-    no explicit `viewer` or `session` argument is given, skip `useStoreKeys()`
-    selector calls when `store.get()` is unchanged and no subscribed key fired,
-    swap pre-allocated key sets in `Store.publish()`, and fold
-    `PdfSessionController` onto a single `stateStore` that preserves changed keys
-    when `passwordPrompt` is disabled.
-  - Separate callback updates (`binding.setCallbacks()`) from option and
-    controlled-prop sync in `<PdfViewer>`, switch `overlays.ts` and `outline.ts`
-    from `createElement` to `react/jsx-runtime`, share `useLayoutSnapshot`
-    across layout-phase subscriptions, and collapse internal search, history,
-    print, form, and annotation slot plumbing onto their controller stores.
+## 0.9.0 — 2026-11-16
 
-- Hold `onViewStateChange` until controlled `<PdfViewer>` props settle, restore
-  pre-divergence scroll coordinates on rejected controlled mutations, eliminate
-  per-snapshot proxy closures, and merge thumbnail store subscriptions:
-  - Suppress transient `onViewStateChange` emissions while controlled `zoom`,
-    `rotation`, `spread`, or `scrollMode` props are diverged (still flushing on
-    `pagehide` and unmount), restore exact scroll offsets and `currentPage` when
-    a non-navigation controlled mutation is rejected near a scroll boundary, and
-    emit a single settled `ViewState` once `<PdfViewer>` accepts or reconciles
-    the prop (including compound destination jumps).
-  - Replace per-snapshot `{}` dummy targets and four closure allocations in
-    `createTrackedSnapshot()` with a single module-level `TRACKED_PROXY_HANDLER`,
-    cache `useStoreKeys()` selections with `shallowEqual`, collapse
-    `<PdfThumbnails>` and `<PdfThumbnail>` onto one `viewer.store` subscription
-    each, derive `ViewerStore.sizes` directly from `layout?.sizes`, and memoize
-    `<SessionLeaseMount>`.
+This release makes the public API React-first, improves document lifetimes and
+large-document navigation, and ships pdf.js 6.5.438. See the
+[migration guide](https://parapdf.yhay81.com/guides/migrating-to-0-9/) when
+upgrading from 0.8.
 
-- Store feature and React state directly in typed controller and session slots,
-  share `useSave()` and `usePrint()` stores across consumers, flush page
-  overlays in layout effects with zero per-page subscriptions, preserve nested
-  `<PdfOutline>` expansion state, and warm named and coordinate destinations in
-  `preloadDocument()`:
-  - Replace module-level `WeakMap` and `WeakSet` feature tables across
-    `ViewerController`, `PdfSessionController`, and `DocumentSession` with
-    typed `SlotKey<T>` controller/session slots and private-field brand checks,
-    memorize `<PdfForms>`, `<PdfPermissions>`, `<PdfAutoLinks>`, and
-    `<PdfAnnotationEditor>`, and merge `<PdfAnnotationEditor>`'s attachment,
-    label, and controlled-tool synchronization into one `useLayoutEffect`.
-  - Back `useSave()` and `usePrint()` with controller-owned `Store<SaveControls>`
-    and `Store<PrintControls>` slots supporting selector overloads
-    (`useSave(selector, session?)`, `usePrint(selector, viewer?)`, and
-    `useAnnotations(selector, viewer?)`), sharing live `saving` and
-    `printing` / `progress` across multiple callers and cancelling print
-    preparation only when the last `usePrint()` holder hides or unmounts.
-  - Subscribe `ViewerPages` and `PdfPageOverlay` to `OverlayStore` in
-    `useLayoutEffect` and pass active overlay renderers and portal membership
-    down to `memo(PdfPage)` directly, eliminating per-page overlay store
-    subscriptions and flushing both child and sibling page overlays before the
-    first paint.
-  - Add `SelectionOptions` (`{ settleDrag?: boolean }`) to `useSelection()` to
-    suppress mid-drag range measurements and React commits when only settled
-    selections are needed, and preserve nested `<PdfOutline>` branch state when
-    collapsing and re-expanding ancestor branches.
-  - Resolve string named destinations in `/OpenAction`, cache resolved named
-    destinations and loaded pages on `DocumentSession` for synchronous warm
-    `resolveDestinationSync()`, and warm URL fragment destinations and
-    `PreloadDocumentOptions.destinations` in `preloadDocument(source, options?)`.
+### Breaking changes
 
-- Consolidate `ViewerStore` and `externalLinks` into a single key-filtered store,
-  instantiate `<PdfDocument>`'s default `ViewerController` lazily, and simplify
-  session fragment and secondary-data subscriptions:
-  - Replace `ViewerStore`'s four internal `Store` instances (`#all`, `#hot`,
-    `#cold`, `#sizes`) and `ViewerController`'s `externalLinks` `Store` with one
-    key-filtered `ViewerStore`, switching `<PdfViewer>`, `<PdfThumbnails>`,
-    `<PdfThumbnail>`, `<PdfOutline>`, `<PdfSelectionPopover>`, controlled-prop
-    and focus bindings, annotation editing, and form scripting to exact
-    key-filtered subscriptions (`subscribeKeys` / `useStoreKeys`) so mounted
-    window shifts no longer wake `currentPage`, controlled-prop, or annotation
-    listeners.
-  - Allocate `<PdfDocument>`'s default `ViewerController` on first use via
-    `LazyViewerHolder` so document-only (`useSession()`, `useDocumentState()`,
-    `useOutline()`, `getText()`, `save()`) and `<PdfView>` subtrees create zero
-    unused `ViewerController` instances.
-  - Replace `PdfSessionController.#fragment`'s `Store` with direct string state
-    and `onFragmentChange()`, merge `<ViewerControlSync>`'s fragment and
-    `viewer.open(session)` setup into one `[viewer, session]` `useLayoutEffect`,
-    and subscribe `useSessionData` only to `["status", "passwordReason"]` so
-    streaming download `progress` updates never wake Suspense data hooks.
+- `useViewer()` reads the nearest `PdfDocument` or `PdfView` context and throws
+  outside both. Use `useCreateViewer()` to create a standalone viewer.
+  `Viewer` and `PdfSession` are narrow interfaces, not constructible classes;
+  obtain their handles through hooks or a viewer `ref`.
+- `useViewState()` takes `(viewer?)` or `(selector, viewer?)` instead of
+  `(viewer, selector)`. `useFormChange()` takes `(listener, viewer?)` instead
+  of `(viewer, listener)`.
+- `viewer.state` and `session.state` are synchronous snapshots. `viewer.store`
+  and `session.state.get()` / `.subscribe()` are removed; use `useViewState()`
+  and `useDocumentState()` for reactive reads. Session promise readers
+  `outline()`, `pageLabels()`, `metadata()`, `attachments()`, `comments()`,
+  `layers()`, and `initialView()` are removed; use the corresponding hooks.
+- `PdfViewer` no longer accepts `forms`, `formScripts`, `annotationEditing`,
+  `annotationLabels`, `autoLinks`, or `enforcePermissions`. Mount `PdfForms`,
+  `PdfAnnotationEditor`, `PdfAutoLinks`, and `PdfPermissions` as children, or
+  pass their `viewer` prop. The old `PdfPermissions` state type is named
+  `DocumentPermissions`.
+- Standalone `save`, `download`, `print`, and `permits` exports are removed.
+  Use `useSave()` (`save`, `download`, `saving`), `usePrint()` (`print`,
+  `printing`, `progress`, `cancel`), and reactive `usePermits()`.
+- `getText`, `getFormFields`, `setFormValues`, `setLayerVisible`,
+  `getAttachmentContent`, and `openAttachment` take `PdfSession` from
+  `useSession()` instead of `Viewer`, and work without a mounted viewport.
+  Move `PdfViewer`'s `openAttachment` callback to `PdfDocument`'s
+  `onOpenAttachment`.
+- `PdfViewer`'s `renderOverlay` is replaced by `PdfPageOverlay` (one page,
+  plain children) and `PdfPageOverlays` (a render function for mounted pages).
+  Standalone `PdfThumbnail` and `PdfThumbnailProps` are removed; use
+  `PdfThumbnails`, whose `children` render prop customizes each item.
+- `getViewState(viewer)` and `setViewState(viewer, state)` are replaced by
+  `viewer.viewState()` and `viewer.setViewState(state)`. Use
+  `PdfViewer.onViewStateChange` to persist settled changes.
+- `useAnnotations()` always returns `AnnotationControls`; its `state` and
+  `styles` are null until `PdfAnnotationEditor` starts editing. It tracks read
+  properties or accepts a selector, like the other state hooks.
+- Removed low-level exports: `searchOf`, `attachSearch`, `Search`,
+  `historyOf`, `attachHistory`, `History`, `HistoryState`, `attachThumbnail`,
+  `enforcePermissions`, `useAnnotationEditing`, `AnnotationEditing`,
+  `AnnotationEditingOptions`, `AnnotationEditingStore`, `FormLayers`,
+  `getSelection`, `ViewerExtension`, `Opening`, `RenderStats`, and
+  `ViewerPosition`. Use the documented React components and hooks.
+- Removed viewer internals: `extend`, `defer`, `renderer`, `session`,
+  `pdfSession`, `permissions`, `layers`, `textLayers`, `annotationLayers`,
+  `workSignal`, `signal`, `pageColors`, `textLayer`, `annotationLayer`,
+  `setFormLayers`, `setFormScripting`, `setAnnotationEditor`, `claimPointer`,
+  `invalidateContent`, `invalidateDrawings`, `openFile`, `sourceName`,
+  `stats`, `keptPixels`, `firstPaintAt`, `hasPixels`, `blankFraction`,
+  `sharpness`, `position`, and `restorePosition`. The
+  [viewer reference](https://parapdf.yhay81.com/reference/viewer/) lists the
+  supported navigation, state, and coordinate APIs.
+- Data hooks return their empty value while a password is requested and read
+  again when it is answered, rather than keeping a Suspense fallback visible.
+  Annotations belonging to an Activity-hidden viewer are excluded from other
+  viewers' save and print operations until that viewer is shown again.
 
-- Render `<PdfPageOverlays>` directly in JSX, eliminate per-item store
-  subscriptions and sidebar scroll reflows on `<PdfPageRect>` and
-  `<PdfThumbnails>`, defer `<PdfSelectionPopover>` drag commits, and filter
-  store notifications by changed keys:
-  - Render `<PdfPageOverlayLayer>` directly inside each mounted page `<section>`
-    (`null` when empty), rendering `<PdfPageOverlays>` inline without portaling,
-    sharing the layer with `<PdfPageOverlay>` portals via React 19 ref cleanup
-    callbacks, and reading page dimensions in `<PdfPageRect>` from `PageContext`
-    with zero `viewer.store` subscriptions.
-  - Report changed keys from `Store.update()` so `useViewState()`,
-    `useDocumentState()`, `useSearch()`, `useHistory()`, and `useAnnotations()`
-    skip waking React on untracked updates; pass primitive page dimensions,
-    `rotation`, and `virtualized` from `<PdfThumbnails>` to a zero-subscription
-    `ThumbnailCanvas`; retain detached virtualized thumbnail canvases in a
-    bounded LRU pixel pool restored synchronously on scroll-back without
-    `IntersectionObserver` or `scrollParent` walks; cache scroll-container
-    geometry across sidebar scrolls and skip redundant initial window commits in
-    `<PdfThumbnails>`; and warm `pageLabels()` in `preloadDocument()`
-    (`knownPageLabels`) so preloaded thumbnails render their labels immediately.
-  - Resolve text layers and page hosts in `getSelection()` and selection anchors
-    in `O(1)` via `viewer.textLayers` and `viewer.pageHost()` with
-    `WeakMap`-cached text-run indices; suppress `<PdfSelectionPopover>` range
-    reads and React commits during primary-button selection drags, keeping its
-    listeners and `ResizeObserver` attached across selection updates and
-    replacing its `MutationObserver` with zoom-preview notifications; eagerly
-    start `pageSizes()` and `direction()` when sessions open in the registry;
-    subscribe `useLayers()` directly to `LayerState`; hoist static
-    `.parapdf-pages` and `<section>` styles into `VIEWER_CSS`; and memoize
-    `<ViewerControlSync>` against `children` and `style` renders.
+### Features and improvements
 
-- Tighten React-to-controller coupling, warm-mount synchronous layout, and the
-  public `Viewer` surface:
-  - **Breaking:** Removed internal diagnostic metrics (`stats`, `keptPixels`,
-    `firstPaintAt`, `hasPixels()`, `blankFraction()`, `sharpness()`) and
-    low-level jump positions (`position()`, `restorePosition()`) from the public
-    `Viewer` interface, and removed `RenderStats` and `ViewerPosition` from
-    `parapdf` exports. Use `viewer.viewState()`, `viewer.setViewState()`, and
-    `<PdfViewer onViewStateChange>` for serializable view persistence, and
-    `useHistory()` for link and outline history.
-  - Connect `<PdfDocument>`, `<PdfView>`, `useCreateViewer()`, `<PdfViewer>`,
-    and `<PdfAnnotationEditor>` in `useLayoutEffect`; warm initial page
-    dimensions, permissions, direction, and initial view in `preloadDocument()`;
-    and resolve warm openings (including numeric `#page=` / `#zoom=` fragments
-    and `initialViewState`) synchronously so `<PdfViewer>` lays out pages and
-    mounts canvases before the first browser paint.
-  - Attach `<PdfPage>` hosts via React 19 ref cleanup callbacks, isolate
-    `<PdfViewer>` controlled-prop reconciliation into a leaf
-    `<ViewerControlSync>` sibling backed by `ViewerController.bindControls()`,
-    and unify `useSearch()`, `useHistory()`, `useAnnotations()`, `<PdfForms>`,
-    and `usePrint()` onto single feature-owned stores and controllers without
-    duplicate store wrappers or relay `WeakMap`s.
-
-- Isolate `<PdfViewer>` page-window and zoom commits inside a memoized page-list
-  boundary so `<PdfViewer>` option setup, `{children}` subtrees, and
-  `configure` / controlled-prop layout effects stay idle while scrolling or
-  zooming; skip per-page overlay store subscriptions and host layout effects on
-  pages without an active `<PdfPageOverlay>` or `<PdfPageOverlays>`; and read
-  thumbnail page dimensions from a dedicated page-size store outside hot
-  viewport state.
-
-- Narrow `PdfSession` to a React-only handle interface:
-  - **Breaking:** `PdfSession` is now a narrow TypeScript interface exposing
-    `source`, `state: DocumentState` (synchronous snapshot, matching
-    `viewer.state`), `proxy`, `signal`, and `submitPassword()`.
-    `session.state.get()` and `session.state.subscribe()` are removed (use
-    `useDocumentState()` for reactive subscriptions and `session.state` for
-    synchronous reads in event handlers), and the duplicate promise methods
-    `session.outline()`, `session.pageLabels()`, `session.metadata()`,
-    `session.attachments()`, `session.comments()`, `session.layers()`, and
-    `session.initialView()` are removed (use `useOutline()`, `usePageLabels()`,
-    `useMetadata()`, `useAttachments()`, `useComments()`, `useLayers()`, and
-    `useInitialView()`).
-
-- Narrow `Viewer` to a React-only handle interface and add `<PdfViewer onViewStateChange>`:
-  - **Breaking:** `Viewer` is now a TypeScript interface rather than a
-    constructible class (`new Viewer()` is removed; obtain a `Viewer` via
-    `useViewer()`, `useCreateViewer()`, or a `ref` on `<PdfViewer>` /
-    `<PdfView>`).
-  - **Breaking:** Removed `viewer.store`, `viewer.extend()`, `viewer.defer()`,
-    `viewer.renderer`, `viewer.session`, `viewer.pdfSession`,
-    `viewer.permissions`, `viewer.layers`, `viewer.textLayers`,
-    `viewer.annotationLayers`, `viewer.workSignal`, `viewer.signal`,
-    `viewer.pageColors`, `viewer.textLayer`, `viewer.annotationLayer`,
-    `viewer.setFormLayers()`, `viewer.setFormScripting()`,
-    `viewer.setAnnotationEditor()`, `viewer.claimPointer()`,
-    `viewer.invalidateContent()`, and `viewer.invalidateDrawings()` from the
-    public `Viewer` surface, and removed `ViewerExtension` and `Opening` from
-    `parapdf` exports. Read reactive state with `useViewState()`, read
-    synchronous snapshots in event handlers with `viewer.state`, and mount
-    `<PdfForms />`, `<PdfAnnotationEditor />`, `<PdfAutoLinks />`, and
-    `<PdfPermissions />` for features.
-  - Added `viewer.state: ViewerState` for synchronous reads in event handlers
-    and callbacks.
-  - Added `<PdfViewer onViewStateChange={(viewState) => ...} />` to persist
-    settled `ViewState` snapshots across intra-page scrolls, zoom, rotation,
-    spread, and scroll-mode changes without firing on initial open, without
-    firing per frame during active scrolls or zoom previews, and flushing
-    pending scrolls on `pagehide` and viewport unmount.
-
-- Keep the active thumbnail visible when opening the sidebar at a deep page,
-  resizing thumbnails, or rotating pages; retain numeric labels when PDF
-  page labels cannot be read, and provide controls to expand collapsed
-  outline branches.
-
-- Window-virtualized `<PdfThumbnails>` with automatic PDF page labels and
-  `<PdfOutline>` for accessible document bookmark trees:
-  - `<PdfThumbnails>` now window-virtualizes its `<ol>` over exact prefix-sum
-    page heights (mounting only the visible range plus overscan on 1,000-page
-    documents while preserving `aria-setsize` / `aria-posinset`), reads the
-    PDF's `pageLabels` automatically without suspending (`pageLabel` now
-    receives `(pageNumber, pageCount, label)` and defaults to `"Page iv"` when
-    the PDF defines custom labels or `"Page 3 of 12"` otherwise), scrolls the
-    active `currentPage` into view (`block: "nearest"`), and accepts `id` and
-    custom `children?: (item: ThumbnailItem) => ReactNode`.
-  - Added `<PdfOutline>` (`PdfOutlineProps`, `OutlineItemHelpers`), rendering
-    `<nav><ol>…</ol></nav>` from `useOutline()` with PDF `bold` and `italic`
-    styles, internal jumps via `viewer.goToDestination()`, live
-    `viewer.externalLinks` enforcement (`"new-tab"` vs inert
-    `aria-disabled="true"` when `"disabled"`), `defaultExpanded`, `onNavigate`,
-    and `renderItem`.
-  - Added `viewer.externalLinks` (`"new-tab" | "disabled"`), reflecting
-    `PdfViewer`'s live `externalLinks` option.
-
-- Keep dynamic overlays visible through React StrictMode effect replay, and
-  keep multiple overlays independent when moving one to another viewer.
-
-- Declarative page overlays (`<PdfPageOverlay>`, `<PdfPageOverlays>`),
-  unclipped selection popovers (`<PdfSelectionPopover>`, `selection.anchor`),
-  PDF-coordinate pointer queries (`viewer.pointAt()`, `onPageClick`), and
-  intent-driven document preloading (`preloadDocument()`):
-  - **Breaking:** Replaced `PdfViewer`'s `renderOverlay` prop with declarative
-    `<PdfPageOverlay page={number}>{children}</PdfPageOverlay>` (plain
-    `ReactNode` children usable directly from Server Components) and
-    `<PdfPageOverlays>{(pageIndex) => ReactNode}</PdfPageOverlays>` (evaluated
-    inside each page's memoized component so scrolling the mounted window never
-    re-evaluates kept pages, allocating `.parapdf-overlay-layer` lazily).
-  - `<PdfPageRect>` now forwards `ref` and `className` to its positioned
-    element for anchoring tooltips and popovers.
-  - Added `selection.anchor` (`SelectionAnchor`, returning the live union
-    client `DOMRect` across scroll, zoom, and rotation) to `useSelection()`,
-    and `<PdfSelectionPopover>` to render floating selection toolbars outside
-    page `contain: "strict"` clipping with zero per-frame React state commits.
-  - Added `viewer.pointAt(point)` and `<PdfViewer onPageClick={(point, event) => ...}>`,
-    mapping client coordinates to `{ pageIndex, x, y }` in unturned PDF points
-    (`<PdfPageRect>`'s coordinates) across rotations (`0`, `90`, `180`, `270`),
-    zoom previews, and `/UserUnit` pages.
-  - Added `preloadDocument(source)` to warm pdf.js, React's URL preload, and
-    the shared document registry ahead of `<PdfDocument>` mounting (such as on
-    route hover).
-
-- Restore saving and printing status when controls reconnect after React
-  Activity hides them during an operation.
-
-- Document-level operations now take `PdfSession` instead of `Viewer`, React
-  action hooks (`useSave`, `usePrint`) cover saving and printing state, and
-  vanilla-only feature plumbing is no longer part of the public surface:
-  - **Breaking:** `save`, `download`, `getText`, `getFormFields`,
-    `setFormValues`, `setLayerVisible`, `getAttachmentContent`, and
-    `openAttachment` now take `session: PdfSession` (`useSession()`) instead of
-    `viewer: Viewer`, so they work even without a mounted `<PdfViewer>` while
-    remaining tree-shakeable standalone functions.
-  - **Breaking:** Moved embedded-file handling from `<PdfViewer openAttachment>`
-    to `<PdfDocument onOpenAttachment>` (`AttachmentHandler`), and removed
-    `viewer.openFile()` and `viewer.sourceName` (`viewer.pdfSession` exposes the
-    attached `PdfSession`).
-  - **Breaking:** Replaced `getViewState(viewer)` and `setViewState(viewer, view)`
-    with `viewer.viewState()` and `viewer.setViewState(view)`.
-  - **Breaking:** Removed vanilla/internal exports `searchOf`, `attachSearch`,
-    `Search`, `historyOf`, `attachHistory`, `History`, `HistoryState`,
-    `attachThumbnail`, `enforcePermissions`, `useAnnotationEditing`,
-    `AnnotationEditing`, `AnnotationEditingOptions`, `AnnotationEditingStore`,
-    `FormLayers`, and `getSelection` from `parapdf`; use the React components
-    and hooks (`useSearch`, `useHistory`, `useAnnotations`, `useSelection`,
-    `<PdfThumbnail>`, `<PdfPermissions>`) instead.
-  - Added `useSave(session?)` (`{ save, download, saving }`) and
-    `usePrint(viewer?)` (`{ print, printing, progress, cancel }`).
-  - Upgraded `useSearch` and `useHistory` to track read properties (or compare
-    an optional `(state) => slice` selector shallowly) and return referentially
-    stable action methods.
-
-- Keep annotation edits across React hides and remounts when the editor
-  component is a sibling rendered after its viewport.
-
-- Declarative feature components replace `PdfViewer`'s boolean feature props,
-  so bundlers statically tree-shake unused features instead of emitting lazy
-  feature chunks for every application:
-  - **Breaking:** Removed `forms`, `formScripts`, `annotationEditing`,
-    `annotationLabels`, `autoLinks`, and `enforcePermissions` from
-    `PdfViewerProps`. Mount `<PdfForms scripts? onChange? />`,
-    `<PdfAnnotationEditor labels? tool? defaultTool? onToolChange? />`,
-    `<PdfAutoLinks />`, and `<PdfPermissions />` inside `<PdfViewer>` (or pass
-    `viewer`) instead; `PdfViewer` now accepts `children`.
-  - **Breaking:** Renamed the `PdfPermissions` permissions-state interface to
-    `DocumentPermissions` so `<PdfPermissions />` names the component cleanly.
-  - **Breaking:** `useAnnotations(viewer?)` now always returns a non-nullable
-    `AnnotationControls` object (`state` and `styles` are `null` until
-    `<PdfAnnotationEditor>` starts editing) and tracks read properties so
-    components reading only methods (such as `const { setTool } =
-    useAnnotations()`) never re-render when the active tool, selection, or
-    styles change.
-
-- `PdfDocument` provides a default `Viewer` through React context, `PdfView`
-  scopes an independent `Viewer` for split panes, and `useViewState()` and
-  `useDocumentState()` track read fields or compare selected values shallowly:
-  - `PdfDocument` creates and holds a default `Viewer` (or provides its
-    optional `viewer` prop) so `<PdfViewer>`, `<PdfThumbnails>`,
-    `<PdfThumbnail>`, and every viewer hook inside it share one viewer
-    without prop plumbing, including when `<PdfDocument>` is rendered in a
-    Server Component.
-  - `PdfView` (`viewer?`, `ref?`) creates an independent `Viewer` scope
-    inside `PdfDocument` for split views. `PdfViewer` and `PdfView` accept a
-    React 19 `ref` to their `Viewer`.
-  - **Breaking:** `useViewer()` now reads the nearest `PdfView` or
-    `PdfDocument` context (throwing outside both). Call `useCreateViewer()`
-    to create a standalone `Viewer` above `PdfDocument` or across panes.
-  - **Breaking:** `useViewState` now takes `(viewer?)` or
-    `(selector, viewer?)` instead of `(viewer, selector)`, and
-    `useFormChange` takes `(listener, viewer?)` instead of
-    `(viewer, listener)`. `useSearch(viewer?)`, `useHistory(viewer?)`,
-    `useAnnotations(viewer?)`, `useAnnotationEditing(viewer?)`,
-    `useSelection(viewer?)`, `PdfThumbnails`, and `PdfThumbnail` make
-    `viewer` optional.
-  - `useViewState()` and `useDocumentState()` called with no selector track
-    which properties are read during rendering and re-render only when one
-    of them changes; called with a selector, they compare array and
-    plain-object results shallowly.
-  - `ViewerState` (and `ColdViewState`) includes `pageCount`, derived from
-    the viewer's laid-out document (`0` while none shows).
-
-- A document and its viewer follow React's lifetimes. `PdfDocument` starts
-  opening its document as it renders instead of once it has mounted: a
-  Suspense boundary above it, and a `source` changed in a transition, wait
-  for the hooks that read the document (`useOutline()` and the others)
-  instead of never showing it. A viewer keeps its page, zoom, rotation,
-  tool, history, finished search, and annotations while React hides it or
-  its `PdfDocument` (`<Activity>`), wherever `useViewer()` is called,
-  instead of resetting the view, or failing once the document had closed;
-  a document hidden for more than a second closes, and opens again when
-  shown. If that URL now returns another PDF or revision, its view, search,
-  and annotations start fresh. Saving or printing after a hide includes
-  restored images and deletions of original annotations. What this changes
-  for applications:
-  - The session's promises (`outline()` and the others) and the data hooks
-    give their empty value while the document waits for a password, with
-    or without `passwordPrompt`, and read it once the password is
-    answered. A data hook no longer shows its Suspense fallback while the
-    prompt is open, and code that awaited a promise before the answer asks
-    again once the document is ready.
-  - A `ViewerExtension`'s `closed` hook takes `kept`: true when the viewer
-    lets go of a document it may show again, false when it forgets the
-    session, which may follow.
-  - While React hides a viewer or its `PdfDocument`, the viewer's
-    `session`, `sourceName`, and layout are null, and the annotations it
-    made are out of the document: `save()` and `print()` from another
-    viewer leave them out until it is shown again.
-  - A document a render opened and no `PdfDocument` came to hold, as in a
-    transition React abandoned for another, loads, and closes ten seconds
-    later.
-
-- Distinct URLs and request options can no longer share the wrong PDF.
-  Form fields settle empty when a provider shows a password error and are
-  read again when the document opens. Metadata lists all authors in the
-  PDF's XMP creator sequence. Extracting edited pages from an encrypted
-  PDF also works when `documentOptions.password` supplied its password.
-
-- Updated pdfjs-dist to 6.5.438. JPEG 2000 images wrapped in LZW now render
-  from the bundled decoder. Set `configurePdfjs({ rendererSrc: true })` to
-  use the packaged drawing worker with either the modern or legacy build.
-  Default rendering still uses GPU-backed canvases on the main thread.
-
-- Browser modules that configure pdf.js, draw and edit pages, or operate on
-  DOM elements now declare their React client boundary explicitly.
-
-- `documentOptions.enableWebGPU` is typed for applications that opt in to
-  GPU drawing of mesh shadings. The default is off.
-
-- Opening a new document in the same viewer resets the previous document's
-  scroll position and applies the new document's pointer tool.
-
-- Search starts on the current page and wraps at the end of the document.
-  Choosing the next or previous match during a search keeps it selected
-  as more results arrive.
-
-- Changing `enforcePermissions` on an open PDF now updates its form fields
-  and annotation editor. The viewer keeps existing edits when enforcement
-  pauses editing.
-
-- A partial `initialViewState` keeps `defaultPage` when it omits the page.
-
-- Text selection, links, form fields, and annotation editors align with the
-  drawing on pages with a nondefault PDF user-space unit. Search uses the
-  page's unit and intrinsic rotation when locating text.
-
-- A tagged PDF shown in multiple viewers gives each page its own accessible
-  text and form controls, including figure descriptions and MathML.
+- `PdfDocument` supplies a shared default viewer; `PdfView` scopes independent
+  split panes. Both default viewers are created lazily, and `PdfViewer` and
+  `PdfView` accept React 19 refs. Document-only trees allocate no viewer.
+- `PdfDocument` starts loading during render, so Suspense above the provider
+  and source changes inside transitions work. Activity hides preserve view,
+  history, completed searches, and annotation edits; returning to a changed
+  PDF or revision starts fresh. Unheld renders release their documents.
+- `preloadDocument(source, { destinations })` warms document data, page sizes,
+  labels, and named or coordinate destinations. Warm viewers, controls,
+  thumbnails, and overlays settle before the first paint.
+- `PdfThumbnails` virtualizes long lists, follows the current page, uses PDF
+  page labels, and reuses detached canvases without copying pixels.
+  `PdfOutline` provides an accessible bookmark tree with customizable items
+  and preserved nested expansion state.
+- Add `PdfSelectionPopover`, `selection.anchor`, `viewer.pointAt()`, and
+  `PdfViewer.onPageClick` for selection controls and PDF-coordinate overlays.
+  `PdfPageRect` forwards `ref` and `className`; selection tracking can wait
+  until a drag settles.
+- State hooks track fields read during rendering or compare selector results
+  shallowly. Saving and printing state is shared across consumers; action
+  methods stay stable. `usePermits()` follows the document and permission
+  enforcement reactively.
+- Batch multi-step view changes into one state notification, isolate page-list
+  React commits, and avoid subscriptions and allocations for unused features
+  and overlays. Optional state fields introduced in a batch are preserved.
+- Keep controlled view callbacks settled, restore exact scroll positions when
+  controlled changes are rejected, and flush pending view persistence on
+  `pagehide` and viewport detach.
+- Search starts on the current page and wraps, retaining a selected match as
+  more results arrive. New documents reset scrolling and apply their pointer
+  tool; a partial `initialViewState` keeps an omitted `defaultPage`.
+- Fix source identity across URLs and request options, encrypted edited-page
+  extraction with a configured password, XMP author lists, and form-field
+  reads after password errors.
+- Align text, links, forms, annotations, and search with PDF user-space units
+  and intrinsic rotation. Tagged pages in separate viewers own independent
+  accessible text, controls, figure descriptions, and MathML targets.
+- Ship pdf.js 6.5.438, including LZW-wrapped JPEG 2000 decoding. Opt into its
+  packaged modern or legacy drawing worker with
+  `configurePdfjs({ rendererSrc: true })`, and mesh-shading WebGPU rendering
+  with `documentOptions.enableWebGPU`. Both remain opt-in.
+- Keep browser modules behind explicit React client boundaries and exclude
+  unused feature chunks from minimal applications.
 
 ## 0.8.0 — 2026-10-30
 

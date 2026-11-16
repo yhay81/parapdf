@@ -619,7 +619,8 @@ describe("a viewer's viewport", () => {
 
   /** A viewer of five Letter pages in a viewport. */
   async function viewing(options: ViewerOptions = {}) {
-    const viewer = new ViewerController(options);
+    const viewer = new ViewerController();
+    viewer.configure(options);
     const scroller = new Scroller();
     attach(viewer, scroller);
     const document = fakeDocument({ pages: Array.from({ length: 5 }, () => LETTER) });
@@ -932,7 +933,8 @@ describe("a viewer's viewport", () => {
   it("shows a document once, however often React runs the effects that mount it", async () => {
     const { loader, calls } = fivePages();
     const session = new PdfSessionController({ url: "/a.pdf" }, { pdfjs: loader });
-    const viewer = new ViewerController({ initialScale: 2 });
+    const viewer = new ViewerController();
+    viewer.configure({ initialScale: 2 });
     const heard: string[] = [];
     viewer.extend({
       ready: () => void heard.push("ready"),
@@ -1006,7 +1008,8 @@ describe("a viewer's viewport", () => {
       spread: "none",
       scrollMode: "vertical",
     };
-    const viewer = new ViewerController({
+    const viewer = new ViewerController();
+    viewer.configure({
       opening: initialViewOpening({ initialViewState: initial }),
     });
     const scroller = new Scroller();
@@ -1107,7 +1110,8 @@ describe("a viewer's viewport", () => {
       { pdfjs: loader },
     );
     session.start();
-    const viewer = new ViewerController({
+    const viewer = new ViewerController();
+    viewer.configure({
       opening: initialViewOpening({ fragment: () => session.fragment }),
     });
     const scroller = new Scroller();
@@ -1124,7 +1128,8 @@ describe("a viewer's viewport", () => {
     // 2. Warm open with initialViewState places the view synchronously without microtasks.
     const restored = new PdfSessionController({ url: "/warm.pdf" }, { pdfjs: loader });
     restored.start();
-    const secondViewer = new ViewerController({
+    const secondViewer = new ViewerController();
+    secondViewer.configure({
       opening: initialViewOpening({
         initialViewState: {
           page: 2,
@@ -1168,7 +1173,8 @@ describe("a viewer's viewport", () => {
       { pdfjs: namedLoader },
     );
     namedSession.start();
-    const namedViewer = new ViewerController({
+    const namedViewer = new ViewerController();
+    namedViewer.configure({
       opening: initialViewOpening({ fragment: () => namedSession.fragment }),
     });
     mount(namedViewer, new Scroller(), namedSession);
@@ -1181,7 +1187,8 @@ describe("a viewer's viewport", () => {
       { pdfjs: namedLoader },
     );
     coordSession.start();
-    const coordViewer = new ViewerController({
+    const coordViewer = new ViewerController();
+    coordViewer.configure({
       opening: initialViewOpening({ fragment: () => coordSession.fragment }),
     });
     mount(coordViewer, new Scroller(), coordSession);
@@ -1309,5 +1316,86 @@ describe("a viewer's viewport", () => {
       statesBeforeScroll + 1,
       "stopping the session flushes unsettled ViewState",
     );
+  });
+
+  it("coalesces warm open, rotation, spread, scrollMode, scale, and setViewState into a single store publish per transaction", async () => {
+    const { loader } = fivePages();
+    const warmup = new PdfSessionController({ url: "/batched.pdf" }, { pdfjs: loader });
+    const releaseWarmup = warmup.connect();
+    const doc = await warmup.document();
+    await Promise.all([doc.pageSizes(), doc.permissions(), doc.direction(), doc.initialView()]);
+
+    const session = new PdfSessionController(
+      { url: "/batched.pdf#page=4&zoom=150" },
+      { pdfjs: loader },
+    );
+    session.start();
+    const viewer = new ViewerController();
+    viewer.configure({
+      opening: initialViewOpening({ fragment: () => session.fragment }),
+      initialTool: "hand",
+    });
+    const scroller = new Scroller();
+    attach(viewer, scroller);
+    release.push(session.connect(), viewer.hold());
+
+    const publishes: { keys: string[]; page: number; scale: number; hasLayout: boolean }[] = [];
+    const unsubscribe = viewer.store.subscribe((changedKeys) => {
+      const s = viewer.store.get();
+      publishes.push({
+        keys: [...(changedKeys ?? [])].map(String),
+        page: s.currentPage,
+        scale: s.scale,
+        hasLayout: s.layout !== null,
+      });
+    });
+
+    viewer.open(session);
+    assert.equal(publishes.length, 1, "warm open with #page=4&zoom=150 emits one store publish");
+    assert.equal(publishes[0]?.hasLayout, true);
+    assert.equal(publishes[0]?.page, 3);
+    assert.equal(publishes[0]?.scale, 2);
+    assert.equal(viewer.store.get().tool, "hand");
+
+    publishes.length = 0;
+    viewer.setRotation(90);
+    assert.equal(publishes.length, 1, "setRotation emits one store publish");
+    assert.equal(viewer.store.get().rotation, 90);
+
+    publishes.length = 0;
+    viewer.setSpread("odd");
+    assert.equal(publishes.length, 1, "setSpread emits one store publish");
+    assert.equal(viewer.store.get().spread, "odd");
+
+    publishes.length = 0;
+    viewer.setScrollMode("wrapped");
+    assert.equal(publishes.length, 1, "setScrollMode emits one store publish");
+    assert.equal(viewer.store.get().scrollMode, "wrapped");
+
+    publishes.length = 0;
+    viewer.setScale(1.25);
+    assert.equal(publishes.length, 1, "setScale emits one store publish");
+    assert.equal(viewer.store.get().scale, 1.25);
+    assert.equal(viewer.store.get().zoomMode, "custom");
+
+    publishes.length = 0;
+    viewer.setViewState({
+      page: 1,
+      x: 0,
+      y: 732,
+      scale: 1.75,
+      rotation: 180,
+      spread: "none",
+      scrollMode: "vertical",
+    });
+    assert.equal(publishes.length, 1, "setViewState emits one store publish");
+    assert.equal(viewer.store.get().currentPage, 1);
+    assert.equal(viewer.store.get().scale, 1.75);
+    assert.equal(viewer.store.get().rotation, 180);
+    assert.equal(viewer.store.get().spread, "none");
+    assert.equal(viewer.store.get().scrollMode, "vertical");
+
+    unsubscribe();
+    releaseWarmup();
   });
 });

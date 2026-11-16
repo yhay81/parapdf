@@ -1,0 +1,111 @@
+{
+  "environment": {
+    "runAt": "2026-11-16T05:34:08.143Z",
+    "os": "darwin 27.2.0 arm64",
+    "cpu": "Apple M2 Pro (12 logical cores)",
+    "browserName": "webkit",
+    "browser": "WebKit 27.2",
+    "headless": true,
+    "power": {
+      "source": "ac",
+      "lowPowerMode": false
+    },
+    "loadAverage": {
+      "start": 6.8,
+      "end": 10.2
+    },
+    "turnTaking": {
+      "waits": 1,
+      "waitedMs": 98261,
+      "repeatedJobs": 0
+    },
+    "before": "712f15e (before atomic stores)",
+    "versions": {
+      "pdfjs": "6.5.438"
+    },
+    "idle": {
+      "timerLagP50Ms": 3.9,
+      "timerLagP95Ms": 4.9,
+      "frameIntervalMs": 13.9
+    },
+    "settings": {
+      "runs": 15,
+      "durationMs": 4000,
+      "latencyMs": 0,
+      "bandwidthMbps": 0,
+      "scrollModes": ["vertical"],
+      "scales": ["fit-width"],
+      "viewport": "1280x900",
+      "devicePixelRatio": 2,
+      "focusViewport": false
+    }
+  },
+  "summaries": [
+    {
+      "file": "bill-hr815.pdf",
+      "speed": 900,
+      "variant": "pdfjs-hwa",
+      "runs": 15,
+      "scrollMode": "vertical",
+      "scale": "fit-width",
+      "firstPaintMs": 254,
+      "firstPaintRunsMs": [
+        193.4, 288.2, 322.6, 212, 252.2, 265.8, 255.8, 234.1, 272, 259.1, 277.2, 205.8, 237.4,
+        211.5, 254
+      ],
+      "pagesCrossed": 2,
+      "commitsDuringScroll": 4,
+      "commitsPerSecond": 1,
+      "storeUpdates": 4,
+      "windowChanges": 2,
+      "currentPageChanges": 2,
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "blockedMs": 13.1,
+      "lagP95Ms": 4.9,
+      "lagMaxMs": 9.9,
+      "droppedFrames": 0,
+      "frames": 289,
+      "baseRenders": 0,
+      "detailRenders": 2,
+      "textLayers": 2,
+      "annotationLayers": 2,
+      "cancelledRenders": 0,
+      "settleMs": 0,
+      "canvasMiB": 183
+    },
+    {
+      "file": "bill-hr815.pdf",
+      "speed": 900,
+      "variant": "pdfjs-hwa, before",
+      "runs": 15,
+      "scrollMode": "vertical",
+      "scale": "fit-width",
+      "firstPaintMs": 251.1,
+      "firstPaintRunsMs": [
+        270.8, 266, 237.4, 313.3, 229.5, 329.5, 205.1, 297, 200, 265.4, 320.2, 202.1, 221.1, 243.5,
+        251.1
+      ],
+      "pagesCrossed": 2,
+      "commitsDuringScroll": 4,
+      "commitsPerSecond": 1,
+      "storeUpdates": 4,
+      "windowChanges": 2,
+      "currentPageChanges": 2,
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "blockedMs": 12.6,
+      "lagP95Ms": 4.9,
+      "lagMaxMs": 10.6,
+      "droppedFrames": 0,
+      "frames": 289,
+      "baseRenders": 0,
+      "detailRenders": 2,
+      "textLayers": 2,
+      "annotationLayers": 2,
+      "cancelledRenders": 0,
+      "settleMs": 0,
+      "canvasMiB": 183
+    }
+  ]
+}

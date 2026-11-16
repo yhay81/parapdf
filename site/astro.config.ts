@@ -54,6 +54,7 @@ export default defineConfig({
           label: "Start here",
           items: [
             "getting-started",
+            "guides/migrating-to-0-9",
             "why-react",
             { label: "Live demo", link: "/demo/" },
             "guides/controls",

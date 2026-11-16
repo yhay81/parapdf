@@ -250,20 +250,7 @@ export class ViewerController implements Viewer {
     return typeof value === "object" && value !== null && #shown in value;
   }
 
-  readonly store = new ViewerStore({
-    layout: null,
-    pageCount: 0,
-    first: 0,
-    last: -1,
-    currentPage: 0,
-    scale: 1,
-    zoomMode: "fit-width",
-    tool: "select",
-    rotation: 0,
-    spread: "none",
-    scrollMode: "vertical",
-    direction: "ltr",
-  });
+  readonly store = new ViewerStore();
   /** The options as set, which the renderer and the next opening read. */
   #options: ViewerOptions = {};
   #gap = 12;
@@ -363,8 +350,10 @@ export class ViewerController implements Viewer {
     maxScale: () => this.#maxScale,
     layoutAt: (scale) => computeLayout(this.#sizes, scale, this.#layoutOptions()),
     zoomTo: (scale, anchor, point) => {
-      this.store.set({ zoomMode: "custom" });
-      this.#zoomTo(scale, anchor, point);
+      this.#changeView(() => {
+        this.store.set({ zoomMode: "custom" });
+        this.#zoomTo(scale, anchor, point);
+      });
     },
     flip: (direction, axis) => this.#flip(direction, axis),
     requestUpdate: () => this.#requestUpdate(),
@@ -393,11 +382,6 @@ export class ViewerController implements Viewer {
   });
 
   #slots: Record<symbol, unknown> | null = null;
-
-  constructor(options: ViewerOptions = {}) {
-    this.configure(options);
-    this.#resetView();
-  }
 
   /** Lazily initialize or read feature-owned state directly on this controller. */
   slot<T>(key: SlotKey<T>, create: () => T): T {
@@ -490,7 +474,7 @@ export class ViewerController implements Viewer {
     }
     this.#batchingView++;
     try {
-      return fn();
+      return this.store.batch(fn);
     } finally {
       if (--this.#batchingView === 0) {
         if (snapshot) {
@@ -520,6 +504,13 @@ export class ViewerController implements Viewer {
     const next = this.viewState();
     if (!next || sameViewState(this.#lastViewState, next)) return;
     this.#lastViewState = next;
+    if (this.#viewStateListeners.size === 1) {
+      for (const listener of this.#viewStateListeners) {
+        listener(next);
+        break;
+      }
+      return;
+    }
     for (const listener of [...this.#viewStateListeners]) listener(next);
   }
 
@@ -745,6 +736,7 @@ export class ViewerController implements Viewer {
   /** The view a document opens with, before its opening applies. */
   #resetView(): void {
     const options = this.#options;
+    const tool = options.initialTool ?? "select";
     this.store.set({
       currentPage: 0,
       scale:
@@ -756,8 +748,10 @@ export class ViewerController implements Viewer {
       spread: options.initialSpread ?? "none",
       scrollMode: options.initialScrollMode ?? "vertical",
       direction: this.#direction(),
+      tool,
     });
-    this.setTool(options.initialTool ?? "select");
+    this.#scroller?.classList.toggle("parapdf-hand", tool === "hand");
+    if (tool !== "hand") this.#input.release();
   }
 
   /** The page order: the option's, or the document's, or "ltr". */
@@ -952,24 +946,26 @@ export class ViewerController implements Viewer {
       this.#connect(showing);
       return;
     }
-    if (showing) this.#stop(showing, false);
-    const shown: Showing = {
-      pdf: new WeakRef(pdf),
-      fingerprints: null,
-      connection: null,
-      work: null,
-      savedPosition: null,
-      session: null,
-      permissions: null,
-      layers: null,
-      renderer: null,
-      direction: null,
-    };
-    this.#shown = shown;
-    this.#firstPaintAt = null;
-    this.#lastViewState = null;
-    this.#resetView();
-    this.#connect(shown);
+    this.store.batch(() => {
+      if (showing) this.#stop(showing, false);
+      const shown: Showing = {
+        pdf: new WeakRef(pdf),
+        fingerprints: null,
+        connection: null,
+        work: null,
+        savedPosition: null,
+        session: null,
+        permissions: null,
+        layers: null,
+        renderer: null,
+        direction: null,
+      };
+      this.#shown = shown;
+      this.#firstPaintAt = null;
+      this.#lastViewState = null;
+      this.#resetView();
+      this.#connect(shown);
+    });
   }
 
   /** Show `shown`'s document until the viewer lets it go, unless it shows it already. */
@@ -1217,9 +1213,11 @@ export class ViewerController implements Viewer {
     if (!this.#scroller) renderer.setKeeping(false);
     for (const [index, host] of this.#pageHosts) renderer.attach(index, host);
     this.batchView(() => {
-      if (view?.spread) this.store.set({ spread: view.spread });
-      if (view?.scrollMode) this.store.set({ scrollMode: view.scrollMode });
-      this.store.set({ direction: this.#direction() });
+      this.store.set({
+        ...(view?.spread ? { spread: view.spread } : {}),
+        ...(view?.scrollMode ? { scrollMode: view.scrollMode } : {}),
+        direction: this.#direction(),
+      });
       // Where a viewport showed the document, it shows it again at once.
       const saved = shown.savedPosition;
       shown.savedPosition = null;

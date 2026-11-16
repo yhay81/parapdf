@@ -153,7 +153,8 @@ describe("a viewer's opening", () => {
       proxy: { getPageLayout: async () => "TwoColumnRight" },
     });
     const opening = initialViewOpening({ initialView: "document" });
-    const viewer = new ViewerController({ opening });
+    const viewer = new ViewerController();
+    viewer.configure({ opening });
     close.push(show(viewer, { url: "/a.pdf" }, fakePdfjs(async () => document.proxy).loader).close);
     await settle();
     const state = viewer.store.get();

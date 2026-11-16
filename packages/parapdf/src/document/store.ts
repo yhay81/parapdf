@@ -24,12 +24,18 @@ export class Store<T extends object> implements ReadableStore<T> {
   #pendingKeys = new Set<PropertyKey>();
   #publishingKeys = new Set<PropertyKey>();
   #publishing = false;
+  #batchDepth = 0;
+  #batchBase: T | null = null;
 
   constructor(value: T) {
     this.#value = value;
   }
 
   get = (): T => this.#value;
+
+  get batching(): boolean {
+    return this.#batchDepth > 0;
+  }
 
   subscribe = (listener: StoreListener): (() => void) => {
     this.#listeners.add(listener);
@@ -54,6 +60,51 @@ export class Store<T extends object> implements ReadableStore<T> {
 
   markChanged(key: PropertyKey): void {
     this.#pendingKeys.add(key);
+  }
+
+  unmarkChanged(key: PropertyKey): void {
+    this.#pendingKeys.delete(key);
+  }
+
+  protected finalizeBatch(_base: T): void {}
+
+  /**
+   * Coalesce synchronous `set()` updates into at most one `publish()` when the
+   * outermost `batch()` exits, pruning keys that reverted to their pre-batch values.
+   */
+  batch<R>(fn: () => R): R {
+    if (this.#batchDepth === 0) {
+      this.#batchBase = this.#value;
+    }
+    this.#batchDepth++;
+    try {
+      return fn();
+    } finally {
+      if (--this.#batchDepth === 0) {
+        const base = this.#batchBase;
+        this.#batchBase = null;
+        if (base && this.#pendingKeys.size > 0) {
+          let anyOwnDiff = false;
+          for (const key of this.#pendingKeys) {
+            if (Object.hasOwn(base, key) || Object.hasOwn(this.#value, key)) {
+              const k = key as keyof T;
+              if (Object.is(base[k], this.#value[k])) {
+                this.#pendingKeys.delete(key);
+              } else {
+                anyOwnDiff = true;
+              }
+            }
+          }
+          if (!anyOwnDiff && base !== this.#value) {
+            this.#value = base;
+          }
+          this.finalizeBatch(base);
+        }
+        if (this.#pendingKeys.size > 0) {
+          this.publish();
+        }
+      }
+    }
   }
 
   publish(): void {
@@ -94,9 +145,9 @@ export class Store<T extends object> implements ReadableStore<T> {
     for (const listener of [...this.#listeners]) listener(changedKeys);
   }
 
-  /** Apply `patch` and notify the listeners, unless it changes nothing. */
+  /** Apply `patch` and notify the listeners (or queue for the enclosing `batch()`), unless it changes nothing. */
   set(patch: Partial<T>): void {
-    if (this.update(patch)) this.publish();
+    if (this.update(patch) && !this.batching) this.publish();
   }
 }
 

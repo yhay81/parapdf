@@ -4,19 +4,33 @@
  * `window.__annotations`, `getSelection`, `showWith`, `attachViewport`): not
  * part of the package's public surface, which is React-first.
  */
-import { PdfSessionController } from "../../../packages/parapdf/src/document/pdf-session.ts";
+import {
+  type PdfSession,
+  PdfSessionController,
+} from "../../../packages/parapdf/src/document/pdf-session.ts";
 import type { PdfjsLoader } from "../../../packages/parapdf/src/document/registry.ts";
 import type { PdfSource } from "../../../packages/parapdf/src/document/session.ts";
 import type { ReadableStore } from "../../../packages/parapdf/src/document/store.ts";
 import { annotationSlot } from "../../../packages/parapdf/src/features/annotation-slot.ts";
 import type { AnnotationEditing } from "../../../packages/parapdf/src/features/annotations.ts";
+import {
+  type DownloadOptions,
+  download,
+  type SaveOptions,
+  save,
+} from "../../../packages/parapdf/src/features/download.ts";
 import { type HistoryControls, historyOf } from "../../../packages/parapdf/src/features/history.ts";
+import { type PrintOptions, print } from "../../../packages/parapdf/src/features/print/index.ts";
 import {
   type SearchControls,
   searchOf,
 } from "../../../packages/parapdf/src/features/search/index.ts";
 import { getSelection } from "../../../packages/parapdf/src/features/selection.ts";
-import { controllerOf, type ViewerController } from "../../../packages/parapdf/src/view/viewer.ts";
+import {
+  controllerOf,
+  type Viewer,
+  type ViewerController,
+} from "../../../packages/parapdf/src/view/viewer.ts";
 
 export type HistoryStore = ReadableStore<HistoryControls>;
 export type SearchStore = ReadableStore<SearchControls>;
@@ -24,9 +38,17 @@ export type SearchStore = ReadableStore<SearchControls>;
 export {
   type AnnotationEditing,
   controllerOf,
+  type DownloadOptions,
+  download,
   getSelection,
   historyOf,
+  type PdfSession,
+  type PrintOptions,
+  print,
+  type SaveOptions,
+  save,
   searchOf,
+  type Viewer,
   type ViewerController,
 };
 

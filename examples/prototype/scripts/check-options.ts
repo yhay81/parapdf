@@ -236,7 +236,7 @@ try {
         pdfjs: () => Promise<unknown>,
       ) => () => void;
     };
-    const Runtime = __viewer.constructor as new (options: object) => ViewerController;
+    const Runtime = __viewer.constructor as new () => ViewerController;
     const results = [];
     for (const scrollMode of ["vertical", "horizontal"] as const) {
       let finishSizes = () => {};
@@ -285,7 +285,8 @@ try {
         iconUrls: null,
         workerLocation: "",
       } as unknown as LoadedPdfjs;
-      const viewer = new Runtime({ initialScale: 1, initialScrollMode: scrollMode });
+      const viewer = new Runtime();
+      viewer.configure({ initialScale: 1, initialScrollMode: scrollMode });
       const scroller = document.createElement("div");
       scroller.style.cssText =
         "position:fixed;inset:0;width:600px;height:600px;overflow:auto;contain:strict";

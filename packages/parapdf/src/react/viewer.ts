@@ -1,8 +1,38 @@
 "use client";
 
-import { useLayoutEffect, useState } from "react";
-import { type Viewer, ViewerController } from "../view/viewer.ts";
-import { useOptionalViewer } from "./context.ts";
+import { type ReactNode, type Ref, useImperativeHandle, useLayoutEffect, useState } from "react";
+import { jsx } from "react/jsx-runtime";
+import { controllerOf, type Viewer, ViewerController } from "../view/viewer.ts";
+import { LazyViewerHolder, useOptionalViewer, ViewerContext } from "./context.ts";
+
+export interface PdfViewProps {
+  /**
+   * The viewer this scope gives its children through `useViewer()`, from
+   * `useCreateViewer()`; without it, `<PdfView>` creates one of its own.
+   */
+  viewer?: Viewer;
+  /** Receives this scope's `Viewer` while mounted. */
+  ref?: Ref<Viewer>;
+  children?: ReactNode;
+}
+
+/**
+ * An independent `Viewer` scope inside `<PdfDocument>`, for split views or
+ * secondary panes whose `<PdfViewer>`, toolbar, and hooks share a viewer
+ * apart from sibling views of the same document.
+ */
+export function PdfView({ viewer: externalViewer, ref, children }: PdfViewProps) {
+  const [holder] = useState(() => new LazyViewerHolder());
+  const contextViewer: ViewerController | LazyViewerHolder = externalViewer
+    ? controllerOf(externalViewer)
+    : holder;
+  useLayoutEffect(() => (externalViewer ? undefined : holder.connect()), [externalViewer, holder]);
+  useImperativeHandle(ref, () => (externalViewer ? controllerOf(externalViewer) : holder.get()), [
+    externalViewer,
+    holder,
+  ]);
+  return jsx(ViewerContext, { value: contextViewer, children });
+}
 
 /**
  * The `Viewer` of the nearest `<PdfView>` or `<PdfDocument>`: one viewport's
