@@ -50,6 +50,18 @@ pages) at 900 CSS px/s in Chromium:
 
 The results do not support "faster in every browser".
 
+### Follow-up: 2026-11-16
+
+The [0.9.0 comparison](../../examples/prototype/results/compare-react-pdf-20261116.md)
+reruns both documents and speeds in all three browsers against react-pdf
+11.0.0 and react-window 2.5.3, five runs per condition. The measured source
+matches the 0.9.0 tag file by file. All twelve conditions have fewer React
+commits and fewer canvas pixels at the sampling point with ParaPDF, while
+main-thread blocking improves or worsens by condition. The report includes
+every run, retained repeat series, and the different resolution and deferred
+work represented by the measurements. The tables above remain the original
+October measurements.
+
 ## Reopen if
 
 react-pdf or react-window change how they render or virtualize pages, or a
