@@ -161,8 +161,32 @@ The WebKit first-paint difference shrinks from 14.1 to 2.9 ms; Chromium's
 candidate median remains longer. Individual paints span many frames, with
 overlapping ranges. The machine's load averages are 8.7 → 6.9 for Chromium
 and 6.8 → 10.2 for WebKit, including 33 and 98 seconds of waiting.
-Do not infer a startup speedup from these runs. Check the build order and
-repeat Firefox's largest zoom-time increase under lower load before publishing.
+Do not infer a startup speedup from these runs. The following checks reverse
+the build order and repeat Firefox's largest zoom-time increase under lower load.
+
+The [reversed-order Chromium check](../../examples/prototype/results/scroll-atomic-stores-first-paint-reversed-chromium.md)
+uses thirty runs per build, `MAX_LOAD=8`, and 200 ms of scrolling to focus on
+first paint (the method used in decision 0032). `DIST` is the old build and
+`BEFORE` is the candidate, so this report's plain `pdfjs-hwa` row is the old
+build and its `pdfjs-hwa, before` row is the candidate, second in each pair.
+First paint is 157.2 → 156.9 ms. The observed frame bands below 150 ms,
+150–167 ms, and 167–184 ms contain 9/20/1 old-build runs and 10/19/1
+candidate runs. The one-minute load average falls from 6.9 to 4.0, with no
+waiting or overlapped jobs. The earlier longer candidate medians do not
+persist in this paired run; these samples do not establish a startup timing
+regression. Its shorter scroll totals are not compared with the four-second
+jobs above.
+
+The [focused Firefox zoom check](../../examples/prototype/results/commit-atomic-stores-firefox-repeat.md)
+runs `zoom-in-far` seven times per build with `MAX_LOAD=8`. It waits 1,374
+seconds for other browsers and load to settle; the initial load average of
+14.7 is recorded before that wait, and the final average is 6.9. Every run
+finishes sharp, with zero blank frames or frames down to the base. Median
+time to sharp is 112.2 → 115.0 ms, with individual ranges 95.1–136.9 ms
+before and 90.1–132.8 ms after. Both medians render five bases and one
+detail, cancel nothing, and peak at 110.5 MiB; both individual-run memory
+ranges are 110.5–118.5 MiB. The initial 43.2 ms increase and higher median
+peak memory are not reproduced.
 
 Adopt the complete pre-paint state updates and the simpler React action
 surface for their verified behavior. The measured rendering work and canvas

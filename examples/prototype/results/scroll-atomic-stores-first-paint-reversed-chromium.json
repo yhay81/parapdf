@@ -1,0 +1,113 @@
+{
+  "environment": {
+    "runAt": "2026-11-16T06:00:47.830Z",
+    "os": "darwin 27.2.0 arm64",
+    "cpu": "Apple M2 Pro (12 logical cores)",
+    "browserName": "chromium",
+    "browser": "Chromium 158.0.8127.18",
+    "headless": true,
+    "power": {
+      "source": "ac",
+      "lowPowerMode": false
+    },
+    "loadAverage": {
+      "start": 6.9,
+      "end": 4
+    },
+    "turnTaking": {
+      "waits": 0,
+      "waitedMs": 0,
+      "repeatedJobs": 0
+    },
+    "before": "0.9.0 candidate (second in each pair)",
+    "versions": {
+      "pdfjs": "6.5.438"
+    },
+    "idle": {
+      "timerLagP50Ms": 1,
+      "timerLagP95Ms": 1.4,
+      "frameIntervalMs": 16.7
+    },
+    "settings": {
+      "runs": 30,
+      "durationMs": 200,
+      "latencyMs": 0,
+      "bandwidthMbps": 0,
+      "scrollModes": ["vertical"],
+      "scales": ["fit-width"],
+      "viewport": "1280x900",
+      "devicePixelRatio": 2,
+      "focusViewport": false
+    }
+  },
+  "summaries": [
+    {
+      "file": "bill-hr815.pdf",
+      "speed": 900,
+      "variant": "pdfjs-hwa",
+      "runs": 30,
+      "scrollMode": "vertical",
+      "scale": "fit-width",
+      "firstPaintMs": 157.2,
+      "firstPaintRunsMs": [
+        139.8, 162.3, 138.6, 155.2, 159.2, 157.2, 161, 157.7, 156.4, 159.4, 157.2, 155.2, 143.5,
+        158.6, 158, 159.5, 157.2, 158.5, 159.4, 157.7, 137.8, 159.7, 140.1, 140, 139.3, 139.7,
+        142.4, 174.7, 156.9, 158
+      ],
+      "pagesCrossed": 0,
+      "commitsDuringScroll": 0,
+      "commitsPerSecond": 0,
+      "storeUpdates": 0,
+      "windowChanges": 0,
+      "currentPageChanges": 0,
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "blockedMs": 0,
+      "lagP95Ms": 1.5,
+      "lagMaxMs": 1.7,
+      "droppedFrames": 0,
+      "frames": 13,
+      "baseRenders": 0,
+      "detailRenders": 0,
+      "textLayers": 0,
+      "annotationLayers": 0,
+      "cancelledRenders": 0,
+      "settleMs": 0,
+      "canvasMiB": 110.7
+    },
+    {
+      "file": "bill-hr815.pdf",
+      "speed": 900,
+      "variant": "pdfjs-hwa, before",
+      "runs": 30,
+      "scrollMode": "vertical",
+      "scale": "fit-width",
+      "firstPaintMs": 156.9,
+      "firstPaintRunsMs": [
+        157.2, 147.1, 154.5, 156.5, 144.5, 136.3, 143.1, 159.3, 157.4, 136.9, 137.7, 156, 154.7,
+        158, 158.1, 157.9, 160, 157.5, 138.6, 158.6, 174, 159.3, 138.5, 137.6, 158.4, 139.6, 158.5,
+        160.1, 156.1, 158.4
+      ],
+      "pagesCrossed": 0,
+      "commitsDuringScroll": 0,
+      "commitsPerSecond": 0,
+      "storeUpdates": 0,
+      "windowChanges": 0,
+      "currentPageChanges": 0,
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "blockedMs": 0,
+      "lagP95Ms": 1.4,
+      "lagMaxMs": 1.8,
+      "droppedFrames": 0,
+      "frames": 13,
+      "baseRenders": 0,
+      "detailRenders": 0,
+      "textLayers": 0,
+      "annotationLayers": 0,
+      "cancelledRenders": 0,
+      "settleMs": 0,
+      "canvasMiB": 110.7
+    }
+  ]
+}
