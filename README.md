@@ -1,6 +1,6 @@
 # ParaPDF
 
-A fast, customizable **React PDF viewer**, built on
+A fast, customizable **React PDF viewer for huge documents**, built on
 [pdf.js](https://github.com/mozilla/pdf.js). Virtualized pages, text selection,
 search, forms, and annotations, with your own React UI.
 
@@ -9,7 +9,7 @@ search, forms, and annotations, with your own React UI.
 · [Performance](https://parapdf.yhay81.com/about/performance/)
 · [npm](https://www.npmjs.com/package/parapdf)
 
-[![ParaPDF: Long PDFs. Your React UI. The live demo shows page 500 of a 1,000-page PDF.](.github/assets/social-preview.png)](https://parapdf.yhay81.com/demo/?file=synthetic-text-1000.pdf)
+[![ParaPDF: Huge PDFs. Your React UI. The live demo shows page 500 of a 1,000-page PDF.](.github/assets/social-preview.png)](https://parapdf.yhay81.com/demo/?file=synthetic-text-1000.pdf)
 
 The demo needs no account. Try the
 [1,000-page document](https://parapdf.yhay81.com/demo/?file=synthetic-text-1000.pdf),
@@ -50,13 +50,32 @@ You build the toolbar and surrounding UI. The
 > npm package; `main` may contain unreleased API changes. See the
 > [changelog](CHANGELOG.md) and [limitations](https://parapdf.yhay81.com/about/limitations/).
 
-## Why ParaPDF?
+## Why not just react-pdf?
+
+[react-pdf](https://github.com/wojtekmaj/react-pdf) gives applications
+`Document` and `Page` components. Its
+[FAQ](https://github.com/wojtekmaj/react-pdf/wiki/Frequently-Asked-Questions#rendering-pdf-is-too-slow-what-can-i-do)
+recommends virtualization for large documents. Our comparison adds
+react-window to do that, so both viewers mount only a window of pages.
+
+ParaPDF needs more than a limit on mounted pages: huge PDFs also need
+control over which pages draw first, how much canvas memory they hold,
+and what happens when the reader zooms or returns to a page. For example,
+[react-pdf 11.0.0 releases a page's canvas when it unmounts](https://github.com/wojtekmaj/react-pdf/blob/v11.0.0/packages/react-pdf/src/Page/Canvas.tsx),
+so remounting draws it again. Adding a shared canvas cache and drawing
+policy would require more viewer infrastructure around those components.
+
+ParaPDF provides that infrastructure on top of the same pdf.js engine:
 
 - **React stays out of the hot path.** Scrolling and zooming commit no React
   state per frame, and pixels never pass through React.
-- **Long documents, bounded rendering.** Pages outside a small window
-  unmount. Visible pages draw a quick base first and full resolution once
-  scrolling settles. Canvas budgets also cover pages kept for a return visit.
+- **Huge documents, bounded rendering.** Pages outside a small window
+  unmount. Visible pages get drawing priority: a quick base first and full
+  resolution once scrolling settles. At high zoom, only the visible region
+  gets full detail within the canvas budget.
+- **Keep work for a return visit.** Unmounted pages retain their canvases
+  within a shared budget. Returning to a page whose canvases are still
+  cached reuses those pixels without drawing them again.
 - **Viewers of their own.** Several viewers and thumbnails share one open
   document, each with its own position, zoom, rotation, and layout.
 - **A document viewer.** Selectable, accessible text, search, links and the
@@ -68,22 +87,28 @@ You build the toolbar and surrounding UI. The
 
 ## Performance, with the trade-offs
 
-An existing comparison with **react-pdf + react-window**, with both viewers
-virtualizing pages: a 110-page PDF at 900 CSS px/s for four seconds, five
-runs, medians, Chromium 156 on an Apple M2 Pro, October 28, 2026.
+In an existing **1,000-page** comparison, ParaPDF used **about 55% less
+canvas memory** and made **about 44% fewer React commits** than
+**react-pdf + react-window** during fast scrolling.
+
+Both viewers virtualized pages. Conditions: 3,600 CSS px/s for four seconds,
+five runs, medians, Chromium 156 on an Apple M2 Pro, 1280×900 at
+devicePixelRatio 2, October 28, 2026. The comparison used react-pdf 11.0.0
+and react-window 2.5.1.
 
 | Measurement | ParaPDF | react-pdf + react-window |
 | --- | ---: | ---: |
-| First paint | 142 ms | 187 ms |
-| React commits during the scroll | 4 | 10 |
-| Canvas memory after settling | 183 MiB | 217 MiB |
-| Main-thread blocked time | 17 ms | 5 ms |
+| First paint | 182 ms | 197 ms |
+| React commits during the scroll | 24 | 43 |
+| Canvas memory after settling | 111 MiB | 249 MiB |
+| Main-thread blocked time | 40 ms | 40 ms |
 
-ParaPDF painted sooner and held less canvas memory in this case, but
-blocked the main thread longer. These are historical results, not a
-benchmark of today's `main`. The stacks used different pdf.js versions
-(6.4.299 and 6.3.289); canvas memory is not total process memory.
-[Full results and reproduction command](examples/prototype/results/compare-react-pdf-110-chromium.md),
+At reading speed (900 CSS px/s) on the same document, ParaPDF still painted
+sooner and held less canvas memory, but blocked the main thread longer:
+7 ms against 4 ms. These are historical results, not a benchmark of today's
+`main`. The stacks used different pdf.js versions (6.4.299 and 6.3.289);
+canvas memory is not total process memory.
+[Full results and reproduction command](examples/prototype/results/compare-react-pdf-1000-chromium.md),
 [comparison decision](docs/decisions/0017-measured-against-react-pdf.md), and
 [results across browsers](https://parapdf.yhay81.com/about/performance/).
 

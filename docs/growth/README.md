@@ -6,15 +6,22 @@ package. Current public baseline: **1 star, 0 forks, npm 0.8.0**.
 
 ## Audience and promise
 
-Start with React developers embedding long documents in an application:
+Start with React developers embedding huge PDFs in an application:
 manuals, research readers, and document review tools. They need page
 virtualization and interaction with their own UI, and can try a library
 before adopting it.
 
-Use one message: **A React PDF viewer for long documents, with your own UI.**
+Use one message: **A React PDF viewer for huge documents, with your own UI.**
 Lead with the [1,000-page demo](https://parapdf.yhay81.com/demo/?file=synthetic-text-1000.pdf),
 then a two-component installation example, then measurements and limits.
 Keep search, forms, annotations, and Japanese text as reasons to explore.
+
+Explain why react-pdf alone does not meet the viewer's requirements:
+virtualizing `Page` components limits mounted pages, but the application
+still needs a drawing policy and a shared canvas cache for return visits.
+ParaPDF supplies those, together with canvas budgets and high-zoom detail
+rendering. Support the comparison with the windowed react-pdf measurements,
+not a claim that react-pdf cannot display huge PDFs.
 
 The first hypothesis is that qualified discovery is the bottleneck. Capture
 traffic before changing it; do not infer a conversion rate by dividing
@@ -68,13 +75,15 @@ stars, or coordinate votes on another service.
 
 ## Claims and release checks
 
-- The first-paint comparison is historical: October 28, 2026, five runs,
-  Apple M2 Pro, Chromium 156, 110 pages, 900 CSS px/s for four seconds,
+- The featured comparison is historical: October 28, 2026, five runs,
+  Apple M2 Pro, Chromium 156, 1,000 pages, 3,600 CSS px/s for four seconds,
   1280×900 at devicePixelRatio 2. Link to the
-  [raw report](../../examples/prototype/results/compare-react-pdf-110-chromium.md).
+  [raw report](../../examples/prototype/results/compare-react-pdf-1000-chromium.md).
 - Compare against **windowed react-pdf**, not just an all-pages-mounted
-  example. Report the 17 vs 5 ms main-thread loss beside the first-paint
-  and canvas-memory wins. The two stacks use different pdf.js versions.
+  example. The 111 vs 249 MiB of canvas memory is about 55% less, and
+  24 vs 43 React commits is about 44% fewer. Also report the 7 vs 4 ms
+  main-thread loss at reading speed on the same 1,000-page document.
+  The two stacks use different pdf.js versions.
 - Do not call canvas memory total memory, or Playwright WebKit Safari.
   Do not call the library universally faster or imply worker drawing is
   the default. Do not present an old measurement as a fresh test of `main`.
