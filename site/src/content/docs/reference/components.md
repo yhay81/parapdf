@@ -265,6 +265,7 @@ functions are tree-shaken out of your bundle.
 | Function | |
 |---|---|
 | `getText(session, options?)` | Resolves to the document's text, all of it or between pages or points (`from`, `to`, `lineBreaks`, `signal`; see [Text](/guides/text/)). |
+| `findText(session, query, options?)` | Locates matches of `query` across pages (`from`, `to`, `limit`, `signal`, and `SearchOptions`) without touching `useSearch()`, resolving to `TextMatch` entries with `rects` and union `bounds` in `PdfPageRect` and `viewer.revealRect()` coordinates (see [Locating text as page rectangles](/guides/text/#locating-text-as-page-rectangles)). |
 | `getFormFields(session)` | Resolves to every form field and its current value. |
 | `setFormValues(session, values)` | Sets fields by name; resolves to the names it set. |
 | `setLayerVisible(session, id, visible)` | Shows or hides a layer, in every viewer of the document. |
@@ -283,5 +284,5 @@ functions are tree-shaken out of your bundle.
 
 Every type the API uses is exported as well, such as `PdfViewerProps`,
 `PdfViewProps`, `Zoom`, `Viewer`, `ViewerState`, `DocumentState`,
-`PdfSession`, `ViewState`, `PdfSource`, `SearchMatch`, `FormField`, and
-`SavedAnnotation`.
+`PdfSession`, `ViewState`, `PdfSource`, `SearchMatch`, `TextMatch`,
+`FindTextOptions`, `PdfRect`, `FormField`, and `SavedAnnotation`.

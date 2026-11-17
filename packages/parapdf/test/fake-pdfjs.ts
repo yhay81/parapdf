@@ -45,6 +45,9 @@ export interface FakeTextItem {
   y?: number;
   width?: number;
   height?: number;
+  dir?: string;
+  transform?: number[];
+  vertical?: boolean;
 }
 
 /**
@@ -92,13 +95,15 @@ function fakePage(
   { drawings, cleaned, textsRead }: { drawings: Drawing[]; cleaned: number[]; textsRead: number[] },
   items: readonly FakeTextItem[],
   textsReady: Promise<unknown>,
+  rotate = 0,
+  userUnit = 1,
 ): Pdfjs.PDFPageProxy {
   return {
     pageNumber: pageIndex + 1,
-    userUnit: 1,
-    rotate: 0,
-    getViewport: ({ scale = 1, rotation = 0 }: { scale?: number; rotation?: number }) =>
-      viewport(size, scale, rotation),
+    userUnit,
+    rotate,
+    getViewport: ({ scale = 1, rotation = rotate }: { scale?: number; rotation?: number }) =>
+      viewport(size, scale * userUnit, rotation),
     render(parameters: {
       canvas: HTMLCanvasElement;
       viewport: { scale: number; rotation: number };
@@ -148,14 +153,37 @@ function fakePage(
     async getTextContent() {
       textsRead.push(pageIndex);
       await textsReady;
+      const styles: Record<string, { vertical: boolean }> = {};
       return {
-        items: items.map(({ str, hasEOL = false, x = 0, y = 0, width = 0, height = 10 }) => ({
-          str,
-          hasEOL,
-          transform: [height, 0, 0, height, x, y],
-          width,
-          height,
-        })),
+        styles,
+        items: items.map(
+          (
+            {
+              str,
+              hasEOL = false,
+              x = 0,
+              y = 0,
+              width = 0,
+              height = 10,
+              dir = "ltr",
+              transform,
+              vertical = false,
+            },
+            index,
+          ) => {
+            const fontName = `f${index}`;
+            if (vertical) styles[fontName] = { vertical: true };
+            return {
+              str,
+              dir: vertical ? "ttb" : dir,
+              hasEOL,
+              fontName,
+              transform: transform ?? [height, 0, 0, height, x, y],
+              width,
+              height,
+            };
+          },
+        ),
       };
     },
     cleanup() {
@@ -196,6 +224,10 @@ export function fakeLayers(groups: Record<string, { name: string; visible: boole
 export interface FakeDocumentOptions {
   /** Each page's size; one US Letter page by default. */
   pages?: readonly PageSize[];
+  /** Each page's intrinsic /Rotate (0, 90, 180, or 270). */
+  rotations?: readonly number[];
+  /** Each page's /UserUnit (1 by default). */
+  userUnits?: readonly number[];
   /** Each page's text items. */
   texts?: readonly (readonly FakeTextItem[])[];
   /** Pages' texts are read once it resolves; at once by default. */
@@ -207,6 +239,8 @@ export interface FakeDocumentOptions {
 /** pdf.js's document as the code under test calls it, with what it was asked. */
 export function fakeDocument({
   pages = [LETTER],
+  rotations = [],
+  userUnits = [],
   texts = [],
   textsReady = Promise.resolve(),
   proxy = {},
@@ -218,7 +252,15 @@ export function fakeDocument({
   /** Zero-based page indexes, in the order pages were asked for. */
   const requested: number[] = [];
   const pageProxies = pages.map((size, index) =>
-    fakePage(index, size, { drawings, cleaned, textsRead }, texts[index] ?? [], textsReady),
+    fakePage(
+      index,
+      size,
+      { drawings, cleaned, textsRead },
+      texts[index] ?? [],
+      textsReady,
+      rotations[index] ?? 0,
+      userUnits[index] ?? 1,
+    ),
   );
   const document = {
     numPages: pages.length,

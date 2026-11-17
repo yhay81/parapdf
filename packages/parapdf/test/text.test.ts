@@ -1,8 +1,17 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it, mock } from "node:test";
 import { PdfSessionController } from "../src/document/pdf-session.ts";
-import { getText, type TextOptions } from "../src/features/text/index.ts";
-import { fakeDocument, fakePdfjs, LETTER, settle } from "./fake-pdfjs.ts";
+import { searchOf } from "../src/features/search/index.ts";
+import { findText, getText, type TextOptions } from "../src/features/text/index.ts";
+import { ViewerController } from "../src/view/viewer.ts";
+import {
+  type FakeDocumentOptions,
+  fakeDocument,
+  fakePdfjs,
+  LETTER,
+  settle,
+  show,
+} from "./fake-pdfjs.ts";
 
 describe("getText", () => {
   const close: (() => void)[] = [];
@@ -102,5 +111,332 @@ describe("getText", () => {
     abort.abort(reason);
     release();
     await assert.rejects(reading, (error) => error === reason);
+  });
+});
+
+describe("findText", () => {
+  const cancelFrame = Object.getOwnPropertyDescriptor(globalThis, "cancelAnimationFrame");
+  const close: (() => void)[] = [];
+
+  beforeEach(() => {
+    mock.timers.enable({ apis: ["setTimeout"] });
+    Object.defineProperty(globalThis, "cancelAnimationFrame", {
+      configurable: true,
+      value: () => {},
+    });
+  });
+
+  afterEach(async () => {
+    for (const release of close.splice(0)) release();
+    mock.timers.tick(1000);
+    await settle();
+    mock.timers.reset();
+    if (cancelFrame) Object.defineProperty(globalThis, "cancelAnimationFrame", cancelFrame);
+    else Reflect.deleteProperty(globalThis, "cancelAnimationFrame");
+  });
+
+  async function openDoc(options: FakeDocumentOptions, url = "/find.pdf") {
+    const document = fakeDocument(options);
+    const { loader } = fakePdfjs(async () => document.proxy);
+    const session = new PdfSessionController({ url }, { pdfjs: loader });
+    close.push(session.connect());
+    await settle();
+    return { session, loader, textsRead: document.textsRead };
+  }
+
+  function gate() {
+    let release!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return { ready, release };
+  }
+
+  it("locates matches across page ranges without mounting a Viewer, and handles bounds and limit", async () => {
+    const { session, textsRead } = await openDoc({
+      pages: [LETTER, LETTER, LETTER, LETTER],
+      texts: [
+        [{ str: "Alpha beta", x: 72, y: 700, width: 100, height: 12, hasEOL: true }],
+        [{ str: "Beta gamma", x: 72, y: 700, width: 100, height: 12, hasEOL: true }],
+        [{ str: "Delta beta", x: 72, y: 700, width: 100, height: 12, hasEOL: true }],
+        [{ str: "Omega", x: 72, y: 700, width: 50, height: 12, hasEOL: true }],
+      ],
+    });
+    // Single-page lookup parses only that page.
+    const single = await findText(session, "beta", { from: 1, to: 1 });
+    assert.deepEqual(textsRead, [1]);
+    assert.equal(single.length, 1);
+    assert.equal(single[0]?.pageIndex, 1);
+    assert.deepEqual(single[0]?.rects, [{ x: 72, y: 80, width: 40, height: 12 }]);
+    assert.deepEqual(single[0]?.bounds, { x: 72, y: 80, width: 40, height: 12 });
+
+    // Out-of-bounds, inverted, empty, or zero-limit queries touch no extra pages.
+    assert.deepEqual(await findText(session, "beta", { from: 4, to: 4 }), []);
+    assert.deepEqual(await findText(session, "beta", { from: -2, to: -1 }), []);
+    assert.deepEqual(await findText(session, "beta", { from: 2, to: 1 }), []);
+    assert.deepEqual(await findText(session, "beta", { from: Number.NaN }), []);
+    assert.deepEqual(await findText(session, "beta", { limit: 0 }), []);
+    assert.deepEqual(await findText(session, "   "), []);
+    assert.deepEqual(textsRead, [1]);
+
+    // `limit: 1` stops once page 0 satisfies it without reading page 2 or 3.
+    const firstMatch = await findText(session, "beta", { limit: 1 });
+    assert.equal(firstMatch.length, 1);
+    assert.equal(firstMatch[0]?.pageIndex, 0);
+    assert.deepEqual(firstMatch[0]?.rects, [{ x: 132, y: 80, width: 40, height: 12 }]);
+    assert.deepEqual(textsRead, [1, 0]);
+
+    // Full range reuses pages 0 and 1 and reads the rest once.
+    const all = await findText(session, "beta", { from: -5, to: 99 });
+    assert.deepEqual(
+      all.map((m) => m.pageIndex),
+      [0, 1, 2],
+    );
+    assert.deepEqual(textsRead, [1, 0, 2, 3]);
+  });
+
+  it("shares cached PageText and PageIndex with useSearch() without disturbing its state", async () => {
+    const document = fakeDocument({
+      pages: [LETTER, LETTER],
+      texts: [
+        [{ str: "Rose and tulip", x: 72, y: 700, width: 140, height: 12 }],
+        [{ str: "Another Rose", x: 72, y: 700, width: 120, height: 12 }],
+      ],
+    });
+    const { loader } = fakePdfjs(async () => document.proxy);
+    const viewer = new ViewerController();
+    const shown = show(viewer, { url: "/shared.pdf" }, loader);
+    close.push(shown.close);
+    await settle();
+
+    const search = searchOf(viewer);
+    search.get().search("tulip");
+    for (let step = 0; step < 4; step++) {
+      await settle();
+      mock.timers.tick(0);
+    }
+    await settle();
+    const beforeState = search.get();
+    assert.equal(beforeState.status, "done");
+    assert.equal(beforeState.query, "tulip");
+    assert.equal(beforeState.matches.length, 1);
+    assert.deepEqual(document.textsRead, [0, 1]);
+
+    // Case-insensitive findText reuses both PageText and PageIndex; case-sensitive reuses PageText.
+    const ci = await findText(shown.session, "rose");
+    const cs = await findText(shown.session, "Rose", { caseSensitive: true, entireWord: true });
+    assert.equal(ci.length, 2);
+    assert.equal(cs.length, 2);
+    assert.deepEqual(document.textsRead, [0, 1], "no page text was parsed again");
+    assert.strictEqual(search.get(), beforeState, "viewer search state stayed untouched");
+  });
+
+  it("slices substrings, coalesces same-line runs, and splits multi-line CJK, hyphenated, and table matches", async () => {
+    const { session } = await openDoc(
+      {
+        pages: [LETTER, LETTER, LETTER],
+        texts: [
+          // Page 0: multi-item kerning on line 1, plus a wide table gap on line 2, plus surrogate & combining marks.
+          [
+            { str: "Making ", x: 72, y: 720, width: 42, height: 12 },
+            { str: "emer", x: 114, y: 720, width: 24, height: 12 },
+            { str: "gency ", x: 138, y: 720, width: 36, height: 12 },
+            { str: "appropriations", x: 174, y: 720, width: 84, height: 12, hasEOL: true },
+            { str: "Total", x: 72, y: 690, width: 30, height: 12 },
+            { str: " ", x: 102, y: 690, width: 300, height: 12 },
+            { str: "$1,250", x: 402, y: 690, width: 42, height: 12, hasEOL: true },
+            { str: "𠮷野家 cafe\u0301", x: 72, y: 660, width: 110, height: 12, hasEOL: true },
+          ],
+          // Page 1: Japanese word and English hyphenated word each broken across two lines, plus mixed CJK + ASCII.
+          [
+            { str: "通知：厚生", x: 420, y: 720, width: 80, height: 16, hasEOL: true },
+            { str: "労働省の指針", x: 72, y: 696, width: 96, height: 16, hasEOL: true },
+            { str: "two divi-", x: 450, y: 660, width: 54, height: 12, hasEOL: true },
+            { str: "sions here", x: 72, y: 644, width: 60, height: 12, hasEOL: true },
+            { str: "日本語 CMap 文書", x: 72, y: 610, width: 160, height: 16, hasEOL: true },
+          ],
+          // Page 2: half-width katakana.
+          [{ str: "ﾃﾞｰﾀ処理", x: 72, y: 700, width: 70, height: 14, hasEOL: true }],
+        ],
+      },
+      "/geometry.pdf",
+    );
+
+    // Multi-item single-line phrase coalesces into one tight PdfRect.
+    const [coalesced] = await findText(session, "emergency appropriations", { from: 0, to: 0 });
+    assert.ok(coalesced);
+    assert.deepEqual(coalesced.rects, [{ x: 114, y: 60, width: 144, height: 12 }]);
+    assert.deepEqual(coalesced.bounds, { x: 114, y: 60, width: 144, height: 12 });
+
+    // Wide table gap (> 1.5 * height) keeps two separate column rects while bounds spans both.
+    const [table] = await findText(session, "Total $1,250", { from: 0, to: 0 });
+    assert.ok(table);
+    assert.deepEqual(table.rects, [
+      { x: 72, y: 90, width: 30, height: 12 },
+      { x: 402, y: 90, width: 42, height: 12 },
+    ]);
+    assert.deepEqual(table.bounds, { x: 72, y: 90, width: 372, height: 12 });
+
+    // Surrogate pair ("𠮷" weight 2 of total weight 6+1+4 = 11) and combining accent ("cafe\u0301" weight 4 of 11).
+    const [surrogate] = await findText(session, "𠮷", { from: 0, to: 0 });
+    const [accented] = await findText(session, "café", { from: 0, to: 0, matchDiacritics: true });
+    assert.ok(surrogate && accented);
+    assert.equal(surrogate.rects[0]?.x, 72);
+    assert.ok(Math.abs((surrogate.rects[0]?.width ?? 0) - 20) < 0.01);
+    assert.ok(Math.abs((accented.rects[0]?.x ?? 0) - 142) < 0.01);
+    assert.ok(Math.abs((accented.rects[0]?.width ?? 0) - 40) < 0.01);
+
+    // Multi-line Japanese word ("厚生労働") splits cleanly across line 1's end and line 2's start.
+    const [kosei] = await findText(session, "厚生労働", { from: 1, to: 1 });
+    assert.ok(kosei);
+    assert.deepEqual(kosei.rects, [
+      { x: 468, y: 56, width: 32, height: 16 },
+      { x: 72, y: 80, width: 32, height: 16 },
+    ]);
+    assert.deepEqual(kosei.bounds, { x: 72, y: 56, width: 428, height: 40 });
+    const readBack = await getText(session, {
+      from: { pageIndex: kosei.pageIndex, ...kosei.start },
+      to: { pageIndex: kosei.pageIndex, ...kosei.end },
+      lineBreaks: "join",
+    });
+    assert.equal(readBack.text, "厚生労働");
+
+    // Hyphenated English word ("divisions") splits across lines 3 and 4.
+    const [divisions] = await findText(session, "divisions", { from: 1, to: 1 });
+    assert.ok(divisions);
+    assert.deepEqual(divisions.rects, [
+      { x: 474, y: 120, width: 30, height: 12 },
+      { x: 72, y: 136, width: 30, height: 12 },
+    ]);
+
+    // Full-width query matches ASCII "CMap" with East Asian width weighting (6+1 = 7 before, 4 match, 16 total).
+    const [cmap] = await findText(session, "ＣＭａｐ", { from: 1, to: 1 });
+    assert.ok(cmap);
+    assert.deepEqual(cmap.rects, [{ x: 142, y: 166, width: 40, height: 16 }]);
+
+    // Half-width katakana with a spacing voiced mark ("ﾃﾞｰﾀ" = 4 half-width cells, "処理" = 2 full-width cells = 4: 4/8 of 70 = 35).
+    const [katakana] = await findText(session, "データ", { from: 2, to: 2 });
+    assert.ok(katakana);
+    assert.deepEqual(katakana.rects, [{ x: 72, y: 78, width: 35, height: 14 }]);
+  });
+
+  it("computes PdfPageRect-aligned boxes across /Rotate 90, 180, 270, /UserUnit, rotated CTM, RTL, and vertical CJK", async () => {
+    const { session } = await openDoc(
+      {
+        pages: [
+          { width: 300, height: 400 }, // Page 0: /Rotate 90, /UserUnit 2 (600x400 turned -> 800x600 physical points)
+          { width: 600, height: 800 }, // Page 1: /Rotate 180
+          { width: 600, height: 800 }, // Page 2: /Rotate 270
+          { width: 600, height: 800 }, // Page 3: /Rotate 0 with RTL and vertical CJK
+        ],
+        rotations: [90, 180, 270, 0],
+        userUnits: [2, 1, 1, 1],
+        texts: [
+          [
+            // Unrotated CTM on /Rotate 90 + /UserUnit 2: advances downward (+y).
+            { str: "ABCD", x: 50, y: 300, width: 80, height: 10 },
+            // Counter-rotated CTM [0, 10, -10, 0, 100, 60]: advances rightward (+x) on /Rotate 90.
+            { str: "WXYZ", transform: [0, 10, -10, 0, 100, 60], width: 80, height: 10 },
+          ],
+          [
+            // Unrotated CTM on /Rotate 180: advances leftward (-x).
+            { str: "ABCD", x: 100, y: 200, width: 80, height: 12 },
+            // Counter-rotated CTM [-12, 0, 0, -12, 500, 100]: advances rightward (+x) on /Rotate 180.
+            { str: "WXYZ", transform: [-12, 0, 0, -12, 500, 100], width: 80, height: 12 },
+          ],
+          [
+            // Unrotated CTM on /Rotate 270: advances upward (-y).
+            { str: "ABCD", x: 100, y: 200, width: 80, height: 12 },
+            // Counter-rotated CTM [0, -12, 12, 0, 480, 700]: advances rightward (+x) on /Rotate 270.
+            { str: "WXYZ", transform: [0, -12, 12, 0, 480, 700], width: 80, height: 12 },
+          ],
+          [
+            // RTL run: logical start "AB" sits at the right half of [100, 180].
+            { str: "ABCD", x: 100, y: 700, width: 80, height: 12, dir: "rtl" },
+            // Vertical CJK column at (500, 600), width 18, height 80: advances downward (+y).
+            {
+              str: "縦書き字",
+              x: 500,
+              y: 600,
+              width: 18,
+              height: 80,
+              transform: [18, 0, 0, 18, 500, 600],
+              vertical: true,
+            },
+          ],
+        ],
+      },
+      "/rotated.pdf",
+    );
+
+    // Page 0 (/Rotate 90, /UserUnit 2): "CD" is second half along +y; "YZ" is second half along +x.
+    const [r90Down] = await findText(session, "CD", { from: 0, to: 0 });
+    const [r90Right] = await findText(session, "YZ", { from: 0, to: 0 });
+    assert.deepEqual(r90Down?.rects, [{ x: 600, y: 180, width: 20, height: 80 }]);
+    assert.deepEqual(r90Right?.rects, [{ x: 200, y: 180, width: 80, height: 20 }]);
+
+    // Page 1 (/Rotate 180): "CD" is left half [420, 460] along -x; "YZ" is right half [140, 180] along +x.
+    const [r180Left] = await findText(session, "CD", { from: 1, to: 1 });
+    const [r180Right] = await findText(session, "YZ", { from: 1, to: 1 });
+    assert.deepEqual(r180Left?.rects, [{ x: 420, y: 200, width: 40, height: 12 }]);
+    assert.deepEqual(r180Right?.rects, [{ x: 140, y: 88, width: 40, height: 12 }]);
+
+    // Page 2 (/Rotate 270): "CD" is upper half [420, 460] along -y; "YZ" is right half [140, 180] along +x.
+    const [r270Up] = await findText(session, "CD", { from: 2, to: 2 });
+    const [r270Right] = await findText(session, "YZ", { from: 2, to: 2 });
+    assert.deepEqual(r270Up?.rects, [{ x: 588, y: 420, width: 12, height: 40 }]);
+    assert.deepEqual(r270Right?.rects, [{ x: 140, y: 108, width: 40, height: 12 }]);
+
+    // Page 3: RTL "AB" sits at [140, 180]; vertical CJK "き字" sits at lower half [240, 280].
+    const [rtl] = await findText(session, "AB", { from: 3, to: 3 });
+    const [vertical] = await findText(session, "き字", { from: 3, to: 3 });
+    assert.deepEqual(rtl?.rects, [{ x: 140, y: 88, width: 40, height: 12 }]);
+    assert.deepEqual(vertical?.rects, [{ x: 491, y: 240, width: 18, height: 40 }]);
+  });
+
+  it("rejects while no document is open, when closed mid-search, or with the signal's abort reason", async () => {
+    await assert.rejects(
+      findText(new PdfSessionController({ url: "/none.pdf" }), "one"),
+      /No document is open/,
+    );
+    const { ready, release } = gate();
+    const { session } = await openDoc(
+      {
+        pages: [LETTER, LETTER],
+        texts: [[{ str: "One" }], [{ str: "Two" }]],
+        textsReady: ready,
+      },
+      "/abort.pdf",
+    );
+    const reason = new Error("cancelled");
+    await assert.rejects(
+      findText(session, "one", { signal: AbortSignal.abort(reason) }),
+      (error) => error === reason,
+    );
+    const abort = new AbortController();
+    const pending = findText(session, "two", { signal: abort.signal });
+    await settle();
+    abort.abort(reason);
+    release();
+    await assert.rejects(pending, (error) => error === reason);
+
+    // Closing the session while searching rejects cleanly.
+    const secondGate = gate();
+    const document = fakeDocument({
+      pages: [LETTER],
+      texts: [[{ str: "One" }]],
+      textsReady: secondGate.ready,
+    });
+    const sessionToClose = new PdfSessionController(
+      { url: "/closing.pdf" },
+      { pdfjs: fakePdfjs(async () => document.proxy).loader },
+    );
+    const disconnect = sessionToClose.connect();
+    await settle();
+    const closingSearch = findText(sessionToClose, "one");
+    await settle();
+    disconnect();
+    secondGate.release();
+    await assert.rejects(closingSearch, /The document was closed/);
   });
 });

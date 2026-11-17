@@ -33,6 +33,50 @@ second read, or a search, parses nothing again. The browser's selection
 covers only mounted pages; to copy a range longer than those, read it with
 `getText()` between the points where it starts and ends.
 
+## Locating text as page rectangles
+
+`findText(session, query, options?)` locates matches of `query` across pages as
+`PdfRect` boxes — for highlighting and scrolling to cited quotes (`{ pageIndex, quote }`)
+with `PdfPageOverlay`, `PdfPageRect`, and `viewer.revealRect()` while leaving
+[`useSearch()`](/guides/search/) free for the reader's own find bar:
+
+```tsx
+const matches = await findText(session, quote, {
+  from: pageIndex,
+  to: pageIndex,
+  limit: 1,
+  signal,
+});
+const match = matches[0];
+if (match) viewer.revealRect(match.pageIndex, match.bounds);
+
+// Render inside <PdfViewer>:
+{match && (
+  <PdfPageOverlay page={match.pageIndex}>
+    {match.rects.map((rect) => (
+      <PdfPageRect
+        key={`${rect.x}:${rect.y}:${rect.width}:${rect.height}`}
+        {...rect}
+        style={{ background: "rgb(255 213 0 / 0.35)" }}
+      />
+    ))}
+  </PdfPageOverlay>
+)}
+```
+
+- `from` and `to` narrow the search to an inclusive zero-based page range (every
+  page by default), `limit` caps the matches returned and stops reading further
+  pages once reached, `signal` aborts a search in progress, and `caseSensitive`,
+  `entireWord`, and `matchDiacritics` match as [`useSearch()`](/guides/search/#matching)
+  does (including NFKC, half-width katakana, and CJK or hyphenated line-joining).
+- Each `TextMatch` carries `pageIndex`, `start`, and `end` (which `getText()`
+  also takes), `rects` (one tight `PdfRect` per matched line, sliced within
+  partial text runs and following `/Rotate`, `/UserUnit`, and vertical or
+  right-to-left text), and `bounds` (their union `PdfRect` for
+  `viewer.revealRect()`).
+- `findText()` works with or without a mounted `PdfViewer` and shares the
+  session's cached `PageText` and `PageIndex` with `getText()` and `useSearch()`.
+
 ## Selections and popovers
 
 `useSelection(viewer?, options?)` returns the text selected in the viewer, the

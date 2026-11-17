@@ -1,5 +1,6 @@
 import {
   type FormChange,
+  findText,
   getAttachmentContent,
   getFormFields,
   getText,
@@ -10,6 +11,7 @@ import {
   PdfPageOverlay,
   PdfPageOverlays,
   PdfPageRect,
+  type PdfRect,
   PdfSelectionPopover,
   type PdfSession,
   type PdfSource,
@@ -313,6 +315,7 @@ const lifetime = (["above", "transition", "activity"] as const).find(
 export interface OverlayTestConfig {
   dynamicBadge?: string | null;
   selectionPopover?: boolean;
+  citations?: readonly { pageIndex: number; rects: readonly PdfRect[] }[] | null;
 }
 
 export function App() {
@@ -446,6 +449,20 @@ function DocumentShell() {
             />
           </PdfPageOverlay>
           {dynamicBadge ? <PdfPageOverlays>{renderDynamicOverlays}</PdfPageOverlays> : null}
+          {overlayTest.citations?.map((entry) => (
+            <PdfPageOverlay
+              key={`${entry.pageIndex}:${entry.rects[0]?.x ?? 0}:${entry.rects[0]?.y ?? 0}`}
+              page={entry.pageIndex}
+            >
+              {entry.rects.map((rect) => (
+                <PdfPageRect
+                  key={`${rect.x}:${rect.y}:${rect.width}:${rect.height}`}
+                  {...rect}
+                  className="test-citation-rect"
+                />
+              ))}
+            </PdfPageOverlay>
+          ))}
           {overlayTest.selectionPopover ? (
             <PdfSelectionPopover className="test-selection-popover">
               {(selection) => (
@@ -480,6 +497,7 @@ function DocumentShell() {
 
 const demoApi = {
   download,
+  findText,
   getAttachmentContent,
   getFormFields,
   getSelection,

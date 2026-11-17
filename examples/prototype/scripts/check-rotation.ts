@@ -59,6 +59,39 @@ const boxOf = (page: Page, selector: string): Promise<Box | null> =>
     return rect ? { left: rect.left, top: rect.top, width: rect.width, height: rect.height } : null;
   }, selector);
 
+/** Four pages covering /Rotate 0, 90 (/UserUnit 2), 180, and 270 with unrotated and counter-rotated text. */
+function rotatedQuotesPdf(): number[] {
+  const stream = (ops: string) => `<< /Length ${ops.length} >>\nstream\n${ops}\nendstream`;
+  const all = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [4 0 R 6 0 R 8 0 R 10 0 R] /Count 4 >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>",
+    stream("BT /F1 16 Tf 1 0 0 1 40 320 Tm (Alpha TARGET Omega) Tj ET"),
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 150 200] /UserUnit 2 /Rotate 90 /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>",
+    stream("BT /F1 1 Tf 0 8 -8 0 50 20 Tm (Alpha TARGET Omega) Tj ET"),
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Rotate 180 /Resources << /Font << /F1 3 0 R >> >> /Contents 9 0 R >>",
+    stream(
+      "BT /F1 16 Tf 1 0 0 1 40 120 Tm (Flip UNROTATED End) Tj /F1 1 Tf -16 0 0 -16 260 240 Tm (Alpha TARGET Omega) Tj ET",
+    ),
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Rotate 270 /Resources << /Font << /F1 3 0 R >> >> /Contents 11 0 R >>",
+    stream(
+      "BT /F1 16 Tf 1 0 0 1 40 100 Tm (Turn UNROTATED End) Tj /F1 1 Tf 0 -16 16 0 200 360 Tm (Alpha TARGET Omega) Tj ET",
+    ),
+  ];
+  let body = "%PDF-1.4\n";
+  const offsets = all.map((object, index) => {
+    const offset = body.length;
+    body += `${index + 1} 0 obj\n${object}\nendobj\n`;
+    return offset;
+  });
+  const xref = body.length;
+  body += `xref\n0 ${all.length + 1}\n0000000000 65535 f \n`;
+  for (const offset of offsets) body += `${String(offset).padStart(10, "0")} 00000 n \n`;
+  body += `trailer\n<< /Size ${all.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return [...Buffer.from(body, "latin1")];
+}
+
 const server = await preview({
   root: exampleDir,
   configFile: join(exampleDir, "vite.config.ts"),
@@ -392,7 +425,147 @@ try {
     searchBox[0] === 698 && searchBox[1] === 96 && searchBox[2] === 36 && (searchBox[3] ?? 0) > 400,
     JSON.stringify(searchBox),
   );
+  const mixedLocated = await mixed.evaluate(async () => {
+    const session = window.__session;
+    const parapdf = window.__parapdf;
+    if (!session || !parapdf) return null;
+    const [match] = await parapdf.findText(session, "marker 5", { from: 4, to: 4 });
+    if (!match) return null;
+    window.__setOverlayTest?.({ citations: [match] });
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const overlay = document
+      .querySelector<HTMLElement>('section[data-page="5"] .test-citation-rect')
+      ?.getBoundingClientRect();
+    const span = [
+      ...document.querySelectorAll<HTMLElement>('section[data-page="5"] .parapdf-text-layer span'),
+    ].find((el) => el.textContent?.includes("marker 5"));
+    const firstNode = span?.firstChild;
+    let overlaps = false;
+    if (firstNode?.textContent && overlay) {
+      const idx = firstNode.textContent.indexOf("marker 5");
+      const range = document.createRange();
+      range.setStart(firstNode, idx);
+      range.setEnd(firstNode, idx + "marker 5".length);
+      const dom = range.getBoundingClientRect();
+      const w = Math.min(overlay.right, dom.right) - Math.max(overlay.left, dom.left);
+      const h = Math.min(overlay.bottom, dom.bottom) - Math.max(overlay.top, dom.top);
+      overlaps =
+        w > 0 &&
+        h > 0 &&
+        (w * h) / Math.min(overlay.width * overlay.height, dom.width * dom.height) >= 0.45;
+    }
+    window.__setOverlayTest?.({ citations: null });
+    return { rects: match.rects.length, overlaps };
+  });
+  check(
+    "findText() slices /Rotate 90 and /UserUnit 2 text runs in PdfPageRect coordinates",
+    mixedLocated?.rects === 1 && mixedLocated.overlaps === true,
+    JSON.stringify(mixedLocated),
+  );
   await mixed.context().close();
+
+  // Check findText() + <PdfPageRect> + viewer.revealRect() across /Rotate 0, 90 (/UserUnit 2),
+  // 180, and 270, with both unrotated and counter-rotated text matrices and view rotation.
+  const rotated = await newPage("synthetic-mixed-sizes.pdf", "&scale=1");
+  const rotatedResults = await rotated.evaluate(async (pdfBytes) => {
+    const blobUrl = URL.createObjectURL(
+      new Blob([new Uint8Array(pdfBytes)], { type: "application/pdf" }),
+    );
+    window.__setSourceUrl?.(blobUrl);
+    for (let waited = 0; waited < 10_000; waited += 50) {
+      if (
+        window.__session?.state.status === "ready" &&
+        window.__session.state.pageCount === 4 &&
+        window.__viewer?.store.get().pageCount === 4
+      ) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    const viewer = window.__viewer;
+    const session = window.__session;
+    const parapdf = window.__parapdf;
+    const scroller = viewer?.scroller;
+    if (!viewer || !session || !parapdf || !scroller) {
+      URL.revokeObjectURL(blobUrl);
+      return null;
+    }
+    const cases: [number, string][] = [
+      [0, "TARGET"],
+      [1, "TARGET"],
+      [2, "UNROTATED"],
+      [2, "TARGET"],
+      [3, "UNROTATED"],
+      [3, "TARGET"],
+    ];
+    const results: { viewRotation: number; pageIndex: number; needle: string; ok: boolean }[] = [];
+    for (const viewRotation of [0, 90] as const) {
+      viewer.setRotation(viewRotation);
+      viewer.setScale(1);
+      for (const [pageIndex, needle] of cases) {
+        const [match] = await parapdf.findText(session, needle, {
+          from: pageIndex,
+          to: pageIndex,
+        });
+        if (!match) {
+          results.push({ viewRotation, pageIndex, needle, ok: false });
+          continue;
+        }
+        window.__setOverlayTest?.({ citations: [match] });
+        viewer.revealRect(pageIndex, match.bounds);
+        for (let waited = 0; waited < 5_000; waited += 40) {
+          const spans = document.querySelectorAll(
+            `section[data-page="${pageIndex + 1}"] .parapdf-text-layer span`,
+          );
+          if (spans.length > 0) break;
+          await new Promise((resolve) => setTimeout(resolve, 40));
+        }
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const overlay = document
+          .querySelector<HTMLElement>(`section[data-page="${pageIndex + 1}"] .test-citation-rect`)
+          ?.getBoundingClientRect();
+        const scrollerRect = scroller.getBoundingClientRect();
+        const span = [
+          ...document.querySelectorAll<HTMLElement>(
+            `section[data-page="${pageIndex + 1}"] .parapdf-text-layer span`,
+          ),
+        ].find((el) => el.textContent?.includes(needle));
+        const firstNode = span?.firstChild;
+        let ok = false;
+        if (overlay && firstNode?.textContent) {
+          const idx = firstNode.textContent.indexOf(needle);
+          const range = document.createRange();
+          range.setStart(firstNode, idx);
+          range.setEnd(firstNode, idx + needle.length);
+          const dom = range.getBoundingClientRect();
+          const w = Math.min(overlay.right, dom.right) - Math.max(overlay.left, dom.left);
+          const h = Math.min(overlay.bottom, dom.bottom) - Math.max(overlay.top, dom.top);
+          const visible =
+            overlay.bottom > scrollerRect.top &&
+            overlay.top < scrollerRect.bottom &&
+            overlay.right > scrollerRect.left &&
+            overlay.left < scrollerRect.right;
+          ok =
+            visible &&
+            w > 0 &&
+            h > 0 &&
+            (w * h) / Math.min(overlay.width * overlay.height, dom.width * dom.height) >= 0.4;
+        }
+        results.push({ viewRotation, pageIndex, needle, ok });
+      }
+    }
+    window.__setOverlayTest?.({ citations: null });
+    URL.revokeObjectURL(blobUrl);
+    return results;
+  }, rotatedQuotesPdf());
+  check(
+    "findText(), PdfPageRect, and revealRect() align across /Rotate 0, 90, 180, 270, /UserUnit 2, and view rotation",
+    rotatedResults !== null &&
+      rotatedResults.length === 12 &&
+      rotatedResults.every((entry) => entry.ok),
+    JSON.stringify(rotatedResults?.filter((entry) => !entry.ok)),
+  );
+  await rotated.context().close();
 
   // A link followed in a turned view lands on its target.
   const guide = await newPage("usrguide.pdf");

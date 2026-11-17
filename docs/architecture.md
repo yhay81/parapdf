@@ -84,7 +84,7 @@ Next.js emit the files (`check:bundlers`); other bundlers take a copy of
 once, then the real ones in the background), and the document's data, each
 read once: page labels, outline, metadata, attachments, comments,
 permissions, the initial view, optional content, and the text read for
-search and `getText()`. Resolved page sizes, permissions, direction, initial
+search, `getText()`, and `findText()`. Resolved page sizes, permissions, direction, initial
 view, page labels, optional-content layers, resolved named destinations, and
 loaded pages are also exposed synchronously (`knownPageSizes`,
 `knownPermissions`, `knownDirection`, `knownInitialView`, `knownPageLabels`,
@@ -287,10 +287,11 @@ of its own, and detaching it undoes what it added. The core imports no feature.
   permission enforcement, search, print, and the other features are imported
   only by the components, hooks, or standalone functions that use them
   (`PdfForms`, `PdfAnnotationEditor`, `PdfAutoLinks`, `PdfPermissions`,
-  `useSearch()`, `useSave()`, `usePrint()`, `usePermits()`, `getText()`, and so on),
+  `useSearch()`, `useSave()`, `usePrint()`, `usePermits()`, `getText()`,
+  `findText()`, and so on),
   so bundlers exclude unused features statically with zero dead feature chunks
   emitted on disk (decisions 0034, 0035, and 0047). Stateless document-level
-  operations (`getText`, `getFormFields`, `setFormValues`, `setLayerVisible`,
+  operations (`getText`, `findText`, `getFormFields`, `setFormValues`, `setLayerVisible`,
   `getAttachmentContent`, `openAttachment`) take `PdfSession` as standalone
   functions rather than methods on `PdfSession`, keeping `PdfDocument` free of
   optional feature code while working without a mounted `PdfViewer`, while
@@ -330,6 +331,10 @@ of its own, and detaching it undoes what it added. The core imports no feature.
   It scans forward from the viewer's current page and wraps at the end.
   Each progress update puts both runs of matches in document order and
   preserves the selected match as earlier pages arrive (decision 0027).
+  `findText()` shares the session's `SEARCH_INDEX_SLOT` (`page-index.ts`) and
+  `session.text()` without touching any viewer's search store, slicing matched
+  runs into unturned PDF-point `PdfRect` boxes across `/Rotate`, `/UserUnit`,
+  and vertical or right-to-left text (decision 0048).
 - Selection (`selection.ts`) resolves text layers and mounted page hosts
   through `viewer.textLayers` (`TextLayerHandle.layer`) and `viewer.pageHost()`
   rather than `querySelectorAll`, and caches each text layer's node-to-item

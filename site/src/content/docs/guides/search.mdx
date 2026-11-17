@@ -67,7 +67,10 @@ default:
 
 `next()`, `previous()`, and `clear()` move between matches and end the
 search. Each match (`SearchMatch`) has its `pageIndex` and its `start` and
-`end` in the page's text, which [`getText()`](/guides/text/) takes.
+`end` in the page's text, which [`getText()`](/guides/text/) takes. To locate
+a quote or citation as `PdfRect` boxes without changing the viewer's
+`useSearch()` state, call
+[`findText(session, query, options?)`](/guides/text/#locating-text-as-page-rectangles).
 
 ## Highlights
 

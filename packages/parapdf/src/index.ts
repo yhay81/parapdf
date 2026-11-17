@@ -32,9 +32,12 @@ export type { SearchMatch, SearchOptions, TextPosition } from "./features/search
 export type { PdfRect, PdfSelection, SelectionAnchor } from "./features/selection.ts";
 export {
   type DocumentText,
+  type FindTextOptions,
+  findText,
   getText,
   type LineBreaks,
   type PageTextContent,
+  type TextMatch,
   type TextOptions,
   type TextPoint,
 } from "./features/text/index.ts";

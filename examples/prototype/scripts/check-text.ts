@@ -577,6 +577,62 @@ try {
   check("Japanese match is highlighted", (await currentHighlightText(page)) === "非埋め込み");
   const fullWidth = await searchFor(page, "ＣＭａｐ");
   check("full-width query matches ASCII text", fullWidth >= 6, `${fullWidth} matches for ＣＭａｐ`);
+  const cjkLocated = await page.evaluate(async () => {
+    const session = window.__session;
+    const parapdf = window.__parapdf;
+    const search = window.__search;
+    if (!session || !parapdf || !search) return null;
+    const queryBefore = search.get().query;
+    const currentBefore = search.get().current;
+    const mixed = await parapdf.findText(session, "代替フォント", { from: 0, to: 0, limit: 1 });
+    const vertical = (await parapdf.findText(session, "非埋め込み", { from: 0, to: 0 })).at(-1);
+    if (!mixed[0] || !vertical) return null;
+    window.__setOverlayTest?.({ citations: [mixed[0], vertical] });
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const rects = [...document.querySelectorAll<HTMLElement>(".test-citation-rect")].map((el) =>
+      el.getBoundingClientRect(),
+    );
+    const spans = [
+      ...document.querySelectorAll<HTMLElement>(
+        'section[data-page="1"] .parapdf-text-layer span:not(.markedContent)',
+      ),
+    ];
+    const rangeRectOf = (needle: string, pickLast = false) => {
+      const matching = spans.filter((span) => span.textContent?.includes(needle));
+      const span = pickLast ? matching.at(-1) : matching[0];
+      const node = span?.firstChild;
+      if (!node?.textContent) return null;
+      const idx = node.textContent.indexOf(needle);
+      if (idx < 0) return null;
+      const range = document.createRange();
+      range.setStart(node, idx);
+      range.setEnd(node, idx + needle.length);
+      return range.getBoundingClientRect();
+    };
+    const mixedDom = rangeRectOf("代替フォント");
+    const verticalDom = rangeRectOf("非埋め込み", true);
+    const overlaps = (a: DOMRect | undefined, b: DOMRect | null) => {
+      if (!a || !b) return false;
+      const w = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+      const h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+      return w > 0 && h > 0 && (w * h) / Math.min(a.width * a.height, b.width * b.height) >= 0.45;
+    };
+    window.__setOverlayTest?.({ citations: null });
+    return {
+      undisturbed: search.get().query === queryBefore && search.get().current === currentBefore,
+      mixedAligned: overlaps(rects[0], mixedDom),
+      verticalAligned: overlaps(rects[1], verticalDom),
+      verticalTall: (vertical.bounds.height ?? 0) > (vertical.bounds.width ?? 0) * 2,
+    };
+  });
+  check(
+    "findText() aligns mixed CJK/ASCII and vertical CJK overlays without disturbing useSearch()",
+    cjkLocated?.undisturbed === true &&
+      cjkLocated.mixedAligned === true &&
+      cjkLocated.verticalAligned === true &&
+      cjkLocated.verticalTall === true,
+    JSON.stringify(cjkLocated),
+  );
 
   // Japanese has no spaces, so a line can end inside a word: page 1 of the
   // MHLW notice breaks 厚生労働 after 厚生, its only occurrence.
@@ -596,6 +652,53 @@ try {
     "a Japanese word broken across lines matches",
     kosei === 1 && highlightedKosei === "厚生労働",
     `${kosei} matches, highlighted ${JSON.stringify(highlightedKosei)}`,
+  );
+  const multilineCjk = await page.evaluate(async () => {
+    const session = window.__session;
+    const parapdf = window.__parapdf;
+    if (!session || !parapdf) return null;
+    const matches = await parapdf.findText(session, "厚生労働", { from: 0, to: 0 });
+    const match = matches[0];
+    if (!match) return null;
+    window.__setOverlayTest?.({ citations: [match] });
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const overlayRects = [...document.querySelectorAll<HTMLElement>(".test-citation-rect")].map(
+      (el) => el.getBoundingClientRect(),
+    );
+    const [range] = CSS.highlights.get("parapdf-search-current") ?? [];
+    const domRects =
+      range instanceof Range
+        ? [...range.getClientRects()].filter((r) => r.width > 1 && r.height > 1)
+        : [];
+    const overlaps = (a: DOMRect | undefined, b: DOMRect | undefined) => {
+      if (!a || !b) return false;
+      const w = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+      const h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+      return w > 0 && h > 0;
+    };
+    window.__setOverlayTest?.({ citations: null });
+    return {
+      count: matches.length,
+      rects: match.rects.length,
+      domRects: domRects.length,
+      bothAligned:
+        overlayRects.length === 2 &&
+        domRects.length === 2 &&
+        overlaps(overlayRects[0], domRects[0]) &&
+        overlaps(overlayRects[1], domRects[1]),
+      boundsCoversBoth:
+        match.rects.length === 2 &&
+        match.bounds.x <= Math.min(match.rects[0]?.x ?? 0, match.rects[1]?.x ?? 0) &&
+        match.bounds.height > (match.rects[0]?.height ?? 0) * 1.5,
+    };
+  });
+  check(
+    "findText() splits a multi-line Japanese match into PdfPageRect boxes aligned with both lines",
+    multilineCjk?.count === 1 &&
+      multilineCjk.rects === 2 &&
+      multilineCjk.bothAligned === true &&
+      multilineCjk.boundsCoversBoth === true,
+    JSON.stringify(multilineCjk),
   );
 
   // Page 24 of the LaTeX guide shows ßüé; a query without the diacritics finds it.
@@ -1049,6 +1152,106 @@ try {
     "a search match's points read the matched text, on any page",
     matched?.text.toLowerCase() === "appropriations",
     JSON.stringify(matched),
+  );
+  const locatedCitation = await page.evaluate(async () => {
+    const viewer = window.__viewer;
+    const session = window.__session;
+    const parapdf = window.__parapdf;
+    const search = window.__search;
+    const scroller = viewer?.scroller;
+    if (!viewer || !session || !parapdf || !search || !scroller) return null;
+    const beforeSearch = search.get();
+    // Locate a hyphenated word and a mid-line quote on page 1, plus a quote on the last matched page.
+    const [quote] = await parapdf.findText(session, "emergency supplemental", {
+      from: 0,
+      to: 0,
+      limit: 1,
+    });
+    const divisions = await parapdf.findText(session, "divisions", {
+      from: 0,
+      to: 0,
+    });
+    const lastPage = beforeSearch.matches.at(-1)?.pageIndex ?? 100;
+    const [farHit] = await parapdf.findText(session, "appropriations", {
+      from: lastPage,
+      to: lastPage,
+      limit: 1,
+    });
+    if (!quote || divisions.length !== 3 || !farHit) return null;
+    const aborted = await parapdf
+      .findText(session, "appropriations", { signal: AbortSignal.abort() })
+      .then(
+        () => false,
+        (error: Error) => error.name === "AbortError",
+      );
+    // Reveal the far citation via viewer.revealRect() and mount its <PdfPageOverlay>.
+    window.__setOverlayTest?.({ citations: [quote, farHit] });
+    viewer.revealRect(farHit.pageIndex, farHit.bounds);
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const scrollerBox = scroller.getBoundingClientRect();
+    const farOverlay = document
+      .querySelector<HTMLElement>(
+        `section[data-page="${farHit.pageIndex + 1}"] .test-citation-rect`,
+      )
+      ?.getBoundingClientRect();
+    const farRevealed =
+      viewer.store.get().currentPage === farHit.pageIndex &&
+      farOverlay !== undefined &&
+      farOverlay.top >= scrollerBox.top - 2 &&
+      farOverlay.bottom <= scrollerBox.bottom + 2;
+    // Return to page 1 and verify the overlay aligns with the text layer's DOM range.
+    viewer.goToPage(0);
+    for (let waited = 0; waited < 5_000; waited += 50) {
+      if (document.querySelector('section[data-page="1"] .parapdf-text-layer span')) break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const page1Overlay = document
+      .querySelector<HTMLElement>('section[data-page="1"] .test-citation-rect')
+      ?.getBoundingClientRect();
+    const span = [
+      ...document.querySelectorAll<HTMLElement>('section[data-page="1"] .parapdf-text-layer span'),
+    ].find((el) => el.textContent?.toLowerCase().includes("emergency supplemental"));
+    const firstNode = span?.firstChild;
+    let quoteAligned = false;
+    if (firstNode?.textContent && page1Overlay) {
+      const idx = firstNode.textContent.toLowerCase().indexOf("emergency supplemental");
+      const range = document.createRange();
+      range.setStart(firstNode, idx);
+      range.setEnd(firstNode, idx + "emergency supplemental".length);
+      const domRect = range.getBoundingClientRect();
+      const w =
+        Math.min(page1Overlay.right, domRect.right) - Math.max(page1Overlay.left, domRect.left);
+      const h =
+        Math.min(page1Overlay.bottom, domRect.bottom) - Math.max(page1Overlay.top, domRect.top);
+      quoteAligned =
+        w > 0 &&
+        h > 0 &&
+        (w * h) /
+          Math.min(page1Overlay.width * page1Overlay.height, domRect.width * domRect.height) >=
+          0.5;
+    }
+    const afterSearch = search.get();
+    window.__setOverlayTest?.({ citations: null });
+    return {
+      undisturbed:
+        afterSearch === beforeSearch &&
+        afterSearch.query === "appropriations" &&
+        afterSearch.status === "done",
+      divisionRects: divisions.map((m) => m.rects.length),
+      farRevealed,
+      quoteAligned,
+      aborted,
+    };
+  });
+  check(
+    "findText() locates quotes, reveals unmounted pages, and aligns with PdfPageRect without disturbing useSearch()",
+    locatedCitation?.undisturbed === true &&
+      JSON.stringify(locatedCitation.divisionRects) === "[1,1,2]" &&
+      locatedCitation.farRevealed === true &&
+      locatedCitation.quoteAligned === true &&
+      locatedCitation.aborted === true,
+    JSON.stringify(locatedCitation),
   );
 
   // Selection anchor & <PdfSelectionPopover>: renders outside page containment,

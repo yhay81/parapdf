@@ -143,6 +143,8 @@ try {
 import {
   type AnnotationTool,
   configurePdfjs,
+  type FindTextOptions,
+  findText,
   type OutlineItemHelpers,
   PdfAnnotationEditor,
   PdfAutoLinks,
@@ -164,6 +166,7 @@ import {
   preloadPdfjs,
   type SelectionAnchor,
   type SelectionOptions,
+  type TextMatch,
   type ThumbnailItem,
   useAnnotations,
   useCreateViewer,
@@ -341,6 +344,11 @@ function Toolbar() {
         const view = viewer.viewState();
         if (view) viewer.setViewState(view);
         setLayerVisible(session, "layer-1", true);
+        const findOpts: FindTextOptions = { from: 0, to: 0, limit: 1 };
+        void findText(session, "pdf", findOpts).then((matches: TextMatch[]) => {
+          const hit = matches[0];
+          if (hit) viewer.revealRect(hit.pageIndex, hit.bounds);
+        });
         search.search("pdf");
         history.back();
         void save();
@@ -409,6 +417,7 @@ export const misuse = <PdfViewer pageLabel={5} renderOverlay={() => null} />;
     `import { createElement, Suspense } from "react";
 import { renderToString } from "react-dom/server";
 import {
+  findText,
   PdfAnnotationEditor,
   PdfAutoLinks,
   PdfDocument,
@@ -436,6 +445,7 @@ import {
 } from "parapdf";
 import * as parapdfExports from "parapdf";
 
+if (typeof findText !== "function") throw new Error("findText is not exported");
 for (const removed of [
   "PdfThumbnail",
   "searchOf",

@@ -5,14 +5,15 @@ import { createSlotKey, type ReadableStore, Store } from "../../document/store.t
 import { linked } from "../../view/signals.ts";
 import type { ViewerController } from "../../view/viewer.ts";
 import { SearchHighlights } from "./highlights.ts";
+import { matchRects, pageIndex } from "./page-index.ts";
 import {
-  buildPageIndex,
   findMatches,
   normalizeQuery,
-  type PageIndex,
   type SearchMatch,
   type SearchOptions,
 } from "./text-search.ts";
+
+export { pageIndex } from "./page-index.ts";
 
 export interface SearchState {
   query: string;
@@ -55,41 +56,6 @@ const yieldToMain = (): Promise<void> => {
   const scheduler = (globalThis as { scheduler?: { yield?: () => Promise<void> } }).scheduler;
   return scheduler?.yield ? scheduler.yield() : new Promise((resolve) => setTimeout(resolve, 0));
 };
-
-/**
- * Each session's page indexes, by the options that shape them
- * ("case-sensitive diacritics"), shared by the searches of its viewers.
- */
-const SEARCH_INDEX_SLOT =
-  createSlotKey<Map<string, Map<number, Promise<PageIndex>>>>("parapdf.searchIndexes");
-
-/** Page `pageIndex`'s index for `options`, read once per session unless the read fails. */
-export function pageIndex(
-  session: DocumentSession,
-  pageIndex: number,
-  options: SearchOptions,
-): Promise<PageIndex> {
-  const key = `${Boolean(options.caseSensitive)} ${Boolean(options.matchDiacritics)}`;
-  const byOptions = session.slot(SEARCH_INDEX_SLOT, () => new Map());
-  let pages = byOptions.get(key);
-  if (!pages) {
-    pages = new Map();
-    byOptions.set(key, pages);
-  }
-  const read = pages;
-  let index = read.get(pageIndex);
-  if (!index) {
-    index = session
-      .text(pageIndex)
-      .then((text) => buildPageIndex(text, options))
-      .catch((error: unknown) => {
-        read.delete(pageIndex);
-        throw error;
-      });
-    read.set(pageIndex, index);
-  }
-  return index;
-}
 
 /** Each viewer's own search store, which `useSearch()` shows. */
 const SEARCH_SLOT = createSlotKey<ReadableStore<SearchControls>>("parapdf.search");
@@ -193,13 +159,7 @@ function createSearchStore(viewer: ViewerController): ReadableStore<SearchContro
     const text = await session.text(match.pageIndex);
     const { matches, current } = store.get();
     if (signal.aborted || matches[current] !== match) return;
-    const at = match.start.item * 4;
-    viewer.revealRect(match.pageIndex, {
-      x: text.boxes[at] ?? 0,
-      y: text.boxes[at + 1] ?? 0,
-      width: text.boxes[at + 2] ?? 0,
-      height: text.boxes[at + 3] ?? 0,
-    });
+    viewer.revealRect(match.pageIndex, matchRects(text, match).bounds);
   };
 
   const selectMatch = (index: number) => {

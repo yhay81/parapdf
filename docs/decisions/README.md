@@ -54,6 +54,7 @@ it. A new choice gets a new record, numbered next.
 | [0045](0045-settled-controls-and-static-proxies.md) | Settled controlled ViewState, pre-divergence scroll restoration, static tracked proxies, and merged thumbnail subscriptions | adopted |
 | [0046](0046-zero-copy-thumbnails-and-react-plumbing.md) | Zero-copy detached thumbnails, explicit-handle context bypass, swap-buffered stores, and streamlined React plumbing | adopted |
 | [0047](0047-atomic-stores-and-react-actions.md) | Atomic view updates, pre-paint state subscriptions, and React action hooks | adopted |
+| [0048](0048-session-text-locator.md) | Session-level `findText()` and directional text-item boxes | adopted |
 
 ## Template
 

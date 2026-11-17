@@ -6,6 +6,14 @@ change the API.
 
 ## Unreleased
 
+### Features and improvements
+
+- Add `findText(session, query, options?)` (`FindTextOptions`, `TextMatch`) to
+  locate matches across a page range as unturned PDF-point `rects` and union
+  `bounds` for `PdfPageOverlay`, `PdfPageRect`, and `viewer.revealRect()`,
+  sharing the session's cached `PageText` and `PageIndex` without disturbing
+  `useSearch()`.
+
 ## 0.9.0 — 2026-11-16
 
 This release makes the public API React-first, improves document lifetimes and

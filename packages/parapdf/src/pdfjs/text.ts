@@ -9,6 +9,12 @@ import { type RawDims, StructTreeBuilder } from "./struct-tree.ts";
 // order, so both read text content with identical options.
 const TEXT_OPTIONS = { includeMarkedContent: true, disableNormalization: true } as const;
 
+/**
+ * Reading advance axis of a text item in `PageText.boxes`'s unturned page space:
+ * `0` (+x), `1` (-x), `2` (+y), `3` (-y).
+ */
+export type TextAdvanceDirection = 0 | 1 | 2 | 3;
+
 /** The text of one page as positioned runs, in content order. */
 export interface PageText {
   readonly items: readonly string[];
@@ -17,31 +23,118 @@ export interface PageText {
   /**
    * Approximate box of each item in PDF points from the page's top-left corner,
    * with the page's own rotation applied but no view rotation:
-   * `[x, y, width, height]` per item. Used to scroll to matches before a
-   * page's text layer exists.
+   * `[x, y, width, height]` per item. Used to scroll to and locate matches
+   * without a mounted text layer.
    */
   readonly boxes: Float32Array;
+  /** Reading advance direction (`0` +x, `1` -x, `2` +y, `3` -y) of each item in `boxes`. */
+  readonly directions?: Uint8Array;
 }
 
 /** The text of `page`, read in pdf.js's worker, as the text layer lays it out. */
 export async function readPageText(page: Pdfjs.PDFPageProxy): Promise<PageText> {
   const content = await page.getTextContent(TEXT_OPTIONS);
   const viewport = page.getViewport({ scale: 1 });
-  const items: string[] = [];
-  const endsLine: boolean[] = [];
-  const boxes: number[] = [];
+  let ma: number;
+  let mb: number;
+  let mc: number;
+  let md: number;
+  let ox: number;
+  let oy: number;
+  const vt = (viewport as { transform?: readonly number[] }).transform;
+  if (vt && vt.length >= 6) {
+    ma = vt[0] ?? 0;
+    mb = vt[1] ?? 0;
+    mc = vt[2] ?? 0;
+    md = vt[3] ?? 0;
+    ox = vt[4] ?? 0;
+    oy = vt[5] ?? 0;
+  } else {
+    const [p0x = 0, p0y = 0] = viewport.convertToViewportPoint(0, 0);
+    const [p1x = 0, p1y = 0] = viewport.convertToViewportPoint(1, 0);
+    const [p2x = 0, p2y = 0] = viewport.convertToViewportPoint(0, 1);
+    ox = p0x;
+    oy = p0y;
+    ma = p1x - p0x;
+    mb = p1y - p0y;
+    mc = p2x - p0x;
+    md = p2y - p0y;
+  }
+  const styles = content.styles as Record<string, { vertical?: boolean } | undefined> | undefined;
+  let count = 0;
+  for (const item of content.items) {
+    if ("str" in item) count++;
+  }
+  const items = new Array<string>(count);
+  const endsLine = new Array<boolean>(count);
+  const boxes = new Float32Array(count * 4);
+  const directions = new Uint8Array(count);
+  let index = 0;
   for (const item of content.items) {
     if (!("str" in item)) continue;
-    items.push(item.str);
-    endsLine.push(item.hasEOL);
+    items[index] = item.str;
+    endsLine[index] = item.hasEOL;
     const [a = 0, b = 0, c = 0, d = 0, e = 0, f = 0] = item.transform as number[];
-    const [x = 0, y = 0] = viewport.convertToViewportPoint(e, f);
-    const height = Math.hypot(c, d) || Math.hypot(a, b) || item.height;
-    // Transform the opposite corner too: the page may turn or use units larger than a point.
-    const [right = 0, top = 0] = viewport.convertToViewportPoint(e + item.width, f + height);
-    boxes.push(Math.min(x, right), Math.min(y, top), Math.abs(right - x), Math.abs(top - y));
+    const ab = Math.hypot(a, b);
+    const cd = Math.hypot(c, d);
+    const ux = ab > 0 ? a / ab : 1;
+    const uy = ab > 0 ? b / ab : 0;
+    const vx = cd > 0 ? c / cd : -uy;
+    const vy = cd > 0 ? d / cd : ux;
+    const vertical = Boolean(styles?.[item.fontName]?.vertical) || item.dir === "ttb";
+    let originX = e;
+    let originY = f;
+    let advX: number;
+    let advY: number;
+    let crossX: number;
+    let crossY: number;
+    let dirVecX: number;
+    let dirVecY: number;
+    if (vertical) {
+      const width = ab || cd || item.width;
+      originX = e - ux * (width / 2);
+      originY = f - uy * (width / 2);
+      advX = -vx * item.height;
+      advY = -vy * item.height;
+      crossX = ux * width;
+      crossY = uy * width;
+      dirVecX = -vx;
+      dirVecY = -vy;
+    } else {
+      const height = cd || ab || item.height;
+      advX = ux * item.width;
+      advY = uy * item.width;
+      crossX = vx * height;
+      crossY = vy * height;
+      dirVecX = ux;
+      dirVecY = uy;
+    }
+    const x0 = ox + ma * originX + mc * originY;
+    const y0 = oy + mb * originX + md * originY;
+    const adx = ma * advX + mc * advY;
+    const ady = mb * advX + md * advY;
+    const cdx = ma * crossX + mc * crossY;
+    const cdy = mb * crossX + md * crossY;
+    const x1 = x0 + adx;
+    const y1 = y0 + ady;
+    const x2 = x0 + cdx;
+    const y2 = y0 + cdy;
+    const x3 = x1 + cdx;
+    const y3 = y1 + cdy;
+    const minX = Math.min(x0, x1, x2, x3);
+    const minY = Math.min(y0, y1, y2, y3);
+    const at = index * 4;
+    boxes[at] = minX;
+    boxes[at + 1] = minY;
+    boxes[at + 2] = Math.max(x0, x1, x2, x3) - minX;
+    boxes[at + 3] = Math.max(y0, y1, y2, y3) - minY;
+    const sign = item.dir === "rtl" ? -1 : 1;
+    const dx = (ma * dirVecX + mc * dirVecY) * sign;
+    const dy = (mb * dirVecX + md * dirVecY) * sign;
+    directions[index] = Math.abs(dx) >= Math.abs(dy) ? (dx < 0 ? 1 : 0) : dy < 0 ? 3 : 2;
+    index++;
   }
-  return { items, endsLine, boxes: Float32Array.from(boxes) };
+  return { items, endsLine, boxes, directions };
 }
 
 export interface TextLayerRequest {
