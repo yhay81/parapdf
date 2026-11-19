@@ -2,15 +2,18 @@
 
 Started November 16, 2026. This is a maintainer's experiment plan, not API
 documentation. The [site](https://parapdf.yhay81.com/) documents the released
-package. Latest snapshot (November 16, 12:42 UTC): **1 star, 0 forks, npm 0.9.0**.
+package. Latest snapshot (November 16, 15:27 UTC): **1 star, 0 forks, npm 0.9.0**.
 
 The [Japanese article](https://zenn.dev/yhay81/articles/202611-parapdf) is
 published. The maintainer has now authorized promotion on other media,
-including English-language channels. The next work is an English
-introduction on X and LinkedIn, then a technical article on Medium if an
-existing account is available. See the [publication log](publications.md),
-[social copy](social-posts.md), and [English article](launch.en.md).
-The social posts remain unpublished until account access is available.
+including English-language channels, and an English
+[directory listing PR](https://github.com/brillout/awesome-react-components/pull/698)
+is open for review. The next work is publishing the prepared articles on
+Medium and Qiita, alongside short introductions on X and LinkedIn once
+account access is connected. See the [publication log](publications.md),
+[English article](launch.en.md), [Qiita article](qiita-rendering.ja.md), and
+[social copy](social-posts.md). Prepared articles and social posts remain
+unpublished until account access is available.
 
 ## Audience and promise
 
@@ -61,12 +64,15 @@ again. The Japanese article's source is tracked in [launch.ja.md](launch.ja.md).
 1. **GitHub discovery.** Keep the About description specific, retain the
    homepage, and use relevant topics. The README should answer what it is,
    show it working, and make trying it obvious. A single star invitation
-   belongs after those answers.
-2. **Zenn and the maintainer's existing social audience.** The technical
-   article is published. Next, introduce the demo in English on X and
-   LinkedIn, through supported account access. Explain the implementation
-   problem and link to the source. Keep benchmark claims qualified.
-   Publish once per channel; do not repeat the link or automate replies.
+   belongs after those answers. A relevant curated-list submission can use
+   GitHub directly: PR #698 to `brillout/awesome-react-components` is open.
+2. **Zenn, Qiita, and the maintainer's existing social audience.** The Zenn
+   article is published, and a separate [Qiita draft](qiita-rendering.ja.md)
+   covers the engineering of page virtualization and canvas retention.
+   Introduce the demo in English on X and LinkedIn, through supported
+   account access. Explain the implementation problem and link to the
+   source. Keep benchmark claims qualified. Publish once per channel; do not
+   repeat the link or automate replies.
 3. **English long-form article.** Publish [launch.en.md](launch.en.md) on
    Medium if account access is available, with its AI-assistance disclosure
    and no paywall. DEV is excluded from this promotional campaign because
