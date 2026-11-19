@@ -170,12 +170,14 @@ describe("destinationScale", () => {
     });
   });
 
-  it("keeps the zoom without a view or a zoom factor", () => {
+  it("keeps the zoom without a view, viewport, page size, or positive factor", () => {
     assert.equal(destination({ pageIndex: 0, x: 0, y: 0 }), null);
-    assert.equal(
-      destination({ pageIndex: 0, x: 0, y: 0, view: { fit: "zoom", zoom: null } }),
-      null,
-    );
+    for (const zoom of [null, 0, -2]) {
+      assert.equal(destination({ pageIndex: 0, x: 0, y: 0, view: { fit: "zoom", zoom } }), null);
+    }
+    const pageFit: ResolvedDestination = { pageIndex: 0, x: 0, y: 0, view: { fit: "page" } };
+    assert.equal(destinationScale(sizes, column, pageFit, null, GAP, 0.25, 10), null);
+    assert.equal(destination({ ...pageFit, pageIndex: 5 }), null);
   });
 
   it("fits the page or its width in the mode that keeps fitting it", () => {
@@ -223,12 +225,6 @@ describe("destinationScale", () => {
     );
   });
 
-  it("keeps the zoom for a factor that is not positive", () => {
-    for (const zoom of [0, -2]) {
-      assert.equal(destination({ pageIndex: 0, x: 0, y: 0, view: { fit: "zoom", zoom } }), null);
-    }
-  });
-
   it("fills the viewport with a rectangle of no width by its height, as pdf.js does", () => {
     const line: ResolvedDestination = {
       pageIndex: 0,
@@ -245,12 +241,6 @@ describe("destinationScale", () => {
       scale: (1000 - 3 * GAP) / (2 * 612),
       mode: "fit-width",
     });
-  });
-
-  it("keeps the zoom without a viewport or the page's size", () => {
-    const target: ResolvedDestination = { pageIndex: 0, x: 0, y: 0, view: { fit: "page" } };
-    assert.equal(destinationScale(sizes, column, target, null, GAP, 0.25, 10), null);
-    assert.equal(destination({ ...target, pageIndex: 5 }), null);
   });
 });
 

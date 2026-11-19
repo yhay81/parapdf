@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it, mock } from "node:test";
 import { PdfSessionController } from "../src/document/pdf-session.ts";
 import type { PdfSource } from "../src/document/session.ts";
+import { getAttachmentContent, openAttachment } from "../src/features/attachments.ts";
 import { download, save } from "../src/features/download.ts";
 import { fakeDocument, fakePdfjs, settle } from "./fake-pdfjs.ts";
 
@@ -131,5 +132,39 @@ describe("save and download", () => {
     await download(fromBytes, { filename: "" });
 
     assert.deepEqual(downloaded, ["served.pdf", "a.pdf", "document.pdf"]);
+  });
+
+  it("reads and opens embedded attachments via onOpenAttachment or browser download", async (t) => {
+    const downloaded = mockDom(t);
+    const bytes = new Uint8Array([10, 20, 30]);
+    const { session, release } = await openSession(
+      { url: "/attachments.pdf" },
+      {
+        getAttachmentContent: async (id: string) => (id === "readme.txt" ? bytes : null),
+      },
+    );
+
+    assert.deepEqual(await getAttachmentContent(session, "readme.txt"), bytes);
+    assert.equal(await getAttachmentContent(session, "missing.txt"), null);
+
+    // Without a custom handler, openAttachment downloads the embedded file in the browser.
+    const attachment = { id: "readme.txt", filename: "readme.txt", description: null };
+    await openAttachment(session, attachment);
+    await openAttachment(session, {
+      id: "missing.txt",
+      filename: "missing.txt",
+      description: null,
+    });
+    assert.deepEqual(downloaded, ["readme.txt"]);
+
+    // With a custom handler, openAttachment delegates to it until the session is released.
+    const opened: { filename: string; content: Uint8Array }[] = [];
+    session.setOpenAttachment((file) => opened.push(file));
+    await openAttachment(session, attachment);
+    assert.deepEqual(opened, [{ filename: "readme.txt", content: bytes }]);
+
+    release();
+    await openAttachment(session, attachment);
+    assert.equal(opened.length, 1);
   });
 });

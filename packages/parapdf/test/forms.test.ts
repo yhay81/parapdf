@@ -1,7 +1,26 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { formsOf } from "../src/features/forms/index.ts";
-import { LETTER, openSession } from "./fake-pdfjs.ts";
+import { describe, it, mock } from "node:test";
+import { PdfSessionController } from "../src/document/pdf-session.ts";
+import {
+  type FormChange,
+  formsOf,
+  getFormFields,
+  hasViewerFormListeners,
+  initialFormFields,
+  notifyViewerFormChange,
+  onViewerFormChange,
+  setFormValues,
+} from "../src/features/forms/index.ts";
+import { ViewerController } from "../src/view/viewer.ts";
+import {
+  askPassword,
+  fakeDocument,
+  fakePdfjs,
+  LETTER,
+  openSession,
+  PasswordException,
+  settle,
+} from "./fake-pdfjs.ts";
 
 /** A widget as pdf.js's getAnnotations() gives it, on page `page` (the first by default). */
 interface Widget {
@@ -308,5 +327,127 @@ describe("form fields", () => {
       assert.deepEqual(storage.get("3R"), { value: "" });
       assert.equal((await forms.getFormFields())[2]?.value, "");
     }
+  });
+});
+
+describe("PdfSession form actions and viewer form listeners", () => {
+  it("reads and sets form values on PdfSession without a Viewer, settles initialFormFields on password errors, and notifies content listeners", async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const unopened = new PdfSessionController({ url: "/unopened.pdf" });
+    assert.deepEqual(await getFormFields(unopened), []);
+    assert.deepEqual(await setFormValues(unopened, { author: "x" }), []);
+
+    const storage = new Map<string, unknown>();
+    const widget = {
+      id: "1R",
+      annotationType: 20,
+      fieldName: "author",
+      fieldType: "Tx",
+      fieldValue: "Initial",
+      rect: [0, 0, 100, 20],
+    };
+    let fieldReads = 0;
+    const objects = new Map([["author", [{ page: 0 }]]]);
+    const doc = fakeDocument({
+      pages: [LETTER],
+      proxy: {
+        getFieldObjects: async () => {
+          fieldReads++;
+          return objects;
+        },
+        getPage: async () => ({
+          view: [0, 0, LETTER.width, LETTER.height],
+          rotate: 0,
+          userUnit: 1,
+          getViewport: () => ({
+            width: LETTER.width,
+            height: LETTER.height,
+            convertToViewportPoint: (x: number, y: number) => [x, LETTER.height - y],
+          }),
+          getAnnotations: async () => [widget],
+        }),
+        annotationStorage: {
+          get size() {
+            return storage.size;
+          },
+          print: { printing: true },
+          getRawValue: (id: string) => storage.get(id),
+          setValue: (id: string, value: unknown) => storage.set(id, value),
+        },
+      },
+    });
+    const loader = fakePdfjs(async (task, { password: given }) => {
+      let password = given;
+      while (password !== "secret") {
+        const answer = await askPassword(task, password === undefined ? "required" : "incorrect");
+        if (answer === null) throw new PasswordException("No password given", 1);
+        password = answer;
+      }
+      return doc.proxy;
+    }).loader;
+
+    const session = new PdfSessionController(
+      { url: "/locked-form.pdf" },
+      { passwordPrompt: false, pdfjs: loader },
+    );
+    const disconnect = session.connect();
+    t.after(async () => {
+      disconnect();
+      t.mock.timers.tick(1000);
+      await settle();
+    });
+
+    // Settles empty while locked without reading fields, then reads once after unlocking.
+    const lockedInitial = initialFormFields(session);
+    assert.deepEqual(await lockedInitial, []);
+    assert.equal(initialFormFields(session), lockedInitial);
+    assert.equal(fieldReads, 0);
+
+    session.submitPassword("secret");
+    await settle();
+    const unlockedInitial = initialFormFields(session);
+    assert.notEqual(unlockedInitial, lockedInitial);
+    assert.equal((await unlockedInitial)[0]?.value, "Initial");
+    assert.equal(fieldReads, 1);
+    assert.equal(initialFormFields(session), unlockedInitial);
+
+    assert.deepEqual(await setFormValues(session, { author: "Updated" }), ["author"]);
+    assert.equal((await getFormFields(session))[0]?.value, "Updated");
+
+    const openDoc = session.openDocument();
+    assert.ok(openDoc);
+    let notifications = 0;
+    const stop = new AbortController();
+    openDoc.onContentChange(() => notifications++, stop.signal);
+    await setFormValues(session, { author: "Again" });
+    assert.equal(notifications, 1);
+    stop.abort();
+  });
+
+  it("tracks viewer form change subscriptions and delivers changes only to active listeners", () => {
+    const viewer = new ViewerController();
+    assert.equal(hasViewerFormListeners(viewer), false);
+    notifyViewerFormChange(viewer, { name: "city", value: "Ignored" });
+
+    const heardA: FormChange[] = [];
+    const heardB: FormChange[] = [];
+    let unsubA = () => {};
+    unsubA = onViewerFormChange(viewer, (change) => {
+      heardA.push(change);
+      unsubA();
+    });
+    const unsubB = onViewerFormChange(viewer, (change) => heardB.push(change));
+    assert.equal(hasViewerFormListeners(viewer), true);
+
+    notifyViewerFormChange(viewer, { name: "city", value: "Tokyo" });
+    assert.deepEqual(heardA, [{ name: "city", value: "Tokyo" }]);
+    assert.deepEqual(heardB, [{ name: "city", value: "Tokyo" }]);
+    assert.equal(hasViewerFormListeners(viewer), true);
+
+    unsubB();
+    assert.equal(hasViewerFormListeners(viewer), false);
+    notifyViewerFormChange(viewer, { name: "city", value: "Osaka" });
+    assert.equal(heardB.length, 1);
+    void mock;
   });
 });

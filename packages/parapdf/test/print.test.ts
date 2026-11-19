@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it, type TestContext } from "node:test";
-import { print } from "../src/features/print/index.ts";
+import { enforcePermissions } from "../src/features/permissions.ts";
+import { type PrintState, print, printOf } from "../src/features/print/index.ts";
 import { printDocument } from "../src/features/print/print.ts";
 import { ViewerController } from "../src/view/viewer.ts";
 import { fakeDocument, fakePdfjs, LETTER, openSession, settle, show } from "./fake-pdfjs.ts";
@@ -226,5 +227,123 @@ describe("print job replacement", () => {
     assert.equal(document.drawings[0]?.cancellations, 1);
     assert.equal(env.prints(), 0);
     assert.equal(env.head.children.length + env.body.children.length + env.listeners.size, 0);
+  });
+});
+
+describe("printOf(viewer)", () => {
+  it("shares print state across holders and cancels preparation only when the last holder disconnects", async (t) => {
+    const env = environment(t);
+    const doc = fakeDocument({ pages: [LETTER, LETTER] });
+    const viewer = new ViewerController();
+    const { close } = show(
+      viewer,
+      { url: "/shared-print.pdf" },
+      fakePdfjs(async () => doc.proxy).loader,
+    );
+    t.after(close);
+    await settle();
+
+    const slot = printOf(viewer);
+    const holdToolbar = slot.hold();
+    const holdMenu = slot.hold();
+
+    const job1 = slot.store.get().print();
+    await settle();
+    assert.equal(slot.store.get().printing, true);
+    assert.deepEqual(slot.store.get().progress, { done: 0, total: 2 });
+
+    // Unmounting a secondary holder leaves preparation running.
+    holdMenu();
+    assert.equal(slot.store.get().printing, true);
+    doc.drawings[0]?.resolve();
+    await settle();
+    assert.deepEqual(slot.store.get().progress, { done: 1, total: 2 });
+    doc.drawings[1]?.resolve();
+    await job1;
+    assert.equal(env.prints(), 1);
+    assert.equal(slot.store.get().printing, false);
+
+    // Disconnecting the last holder cancels in-flight preparation cleanly.
+    const job2 = slot.store.get().print();
+    await settle();
+    assert.equal(slot.store.get().printing, true);
+    holdToolbar();
+    assert.equal(slot.store.get().printing, false);
+    assert.equal(slot.store.get().progress, null);
+    await job2;
+    assert.equal(env.prints(), 1);
+  });
+
+  it("tracks progress, supports clean cancel(), and rejects on caller abort or restricted permissions", async (t) => {
+    const env = environment(t);
+    const doc = fakeDocument({ pages: [LETTER, LETTER, LETTER] });
+    const viewer = new ViewerController();
+    const { close } = show(viewer, { url: "/three.pdf" }, fakePdfjs(async () => doc.proxy).loader);
+    t.after(close);
+    await settle();
+
+    const states: PrintState[] = [];
+    const slot = printOf(viewer);
+    const unsub = slot.store.subscribe(() => {
+      const { printing, progress } = slot.store.get();
+      states.push({ printing, progress });
+    });
+    t.after(unsub);
+
+    const firstRun = slot.store.get().print();
+    for (let index = 0; index < 3; index++) {
+      await settle();
+      doc.drawings[index]?.resolve();
+    }
+    await firstRun;
+    assert.equal(env.prints(), 1);
+    assert.deepEqual(states, [
+      { printing: true, progress: { done: 0, total: 3 } },
+      { printing: true, progress: { done: 1, total: 3 } },
+      { printing: true, progress: { done: 2, total: 3 } },
+      { printing: true, progress: { done: 3, total: 3 } },
+      { printing: false, progress: null },
+    ]);
+
+    // Cancelling mid-preparation resolves cleanly and resets to idle immediately.
+    states.length = 0;
+    const cancelledRun = slot.store.get().print();
+    await settle();
+    assert.deepEqual(states, [{ printing: true, progress: { done: 0, total: 3 } }]);
+    slot.store.get().cancel();
+    assert.deepEqual(states.at(-1), { printing: false, progress: null });
+    await cancelledRun;
+    assert.equal(env.prints(), 1);
+
+    // Caller AbortSignal rejects instead of being swallowed as cancel().
+    const callerAbort = new AbortController();
+    const abortedRun = slot.store.get().print({ signal: callerAbort.signal });
+    await settle();
+    const reason = new Error("caller aborted");
+    callerAbort.abort(reason);
+    await assert.rejects(abortedRun, /Rendering cancelled/);
+    await assert.rejects(
+      slot.store.get().print({ signal: AbortSignal.abort(reason) }),
+      (err) => err === reason,
+    );
+
+    // Restricted permissions reject immediately.
+    const restrictedDoc = fakeDocument({
+      pages: [LETTER],
+      proxy: { getPermissions: async () => new Set<number>() },
+    });
+    const restrictedViewer = new ViewerController();
+    const detachPermissions = enforcePermissions(restrictedViewer);
+    const { close: closeRestricted } = show(
+      restrictedViewer,
+      { url: "/locked.pdf" },
+      fakePdfjs(async () => restrictedDoc.proxy).loader,
+    );
+    t.after(() => {
+      detachPermissions();
+      closeRestricted();
+    });
+    await settle();
+    await assert.rejects(printOf(restrictedViewer).store.get().print(), /does not permit printing/);
   });
 });

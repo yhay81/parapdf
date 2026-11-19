@@ -1,18 +1,24 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it, mock } from "node:test";
 import type { PDFDataRangeTransport } from "pdfjs-dist";
-import { PdfSessionController } from "../src/document/pdf-session.ts";
+import {
+  type PdfSession,
+  PdfSessionController,
+  sessionControllerOf,
+} from "../src/document/pdf-session.ts";
 import { OPENING, type PdfjsLoader } from "../src/document/registry.ts";
 import type { PdfSource } from "../src/document/session.ts";
-import { initialFormFields } from "../src/features/forms/index.ts";
 import {
   askPassword,
   FakeRangeTransport,
   fakeDocument,
   fakePdfjs,
+  LETTER,
   PasswordException,
   settle,
 } from "./fake-pdfjs.ts";
+
+const A4 = { width: 595, height: 842 };
 
 /** A document whose one page is labelled "i", which tells a read from its empty value. */
 const labelled = () => fakeDocument({ proxy: { getPageLabels: async () => ["i"] } }).proxy;
@@ -31,13 +37,9 @@ const readInitialView = (session: PdfSessionController) =>
  * `reads` counts the reads of its page labels.
  */
 const lockedPdfjs = () => {
-  const reads = { labels: 0, fields: 0 };
+  const reads = { labels: 0 };
   const proxy = fakeDocument({
     proxy: {
-      getFieldObjects: async () => {
-        reads.fields++;
-        return null;
-      },
       getPageLabels: async () => {
         reads.labels++;
         return ["i"];
@@ -57,22 +59,34 @@ const lockedPdfjs = () => {
 };
 
 describe("a PdfSession's source and fragment", () => {
-  it("is the source given when it has no fragment to take out", () => {
+  it("is the source given when it has no fragment to take out, and validates sessionControllerOf", () => {
     const url: PdfSource = { url: "/a.pdf", withCredentials: true };
     const data: PdfSource = { data: new Uint8Array(4) };
     const range = new FakeRangeTransport(4, null) as unknown as PDFDataRangeTransport;
     const ranged: PdfSource = { range, password: "x" };
     for (const source of [url, data, ranged]) {
       const session = new PdfSessionController(source);
+      assert.equal(sessionControllerOf(session), session);
       assert.equal(session.source, source);
       assert.equal(session.fragment, "");
     }
+    assert.throws(() => sessionControllerOf({} as PdfSession), TypeError);
   });
 
-  it("keeps everything after the URL's first # as its fragment, and the rest of the source", () => {
+  it("keeps everything after the URL's first # as its fragment, and strips an empty #", () => {
     const session = new PdfSessionController({ url: "/a.pdf?v=1#nameddest=a#b", password: "x" });
     assert.deepEqual(session.source, { url: "/a.pdf?v=1", password: "x" });
     assert.equal(session.fragment, "nameddest=a#b");
+
+    const empty = new PdfSessionController({
+      url: "/a.pdf#",
+      httpHeaders: { Accept: "application/pdf" },
+    });
+    assert.deepEqual(empty.source, {
+      url: "/a.pdf",
+      httpHeaders: { Accept: "application/pdf" },
+    });
+    assert.equal(empty.fragment, "");
   });
 
   it("tells the fragment's readers of a new fragment only", () => {
@@ -106,6 +120,33 @@ describe("a PdfSession", () => {
     return session;
   };
 
+  it("shares the document and its state across providers while each provider keeps its own fragment", async () => {
+    let opens = 0;
+    const { loader } = fakePdfjs(async () => {
+      opens++;
+      return fakeDocument({ pages: [LETTER, A4] }).proxy;
+    });
+    const first = provide({ url: "/fragment.pdf#page=2" }, loader);
+    const second = provide({ url: "/fragment.pdf#page=3" }, loader);
+    assert.equal(first.state.status, "loading");
+    assert.equal(first.state, second.state, "one state snapshot for both");
+    await settle();
+    assert.equal(opens, 1);
+    assert.equal(first.proxy, second.proxy);
+    assert.ok(first.proxy);
+    assert.deepEqual(first.source, { url: "/fragment.pdf" });
+    assert.equal(first.fragment, "page=2");
+    first.setFragment("page=4");
+    assert.equal(first.fragment, "page=4");
+    assert.equal(second.fragment, "page=3");
+
+    const { state } = first;
+    assert.equal(state.status, "ready");
+    assert.equal(state.pageCount, 2);
+    assert.equal(state.permissions?.restricted, false);
+    assert.equal(second.state, state);
+  });
+
   it("shows the document opening before a provider holds it, and reads it once held", async () => {
     const { loader } = fakePdfjs(async () => labelled());
     const session = new PdfSessionController({ url: "/a.pdf" }, { pdfjs: loader });
@@ -121,7 +162,7 @@ describe("a PdfSession", () => {
     assert.ok(session.proxy);
   });
 
-  it("stops what was started for it when let go, once, and gives the next hold a new signal", async () => {
+  it("stops what was started for it when let go, ignores late passwords, and gives the next hold a new signal", async () => {
     const { loader } = lockedPdfjs();
     const session = new PdfSessionController({ url: "/locked.pdf" }, { pdfjs: loader });
     const release = session.connect();
@@ -129,10 +170,12 @@ describe("a PdfSession", () => {
     await settle();
     release();
     assert.equal(first.aborted, true);
-    session.submitPassword("secret"); // Let go: it answers nothing.
+    session.submitPassword("secret"); // Let go: it answers nothing, even once reconnected.
     await settle();
     assert.equal(session.state.status, "password");
     close.push(session.connect());
+    await settle();
+    assert.equal(session.state.status, "password");
     const second = session.signal;
     assert.notEqual(second, first);
     release(); // A second call of the first release changes nothing.
@@ -173,16 +216,53 @@ describe("a PdfSession", () => {
     assert.deepEqual(await readPageLabels(session), ["i"]);
   });
 
-  it("ignores a password typed after the provider let go, even once it holds again", async () => {
+  it("preserves a password request replayed to a second provider, or across a remount within the release delay", async () => {
     const { loader } = lockedPdfjs();
-    const session = new PdfSessionController({ url: "/locked.pdf" }, { pdfjs: loader });
-    const release = session.connect();
+    const first = provide({ url: "/locked.pdf" }, loader);
     await settle();
+    assert.equal(first.state.status, "password");
+    assert.equal(first.state.passwordReason, "required");
+
+    // Remounting within the 1s release delay keeps the waiting prompt.
+    const transient = new PdfSessionController({ url: "/remount-locked.pdf" }, { pdfjs: loader });
+    const releaseTransient = transient.connect();
+    await settle();
+    releaseTransient();
+    close.push(transient.connect());
+    assert.equal(transient.state.status, "password");
+    assert.equal(transient.state.passwordReason, "required");
+
+    first.submitPassword("wrong");
+    await settle();
+    const second = provide({ url: "/locked.pdf" }, loader);
+    assert.equal(second.state.status, "password");
+    assert.equal(second.state.passwordReason, "incorrect");
+    // A replayed prompt must remain usable, not only visible.
+    second.submitPassword(null);
+    await settle();
+    assert.equal(first.state.status, "error");
+    assert.equal(second.state.status, "error");
+  });
+
+  it("opens with a changed source password without replaying the old error", async () => {
+    const { loader, calls } = lockedPdfjs();
+    const wrong = new PdfSessionController(
+      { url: "/locked.pdf", password: "wrong" },
+      { passwordPrompt: false, pdfjs: loader },
+    );
+    const release = wrong.connect();
+    await settle();
+    assert.equal(wrong.state.status, "error");
     release();
-    session.submitPassword("secret");
-    close.push(session.connect());
+    const right = provide({ url: "/locked.pdf", password: "secret" }, loader, false);
+    const statuses: string[] = [];
+    const unsubscribe = right.stateStore.subscribe(() => statuses.push(right.state.status));
     await settle();
-    assert.equal(session.state.status, "password");
+    unsubscribe();
+    assert.equal(right.state.status, "ready");
+    assert.equal(right.state.error, null);
+    assert.equal(calls.opens, 1);
+    assert.equal(statuses.includes("error"), false);
   });
 
   it("gives a new provider of a ready document its proxy on the first render", async () => {
@@ -194,6 +274,26 @@ describe("a PdfSession", () => {
     second.start();
     assert.equal(second.state.status, "ready");
     assert.equal(second.proxy, first.proxy);
+  });
+
+  it("follows the session opened again after a hold that outlived it", async () => {
+    const { loader, calls } = fakePdfjs();
+    const session = new PdfSessionController({ url: "/a.pdf" }, { pdfjs: loader });
+    const release = session.connect();
+    const first = await session.document();
+    const outline = readOutline(session);
+    assert.equal(readOutline(session), outline);
+    release();
+    mock.timers.tick(1000);
+    await settle();
+    assert.equal(first.signal.aborted, true, "the registry closed the first session");
+    close.push(session.connect());
+    const second = await session.document();
+    assert.notEqual(second, first);
+    assert.equal(second.signal.aborted, false);
+    assert.notEqual(readOutline(session), outline, "its data is read from the new session");
+    assert.equal(session.proxy, second.proxy);
+    assert.equal(calls.opens, 2);
   });
 
   it("retries failed data reads for a fresh provider and keeps the promise stable through Suspense", async (context) => {
@@ -258,7 +358,7 @@ describe("a PdfSession", () => {
     assert.equal(calls.opens, 2);
   });
 
-  it("reports a read that fails on a ready document, and nothing for one that failed", async (context) => {
+  it("reports a read that fails on a ready document, and settles empty without logging on a failed document", async (context) => {
     const errors = context.mock.method(console, "error", () => {});
     const { loader } = fakePdfjs(
       async () =>
@@ -282,17 +382,34 @@ describe("a PdfSession", () => {
     );
     assert.equal(await readPageLabels(failed), null);
     assert.equal(await readInitialView(failed), null);
+    assert.deepEqual(await failed.read("attachments", (doc) => doc.attachments(), []), []);
+    assert.equal(failed.state.status, "error");
     assert.equal(errors.mock.callCount(), 1, "the document's state says it failed");
   });
 
-  it("keeps one snapshot of a request shown as an error, and of any other state", async () => {
+  it("shows a password request as an error without a prompt, keeps one snapshot, and stays quiet outside password status", async () => {
+    const quiet = new PdfSessionController({ url: "/quiet.pdf" }, { passwordPrompt: false });
+    let quietHeard = 0;
+    const stopQuiet = quiet.stateStore.subscribe(() => quietHeard++);
+    quiet.setPasswordPrompt(true);
+    quiet.setPasswordPrompt(false);
+    assert.equal(quietHeard, 0, "toggling passwordPrompt while loading wakes no subscribers");
+    stopQuiet();
+
     const { loader } = lockedPdfjs();
     const prompted = provide({ url: "/locked.pdf" }, loader);
     const session = provide({ url: "/locked.pdf" }, loader, false);
     await settle();
+    assert.equal(prompted.state.status, "password", "the prompted provider may still answer");
     const shown = session.state;
     assert.equal(shown.status, "error");
+    assert.equal(shown.error, "PasswordException: No password given");
     assert.equal(session.state, shown);
+
+    prompted.submitPassword("wrong");
+    await settle();
+    assert.equal(session.state.error, "PasswordException: Incorrect Password");
+
     let heard = 0;
     session.stateStore.subscribe(() => heard++);
     session.setPasswordPrompt(false);
@@ -402,22 +519,6 @@ describe("a PdfSession", () => {
     assert.equal(mounted.state.status, "ready");
   });
 
-  it("settles form fields on a password error and reads them once after unlocking", async () => {
-    const { loader, reads } = lockedPdfjs();
-    const session = provide({ url: "/locked.pdf" }, loader, false);
-    const initial = initialFormFields(session);
-    assert.deepEqual(await initial, []);
-    assert.equal(initialFormFields(session), initial);
-    assert.equal(reads.fields, 0);
-    session.submitPassword("secret");
-    await settle();
-    const unlocked = initialFormFields(session);
-    assert.notEqual(unlocked, initial);
-    assert.deepEqual(await unlocked, []);
-    assert.equal(reads.fields, 1);
-    assert.equal(initialFormFields(session), unlocked);
-  });
-
   it("keeps what settled empty when its prompt shows again, until the request is answered", async () => {
     const { loader, reads } = lockedPdfjs();
     const session = provide({ url: "/locked.pdf" }, loader, false);
@@ -436,23 +537,13 @@ describe("a PdfSession", () => {
     assert.equal(reads.labels, 1, "the document read once");
   });
 
-  it("reads anew what settled empty while the request showed as an error, once another provider answers it", async () => {
+  it("reads anew what settled empty while the request showed as an error, once another provider unlocks it", async () => {
     const { loader } = lockedPdfjs();
     const prompted = provide({ url: "/locked.pdf" }, loader);
     const session = provide({ url: "/locked.pdf" }, loader, false);
     await settle();
     assert.equal(await readPageLabels(session), null);
-    prompted.submitPassword("secret");
-    await settle();
-    assert.deepEqual(await readPageLabels(session), ["i"]);
-  });
-
-  it("reads the document another provider unlocked while it showed the request as an error", async () => {
-    const { loader } = lockedPdfjs();
-    const prompted = provide({ url: "/locked.pdf" }, loader);
-    const session = provide({ url: "/locked.pdf" }, loader, false);
-    await settle();
-    assert.equal(await readMetadata(session), null, "settled while the request shows as an error");
+    assert.equal(await readMetadata(session), null);
     prompted.submitPassword("secret");
     await settle();
     assert.equal(session.state.status, "ready");

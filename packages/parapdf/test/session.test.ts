@@ -59,6 +59,20 @@ describe("DocumentSession", () => {
     assert.deepEqual(requested, [0, 1, 2]);
   });
 
+  it("measures every page once, a batch at a time, whatever their number", async () => {
+    for (const count of [1, 2, 65, 66, 129, 130]) {
+      const pages = Array.from({ length: count }, (_, index) => (index % 3 === 1 ? A4 : LETTER));
+      const { session, requested } = await openSession({ pages });
+      assert.deepEqual(await session.measurePages(), pages, `${count} pages`);
+      assert.deepEqual(await session.pageSizes(), pages, `${count} pages`);
+      assert.deepEqual(
+        requested,
+        pages.map((_, index) => index),
+        `${count} pages`,
+      );
+    }
+  });
+
   it("stops measuring pages once it closes", async () => {
     mock.timers.enable({ apis: ["setTimeout"] });
     const pages = Array.from({ length: 130 }, () => LETTER);
@@ -71,6 +85,21 @@ describe("DocumentSession", () => {
     mock.timers.tick(0);
     await assert.rejects(measuring, { name: "AbortError" });
     assert.equal(requested.length, 65, "no other batch is asked for");
+  });
+
+  it("gives every page the first one's size still after a pass fails to measure them", async () => {
+    const document = fakeDocument({ pages: [LETTER, A4, LETTER] });
+    const { session } = await openSession({
+      pages: [LETTER, A4, LETTER],
+      proxy: {
+        getPage: (pageNumber: number) =>
+          pageNumber === 3
+            ? Promise.reject(new Error("the page did not load"))
+            : document.proxy.getPage(pageNumber),
+      },
+    });
+    await assert.rejects(session.measurePages(), /did not load/);
+    assert.deepEqual(await session.pageSizes(), [LETTER, LETTER, LETTER]);
   });
 
   it("reads each page's text once, with its items' boxes", async () => {
@@ -86,15 +115,17 @@ describe("DocumentSession", () => {
     assert.deepEqual([...boxes.slice(0, 4)], [72, 80, 30, 12]);
   });
 
-  it("keeps a page's parsing results while another viewer shows it", async () => {
-    const { session, cleaned } = await openSession();
+  it("keeps a page's parsing results while another viewer shows it, and asks for no unloaded page on release", async () => {
+    const { session, requested, cleaned } = await openSession({ pages: [LETTER, LETTER] });
     await session.page(0);
     // Two viewers of the session mount the page; one unmounts it.
     session.holdPage(0);
     session.holdPage(0);
     session.releasePage(0);
+    session.releasePage(1);
     await settle();
     assert.deepEqual(cleaned, []);
+    assert.deepEqual(requested, [0]);
     session.releasePage(0);
     await settle();
     assert.deepEqual(cleaned, [0]);
@@ -114,6 +145,15 @@ describe("DocumentSession", () => {
     assert.deepEqual(cleaned, [0]);
   });
 
+  it("lets a viewer give back a page that failed to load", async () => {
+    const { session, cleaned } = await openSession();
+    await assert.rejects(session.page(4), /Invalid page request/);
+    session.holdPage(4);
+    session.releasePage(4);
+    await settle();
+    assert.deepEqual(cleaned, []);
+  });
+
   it("reads again what failed to read, and keeps what it read", async () => {
     let outlines = 0;
     const { session } = await openSession({
@@ -131,17 +171,7 @@ describe("DocumentSession", () => {
     assert.equal(outlines, 2);
   });
 
-  it("releases pdf.js's parsing results of the pages it loaded, and asks for no other", async () => {
-    const { session, requested, cleaned } = await openSession({ pages: [LETTER, LETTER] });
-    await session.page(0);
-    session.releasePage(0);
-    session.releasePage(1);
-    await settle();
-    assert.deepEqual(cleaned, [0]);
-    assert.deepEqual(requested, [0]);
-  });
-
-  it("reads what the document permits, everything when it is not encrypted", async () => {
+  it("reads what the document permits, everything when unencrypted and only granted flags when encrypted", async () => {
     const open = await openSession();
     assert.deepEqual(await open.session.permissions(), {
       restricted: false,
@@ -164,6 +194,19 @@ describe("DocumentSession", () => {
     assert.equal(permissions.fillForms, true);
     assert.equal(permissions.copy, false);
     assert.equal(permissions.annotate, false);
+
+    const lockedAll = await openSession({ proxy: { getPermissions: async () => new Set() } });
+    assert.deepEqual(await lockedAll.session.permissions(), {
+      restricted: true,
+      print: false,
+      printHighQuality: false,
+      modify: false,
+      copy: false,
+      copyForAccessibility: false,
+      annotate: false,
+      fillForms: false,
+      assemble: false,
+    });
   });
 
   it("reads how the document asks to be shown, and only the layouts and modes there are", async () => {
@@ -185,6 +228,24 @@ describe("DocumentSession", () => {
       destination: null,
       pageLayout: null,
       pageMode: null,
+    });
+  });
+
+  it("reads how the document asks to be shown even when its destination points nowhere", async () => {
+    const { session } = await openSession({
+      proxy: {
+        getOpenAction: async () => new Map([["dest", [{ num: 7, gen: 0 }, { name: "Fit" }]]]),
+        getPageIndex: async () => {
+          throw new Error("Invalid pageIndex request.");
+        },
+        getPageLayout: async () => "SinglePage",
+        getPageMode: async () => "UseThumbs",
+      },
+    });
+    assert.deepEqual(await session.initialView(), {
+      destination: null,
+      pageLayout: "SinglePage",
+      pageMode: "UseThumbs",
     });
   });
 
@@ -398,8 +459,18 @@ describe("DocumentSession", () => {
     assert.deepEqual(await session.save(pages), new Uint8Array([3, 2, 9]));
   });
 
-  it("waits for its output listeners, through their failures, until their signal aborts", async () => {
+  it("runs active committers and waits for output listeners, skipping any whose signal aborted", async () => {
     const { session } = await openSession();
+    const committed: number[] = [];
+    const editing = new AbortController();
+    session.onCommit(() => committed.push(0), editing.signal);
+    session.onCommit(() => committed.push(1), new AbortController().signal);
+    session.onCommit(() => committed.push(2), AbortSignal.abort());
+    session.commit();
+    editing.abort();
+    session.commit();
+    assert.deepEqual(committed, [0, 1, 1]);
+
     const heard: string[] = [];
     const control = new AbortController();
     let finish!: () => void;
@@ -412,6 +483,7 @@ describe("DocumentSession", () => {
       control.signal,
     );
     session.onOutput(() => Promise.reject(new Error("broken")), control.signal);
+    session.onOutput(async (event) => void heard.push(`aborted:${event}`), AbortSignal.abort());
     let done = false;
     const output = session.output("WillPrint").then(() => {
       done = true;
@@ -616,87 +688,5 @@ describe("DocumentSession", () => {
       [20, null],
       [30, null],
     ]);
-  });
-
-  it("measures every page once, a batch at a time, whatever their number", async () => {
-    for (const count of [1, 2, 65, 66, 129, 130]) {
-      const pages = Array.from({ length: count }, (_, index) => (index % 3 === 1 ? A4 : LETTER));
-      const { session, requested } = await openSession({ pages });
-      assert.deepEqual(await session.measurePages(), pages, `${count} pages`);
-      assert.deepEqual(await session.pageSizes(), pages, `${count} pages`);
-      assert.deepEqual(
-        requested,
-        pages.map((_, index) => index),
-        `${count} pages`,
-      );
-    }
-  });
-
-  it("gives every page the first one's size still after a pass fails to measure them", async () => {
-    const document = fakeDocument({ pages: [LETTER, A4, LETTER] });
-    const { session } = await openSession({
-      pages: [LETTER, A4, LETTER],
-      proxy: {
-        getPage: (pageNumber: number) =>
-          pageNumber === 3
-            ? Promise.reject(new Error("the page did not load"))
-            : document.proxy.getPage(pageNumber),
-      },
-    });
-    await assert.rejects(session.measurePages(), /did not load/);
-    assert.deepEqual(await session.pageSizes(), [LETTER, LETTER, LETTER]);
-  });
-
-  it("lets a viewer give back a page that failed to load", async () => {
-    const { session, cleaned } = await openSession();
-    await assert.rejects(session.page(4), /Invalid page request/);
-    session.holdPage(4);
-    session.releasePage(4);
-    await settle();
-    assert.deepEqual(cleaned, []);
-  });
-
-  it("permits nothing an encrypted document's flags leave out", async () => {
-    const { session } = await openSession({ proxy: { getPermissions: async () => new Set() } });
-    assert.deepEqual(await session.permissions(), {
-      restricted: true,
-      print: false,
-      printHighQuality: false,
-      modify: false,
-      copy: false,
-      copyForAccessibility: false,
-      annotate: false,
-      fillForms: false,
-      assemble: false,
-    });
-  });
-
-  it("reads how the document asks to be shown even when its destination points nowhere", async () => {
-    const { session } = await openSession({
-      proxy: {
-        getOpenAction: async () => new Map([["dest", [{ num: 7, gen: 0 }, { name: "Fit" }]]]),
-        getPageIndex: async () => {
-          throw new Error("Invalid pageIndex request.");
-        },
-        getPageLayout: async () => "SinglePage",
-        getPageMode: async () => "UseThumbs",
-      },
-    });
-    assert.deepEqual(await session.initialView(), {
-      destination: null,
-      pageLayout: "SinglePage",
-      pageMode: "UseThumbs",
-    });
-  });
-
-  it("calls no committer or output listener whose signal aborted before it was added", async () => {
-    const { session } = await openSession();
-    const heard: string[] = [];
-    const aborted = AbortSignal.abort();
-    session.onCommit(() => heard.push("commit"), aborted);
-    session.onOutput(async (event) => void heard.push(event), aborted);
-    session.commit();
-    await session.output("WillSave");
-    assert.deepEqual(heard, []);
   });
 });

@@ -95,12 +95,13 @@ describe("ViewerInput", () => {
     assert.deepEqual(calls, ["flip 1 y", "flip 1 x"]);
   });
 
-  it("flips pages in page mode only at the edge a key crosses", () => {
+  it("flips pages in page mode only at the edge a key crosses, and jumps on Home and End", () => {
     const top = setUp({ tool: "select", scrollMode: "page" });
     assert.equal(top.fire("keydown", { key: "PageDown" }), false);
     assert.equal(top.fire("keydown", { key: "ArrowUp" }), true);
+    assert.equal(top.fire("keydown", { key: "Home" }), true);
     assert.equal(top.fire("keydown", { key: "End" }), true);
-    assert.deepEqual(top.calls, ["flip -1 y", "page 4"]);
+    assert.deepEqual(top.calls, ["flip -1 y", "page 0", "page 4"]);
     const bottom = setUp({ tool: "select", scrollMode: "page" }, 1000);
     assert.equal(bottom.fire("keydown", { key: " " }), true);
     assert.deepEqual(bottom.calls, ["flip 1 y"]);
@@ -124,14 +125,22 @@ describe("ViewerInput", () => {
   it("leaves page navigation keys to a focused control", () => {
     const { fire, calls } = setUp({ tool: "select", scrollMode: "page" }, 1000);
     const control = new (class extends Element {
-      closest() {
-        return this;
+      override closest(selector: string) {
+        return selector.includes("input") ? this : null;
       }
     })();
     for (const key of ["ArrowDown", "PageDown", " ", "Home", "End"]) {
       assert.equal(fire("keydown", { key, target: control }), false);
     }
     assert.deepEqual(calls, []);
+
+    const nonControl = new (class extends Element {
+      override closest() {
+        return null;
+      }
+    })();
+    assert.equal(fire("keydown", { key: "Home", target: nonControl }), true);
+    assert.deepEqual(calls, ["page 0"]);
   });
 
   it("scrolls with the hand tool's drag and lets go when the tool changes", () => {

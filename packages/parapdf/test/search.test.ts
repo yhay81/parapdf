@@ -270,6 +270,66 @@ describe("the search feature", () => {
     assert.deepEqual(search.get().matches, []);
   });
 
+  it("stops an in-flight search without publishing or reading further pages when its document closes", async () => {
+    let releaseText!: () => void;
+    const textsReady = new Promise<void>((resolve) => {
+      releaseText = resolve;
+    });
+    const document = fakeDocument({
+      pages: [LETTER, LETTER, LETTER],
+      texts: [[{ str: "hello" }], [{ str: "hello" }], [{ str: "hello" }]],
+      textsReady,
+    });
+    const viewer = new ViewerController();
+    const { close: closeDocument } = show(
+      viewer,
+      { url: "/closing-search.pdf" },
+      fakePdfjs(async () => document.proxy).loader,
+    );
+    await settle();
+    const search = searchOf(viewer);
+    search.get().search("hello");
+    assert.equal(search.get().status, "searching");
+    await settle();
+    assert.deepEqual(document.textsRead, [0], "the search reads a page at a time");
+    closeDocument();
+    releaseText();
+    await finish();
+    assert.equal(search.get().status, "idle", "the search publishes nothing after");
+    assert.deepEqual(document.textsRead, [0], "and stopped after the page it was reading");
+  });
+
+  it("retries a search after a transient text read failure", async (context) => {
+    const document = fakeDocument({ texts: [[{ str: "hello" }]] });
+    const page = await document.proxy.getPage(1);
+    let attempts = 0;
+    context.mock.method(page, "getTextContent", async () => {
+      if (++attempts === 1) throw new Error("text unavailable");
+      return {
+        items: [
+          { str: "hello", hasEOL: false, transform: [10, 0, 0, 10, 0, 0], width: 20, height: 10 },
+        ],
+      };
+    });
+    context.mock.method(console, "error", () => {});
+    const viewer = new ViewerController();
+    close.push(
+      show(viewer, { url: "/retry-search.pdf" }, fakePdfjs(async () => document.proxy).loader)
+        .close,
+    );
+    await settle();
+    const search = searchOf(viewer);
+    search.get().search("hello");
+    await settle();
+    assert.equal(search.get().status, "done");
+    assert.equal(search.get().matches.length, 0);
+    search.get().search("hello");
+    await finish();
+    assert.equal(search.get().status, "done");
+    assert.equal(search.get().matches.length, 1);
+    assert.equal(attempts, 2);
+  });
+
   it("shares one persistent search store per viewer", async () => {
     const { viewers } = await twoViewers();
     const own = searchOf(viewers[0]);

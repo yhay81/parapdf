@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import type { Rotation } from "../src/pdfjs/draw.ts";
 import {
   areaSize,
   computeLayout,
@@ -15,6 +16,7 @@ import {
   toRotation,
   turnBox,
   turnedSize,
+  unturnPoint,
   type Viewport,
   visibleArea,
   visibleRange,
@@ -131,26 +133,38 @@ describe("pageLeft and visibleArea", () => {
   });
 });
 
-describe("turnBox", () => {
+describe("turnBox and unturnPoint", () => {
   const size = { width: 100, height: 200 };
   const box = { x: 10, y: 20, width: 30, height: 40 };
 
-  it("moves a box with the view's clockwise turn", () => {
+  it("moves a box with the view's clockwise turn and turns back to where it started", () => {
     assert.deepEqual(turnBox(box, size, 0), box);
     assert.deepEqual(turnBox(box, size, 90), { x: 140, y: 10, width: 40, height: 30 });
     assert.deepEqual(turnBox(box, size, 180), { x: 60, y: 140, width: 30, height: 40 });
     assert.deepEqual(turnBox(box, size, 270), { x: 20, y: 60, width: 40, height: 30 });
-  });
 
-  it("turns back to where it started", () => {
-    const turned = turnBox(box, size, 90);
-    assert.deepEqual(turnBox(turned, turnedSize(size, 90), 270), box);
-  });
-
-  it("turns back from a half turn and from three quarters", () => {
+    assert.deepEqual(turnBox(turnBox(box, size, 90), turnedSize(size, 90), 270), box);
     assert.deepEqual(turnBox(turnBox(box, size, 180), size, 180), box);
-    const turned = turnBox(box, size, 270);
-    assert.deepEqual(turnBox(turned, turnedSize(size, 270), 90), box);
+    assert.deepEqual(turnBox(turnBox(box, size, 270), turnedSize(size, 270), 90), box);
+  });
+
+  it("inverts turnBox across 0, 90, 180, and 270 degrees and userUnit-scaled page sizes", () => {
+    const pageSizes = [
+      { width: 612, height: 792 },
+      { width: 1224, height: 1584 },
+    ];
+    const rotations: Rotation[] = [0, 90, 180, 270];
+    for (const pageSize of pageSizes) {
+      for (const rotation of rotations) {
+        const original = { x: 144, y: 216, width: 0, height: 0 };
+        const turned = turnBox(original, pageSize, rotation);
+        const turnedW = rotation % 180 === 0 ? pageSize.width : pageSize.height;
+        const turnedH = rotation % 180 === 0 ? pageSize.height : pageSize.width;
+        const restored = unturnPoint(turned.x / turnedW, turned.y / turnedH, pageSize, rotation);
+        assert.ok(Math.abs(restored.x - original.x) < 1e-9);
+        assert.ok(Math.abs(restored.y - original.y) < 1e-9);
+      }
+    }
   });
 });
 

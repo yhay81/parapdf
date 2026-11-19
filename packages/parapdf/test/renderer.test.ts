@@ -148,9 +148,9 @@ describe("Renderer failures", () => {
     assert.equal(renderer.hasPixels(0), false);
   });
 
-  for (const initialBase of [false, true]) {
-    it(`replaces stale detail with a base after a content change${initialBase ? " with an existing base" : ""}`, async (t) => {
-      t.mock.method(console, "error", () => {});
+  it("replaces stale detail with a base after a content change", async (t) => {
+    t.mock.method(console, "error", () => {});
+    for (const initialBase of [false, true]) {
       const { doc, renders } = await controlledDocument();
       const renderer = new Renderer(doc, drawingsOnly);
       t.after(() => renderer.dispose());
@@ -191,8 +191,8 @@ describe("Renderer failures", () => {
       await settle();
       assert.equal(renders.length, before + 2);
       assert.equal(renderer.stats.failed, 1);
-    });
-  }
+    }
+  });
 
   it("keeps stale detail if its replacement and base fallback both fail", async (t) => {
     t.mock.method(console, "error", () => {});
@@ -592,5 +592,91 @@ describe("Renderer view changes", () => {
     assert.equal(detail.width * detail.height, 0, "the old one is given back");
     assert.equal(renderer.stats.cancelled, 1);
     assert.equal(renderer.stats.failed, 0);
+  });
+});
+
+describe("Renderer whole-page details zoomed past their budget (decision 0012)", () => {
+  const copies = (canvas: HTMLCanvasElement) => (canvas as unknown as FakeElement).copied;
+  const twoPages = (scale: number): ViewInput => ({
+    ...input(scale, true),
+    layout: computeLayout([LETTER, LETTER], scale, { gap: 10 }),
+  });
+  const demoteOptions = { ...drawingsOnly, maxDetailPixels: 1_000_000 };
+
+  async function zoomedOut(
+    renderer: Renderer,
+    renders: Awaited<ReturnType<typeof controlledDocument>>["renders"],
+  ) {
+    renderer.update(twoPages(1));
+    await settle();
+    for (const render of renders) {
+      render.request.canvas.width = 612;
+      render.request.canvas.height = 792;
+      render.resolve();
+    }
+    await settle();
+    assert.equal(renders.length, 2, "a whole-page detail each, no base");
+  }
+
+  it("shows a small one as the base under the partial detail instead of drawing a base", async (t) => {
+    const { doc, renders } = await controlledDocument();
+    const renderer = new Renderer(doc, demoteOptions);
+    t.after(() => renderer.dispose());
+    const page = mount(renderer, 0);
+    mount(renderer, 1);
+    await zoomedOut(renderer, renders);
+
+    renderer.update(twoPages(2));
+    await settle();
+    const drawing = renders[2];
+    assert.equal(renders.length, 3, "no base is drawn");
+    assert.equal(drawing?.request.canvas, page.spare);
+    assert.ok(drawing?.request.region, "part of the page");
+    assert.notEqual(page.detail.style.visibility, "hidden", "the whole-page detail still shows");
+    drawing?.resolve();
+    await settle();
+
+    assert.deepEqual(copies(page.base), [page.detail]);
+    assert.equal(page.base.width, 612);
+    assert.equal(page.base.height, 792);
+    assert.equal(page.base.style.visibility, "");
+    for (let frame = 0; frame < 5; frame++) renderer.update(twoPages(2));
+    await settle();
+    assert.equal(renders.length, 3, "still no base");
+  });
+
+  it("makes a small one the base of a page that leaves the viewport", async (t) => {
+    const { doc, renders } = await controlledDocument();
+    const renderer = new Renderer(doc, demoteOptions);
+    t.after(() => renderer.dispose());
+    mount(renderer, 0);
+    const outside = mount(renderer, 1);
+    await zoomedOut(renderer, renders);
+
+    renderer.update(twoPages(2));
+    assert.deepEqual(copies(outside.base), [outside.detail], "copied at the zoom's commit");
+    assert.equal(outside.detail.width, 0, "the detail is given back");
+    await settle();
+    assert.ok(
+      renders.slice(2).every((render) => render.pageIndex === 0),
+      "page 2 draws no base",
+    );
+    assert.equal(renderer.stats.demoted, 1);
+  });
+
+  it("draws a base again under a whole-page detail larger than a base", async (t) => {
+    const { doc, renders } = await controlledDocument();
+    const renderer = new Renderer(doc, { ...demoteOptions, maxBasePixels: 400_000 });
+    t.after(() => renderer.dispose());
+    const page = mount(renderer, 0);
+    const outside = mount(renderer, 1);
+    await zoomedOut(renderer, renders);
+
+    renderer.update(twoPages(2));
+    await settle();
+    assert.equal(renders[2]?.request.canvas, page.base);
+    assert.deepEqual(copies(page.base), []);
+    assert.deepEqual(copies(outside.base), []);
+    assert.equal(renderer.stats.demoted, 0);
   });
 });

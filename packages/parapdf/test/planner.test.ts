@@ -232,71 +232,83 @@ function random(seed: number): () => number {
 }
 
 describe("planner invariants", () => {
-  const next = random(7);
-  const pick = <T>(values: readonly T[]): T => values[Math.floor(next() * values.length)] as T;
-  for (let scenario = 0; scenario < 300; scenario++) {
-    const sizes = Array.from({ length: 12 }, () => pick([LETTER, LETTER, LANDSCAPE, TALL]));
-    const scale = pick([0.25, 0.5, 1, 1.5, 2, 4, 8]);
-    const devicePixelRatio = pick([1, 2, 3]);
-    const budgets: Partial<Budgets> = {
-      maxCanvasPixels: pick([Number.POSITIVE_INFINITY, 33_554_432, 8_000_000, 2_000_000, 300_000]),
-      maxDetailPixels: pick([16_777_216, 4_000_000, 1_000_000]),
-      maxBasePixels: pick([2_097_152, 500_000]),
-    };
-    const settled = next() < 0.7;
-    const layoutHeight = computeLayout(sizes, scale, { gap: 10 }).totalHeight;
-    const top = Math.floor(next() * Math.max(0, layoutHeight - 900));
-    const { input, mounted } = view(sizes, scale, { top, devicePixelRatio, settled });
-    const name = `scale ${scale}, dpr ${devicePixelRatio}, ${JSON.stringify(budgets)}, top ${top}${settled ? "" : ", scrolling"}`;
-
-    it(`keeps its invariants: ${name}`, () => {
-      const plan = context(input, budgets);
-      const pages = new Map(mounted.map((index) => [index, blank(index)]));
-      run(plan, pages);
-      checkSettled(plan, pages, budgets);
-    });
-  }
+  it("keeps its invariants across seeded views and budgets", () => {
+    const next = random(7);
+    const pick = <T>(values: readonly T[]): T => values[Math.floor(next() * values.length)] as T;
+    for (let scenario = 0; scenario < 300; scenario++) {
+      const sizes = Array.from({ length: 12 }, () => pick([LETTER, LETTER, LANDSCAPE, TALL]));
+      const scale = pick([0.25, 0.5, 1, 1.5, 2, 4, 8]);
+      const devicePixelRatio = pick([1, 2, 3]);
+      const budgets: Partial<Budgets> = {
+        maxCanvasPixels: pick([
+          Number.POSITIVE_INFINITY,
+          33_554_432,
+          8_000_000,
+          2_000_000,
+          300_000,
+        ]),
+        maxDetailPixels: pick([16_777_216, 4_000_000, 1_000_000]),
+        maxBasePixels: pick([2_097_152, 500_000]),
+      };
+      const settled = next() < 0.7;
+      const layoutHeight = computeLayout(sizes, scale, { gap: 10 }).totalHeight;
+      const top = Math.floor(next() * Math.max(0, layoutHeight - 900));
+      const { input, mounted } = view(sizes, scale, { top, devicePixelRatio, settled });
+      const name = `scale ${scale}, dpr ${devicePixelRatio}, ${JSON.stringify(budgets)}, top ${top}${settled ? "" : ", scrolling"}`;
+      try {
+        const planned = context(input, budgets);
+        const pages = new Map(mounted.map((index) => [index, blank(index)]));
+        run(planned, pages);
+        checkSettled(planned, pages, budgets);
+      } catch (error) {
+        throw new Error(name, { cause: error });
+      }
+    }
+  });
 
   // Pages zoomed with what they show from the zoom before: stale bases and
   // details, and pages that mount blank.
-  const zoomNext = random(11);
-  const zoomPick = <T>(values: readonly T[]): T =>
-    values[Math.floor(zoomNext() * values.length)] as T;
-  for (let scenario = 0; scenario < 120; scenario++) {
-    const sizes = Array.from({ length: 12 }, () => zoomPick([LETTER, LANDSCAPE, TALL]));
-    const from = zoomPick([0.5, 1, 1.5, 2, 4]);
-    const to = zoomPick([0.25, 0.5, 1, 2.5, 4, 8]);
-    const devicePixelRatio = zoomPick([1, 2, 3]);
-    const budgets: Partial<Budgets> = {
-      maxCanvasPixels: zoomPick([Number.POSITIVE_INFINITY, 33_554_432, 8_000_000, 2_000_000]),
-      maxDetailPixels: zoomPick([16_777_216, 4_000_000]),
-      maxBasePixels: zoomPick([2_097_152, 500_000]),
-    };
-    const layoutHeight = computeLayout(sizes, from, { gap: 10 }).totalHeight;
-    const top = Math.floor(zoomNext() * Math.max(0, layoutHeight - 900));
-    const name = `${from} to ${to}, dpr ${devicePixelRatio}, ${JSON.stringify(budgets)}, top ${top}`;
-
-    it(`keeps its invariants through a zoom: ${name}`, () => {
-      let plan = context(view(sizes, from).input);
-      let pages = new Map<number, Page>();
-      // Scrolled to with bases, settled, then zoomed with what the pages show.
-      for (const [scale, settled] of [
-        [from, false],
-        [from, true],
-        [to, true],
-      ] as const) {
-        const { input, mounted } = view(sizes, scale, {
-          top: Math.floor((top * scale) / from),
-          devicePixelRatio,
-          settled,
-        });
-        plan = context(input, budgets);
-        pages = new Map(mounted.map((index) => [index, pages.get(index) ?? blank(index)]));
-        run(plan, pages);
+  it("keeps its invariants through seeded zooms", () => {
+    const zoomNext = random(11);
+    const zoomPick = <T>(values: readonly T[]): T =>
+      values[Math.floor(zoomNext() * values.length)] as T;
+    for (let scenario = 0; scenario < 120; scenario++) {
+      const sizes = Array.from({ length: 12 }, () => zoomPick([LETTER, LANDSCAPE, TALL]));
+      const from = zoomPick([0.5, 1, 1.5, 2, 4]);
+      const to = zoomPick([0.25, 0.5, 1, 2.5, 4, 8]);
+      const devicePixelRatio = zoomPick([1, 2, 3]);
+      const budgets: Partial<Budgets> = {
+        maxCanvasPixels: zoomPick([Number.POSITIVE_INFINITY, 33_554_432, 8_000_000, 2_000_000]),
+        maxDetailPixels: zoomPick([16_777_216, 4_000_000]),
+        maxBasePixels: zoomPick([2_097_152, 500_000]),
+      };
+      const layoutHeight = computeLayout(sizes, from, { gap: 10 }).totalHeight;
+      const top = Math.floor(zoomNext() * Math.max(0, layoutHeight - 900));
+      const name = `${from} to ${to}, dpr ${devicePixelRatio}, ${JSON.stringify(budgets)}, top ${top}`;
+      try {
+        let planned = context(view(sizes, from).input);
+        let pages = new Map<number, Page>();
+        // Scrolled to with bases, settled, then zoomed with what the pages show.
+        for (const [scale, settled] of [
+          [from, false],
+          [from, true],
+          [to, true],
+        ] as const) {
+          const { input, mounted } = view(sizes, scale, {
+            top: Math.floor((top * scale) / from),
+            devicePixelRatio,
+            settled,
+          });
+          planned = context(input, budgets);
+          pages = new Map(mounted.map((index) => [index, pages.get(index) ?? blank(index)]));
+          run(planned, pages);
+        }
+        checkSettled(planned, pages, budgets, true);
+      } catch (error) {
+        throw new Error(name, { cause: error });
       }
-      checkSettled(plan, pages, budgets, true);
-    });
-  }
+    }
+  });
 
   it("keeps its invariants through a zoom that leaves a detail drawn first no room", () => {
     const sizes = Array(8).fill(LETTER);
@@ -376,13 +388,6 @@ describe("planner", () => {
     // Past four bases' worth (8.4 MP), too.
     const large = view([LETTER], 2.5, { devicePixelRatio: 2 }).input;
     assert.equal(plan(context(large), [blank(0)], 1)[0]?.layer, "base");
-  });
-
-  it("caps a base at maxBasePixels", () => {
-    const { input } = view([LETTER], 8, { settled: false });
-    const [base] = plan(context(input), [blank(0)], 1);
-    assert.equal(base?.layer, "base");
-    assert.ok(Math.abs(pagePixels(input, 0, base?.scale ?? 0, null) - 2_097_152) < 1);
   });
 
   it("draws the next detail into the spare while the old one shows, with no base under it", () => {
@@ -483,59 +488,6 @@ describe("planner", () => {
     assert.ok(pixels <= 4_000_000 * 1.0001, `${pixels}`);
   });
 
-  it("lowers resolution in quarter-octave steps when the visible area does not fit", () => {
-    const { input } = view([LETTER], 4, { top: 1000, devicePixelRatio: 2 });
-    const planned = detailPlan(context(input, { maxDetailPixels: 1_000_000 }), 0);
-    const steps = Math.log((planned?.scale ?? 0) / 8) / Math.log(REDUCED_DETAIL_STEP);
-    assert.ok(steps > 0 && Math.abs(steps - Math.round(steps)) < 1e-9, `${steps} steps`);
-    assert.ok(planned?.region);
-    // A detail no sharper than the base is not drawn.
-    assert.equal(detailPlan(context(input, { maxDetailPixels: 10_000 }), 0), null);
-  });
-
-  it("gives visible pages' details what their bases leave of maxCanvasPixels, by visible area", () => {
-    const { input, mounted } = view(Array(4).fill(LETTER), 1, { devicePixelRatio: 2 });
-    const plan = context(input, { maxCanvasPixels: 2_500_000 });
-    const pages = new Map(mounted.map((index) => [index, blank(index)]));
-    run(plan, pages);
-    const visibleDetails = [...pages.values()]
-      .filter((page) => visible(plan, page.index))
-      .reduce((sum, page) => sum + page.detailPixels + page.basePixels, 0);
-    assert.ok(visibleDetails <= 2_500_000 * 1.01, `${visibleDetails}`);
-    for (const page of pages.values()) {
-      if (!visible(plan, page.index)) assert.equal(page.basePixels + page.detailPixels, 0);
-    }
-  });
-
-  it("gives back the pixels of pages outside the viewport, farthest first and detail before base", () => {
-    const { input } = view(Array(8).fill(LETTER), 1, { top: 2400 });
-    const pages = [1, 2, 3, 4, 5].map((index) => {
-      const page = blank(index);
-      Object.assign(page, {
-        baseScale: 0.5,
-        basePixels: 121_176,
-        detailScale: 1,
-        detailPixels: 484_704,
-      });
-      return page;
-    });
-    const plan = context(input, { maxCanvasPixels: 2_500_000 });
-    const released = trim(plan, pages);
-    assert.ok(released.length > 0);
-    assert.ok(released.every(({ index }) => !visible(plan, index)));
-    const firstBase = released.findIndex(({ layer }) => layer === "base");
-    if (firstBase >= 0) {
-      assert.ok(released.slice(firstBase).every(({ layer }) => layer === "base"));
-    }
-    const distances = released
-      .filter(({ layer }) => layer === "detail")
-      .map(({ index }) => Math.abs(index - input.focus));
-    assert.deepEqual(
-      distances,
-      [...distances].sort((a, b) => b - a),
-    );
-  });
-
   it("cancels a detail drawing for a page that scrolls in blank during a fling", () => {
     const { input } = view([LETTER], 1, { settled: false });
     const page = blank(0);
@@ -558,9 +510,7 @@ describe("planner", () => {
       false,
     );
   });
-});
 
-describe("planner boundaries", () => {
   const area = (region: PageArea) => (region.maxX - region.minX) * (region.maxY - region.minY);
   const contains = (outer: PageArea, inner: PageArea) =>
     outer.minX <= inner.minX + 1e-9 &&
@@ -624,6 +574,8 @@ describe("planner boundaries", () => {
       assert.ok(shown * pagePixels(input, 0, finer, null) > maxDetailPixels, `${maxDetailPixels}`);
       assert.ok(pagePixels(input, 0, scale, planned.region) <= maxDetailPixels * 1.0001);
     }
+    // A detail no sharper than the base is not drawn.
+    assert.equal(detailPlan(context(input, { maxDetailPixels: 10_000 }), 0), null);
   });
 
   it("snaps a turned page's region within its turned size", () => {

@@ -16,7 +16,7 @@ import {
 import { preloadDocument, preloadDocumentWith } from "../src/react/preload.ts";
 import { computePopoverPosition, sameSelection } from "../src/react/selection.ts";
 import { TextSelectionTracker } from "../src/render/selection.ts";
-import { computeLayout, turnBox, unturnPoint } from "../src/view/layout.ts";
+import { computeLayout, turnBox } from "../src/view/layout.ts";
 import { ViewerController } from "../src/view/viewer.ts";
 import { FakeDocument } from "./fake-dom.ts";
 import { fakeDocument, fakePdfjs, LETTER, settle } from "./fake-pdfjs.ts";
@@ -110,23 +110,7 @@ function withBrowserGlobals<T>(run: () => Promise<T> | T): Promise<T> {
     });
 }
 
-describe("unturnPoint and viewer.pointAt", () => {
-  it("inverts turnBox across 0, 90, 180, and 270 degrees and userUnit-scaled page sizes", () => {
-    const sizes = [LETTER, { width: 1224, height: 1584 }];
-    const rotations: Rotation[] = [0, 90, 180, 270];
-    for (const size of sizes) {
-      for (const rotation of rotations) {
-        const original = { x: 144, y: 216, width: 0, height: 0 };
-        const turned = turnBox(original, size, rotation);
-        const turnedW = rotation % 180 === 0 ? size.width : size.height;
-        const turnedH = rotation % 180 === 0 ? size.height : size.width;
-        const restored = unturnPoint(turned.x / turnedW, turned.y / turnedH, size, rotation);
-        assert.ok(Math.abs(restored.x - original.x) < 1e-9);
-        assert.ok(Math.abs(restored.y - original.y) < 1e-9);
-      }
-    }
-  });
-
+describe("viewer.pointAt and viewer.pointerClaimed", () => {
   it("maps client points to unturned PDF coordinates via live host boxes and layout fallback", () =>
     withBrowserGlobals(() => {
       const viewer = new ViewerController();
@@ -397,23 +381,20 @@ describe("OverlayStore, PdfPageOverlay, PdfPageOverlays, and PdfPageRect", () =>
     release1();
     assert.deepEqual(snapshots.at(-1), { renderers: 1, portals: [] });
 
-    // Removing the last renderer restores the inactive singleton.
+    // Removing the last renderer restores the inactive singleton, and SSR leaves the store inactive.
     store.removeRenderer("r1");
     assert.equal(store.isActive(), false);
     assert.deepEqual(snapshots.at(-1), { renderers: 0, portals: [] });
-
     unsub();
-  });
 
-  it("renders PdfPageOverlay and PdfPageOverlays cleanly on SSR without touching DOM", () => {
-    const viewer = new ViewerController();
+    const ssrViewer = new ViewerController();
     const ssrHtml = renderToString(
       createElement(
         SessionContext,
         { value: new PdfSessionController({ url: "/manual.pdf" }) },
         createElement(
           ViewerContext,
-          { value: viewer },
+          { value: ssrViewer },
           createElement(PdfPageOverlay, { page: 0 }, createElement("span", null, "p0")),
           createElement(PdfPageOverlays, {
             // biome-ignore lint/correctness/noChildrenProp: function-as-child render prop under createElement without JSX.
@@ -423,6 +404,7 @@ describe("OverlayStore, PdfPageOverlay, PdfPageOverlays, and PdfPageRect", () =>
       ),
     );
     assert.equal(ssrHtml, "");
+    assert.equal(overlayStoreOf(ssrViewer).isActive(), false);
   });
 
   it("positions PdfPageRect purely from PageContext.size with zero store subscriptions", () => {
@@ -706,8 +688,9 @@ describe("preloadDocument", () => {
     );
   });
 
-  it("warms the shared registry session ahead of <PdfDocument> mount with a single getDocument call", () =>
+  it("warms the shared registry session ahead of <PdfDocument> mount with a single getDocument call", (t) =>
     withBrowserGlobals(async () => {
+      t.mock.timers.enable({ apis: ["setTimeout"] });
       let opened = 0;
       let warmedPdfjs = 0;
       const { loader } = fakePdfjs(async () => {
@@ -732,11 +715,13 @@ describe("preloadDocument", () => {
       assert.equal(opened, 1);
 
       disconnect();
-      await new Promise((resolve) => setTimeout(resolve, 1050));
+      t.mock.timers.tick(1000);
+      await settle();
     }));
 
-  it("warms URL fragment named destinations and options.destinations so warm viewers lay out synchronously at them", () =>
+  it("warms URL fragment named destinations and options.destinations so warm viewers lay out synchronously at them", (t) =>
     withBrowserGlobals(async () => {
+      t.mock.timers.enable({ apis: ["setTimeout"] });
       const refMap = new Map<string, number>([
         ["3R", 2],
         ["4R", 3],
@@ -789,6 +774,7 @@ describe("preloadDocument", () => {
       assert.ok(openDoc.knownPage(1), "explicit coordinate destination page is warmed");
 
       disconnect();
-      await new Promise((resolve) => setTimeout(resolve, 1050));
+      t.mock.timers.tick(1000);
+      await settle();
     }));
 });

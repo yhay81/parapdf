@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createElement } from "react";
-import { renderToString } from "react-dom/server";
 import { Store } from "../src/document/store.ts";
 import {
   annotationSlot,
@@ -14,21 +12,13 @@ import {
   type AnnotationEditingStore,
   attachAnnotationEditing,
 } from "../src/features/annotations.ts";
-import { notifyViewerFormChange } from "../src/features/forms/index.ts";
 import type {
   AnnotationEditingState,
   AnnotationLabels,
   AnnotationStyles,
   AnnotationTool,
 } from "../src/pdfjs/editor-types.ts";
-import { useAnnotations } from "../src/react/annotations.ts";
-import {
-  activeTracked,
-  createTrackedSnapshot,
-  hasTrackedChange,
-  ViewerContext,
-} from "../src/react/context.ts";
-import { useFormChange } from "../src/react/forms.ts";
+import { activeTracked, createTrackedSnapshot, hasTrackedChange } from "../src/react/context.ts";
 import { ViewerController } from "../src/view/viewer.ts";
 import { fakeDocument, fakePdfjs, settle, show } from "./fake-pdfjs.ts";
 
@@ -154,49 +144,16 @@ function fakeViewport() {
   return { scroller: element(), content: element() };
 }
 
-function SsrProbe({ out }: { out: { tool: string } }) {
-  const controls = useAnnotations();
-  out.tool = controls.tool;
-  useFormChange(() => {});
-  return createElement("span", null, controls.tool);
-}
-
 describe("annotationSlot and useAnnotations", () => {
-  it("shares a single Store instance directly with attachAnnotationEditing", () => {
-    const viewer = new ViewerController();
-    const slot = annotationSlot(viewer);
-    const unmount = slot.mount(attachAnnotationEditing, undefined);
-    assert.ok(slot.editing);
-    assert.equal(slot.editing.store, slot.store);
-    unmount();
-    slot.detachNow();
-  });
+  it("shares a single Store instance with attachAnnotationEditing, returns idle controls pre-mount, and keeps action references stable", () => {
+    const realViewer = new ViewerController();
+    const realSlot = annotationSlot(realViewer);
+    const unmountReal = realSlot.mount(attachAnnotationEditing, undefined);
+    assert.ok(realSlot.editing);
+    assert.equal(realSlot.editing.store, realSlot.store);
+    unmountReal();
+    realSlot.detachNow();
 
-  it("keeps editing when a sibling mounts after the viewport in the same commit", () =>
-    withViewportGlobals(async () => {
-      const viewer = new ViewerController();
-      const slot = annotationSlot(viewer);
-      const fake = fakeEditing();
-      const { scroller, content } = fakeViewport();
-      const detach = viewer.attachViewport(scroller, content);
-      const unmount = slot.mount(fake.attach, undefined);
-      fake.open();
-      detach();
-      unmount();
-      await settle();
-
-      const reattach = viewer.attachViewport(scroller, content);
-      const remount = slot.mount(fake.attach, undefined);
-      await settle();
-      assert.equal(fake.detached, 0, "the same React commit restores the editor's owner");
-      assert.equal(slot.editing, fake.editing);
-      remount();
-      await settle();
-      assert.equal(fake.detached, 1, "removing the editor alone still detaches it");
-      reattach();
-    }));
-
-  it("returns non-null controls before mounting and keeps method references stable across tool updates", () => {
     const viewer = new ViewerController();
     const slot = annotationSlot(viewer);
     const initial = slot.store.get();
@@ -222,18 +179,14 @@ describe("annotationSlot and useAnnotations", () => {
     assert.equal(updated.undo, undoRef);
     assert.equal(hasTrackedChange(tracked.raw, updated, activeTracked(tracked)), false);
 
-    const out = { tool: "" };
-    const html = renderToString(
-      createElement(
-        ViewerContext,
-        { value: new ViewerController() },
-        createElement(SsrProbe, { out }),
-      ),
-    );
-    assert.equal(html, "<span>none</span>");
-    assert.equal(out.tool, "none");
-
+    // detachNow() synchronously clears slot.editing and resets the store to STOPPED even if an adapter left state behind.
+    fake.editing.detach = () => {};
     unmount();
+    slot.detachNow();
+    assert.equal(slot.editing, null);
+    assert.equal(slot.store.get().tool, "none");
+    assert.equal(slot.store.get().state, null);
+    assert.equal(slot.store.get().styles, null);
   });
 
   it("compares inline label objects structurally and forwards only real changes", () => {
@@ -269,7 +222,7 @@ describe("annotationSlot and useAnnotations", () => {
     control.disconnect();
   });
 
-  it("survives StrictMode remounts and viewport hides, while detaching when removed from a live viewport", () =>
+  it("survives StrictMode remounts, sibling reattaches, and viewport hides, while detaching when removed from a live viewport", () =>
     withViewportGlobals(async () => {
       const viewer = new ViewerController();
       const slot = annotationSlot(viewer);
@@ -287,13 +240,24 @@ describe("annotationSlot and useAnnotations", () => {
 
       // Simultaneous viewport hide (<Activity mode="hidden"> or unmounting <PdfViewer>):
       // scroller is detached during commit, so kept edits stay on the viewer.
+      fake.open();
       detachViewport();
       unmount2();
       await settle();
       assert.equal(fake.detached, 0);
       assert.equal(slot.editing, fake.editing);
 
-      // Without an editor owner by the end of the commit, kept edits detach.
+      // Sibling mounting after the viewport in the same commit restores the editor's owner without detaching.
+      const reattachSibling = viewer.attachViewport(scroller, content);
+      const remountSibling = slot.mount(fake.attach, undefined);
+      await settle();
+      assert.equal(fake.detached, 0, "the same React commit restores the editor's owner");
+      assert.equal(slot.editing, fake.editing);
+      reattachSibling();
+      remountSibling();
+      await settle();
+
+      // Reattaching the viewport without an editor owner by the end of the commit detaches kept edits.
       const detachViewport2 = viewer.attachViewport(scroller, content);
       await settle();
       assert.equal(fake.detached, 1);
@@ -402,12 +366,5 @@ describe("bindAnnotationTool", () => {
     second.close();
     controller.disconnect();
     unmount();
-  });
-});
-
-describe("notifyViewerFormChange", () => {
-  it("ignores viewers with no active listeners", () => {
-    const viewer = new ViewerController();
-    assert.doesNotThrow(() => notifyViewerFormChange(viewer, { name: "city", value: "Tokyo" }));
   });
 });

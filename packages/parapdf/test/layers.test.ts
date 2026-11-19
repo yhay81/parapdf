@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type * as Pdfjs from "pdfjs-dist";
+import { PdfSessionController } from "../src/document/pdf-session.ts";
+import { setLayerVisible } from "../src/features/layers.ts";
 import { LayerState } from "../src/pdfjs/layers.ts";
+import { fakeDocument, fakePdfjs, settle } from "./fake-pdfjs.ts";
 
 type Group = { name: string | null; visible: boolean };
 
@@ -133,5 +136,40 @@ describe("LayerState", () => {
       [display.getGroup("a")?.visible, display.getGroup("b")?.visible],
       [true, false],
     );
+  });
+
+  it("toggles layers via PdfSession both before and after layers are loaded", async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const unopened = new PdfSessionController({ url: "/unopened.pdf" });
+    setLayerVisible(unopened, "grid", false);
+
+    const display = config({ grid: { name: "Grid", visible: true } }, ["grid"]);
+    const doc = fakeDocument({
+      proxy: {
+        getOptionalContentConfig: async () => display,
+      },
+    });
+    const session = new PdfSessionController(
+      { url: "/layers.pdf" },
+      { pdfjs: fakePdfjs(async () => doc.proxy).loader },
+    );
+    const disconnect = session.connect();
+    t.after(async () => {
+      disconnect();
+      t.mock.timers.tick(1000);
+      await settle();
+    });
+    await settle();
+
+    // Before layers() was called by any viewer, setLayerVisible loads and updates them.
+    assert.equal(session.openDocument()?.loadedLayers, null);
+    setLayerVisible(session, "grid", false);
+    await settle();
+    assert.equal(display.getGroup("grid")?.visible, false);
+    assert.notEqual(session.openDocument()?.loadedLayers, null);
+
+    // Subsequent calls update loadedLayers synchronously.
+    setLayerVisible(session, "grid", true);
+    assert.equal(display.getGroup("grid")?.visible, true);
   });
 });

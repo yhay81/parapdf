@@ -227,20 +227,6 @@ describe("Renderer kept canvases", () => {
     assert.equal(renderer.keptPixels, 0);
   });
 
-  it("keeps nothing with a budget of 0", async (t) => {
-    const { doc, renders } = await controlledDocument();
-    const renderer = new Renderer(doc, { maxKeptPixels: 0 });
-    t.after(() => renderer.dispose());
-    const { detail } = mount(renderer, 0);
-    renderer.update(input(1));
-    await settle();
-    renders[0]?.resolve();
-    await settle();
-    renderer.detach(0);
-    assert.equal(detail.width, 0);
-    assert.equal(renderer.keptPixels, 0);
-  });
-
   it("keeps twelve viewports' worth of device pixels by default, and no page larger than that", async () => {
     // The page's detail holds 612 by 792 pixels: twelve viewports of 201 by
     // 201 hold it, of 200 by 201 not.
@@ -249,6 +235,7 @@ describe("Renderer kept canvases", () => {
       [200, undefined, 0],
       [800, 484_704, 612 * 792],
       [800, 484_703, 0],
+      [800, 0, 0],
     ] as const) {
       const { doc, renders } = await controlledDocument();
       const renderer = new Renderer(doc, maxKeptPixels === undefined ? {} : { maxKeptPixels });
@@ -358,10 +345,9 @@ describe("Renderer kept canvases", () => {
     }
   });
 
-  it("keeps nothing while the viewer has no viewport", async (t) => {
+  it("keeps nothing while the viewer has no viewport, and releases kept canvases on dispose", async () => {
     const { doc, renders } = await controlledDocument();
     const renderer = new Renderer(doc, { maxKeptPixels: 4_000_000 });
-    t.after(() => renderer.dispose());
     const first = mount(renderer, 0).detail;
     renderer.update(input(1));
     await settle();
@@ -381,20 +367,17 @@ describe("Renderer kept canvases", () => {
     renderer.detach(1);
     assert.equal(renderer.keptPixels, 0);
     assert.equal(second.width, 0);
-  });
 
-  it("lets kept canvases go when it is disposed", async () => {
-    const { doc, renders } = await controlledDocument();
-    const renderer = new Renderer(doc, { maxKeptPixels: 4_000_000 });
-    const { detail } = mount(renderer, 0);
+    renderer.setKeeping(true);
+    const third = mount(renderer, 0).detail;
     renderer.update(input(1));
     await settle();
     renders.at(-1)?.resolve();
     await settle();
     renderer.detach(0);
-    assert.ok(detail.width > 0);
+    assert.ok(third.width > 0);
     renderer.dispose();
-    assert.equal(detail.width, 0);
+    assert.equal(third.width, 0);
     assert.equal(renderer.keptPixels, 0);
   });
 });

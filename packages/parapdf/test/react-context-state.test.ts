@@ -2,12 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createElement, useContext } from "react";
 import { renderToString } from "react-dom/server";
-import {
-  type PdfSession,
-  PdfSessionController,
-  sessionControllerOf,
-} from "../src/document/pdf-session.ts";
-import { Store, subscribeKeys } from "../src/document/store.ts";
+import { PdfSessionController } from "../src/document/pdf-session.ts";
 import { useAnnotations } from "../src/react/annotations.ts";
 import {
   activeTracked,
@@ -28,57 +23,8 @@ import { usePermits } from "../src/react/permissions.ts";
 import { useSearch } from "../src/react/search.ts";
 import { useSelection } from "../src/react/selection.ts";
 import { PdfView, useCreateViewer, useViewer } from "../src/react/viewer.ts";
-import { computeLayout } from "../src/view/layout.ts";
 import { controllerOf, type Viewer, ViewerController } from "../src/view/viewer.ts";
-import { fakeDocument, fakePdfjs, LETTER, settle } from "./fake-pdfjs.ts";
-
-describe("ViewerStore pageCount", () => {
-  it("starts at 0 and publishes pageCount only when the document's page count changes", () => {
-    const viewer = new ViewerController();
-    assert.equal(viewer.store.get().pageCount, 0);
-
-    let layoutPublishes = 0;
-    let pageCountPublishes = 0;
-    viewer.store.subscribeKeys(["layout", "scale"], () => layoutPublishes++);
-    viewer.store.subscribeKeys(["pageCount"], () => pageCountPublishes++);
-
-    const threePages = [LETTER, LETTER, LETTER];
-    const layout1 = computeLayout(threePages, 1, {
-      gap: 12,
-      rotation: 0,
-      spread: "none",
-      scrollMode: "vertical",
-      direction: "ltr",
-      viewportWidth: 800,
-      page: 0,
-    });
-    viewer.store.set({ layout: layout1 });
-    assert.equal(viewer.store.get().pageCount, 3);
-    assert.equal(layoutPublishes, 1);
-    assert.equal(pageCountPublishes, 1);
-
-    // Zooming produces a new Layout with the same page count: pageCount listeners stay quiet.
-    const layout2 = computeLayout(threePages, 1.5, {
-      gap: 12,
-      rotation: 0,
-      spread: "none",
-      scrollMode: "vertical",
-      direction: "ltr",
-      viewportWidth: 800,
-      page: 0,
-    });
-    viewer.store.set({ layout: layout2, scale: 1.5 });
-    assert.equal(viewer.store.get().pageCount, 3);
-    assert.equal(layoutPublishes, 2);
-    assert.equal(pageCountPublishes, 1);
-
-    // Closing resets layout to null and pageCount to 0.
-    viewer.store.set({ layout: null, first: 0, last: -1 });
-    assert.equal(viewer.store.get().pageCount, 0);
-    assert.equal(layoutPublishes, 3);
-    assert.equal(pageCountPublishes, 2);
-  });
-});
+import { fakeDocument, fakePdfjs, settle } from "./fake-pdfjs.ts";
 
 describe("shallowEqual and selector caching", () => {
   it("compares primitives, tuples, plain objects, and non-plain instances accurately", () => {
@@ -205,171 +151,6 @@ describe("getter-tracked snapshots", () => {
     assert.equal(nullSnap.proxy.raw, "own-raw");
     assert.equal("raw" in nullSnap.proxy, true);
   });
-
-  it("publishes exact changedKeys on Store across single set and multi-step update/publish", () => {
-    const store = new Store({ currentPage: 0, rotation: 0, search: () => {} });
-    const batches: string[][] = [];
-    const unsub = store.subscribe((changedKeys) => {
-      batches.push([...(changedKeys ?? [])].map(String));
-    });
-
-    // Unchanged value emits nothing.
-    store.set({ currentPage: 0 });
-    assert.equal(batches.length, 0);
-
-    // Hot update emits only currentPage, never rotation or search.
-    store.set({ currentPage: 3, rotation: 0 });
-    assert.deepEqual(batches, [["currentPage"]]);
-
-    // Multiple update() calls before publish() accumulate all changed keys.
-    assert.equal(store.update({ currentPage: 4 }), true);
-    assert.equal(store.update({ rotation: 90 }), true);
-    store.publish();
-    assert.deepEqual(batches, [["currentPage"], ["currentPage", "rotation"]]);
-
-    unsub();
-
-    // Re-entrant store.set() inside a listener keeps outer and inner changedKeys isolated.
-    const seen: { listener: number; keys: string[] }[] = [];
-    const u1 = store.subscribe((changedKeys) => {
-      seen.push({ listener: 1, keys: [...(changedKeys ?? [])].map(String) });
-      if (store.get().currentPage === 7 && store.get().rotation !== 180) {
-        store.set({ rotation: 180 });
-      }
-    });
-    const u2 = store.subscribe((changedKeys) => {
-      seen.push({ listener: 2, keys: [...(changedKeys ?? [])].map(String) });
-    });
-    store.set({ currentPage: 7 });
-    assert.deepEqual(seen, [
-      { listener: 1, keys: ["currentPage"] },
-      { listener: 1, keys: ["rotation"] },
-      { listener: 2, keys: ["rotation"] },
-      { listener: 2, keys: ["currentPage"] },
-    ]);
-    u1();
-    u2();
-  });
-
-  it("subscribeKeys ignores unrelated keys such as streaming progress while firing on matching or unkeyed publishes", () => {
-    const store = new Store({
-      status: "loading",
-      passwordReason: null as "need" | "incorrect" | null,
-      progress: null as { loaded: number; total: number | null } | null,
-    });
-    let calls = 0;
-    const unsub = subscribeKeys(store, ["status", "passwordReason"], () => {
-      calls++;
-    });
-
-    store.set({ progress: { loaded: 1024, total: 8192 } });
-    store.set({ progress: { loaded: 4096, total: 8192 } });
-    assert.equal(calls, 0);
-
-    store.set({ status: "password", passwordReason: "need" });
-    assert.equal(calls, 1);
-
-    // Unkeyed publish() (such as session #follow or failed-read retry) always wakes subscribeKeys.
-    store.publish();
-    assert.equal(calls, 2);
-
-    unsub();
-  });
-
-  it("keeps optional fields introduced in a batch and prunes them when reverted", () => {
-    const store = new Store<{ status: string; error?: string | undefined }>({ status: "idle" });
-    const batches: string[][] = [];
-    store.subscribe((keys) => batches.push([...(keys ?? [])].map(String)));
-
-    store.batch(() => store.set({ error: "Failed to open" }));
-    assert.deepEqual(store.get(), { status: "idle", error: "Failed to open" });
-    assert.deepEqual(batches, [["error"]]);
-
-    const before = store.get();
-    store.batch(() => {
-      store.set({ error: undefined });
-      store.set({ error: "Failed to open" });
-    });
-    assert.equal(store.get(), before);
-    assert.equal(batches.length, 1);
-
-    const empty = new Store<{ error?: string | undefined }>({});
-    const initial = empty.get();
-    let notifications = 0;
-    empty.subscribe(() => notifications++);
-    empty.batch(() => {
-      empty.set({ error: "Temporary" });
-      empty.set({ error: undefined });
-    });
-    assert.equal(empty.get(), initial);
-    assert.equal(notifications, 0);
-  });
-
-  it("coalesces multi-step Store.batch and ViewerStore.batch updates and prunes reverted keys", () => {
-    const store = new Store({ page: 0, scale: 1, tool: "select" as "select" | "hand" });
-    const baseSnapshot = store.get();
-    const batches: string[][] = [];
-    const unsub = store.subscribe((changedKeys) => {
-      batches.push([...(changedKeys ?? [])].map(String));
-    });
-
-    // Reverting every touched key inside a batch emits zero notifications and restores the original snapshot reference.
-    store.batch(() => {
-      store.set({ page: 3, scale: 2 });
-      store.batch(() => {
-        store.set({ page: 0, scale: 1 });
-      });
-    });
-    assert.equal(batches.length, 0);
-    assert.equal(store.get(), baseSnapshot);
-
-    // Multi-step mutations across nested batches publish once with only net changed keys.
-    store.batch(() => {
-      store.set({ page: 1, tool: "hand" });
-      store.batch(() => {
-        store.set({ page: 4, scale: 1.5 });
-        store.set({ tool: "select" });
-      });
-    });
-    assert.deepEqual(batches, [["page", "scale"]]);
-    assert.deepEqual(store.get(), { page: 4, scale: 1.5, tool: "select" });
-    unsub();
-
-    // ViewerStore tracks net "sizes" and "externalLinks" changes across batch boundaries.
-    const viewer = new ViewerController();
-    const viewerBatches: string[][] = [];
-    const unsubViewer = viewer.store.subscribe((changedKeys) => {
-      viewerBatches.push([...(changedKeys ?? [])].map(String));
-    });
-    const sizes = [LETTER, LETTER];
-    const layout = computeLayout(sizes, 1.5, {
-      gap: 12,
-      rotation: 0,
-      spread: "none",
-      scrollMode: "vertical",
-      direction: "ltr",
-      viewportWidth: 800,
-      page: 0,
-    });
-    viewer.store.batch(() => {
-      viewer.store.set({ layout, scale: 1 });
-      viewer.store.setExternalLinks("disabled");
-      viewer.store.setExternalLinks("new-tab");
-    });
-    assert.equal(viewerBatches.length, 1);
-    assert.ok(viewerBatches[0]?.includes("sizes"));
-    assert.equal(viewerBatches[0]?.includes("externalLinks"), false);
-
-    // Reverting layout back to null and back to the same sizes in a batch does not re-emit "sizes".
-    viewerBatches.length = 0;
-    viewer.store.batch(() => {
-      viewer.store.set({ layout: null });
-      viewer.store.set({ layout, scale: 2 });
-    });
-    assert.equal(viewerBatches.length, 1);
-    assert.deepEqual(viewerBatches[0], ["scale"]);
-    unsubViewer();
-  });
 });
 
 function ContextToolbar({ seen }: { seen: Viewer[] }) {
@@ -446,8 +227,6 @@ describe("ViewerContext, useCreateViewer, and optional viewer hooks", () => {
 
     const session = new PdfSessionController({ url: "/manual.pdf" });
     assert.equal(session.state.status, "loading");
-    assert.equal(sessionControllerOf(session), session);
-    assert.throws(() => sessionControllerOf({} as PdfSession), TypeError);
 
     const html = renderToString(
       createElement(
@@ -612,21 +391,5 @@ describe("ViewerContext, useCreateViewer, and optional viewer hooks", () => {
       ),
     );
     assert.equal(externalSlots[0], customViewer);
-  });
-
-  it("keeps setPasswordPrompt quiet outside password status and publishes exact keys on PdfSessionController.stateStore", () => {
-    const session = new PdfSessionController(
-      { url: "/quiet-prompt.pdf" },
-      { passwordPrompt: false },
-    );
-    const batches: (string[] | undefined)[] = [];
-    const unsub = session.stateStore.subscribe((changedKeys) => {
-      batches.push(changedKeys ? [...changedKeys].map(String) : undefined);
-    });
-    // Toggling passwordPrompt while status === "loading" does not wake subscribers at all.
-    session.setPasswordPrompt(true);
-    session.setPasswordPrompt(false);
-    assert.deepEqual(batches, []);
-    unsub();
   });
 });

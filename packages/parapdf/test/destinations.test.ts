@@ -260,18 +260,12 @@ describe("an explicit destination", () => {
     }
   });
 
-  it("goes to the page alone when a rectangle lacks a corner's coordinate", async () => {
+  it("goes to the page alone without loading it for an incomplete FitR or an unknown fit", async () => {
     const { resolve, loaded } = letter();
     const page = { pageIndex: 0, x: null, y: null };
     assert.deepEqual(await resolve([0, name("FitR"), 100, 200, 300, null]), page);
     assert.deepEqual(await resolve([0, name("FitR"), 100, 200, 300]), page);
     assert.deepEqual(await resolve([0, name("FitR"), 100, "200", 300, 500]), page);
-    assert.deepEqual(loaded, []);
-  });
-
-  it("goes to the page alone, asking no view, for a fit it does not know", async () => {
-    const { resolve, loaded } = letter();
-    const page = { pageIndex: 0, x: null, y: null };
     assert.deepEqual(await resolve([0, name("Zoom"), 72, 720, 2]), page);
     assert.deepEqual(await resolve([0, null, 72, 720]), page);
     assert.deepEqual(await resolve([0, "XYZ", 72, 720, 2]), page);

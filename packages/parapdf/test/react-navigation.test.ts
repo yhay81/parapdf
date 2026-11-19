@@ -16,75 +16,13 @@ import {
   scrollOffsetForThumbnail,
   thumbnailCanvasHeight,
 } from "../src/react/thumbnails.ts";
-import { computeLayout } from "../src/view/layout.ts";
 import { ViewerController } from "../src/view/viewer.ts";
 import { fakeDocument, fakePdfjs, LETTER, settle } from "./fake-pdfjs.ts";
 
 describe("thumbnailCanvasHeight", () => {
-  it("publishes viewer.store sizes key only on open, non-uniform size updates, and close, ignoring scroll and zoom commits", () => {
-    const viewer = new ViewerController();
-    let notifications = 0;
-    const unsub = viewer.store.subscribeKeys(["sizes"], () => notifications++);
-    assert.equal(viewer.store.sizes, undefined);
-
-    const uniformSizes = [LETTER, LETTER, LETTER];
-    const layoutAt1 = computeLayout(uniformSizes, 1, {
-      gap: 12,
-      rotation: 0,
-      spread: "none",
-      scrollMode: "vertical",
-      direction: "ltr",
-      viewportWidth: 800,
-      page: 0,
-    });
-    viewer.store.set({ layout: layoutAt1, scale: 1, first: 0, last: 1 });
-    assert.equal(notifications, 1);
-    assert.equal(viewer.store.sizes, uniformSizes);
-
-    // Scroll window shifts, currentPage flips, zoom commits sharing `uniformSizes`, and cold tool/rotation updates must not notify sizes subscribers:
-    viewer.store.set({ first: 1, last: 2, currentPage: 1 });
-    const layoutAt2 = computeLayout(uniformSizes, 2, {
-      gap: 12,
-      rotation: 0,
-      spread: "none",
-      scrollMode: "vertical",
-      direction: "ltr",
-      viewportWidth: 800,
-      page: 1,
-    });
-    viewer.store.set({ layout: layoutAt2, scale: 2 });
-    viewer.store.set({ rotation: 90, tool: "hand" });
-    assert.equal(notifications, 1);
-
-    // Background measurement discovering mixed page sizes publishes once:
-    const mixedSizes = [LETTER, { width: 792, height: 612 }, LETTER];
-    const mixedLayout = computeLayout(mixedSizes, 2, {
-      gap: 12,
-      rotation: 90,
-      spread: "none",
-      scrollMode: "vertical",
-      direction: "ltr",
-      viewportWidth: 800,
-      page: 1,
-    });
-    viewer.store.set({ layout: mixedLayout });
-    assert.equal(notifications, 2);
-    assert.equal(viewer.store.sizes, mixedSizes);
-
-    // Closing the document clears sizes once:
-    viewer.store.set({ layout: null, first: 0, last: -1 });
-    assert.equal(notifications, 3);
-    assert.equal(viewer.store.sizes, undefined);
-
-    unsub();
-  });
-
-  it("falls back to US Letter aspect ratio until the page size is known", () => {
-    const height = thumbnailCanvasHeight(undefined, 0, 120);
-    assert.ok(Math.abs(height - (120 * 11) / 8.5) < 1e-9);
-  });
-
-  it("swaps width and height on quarter turns", () => {
+  it("falls back to US Letter aspect ratio until known, and swaps width and height on quarter turns", () => {
+    const fallback = thumbnailCanvasHeight(undefined, 0, 120);
+    assert.ok(Math.abs(fallback - (120 * 11) / 8.5) < 1e-9);
     assert.ok(Math.abs(thumbnailCanvasHeight(LETTER, 0, 120) - (120 * 792) / 612) < 1e-9);
     assert.ok(Math.abs(thumbnailCanvasHeight(LETTER, 90, 120) - (120 * 612) / 792) < 1e-9);
     assert.ok(Math.abs(thumbnailCanvasHeight(LETTER, 180, 120) - (120 * 792) / 612) < 1e-9);
@@ -436,33 +374,26 @@ describe("ThumbnailRenderer host-owned canvases and zero-copy kept pool", () => 
   });
 });
 
-describe("viewer.externalLinks and PdfOutline", () => {
-  it("tracks live externalLinks option updates on Viewer", () => {
-    const viewer = new ViewerController();
-    let notifications = 0;
-    const unsub = viewer.store.subscribeKeys(["externalLinks"], () => notifications++);
-    assert.equal(viewer.externalLinks, "new-tab");
-
-    viewer.configure({ externalLinks: "disabled" });
-    assert.equal(viewer.externalLinks, "disabled");
-    assert.equal(viewer.store.externalLinks, "disabled");
-    assert.equal(notifications, 1);
-
-    viewer.configure({ externalLinks: "disabled" });
-    assert.equal(notifications, 1);
-    unsub();
-  });
-
-  it("computes bold and italic inline styles only when set", () => {
+describe("PdfOutline", () => {
+  it("renders nested bookmarks, inline styles, empty outlines, externalLinks, renderItem, and SSR bailout", async () => {
     assert.equal(outlineItemStyle({ bold: false, italic: false }), undefined);
     assert.deepEqual(outlineItemStyle({ bold: true, italic: false }), { fontWeight: 600 });
     assert.deepEqual(outlineItemStyle({ bold: true, italic: true }), {
       fontWeight: 600,
       fontStyle: "italic",
     });
-  });
 
-  it("renders nested bookmarks, honors externalLinks, supports renderItem, and bails out cleanly on SSR", async () => {
+    assert.equal(
+      renderToString(
+        createElement(
+          ViewerContext,
+          { value: new ViewerController() },
+          createElement(OutlineTree, { items: [] }),
+        ),
+      ),
+      "",
+    );
+
     // 1. Prerendering <PdfOutline> on the server renders its Suspense fallback via browser() bailout
     const errors: unknown[] = [];
     const bailouts: unknown[] = [];
@@ -592,16 +523,5 @@ describe("viewer.externalLinks and PdfOutline", () => {
       ),
     );
     assert.deepEqual(navigated, ["1 Introduction"]);
-  });
-
-  it("renders nothing when the document has an empty outline", () => {
-    const html = renderToString(
-      createElement(
-        ViewerContext,
-        { value: new ViewerController() },
-        createElement(OutlineTree, { items: [] }),
-      ),
-    );
-    assert.equal(html, "");
   });
 });

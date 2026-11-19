@@ -1,55 +1,15 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it, mock } from "node:test";
 import { PdfSessionController } from "../src/document/pdf-session.ts";
-import type { PdfjsLoader } from "../src/document/registry.ts";
-import type { PdfSource } from "../src/document/session.ts";
-import { initialViewOpening } from "../src/features/initial-view.ts";
-import { searchOf } from "../src/features/search/index.ts";
-import { getText } from "../src/features/text/index.ts";
 import type { Rotation } from "../src/pdfjs/draw.ts";
-import { preloadDocumentWith } from "../src/react/preload.ts";
 import type { ViewerOptions } from "../src/view/options.ts";
-import type { ViewState } from "../src/view/view-state.ts";
+import { toShownView, type ViewState } from "../src/view/view-state.ts";
 import { ViewerController, type Zoom } from "../src/view/viewer.ts";
-import {
-  askPassword,
-  fakeDocument,
-  fakePdfjs,
-  LETTER,
-  PasswordException,
-  settle,
-  show,
-} from "./fake-pdfjs.ts";
+import { fakeDocument, fakePdfjs, LETTER, settle, show } from "./fake-pdfjs.ts";
 
 const A4 = { width: 595, height: 842 };
-const readOutline = (session: PdfSessionController) =>
-  session.read("outline", (doc) => doc.outline(), []);
 
-/** pdf.js that keeps asking for a password until the viewers close the document. */
-function lockedPdfjs() {
-  return fakePdfjs(async (task) => {
-    let reason: "required" | "incorrect" = "required";
-    for (;;) {
-      if ((await askPassword(task, reason)) === null) {
-        throw new PasswordException("No password given", 1);
-      }
-      reason = "incorrect";
-    }
-  }).loader;
-}
-
-describe("a session's document state", () => {
-  it("removes an empty URL fragment from its source too", () => {
-    const session = new PdfSessionController({
-      url: "/a.pdf#",
-      httpHeaders: { Accept: "application/pdf" },
-    });
-    assert.deepEqual(session.source, {
-      url: "/a.pdf",
-      httpHeaders: { Accept: "application/pdf" },
-    });
-  });
-
+describe("closing and extending a viewer's document", () => {
   const cancelFrame = Object.getOwnPropertyDescriptor(globalThis, "cancelAnimationFrame");
   const close: (() => void)[] = [];
 
@@ -70,238 +30,7 @@ describe("a session's document state", () => {
     else Reflect.deleteProperty(globalThis, "cancelAnimationFrame");
   });
 
-  /** A provider of `source`, as `<PdfDocument>` holds one. */
-  const provide = (source: PdfSource, loader: PdfjsLoader, passwordPrompt = true) => {
-    const session = new PdfSessionController(source, { passwordPrompt, pdfjs: loader });
-    close.push(session.connect());
-    return session;
-  };
-
-  it("shares the document while each provider keeps its own fragment", async () => {
-    let opens = 0;
-    const { loader } = fakePdfjs(async () => {
-      opens++;
-      return fakeDocument().proxy;
-    });
-    const first = provide({ url: "/fragment.pdf#page=2" }, loader);
-    const second = provide({ url: "/fragment.pdf#page=3" }, loader);
-    await settle();
-    assert.equal(opens, 1);
-    assert.equal(first.proxy, second.proxy);
-    assert.deepEqual(first.source, { url: "/fragment.pdf" });
-    assert.equal(first.fragment, "page=2");
-    first.setFragment("page=4");
-    assert.equal(first.fragment, "page=4");
-    assert.equal(second.fragment, "page=3");
-  });
-
-  it("is the session's, published to every provider and viewer of it", async () => {
-    const { loader } = fakePdfjs(async () => fakeDocument({ pages: [LETTER, A4] }).proxy);
-    const first = provide({ url: "/a.pdf" }, loader);
-    const second = provide({ url: "/a.pdf" }, loader);
-    assert.equal(first.state.status, "loading");
-    assert.equal(first.state, second.state, "one store for both");
-    await settle();
-    const { state } = first;
-    assert.equal(state.status, "ready");
-    assert.equal(state.pageCount, 2);
-    assert.equal(state.permissions?.restricted, false);
-    assert.equal(second.state, state);
-    assert.ok(first.proxy);
-    // A viewer keeps view state only.
-    const viewer = new ViewerController();
-    viewer.open(first);
-    await settle();
-    assert.equal("status" in viewer.store.get(), false);
-    assert.equal(viewer.session?.proxy, first.proxy);
-  });
-
-  it("preserves a password request replayed to a second provider", async () => {
-    const pdfjs = lockedPdfjs();
-    const first = provide({ url: "/locked.pdf" }, pdfjs);
-    await settle();
-    assert.equal(first.state.status, "password");
-    first.submitPassword("wrong");
-    await settle();
-
-    const second = provide({ url: "/locked.pdf" }, pdfjs);
-    assert.equal(second.state.status, "password");
-    assert.equal(second.state.passwordReason, "incorrect");
-    // A replayed prompt must remain usable, not only visible.
-    second.submitPassword(null);
-    await settle();
-    assert.equal(first.state.status, "error");
-    assert.equal(second.state.status, "error");
-  });
-
-  it("preserves the prompt when a waiting provider remounts within the release delay", async () => {
-    const loader = lockedPdfjs();
-    const session = new PdfSessionController({ url: "/locked.pdf" }, { pdfjs: loader });
-    const release = session.connect();
-    await settle();
-    release();
-    close.push(session.connect());
-    assert.equal(session.state.status, "password");
-    assert.equal(session.state.passwordReason, "required");
-  });
-
-  it("shows a password request as an error to a provider without a prompt", async () => {
-    const pdfjs = lockedPdfjs();
-    const first = provide({ url: "/locked.pdf" }, pdfjs);
-    await settle();
-    const second = provide({ url: "/locked.pdf" }, pdfjs, false);
-    assert.equal(first.state.status, "password", "the other provider may still answer");
-    assert.equal(second.state.status, "error");
-    assert.equal(second.state.error, "PasswordException: No password given");
-    first.submitPassword("wrong");
-    await settle();
-    assert.equal(second.state.error, "PasswordException: Incorrect Password");
-  });
-
-  it("settles its data without a prompt, and shows the prompt again once asked to", async () => {
-    const pdfjs = lockedPdfjs();
-    const session = provide({ url: "/locked.pdf" }, pdfjs, false);
-    await settle();
-    assert.equal(session.state.status, "error");
-    assert.deepEqual(await readOutline(session), [], "data settles while the document waits");
-    let heard = 0;
-    session.stateStore.subscribe(() => heard++);
-    session.setPasswordPrompt(true);
-    assert.equal(session.state.status, "password", "the same session, now with its prompt");
-    assert.equal(heard, 1);
-  });
-
-  it("opens with a changed source password without replaying the old error", async () => {
-    const { loader, calls } = fakePdfjs(async (task, { password: given }) => {
-      let password = given;
-      while (password !== "secret") {
-        const answer = await askPassword(task, password === undefined ? "required" : "incorrect");
-        if (answer === null) throw new PasswordException("No password given", 1);
-        password = answer;
-      }
-      return fakeDocument().proxy;
-    });
-    const wrong = new PdfSessionController(
-      { url: "/locked.pdf", password: "wrong" },
-      { passwordPrompt: false, pdfjs: loader },
-    );
-    const release = wrong.connect();
-    await settle();
-    assert.equal(wrong.state.status, "error");
-    release();
-    const right = provide({ url: "/locked.pdf", password: "secret" }, loader, false);
-    const statuses: string[] = [];
-    const unsubscribe = right.stateStore.subscribe(() => statuses.push(right.state.status));
-    await settle();
-    unsubscribe();
-    assert.equal(right.state.status, "ready");
-    assert.equal(right.state.error, null);
-    assert.equal(calls.opens, 1);
-    assert.equal(statuses.includes("error"), false);
-  });
-
-  it("follows the session opened again after a hold that outlived it", async () => {
-    const { loader, calls } = fakePdfjs();
-    const session = new PdfSessionController({ url: "/a.pdf" }, { pdfjs: loader });
-    const release = session.connect();
-    const first = await session.document();
-    const outline = readOutline(session);
-    release();
-    mock.timers.tick(1000);
-    await settle();
-    assert.equal(first.signal.aborted, true, "the registry closed the first session");
-    close.push(session.connect());
-    const second = await session.document();
-    assert.notEqual(second, first);
-    assert.equal(second.signal.aborted, false);
-    assert.notEqual(readOutline(session), outline, "its data is read from the new session");
-    assert.equal(session.proxy, second.proxy);
-    assert.equal(calls.opens, 2);
-  });
-
-  it("reads secondary data once, and settles it empty when the document fails", async (context) => {
-    context.mock.method(console, "error", () => {});
-    const { loader } = fakePdfjs();
-    const session = provide({ url: "/a.pdf" }, loader);
-    assert.equal(readOutline(session), readOutline(session));
-    assert.deepEqual(await readOutline(session), []);
-    const failed = provide(
-      { url: "/broken.pdf" },
-      fakePdfjs(async () => {
-        throw new Error("not a PDF");
-      }).loader,
-    );
-    assert.deepEqual(await failed.read("attachments", (doc) => doc.attachments(), []), []);
-    assert.equal(await failed.read("metadata", (doc) => doc.metadata(), null), null);
-    assert.equal(failed.state.status, "error");
-  });
-});
-
-describe("closing a viewer's document", () => {
-  const cancelFrame = Object.getOwnPropertyDescriptor(globalThis, "cancelAnimationFrame");
-  const close: (() => void)[] = [];
-
-  beforeEach(() => {
-    mock.timers.enable({ apis: ["setTimeout"] });
-    Object.defineProperty(globalThis, "cancelAnimationFrame", {
-      configurable: true,
-      value: () => {},
-    });
-  });
-
-  afterEach(async () => {
-    for (const release of close.splice(0)) release();
-    mock.timers.tick(1000);
-    await settle();
-    mock.timers.reset();
-    if (cancelFrame) Object.defineProperty(globalThis, "cancelAnimationFrame", cancelFrame);
-    else Reflect.deleteProperty(globalThis, "cancelAnimationFrame");
-  });
-
-  /**
-   * pdf.js whose documents' texts, "hello" on every page, are read once
-   * `read()` is called; `textsRead` lists the pages whose text was asked for.
-   */
-  function slowTexts(pages = 2) {
-    let read = () => {};
-    const textsReady = new Promise<void>((resolve) => (read = resolve));
-    const document = fakeDocument({
-      pages: Array.from({ length: pages }, () => LETTER),
-      texts: Array.from({ length: pages }, () => [{ str: "hello" }]),
-      textsReady,
-    });
-    const fake = fakePdfjs(async () => document.proxy);
-    return { ...fake, read, textsRead: document.textsRead };
-  }
-
-  it("stops what the viewer and session started for the document", async () => {
-    const { loader, read } = slowTexts();
-    const viewer = new ViewerController();
-    const { session: pdfSession, close: closeDocument } = show(viewer, { url: "/a.pdf" }, loader);
-    await settle();
-    assert.ok(viewer.store.get().layout);
-    const session = viewer.session;
-    const reading = getText(pdfSession);
-    const search = searchOf(viewer);
-    search.get().search("hello");
-    assert.equal(search.get().status, "searching");
-    closeDocument();
-    read();
-    await assert.rejects(reading, /closed/);
-    // The search's first match would be published, and it yields after.
-    await settle();
-    mock.timers.tick(0);
-    await settle();
-    assert.equal(search.get().status, "idle", "the search publishes nothing after");
-    assert.equal(viewer.session, null);
-    // The session stays a second for a viewer that comes back, then closes.
-    assert.equal(session?.signal.aborted, false);
-    mock.timers.tick(1000);
-    await settle();
-    assert.equal(session?.signal.aborted, true);
-  });
-
-  it("drops what the viewer held of the document", async () => {
+  it("stops the viewer's work immediately, drops what it held, and closes the unheld session after the grace delay", async () => {
     const { loader } = fakePdfjs();
     const viewer = new ViewerController();
     const { session: pdfSession, close: closeDocument } = show(
@@ -310,9 +39,12 @@ describe("closing a viewer's document", () => {
       loader,
     );
     await settle();
+    const session = viewer.session;
     const work = viewer.workSignal;
-    assert.ok(viewer.session && viewer.permissions && viewer.renderer && viewer.layers && work);
+    assert.ok(session && viewer.permissions && viewer.renderer && viewer.layers && work);
+    assert.ok(viewer.store.get().layout);
     assert.equal(viewer.pdfSession, pdfSession);
+
     closeDocument();
     assert.equal(work.aborted, true);
     assert.deepEqual(
@@ -327,24 +59,11 @@ describe("closing a viewer's document", () => {
       ],
       [null, null, null, null, null, null, null],
     );
-  });
-
-  it("stops a search, which reads no more pages once its document closes", async () => {
-    const { loader, read, textsRead } = slowTexts(3);
-    const viewer = new ViewerController();
-    const { close: closeDocument } = show(viewer, { url: "/a.pdf" }, loader);
+    // The session stays a second for a viewer that comes back, then closes.
+    assert.equal(session.signal.aborted, false);
+    mock.timers.tick(1000);
     await settle();
-    searchOf(viewer).get().search("hello");
-    await settle();
-    assert.deepEqual(textsRead, [0], "the search reads a page at a time");
-    closeDocument();
-    read();
-    for (let step = 0; step < 3; step++) {
-      await settle();
-      mock.timers.tick(0);
-    }
-    await settle();
-    assert.deepEqual(textsRead, [0], "and stopped after the page it was reading");
+    assert.equal(session.signal.aborted, true);
   });
 
   it("lays the pages out again once their sizes are known, unless the document closed", async () => {
@@ -371,56 +90,36 @@ describe("closing a viewer's document", () => {
     assert.equal(published, 0, "a closed viewer publishes nothing when the pass ends");
   });
 
-  it("leaves the work of another viewer of the same document running", async () => {
-    const { loader, calls, read } = slowTexts();
+  it("leaves the work and shared session of another viewer of the same document running", async () => {
+    let read = () => {};
+    const textsReady = new Promise<void>((resolve) => (read = resolve));
+    const document = fakeDocument({
+      pages: [LETTER, LETTER],
+      texts: [[{ str: "hello" }], [{ str: "hello" }]],
+      textsReady,
+    });
+    const { loader, calls } = fakePdfjs(async () => document.proxy);
     const first = new ViewerController();
     const second = new ViewerController();
     const { close: closeFirst } = show(first, { url: "/a.pdf" }, loader);
-    const { session: secondSession, close: closeSecond } = show(second, { url: "/a.pdf" }, loader);
+    const { close: closeSecond } = show(second, { url: "/a.pdf" }, loader);
     close.push(closeSecond);
     await settle();
     const session = second.session;
-    assert.ok(session);
+    const firstWork = first.workSignal;
+    const secondWork = second.workSignal;
+    assert.ok(session && firstWork && secondWork);
     assert.equal(first.session, session, "one session for both");
-    const reading = getText(secondSession);
+    const reading = session.text(0);
     closeFirst();
+    assert.equal(firstWork.aborted, true);
+    assert.equal(secondWork.aborted, false);
     read();
-    assert.equal((await reading).text, "hello\n\nhello");
+    assert.deepEqual((await reading).items, ["hello"]);
     mock.timers.tick(1000);
     await settle();
     assert.equal(session.signal.aborted, false, "the session stays open for the other viewer");
     assert.equal(calls.opens, 1);
-  });
-
-  it("retries a search after a transient text read failure", async (context) => {
-    const document = fakeDocument({ texts: [[{ str: "hello" }]] });
-    const page = await document.proxy.getPage(1);
-    let attempts = 0;
-    context.mock.method(page, "getTextContent", async () => {
-      if (++attempts === 1) throw new Error("text unavailable");
-      return {
-        items: [
-          { str: "hello", hasEOL: false, transform: [10, 0, 0, 10, 0, 0], width: 20, height: 10 },
-        ],
-      };
-    });
-    context.mock.method(console, "error", () => {});
-    const { loader } = fakePdfjs(async () => document.proxy);
-    const viewer = new ViewerController();
-    close.push(show(viewer, { url: "/a.pdf" }, loader).close);
-    await settle();
-    const search = searchOf(viewer);
-    search.get().search("hello");
-    await settle();
-    assert.equal(search.get().status, "done");
-    assert.equal(search.get().matches.length, 0);
-    search.get().search("hello");
-    await settle();
-    mock.timers.tick(0);
-    await settle();
-    assert.equal(search.get().status, "done");
-    assert.equal(search.get().matches.length, 1);
-    assert.equal(attempts, 2);
   });
 
   it("closes the open document when it opens another", async () => {
@@ -441,50 +140,27 @@ describe("closing a viewer's document", () => {
     assert.equal(second.signal.aborted, false);
     assert.equal(calls.destroys, 1);
   });
-});
 
-describe("a viewer's extensions", () => {
-  const cancelFrame = Object.getOwnPropertyDescriptor(globalThis, "cancelAnimationFrame");
-  const close: (() => void)[] = [];
-
-  beforeEach(() => {
-    mock.timers.enable({ apis: ["setTimeout"] });
-    Object.defineProperty(globalThis, "cancelAnimationFrame", {
-      configurable: true,
-      value: () => {},
-    });
-  });
-
-  afterEach(async () => {
-    for (const release of close.splice(0)) release();
-    mock.timers.tick(1000);
-    await settle();
-    mock.timers.reset();
-    if (cancelFrame) Object.defineProperty(globalThis, "cancelAnimationFrame", cancelFrame);
-    else Reflect.deleteProperty(globalThis, "cancelAnimationFrame");
-  });
-
-  /** An extension that counts what it hears. */
-  const counting = () => {
-    const heard = { prepare: 0, ready: 0, closed: 0, aborted: 0 };
-    return {
-      heard,
-      extension: {
-        prepare: () => void heard.prepare++,
-        ready: (_session: unknown, signal: AbortSignal) => {
-          heard.ready++;
-          signal.addEventListener("abort", () => heard.aborted++);
+  it("notifies viewer extensions once per load whether registered before, during, or after open", async () => {
+    const counting = () => {
+      const heard = { prepare: 0, ready: 0, closed: 0, aborted: 0 };
+      return {
+        heard,
+        extension: {
+          prepare: () => void heard.prepare++,
+          ready: (_session: unknown, signal: AbortSignal) => {
+            heard.ready++;
+            signal.addEventListener("abort", () => heard.aborted++);
+          },
+          closed: () => {
+            // The document's work stops after the features let go of it.
+            assert.equal(heard.aborted, 0);
+            heard.closed++;
+          },
         },
-        closed: () => {
-          // The document's work stops after the features let go of it.
-          assert.equal(heard.aborted, 0);
-          heard.closed++;
-        },
-      },
+      };
     };
-  };
 
-  it("hear a document's load once, whether they extend before or after it", async () => {
     const viewer = new ViewerController();
     const early = counting();
     viewer.extend(early.extension);
@@ -501,23 +177,6 @@ describe("a viewer's extensions", () => {
     closeDocument();
     assert.deepEqual(early.heard, { prepare: 1, ready: 1, closed: 1, aborted: 1 });
     assert.equal(late.heard.closed, 0, "a removed extension hears nothing more");
-  });
-
-  it("finish the edits in progress of every viewer of the document before it saves", async () => {
-    const { loader } = fakePdfjs();
-    const viewers = [new ViewerController(), new ViewerController()];
-    for (const viewer of viewers) close.push(show(viewer, { url: "/a.pdf" }, loader).close);
-    await settle();
-    const session = viewers[0]?.session;
-    assert.ok(session && session === viewers[1]?.session);
-    const committed: number[] = [];
-    const editing = new AbortController();
-    session.onCommit(() => committed.push(0), editing.signal);
-    session.onCommit(() => committed.push(1), new AbortController().signal);
-    session.commit();
-    editing.abort();
-    session.commit();
-    assert.deepEqual(committed, [0, 1, 1]);
   });
 });
 
@@ -702,42 +361,49 @@ describe("a viewer's viewport", () => {
     assert.equal(viewer.store.get().currentPage, 1);
   });
 
-  it("keeps fitting within scale limits that change, and clamps a custom zoom to them", async () => {
+  it("keeps fitting within scale limits that change, and clamps an initial or custom zoom to them", async () => {
+    const { viewer: initialClamped } = await viewing({ initialScale: 20 });
+    assert.deepEqual(
+      [initialClamped.store.get().scale, initialClamped.store.get().zoomMode],
+      [10, "custom"],
+    );
+
     const { viewer, scroller } = await viewing();
     const zoom = () => [viewer.store.get().scale, viewer.store.get().zoomMode];
     assert.deepEqual(zoom(), [fitWidth(1000), "fit-width"]);
-    viewer.configure({ minScale: 2 });
-    assert.deepEqual(zoom(), [2, "fit-width"]);
-    resize(scroller, 1400, 800);
-    assert.deepEqual(zoom(), [fitWidth(1400), "fit-width"]);
-    viewer.setScale(5);
-    viewer.configure({ minScale: 2, maxScale: 3 });
-    assert.deepEqual(zoom(), [3, "custom"]);
-  });
-
-  it("fits again as the scale limits change, widening or narrowing", async () => {
-    const { viewer } = await viewing();
-    const zoom = () => [viewer.store.get().scale, viewer.store.get().zoomMode];
     viewer.configure({ maxScale: 1 });
     assert.deepEqual(zoom(), [1, "fit-width"]);
     viewer.configure({});
     assert.deepEqual(zoom(), [fitWidth(1000), "fit-width"]);
     viewer.configure({ minScale: 2 });
     assert.deepEqual(zoom(), [2, "fit-width"]);
+    resize(scroller, 1400, 800);
+    assert.deepEqual(zoom(), [fitWidth(1400), "fit-width"]);
     viewer.configure({ minScale: 1 });
-    assert.deepEqual(zoom(), [fitWidth(1000), "fit-width"]);
+    assert.deepEqual(zoom(), [fitWidth(1400), "fit-width"]);
+    viewer.setScale(5);
+    viewer.configure({ minScale: 2, maxScale: 3 });
+    assert.deepEqual(zoom(), [3, "custom"]);
   });
 
-  it("does nothing for a NaN scale, zoom factor, or rotation, or a rotation not finite", async () => {
+  it("does nothing for a NaN scale, zoom factor, rotation, or target page, or a rotation not finite", async () => {
     const { viewer } = await viewing();
+    viewer.goToPage(2);
     viewer.setScale(2);
     viewer.setScale(Number.NaN);
     viewer.zoomBy(Number.NaN);
     viewer.setRotation(Number.NaN as Rotation);
     viewer.setRotation(Number.POSITIVE_INFINITY as Rotation);
     viewer.rotate(Number.NaN);
-    const { scale, zoomMode, rotation, layout } = viewer.store.get();
-    assert.deepEqual([scale, zoomMode, rotation, layout?.scale], [2, "custom", 0, 2]);
+    viewer.show({
+      target: { pageIndex: Number.NaN, x: null, y: null },
+      rotation: Number.NaN as Rotation,
+    });
+    const { currentPage, scale, zoomMode, rotation, layout } = viewer.store.get();
+    assert.deepEqual(
+      [currentPage, scale, zoomMode, rotation, layout?.scale],
+      [2, 2, "custom", 0, 2],
+    );
   });
 
   it("reveals a rect on the page a fractional index truncates to, and nothing for NaN", async () => {
@@ -751,21 +417,6 @@ describe("a viewer's viewport", () => {
     assert.deepEqual(at(), revealed);
     viewer.revealRect(Number.NaN, rect);
     assert.deepEqual(at(), revealed);
-  });
-
-  it("keeps the page and rotation a view shows as NaN", async () => {
-    const { viewer } = await viewing();
-    viewer.goToPage(2);
-    viewer.show({
-      target: { pageIndex: Number.NaN, x: null, y: null },
-      rotation: Number.NaN as Rotation,
-    });
-    assert.deepEqual([viewer.store.get().currentPage, viewer.store.get().rotation], [2, 0]);
-  });
-
-  it("opens at an initial scale within the limits", async () => {
-    const { viewer } = await viewing({ initialScale: 20 });
-    assert.deepEqual([viewer.store.get().scale, viewer.store.get().zoomMode], [10, "custom"]);
   });
 
   it("keeps a custom zoom within limits that change as the document is built again", async () => {
@@ -1010,7 +661,7 @@ describe("a viewer's viewport", () => {
     };
     const viewer = new ViewerController();
     viewer.configure({
-      opening: initialViewOpening({ initialViewState: initial }),
+      opening: () => ({ view: toShownView(initial) }),
     });
     const scroller = new Scroller();
     const detach = attach(viewer, scroller);
@@ -1097,22 +748,21 @@ describe("a viewer's viewport", () => {
     unsubscribe();
   });
 
-  it("lays out a warm session synchronously before open() returns, including fragments and initialViewState", async () => {
+  it("lays out a warm session synchronously before open() returns, including synchronous openings", async () => {
     const { loader } = fivePages();
     const warmup = new PdfSessionController({ url: "/warm.pdf" }, { pdfjs: loader });
     const releaseWarmup = warmup.connect();
     const doc = await warmup.document();
     await Promise.all([doc.pageSizes(), doc.permissions(), doc.direction(), doc.initialView()]);
 
-    // 1. Default warm open + numeric #page= & #zoom= fragment resolves in zero microtasks.
-    const session = new PdfSessionController(
-      { url: "/warm.pdf#page=4&zoom=150" },
-      { pdfjs: loader },
-    );
+    // 1. Warm open with a synchronous destination opening resolves in zero microtasks.
+    const session = new PdfSessionController({ url: "/warm.pdf" }, { pdfjs: loader });
     session.start();
     const viewer = new ViewerController();
     viewer.configure({
-      opening: initialViewOpening({ fragment: () => session.fragment }),
+      opening: () => ({
+        view: { target: { pageIndex: 3, x: null, y: null, view: { fit: "zoom", zoom: 1.5 } } },
+      }),
     });
     const scroller = new Scroller();
     mount(viewer, scroller, session);
@@ -1125,13 +775,13 @@ describe("a viewer's viewport", () => {
     assert.equal(state.scale, 2);
     assert.ok(state.last >= state.first);
 
-    // 2. Warm open with initialViewState places the view synchronously without microtasks.
+    // 2. Warm open with a ShownView places the view synchronously without microtasks.
     const restored = new PdfSessionController({ url: "/warm.pdf" }, { pdfjs: loader });
     restored.start();
     const secondViewer = new ViewerController();
     secondViewer.configure({
-      opening: initialViewOpening({
-        initialViewState: {
+      opening: () => ({
+        view: toShownView({
           page: 2,
           x: 0,
           y: 96,
@@ -1139,7 +789,7 @@ describe("a viewer's viewport", () => {
           rotation: 0,
           spread: "none",
           scrollMode: "vertical",
-        },
+        }),
       }),
     });
     const secondScroller = new Scroller();
@@ -1151,50 +801,6 @@ describe("a viewer's viewport", () => {
     assert.equal(secondViewer.viewState()?.y, 96);
 
     releaseWarmup();
-
-    // 3. preloadDocumentWith warms URL #nameddest= and explicit coordinate destinations for synchronous open().
-    const namedLoader = fakePdfjs(
-      async () =>
-        fakeDocument({
-          pages: Array.from({ length: 5 }, () => LETTER),
-          proxy: {
-            getDestination: async (name: string) =>
-              name === "chapter-3" ? [2, { name: "XYZ" }, 90, 592, 1.5] : null,
-          },
-        }).proxy,
-    ).loader;
-    preloadDocumentWith("/warm-named.pdf#nameddest=chapter-3", namedLoader, () => {}, {
-      destinations: [[1, { name: "XYZ" }, 40, 692, 2]],
-    });
-    await settle();
-
-    const namedSession = new PdfSessionController(
-      { url: "/warm-named.pdf#nameddest=chapter-3" },
-      { pdfjs: namedLoader },
-    );
-    namedSession.start();
-    const namedViewer = new ViewerController();
-    namedViewer.configure({
-      opening: initialViewOpening({ fragment: () => namedSession.fragment }),
-    });
-    mount(namedViewer, new Scroller(), namedSession);
-    assert.ok(namedViewer.store.get().layout, "warm named destination lays out synchronously");
-    assert.equal(namedViewer.store.get().currentPage, 2);
-    assert.equal(namedViewer.store.get().scale, 2);
-
-    const coordSession = new PdfSessionController(
-      { url: "/warm-named.pdf#page=2&zoom=200,40,692" },
-      { pdfjs: namedLoader },
-    );
-    coordSession.start();
-    const coordViewer = new ViewerController();
-    coordViewer.configure({
-      opening: initialViewOpening({ fragment: () => coordSession.fragment }),
-    });
-    mount(coordViewer, new Scroller(), coordSession);
-    assert.ok(coordViewer.store.get().layout, "warm coordinate destination lays out synchronously");
-    assert.equal(coordViewer.store.get().currentPage, 1);
-    assert.equal(coordViewer.store.get().scale, (2 * 96) / 72);
   });
 
   it("binds controlled view props without echoing callbacks, reconciles rejected values, and flushes on stop", async (context) => {
@@ -1325,14 +931,13 @@ describe("a viewer's viewport", () => {
     const doc = await warmup.document();
     await Promise.all([doc.pageSizes(), doc.permissions(), doc.direction(), doc.initialView()]);
 
-    const session = new PdfSessionController(
-      { url: "/batched.pdf#page=4&zoom=150" },
-      { pdfjs: loader },
-    );
+    const session = new PdfSessionController({ url: "/batched.pdf" }, { pdfjs: loader });
     session.start();
     const viewer = new ViewerController();
     viewer.configure({
-      opening: initialViewOpening({ fragment: () => session.fragment }),
+      opening: () => ({
+        view: { target: { pageIndex: 3, x: null, y: null, view: { fit: "zoom", zoom: 1.5 } } },
+      }),
       initialTool: "hand",
     });
     const scroller = new Scroller();
@@ -1351,7 +956,7 @@ describe("a viewer's viewport", () => {
     });
 
     viewer.open(session);
-    assert.equal(publishes.length, 1, "warm open with #page=4&zoom=150 emits one store publish");
+    assert.equal(publishes.length, 1, "warm open emits one store publish");
     assert.equal(publishes[0]?.hasLayout, true);
     assert.equal(publishes[0]?.page, 3);
     assert.equal(publishes[0]?.scale, 2);

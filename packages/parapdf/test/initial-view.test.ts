@@ -12,7 +12,6 @@ import {
 } from "../src/features/initial-view.ts";
 import type { Destination } from "../src/pdfjs/destinations.ts";
 import type { ViewerExtension } from "../src/view/extensions.ts";
-import { toShownView } from "../src/view/view-state.ts";
 import { ViewerController } from "../src/view/viewer.ts";
 import { fakeDocument, fakePdfjs, LETTER, settle, show } from "./fake-pdfjs.ts";
 
@@ -22,52 +21,6 @@ const asked = (view: Partial<PdfInitialView> = {}): PdfInitialView => ({
   pageLayout: "TwoPageRight",
   pageMode: null,
   ...view,
-});
-
-describe("view states", () => {
-  it("keeps the fields of the right kind", () => {
-    assert.deepEqual(
-      toShownView({
-        page: 3.7,
-        x: 10,
-        y: 20,
-        scale: 1.5,
-        rotation: 450 as never,
-        spread: "odd",
-        scrollMode: "wrapped",
-      }),
-      {
-        rotation: 90,
-        spread: "odd",
-        scrollMode: "wrapped",
-        scale: 1.5,
-        target: { pageIndex: 3, x: 10, y: 20 },
-      },
-    );
-    assert.deepEqual(toShownView({ scale: "fit-page", rotation: -90 as never }), {
-      rotation: 270,
-      scale: "fit-page",
-    });
-    assert.deepEqual(toShownView({ scale: "auto" }), { scale: "auto" });
-    assert.deepEqual(toShownView({ scale: "fit" as never }), {});
-  });
-
-  it("leaves out what a URL could hold wrongly", () => {
-    const shown = toShownView({
-      page: "x",
-      x: Number.NaN,
-      scale: -1,
-      rotation: Number.NaN,
-      spread: "sideways",
-      scrollMode: 3,
-    } as never);
-    assert.deepEqual(shown, {});
-    assert.deepEqual(toShownView({ page: 1, x: Number.POSITIVE_INFINITY }).target, {
-      pageIndex: 1,
-      x: null,
-      y: null,
-    });
-  });
 });
 
 describe("the opening", () => {

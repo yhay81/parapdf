@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { HISTORY_LIMIT, historyOf, Positions } from "../src/features/history.ts";
 import type { ViewerExtension } from "../src/view/extensions.ts";
 import type { ViewerPosition } from "../src/view/navigation.ts";
-import type { ViewerController } from "../src/view/viewer.ts";
+import { ViewerController } from "../src/view/viewer.ts";
 
 const at = (pageIndex: number): ViewerPosition => ({
   pageIndex,
@@ -92,7 +92,12 @@ describe("history positions", () => {
 });
 
 describe("the history feature", () => {
-  it("keeps the positions jumps start from and returns to them", () => {
+  it("keeps one store per viewer, records jump origins, and returns to them", () => {
+    const first = new ViewerController();
+    const second = new ViewerController();
+    assert.equal(historyOf(first), historyOf(first));
+    assert.notEqual(historyOf(first), historyOf(second));
+
     const fake = fakeViewer();
     const history = historyOf(fake.viewer);
     const { back, forward } = history.get();
@@ -177,13 +182,5 @@ describe("the history feature", () => {
       back,
       forward,
     });
-  });
-
-  it("shares one persistent history store per viewer", () => {
-    const fake = fakeViewer();
-    const other = fakeViewer();
-    const history = historyOf(fake.viewer);
-    assert.equal(historyOf(fake.viewer), history);
-    assert.notEqual(historyOf(other.viewer), history);
   });
 });
