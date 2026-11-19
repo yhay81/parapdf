@@ -55,6 +55,7 @@ it. A new choice gets a new record, numbered next.
 | [0046](0046-zero-copy-thumbnails-and-react-plumbing.md) | Zero-copy detached thumbnails, explicit-handle context bypass, swap-buffered stores, and streamlined React plumbing | adopted |
 | [0047](0047-atomic-stores-and-react-actions.md) | Atomic view updates, pre-paint state subscriptions, and React action hooks | adopted |
 | [0048](0048-session-text-locator.md) | Session-level `findText()` and directional text-item boxes | adopted |
+| [0049](0049-virtualized-text-layers.md) | Unmounted pages keep no DOM text layers | rejected |
 
 ## Template
 

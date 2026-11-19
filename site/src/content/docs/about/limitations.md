@@ -8,9 +8,10 @@ description: What ParaPDF does not do yet, and what has not been verified.
 - Editing the annotations a PDF already holds other than text, drawings,
   highlights, and images: those stay as they are drawn.
 - XFA forms.
-- Text layers for pages outside the mounted window, so the browser's own find
-  and assistive technology see only mounted pages; use `useSearch()` and
-  `getText()` for the whole document.
+- DOM text layers for pages outside the mounted window, so the browser's own
+  find, select-all, selections extending into unmounted pages, and assistive
+  technology see only mounted pages; use `useSearch()`, `findText()`, and
+  `getText()` for whole-document or multi-page text ([#10](https://github.com/yhay81/parapdf/issues/10)).
 - A highlight fallback for browsers without the CSS Custom Highlight API,
   which find and scroll to matches without painting them.
 - Seeing other viewers' annotations while they edit. Viewers of one

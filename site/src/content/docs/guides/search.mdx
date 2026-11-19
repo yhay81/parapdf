@@ -91,6 +91,8 @@ Browsers without the API find and scroll to matches without painting them.
 
 ## The browser's own find
 
-Only mounted pages have text layers, so the browser's find sees only those.
-Applications usually take Ctrl or ⌘ with F to focus their own search field,
-as [the demo](/demo/) does.
+Only mounted pages have DOM text layers, and native browser find neither joins
+words split across PDF line breaks nor normalizes full-width and CJK forms as
+`useSearch()` does. Bind Ctrl+F / ⌘F to focus your own search field, as
+[the demo](/demo/) does, or use [`findText()`](/guides/text/#locating-text-as-page-rectangles)
+when locating citations programmatically.

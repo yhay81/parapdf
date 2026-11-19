@@ -269,7 +269,9 @@ the garbage collector takes with it (decision 0032).
   Text layers keep the zoom they were laid out at and follow later zooms
   with CSS. DOM layers scale their raw coordinates by the page's PDF
   user-space unit, which pdf.js includes in the canvas viewport (decision
-  0030). Text layers are built per page (decision 0020).
+  0030). Text layers are built in the document per mounted page; unmounted
+  pages keep no DOM text layers or hidden placeholders (decisions 0020 and
+  0049).
 - `selection.ts` keeps text selection drags in text layers across pages
   and gaps, with each browser's fixes; ported from pdf.js's
   `TextLayerBuilder` (`NOTICE.md`).

@@ -29,9 +29,12 @@ const { text, pages } = await getText(session);
 - `signal` stops a read, which then rejects with the signal's reason.
 
 Pages are parsed in pdf.js's worker a few at a time, and the text is kept: a
-second read, or a search, parses nothing again. The browser's selection
-covers only mounted pages; to copy a range longer than those, read it with
-`getText()` between the points where it starts and ends.
+second read, or a search, parses nothing again. Only mounted pages have DOM
+text layers, so the browser's own select-all (`Ctrl+A` / `⌘A`), copy, and pointer
+selections cover only the mounted window (and collapse if an endpoint page
+scrolls out and unmounts). Use `await getText(session)` to copy the whole
+document, or `await getText(session, { from, to })` with captured `TextPoint`s
+to copy a range that spans unmounted pages.
 
 ## Locating text as page rectangles
 
