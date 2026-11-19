@@ -1234,6 +1234,7 @@ export class ViewerController implements Viewer {
       signal,
     });
     shown.renderer = renderer;
+    session.trackActivity(() => !this.#isScrollQuiet(), signal);
     session.onContentChange(() => renderer.invalidateContent(), signal);
     // Pages unmounting while no viewport shows them keep nothing.
     if (!this.#scroller) renderer.setKeeping(false);
@@ -2282,6 +2283,12 @@ export class ViewerController implements Viewer {
     this.#fromRight = maxLeft - clamp(scroller.scrollLeft, 0, maxLeft);
   }
 
+  #isScrollQuiet(): boolean {
+    if (this.#gestures.zooming()) return false;
+    const motion = this.#gestures.motion ?? this.#scrolling;
+    return motion.at === 0 || performance.now() - motion.at > SETTLE_DELAY;
+  }
+
   #onResize = (): void => {
     const scroller = this.#scroller;
     if (!scroller) return;
@@ -2328,7 +2335,7 @@ export class ViewerController implements Viewer {
     this.#syncFromRight();
     move(
       this.#scrolling,
-      positionOf(this.store.get().scrollMode, viewportOf(scroller)),
+      this.store.get().scrollMode === "horizontal" ? scroller.scrollLeft : scroller.scrollTop,
       performance.now(),
     );
     this.#requestUpdate();
@@ -2416,6 +2423,7 @@ export class ViewerController implements Viewer {
       settled,
     });
     if (quiet && !this.#gestures.zooming()) {
+      this.#shown?.session?.notifyIdle();
       this.#notifyViewState();
     } else if (!quiet && !this.#settleTimer) {
       this.#settleTimer = window.setTimeout(() => {

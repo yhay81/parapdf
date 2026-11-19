@@ -262,6 +262,8 @@ const toOutline = (items: readonly PdfjsOutlineItem[] | null): OutlineNode[] =>
 /** Pages whose sizes the background pass asks pdf.js's worker for at a time. */
 const MEASURED_PAGES = 64;
 
+const nextTask = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
 /** The document's events around saving and printing, named as its scripts know them. */
 export type OutputEvent = "WillSave" | "DidSave" | "WillPrint" | "DidPrint";
 
@@ -304,6 +306,8 @@ export class DocumentSession {
   readonly #outputs = new Set<(event: OutputEvent) => Promise<void>>();
   /** What hears the document's content change, such as form values; see `invalidateContent()`. */
   readonly #contentListeners = new Set<() => void>();
+  readonly #busyChecks = new Set<() => boolean>();
+  readonly #idleWaiters = new Set<() => void>();
   /** Initial uniform page-size array once page 1's size is known, before `measurePages()` finishes. */
   #firstSizes: readonly PageSize[] | null = null;
   /** Every page's size, once the background pass has learned them. */
@@ -330,6 +334,9 @@ export class DocumentSession {
     this.#password = password;
     this.#close = () => {
       controller.abort();
+      this.#busyChecks.clear();
+      for (const wake of [...this.#idleWaiters]) wake();
+      this.#idleWaiters.clear();
       this.#pages.clear();
       this.#knownPages.clear();
       this.#texts.clear();
@@ -454,7 +461,8 @@ export class DocumentSession {
 
   /** The page's size in PDF points with its own rotation applied. */
   async pageSize(pageIndex: number): Promise<PageSize> {
-    const { width, height } = (await this.page(pageIndex)).getViewport({ scale: 1 });
+    const page = this.#knownPages.get(pageIndex) ?? (await this.page(pageIndex));
+    const { width, height } = page.getViewport({ scale: 1 });
     return { width, height };
   }
 
@@ -496,23 +504,61 @@ export class DocumentSession {
   }
 
   /**
+   * Register a renderer's busy predicate so background page-size measurement
+   * yields while visible pages are drawing or the reader is scrolling.
+   */
+  trackActivity(isBusy: () => boolean, signal?: AbortSignal): () => void {
+    if (signal?.aborted || this.signal.aborted) return () => {};
+    this.#busyChecks.add(isBusy);
+    const remove = () => {
+      if (this.#busyChecks.delete(isBusy)) this.notifyIdle();
+    };
+    signal?.addEventListener("abort", remove, { once: true });
+    return remove;
+  }
+
+  /** Wake idle waiters once active rendering and scrolling settle. */
+  notifyIdle(): void {
+    if (this.#idleWaiters.size === 0 || this.#isBusy()) return;
+    for (const wake of [...this.#idleWaiters]) wake();
+  }
+
+  #isBusy(): boolean {
+    for (const check of this.#busyChecks) if (check()) return true;
+    return false;
+  }
+
+  #whenIdle(): Promise<void> {
+    if (!this.#isBusy() || this.signal.aborted) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      const wake = () => {
+        this.#idleWaiters.delete(wake);
+        this.signal.removeEventListener("abort", wake);
+        resolve();
+      };
+      this.#idleWaiters.add(wake);
+      this.signal.addEventListener("abort", wake, { once: true });
+    });
+  }
+
+  /**
    * Learns the size of every page in the background, once for every viewer,
-   * a batch at a time, and resolves with them. Stops when the session closes.
+   * an idle batch at a time while no viewer is scrolling or drawing, and
+   * resolves with them. Stops when the session closes.
    */
   measurePages(): Promise<readonly PageSize[]> {
     return this.#once("sizes", async () => {
       const sizes = [...(await this.pageSizes())];
       for (let index = 1; index < this.pageCount; index += MEASURED_PAGES) {
+        await nextTask();
+        await this.#whenIdle();
         this.signal.throwIfAborted();
-        const batch = Array.from(
-          { length: Math.min(MEASURED_PAGES, this.pageCount - index) },
-          (_, offset) => this.pageSize(index + offset),
-        );
+        const count = Math.min(MEASURED_PAGES, this.pageCount - index);
+        const batch = Array.from({ length: count }, (_, offset) => this.pageSize(index + offset));
         const results = await Promise.all(batch);
         results.forEach((size, offset) => {
           sizes[index + offset] = size;
         });
-        await new Promise((resolve) => setTimeout(resolve, 0));
       }
       this.signal.throwIfAborted();
       this.#sizes = sizes;

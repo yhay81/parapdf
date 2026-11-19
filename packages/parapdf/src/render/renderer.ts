@@ -198,6 +198,7 @@ export class Renderer {
   /** The content version pages should show; see PlanContext. */
   #version = 0;
   #disposed = false;
+  readonly #stopActivity: () => void;
 
   constructor(session: DocumentSession, options: RendererOptions = {}) {
     this.#session = session;
@@ -224,8 +225,22 @@ export class Renderer {
     this.#layers = new DomLayers(session, this.#options, this.stats, () =>
       this.#waitingForPixels(),
     );
+    this.#stopActivity = session.trackActivity(() => this.#isBusy(), options.signal);
     if (options.signal?.aborted) this.dispose();
     else options.signal?.addEventListener("abort", () => this.dispose(), { once: true });
+  }
+
+  /** Whether this renderer is actively drawing or waiting on initial visible pixels. */
+  get busy(): boolean {
+    return (
+      !this.#disposed &&
+      this.#input !== undefined &&
+      (!this.#input.settled || this.#running > 0 || this.#waitingForPixels())
+    );
+  }
+
+  #isBusy(): boolean {
+    return this.busy;
   }
 
   #cancelJob(job: Job | undefined): void {
@@ -423,6 +438,7 @@ export class Renderer {
   /** Cancels all work and releases every page, for example when the document closes. */
   dispose(): void {
     this.#disposed = true;
+    this.#stopActivity();
     // Closing pages keep nothing.
     this.#kept.close();
     for (const index of [...this.#slots.keys()]) this.detach(index);
@@ -636,6 +652,7 @@ export class Renderer {
     // The drawings just started may need the room kept canvases take.
     if (context) this.#trimKept(context);
     this.#layers.schedule();
+    if (!this.#isBusy()) this.#session.notifyIdle();
   }
 
   #startExtra(job: ExtraJob): void {

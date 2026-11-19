@@ -21,7 +21,7 @@ import type {
 import type { LayerState } from "../pdfjs/layers.ts";
 import { buildTextLayer, type TextLayerHandle, type TextLayerTask } from "../pdfjs/text.ts";
 import type { PageElements } from "./page.ts";
-import { sameScale, type ViewInput } from "./planner.ts";
+import type { ViewInput } from "./planner.ts";
 import type { TextSelectionTracker } from "./selection.ts";
 
 /**
@@ -360,9 +360,9 @@ export class DomLayers {
     const textStale = (page: PageLayerState) =>
       page.textHandle !== undefined &&
       (scale > page.textScale * TEXT_RELAYOUT_ZOOM || page.textRotation !== rotation);
+    // Annotation link and popup boxes scale in CSS; only rotation needs layer.update().
     const linksStale = (page: PageLayerState) =>
-      page.annotationHandle !== undefined &&
-      (!sameScale(page.annotationScale, scale) || page.annotationRotation !== rotation);
+      page.annotationHandle !== undefined && page.annotationRotation !== rotation;
     const stale = pages.find((page) => visible(page) && (textStale(page) || linksStale(page)));
     if (stale) {
       const { text } = stale.elements;

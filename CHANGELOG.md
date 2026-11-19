@@ -39,6 +39,10 @@ change the API.
   emissions during background page-size measurement, and align horizontal and
   RTL navigation, `viewState()`, and `PdfThumbnails` metrics across gaps and
   hidden containers.
+- Yield before background page-size measurement batches and pause them while
+  visible pages draw or the viewport scrolls, read `scrollLeft` / `scrollTop`
+  directly on scroll events without per-event viewport layout reads, and skip
+  no-op scale-only `AnnotationLayer.update()` idle passes after zoom commits.
 
 ## 0.9.0 — 2026-11-16
 

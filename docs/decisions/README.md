@@ -56,6 +56,7 @@ it. A new choice gets a new record, numbered next.
 | [0047](0047-atomic-stores-and-react-actions.md) | Atomic view updates, pre-paint state subscriptions, and React action hooks | adopted |
 | [0048](0048-session-text-locator.md) | Session-level `findText()` and directional text-item boxes | adopted |
 | [0049](0049-virtualized-text-layers.md) | Unmounted pages keep no DOM text layers | rejected |
+| [0050](0050-quiet-page-measurement-and-scroll-hot-path.md) | Quiet-gated background page measurement, direct scroll-event offsets, and rotation-only annotation layer updates | adopted |
 
 ## Template
 

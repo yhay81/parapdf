@@ -73,15 +73,27 @@ describe("DocumentSession", () => {
     }
   });
 
-  it("stops measuring pages once it closes", async () => {
+  it("yields before background batches, pauses while busy, and stops once it closes", async () => {
     mock.timers.enable({ apis: ["setTimeout"] });
     const pages = Array.from({ length: 130 }, () => LETTER);
     const { session, requested } = await openSession({ pages });
+    let busy = true;
+    const stopBusy = session.trackActivity(() => busy);
     const measuring = session.measurePages();
-    // The first page and the first batch of 64, which then waits for a timer.
+    // Only page 1 is read before yielding; while busy, timer ticks start no batch.
     await settle();
-    assert.equal(requested.length, 65);
+    assert.equal(requested.length, 1);
+    mock.timers.tick(0);
+    await settle();
+    assert.equal(requested.length, 1, "no background batch starts while a renderer is busy");
+
+    busy = false;
+    session.notifyIdle();
+    await settle();
+    assert.equal(requested.length, 65, "first 64-page batch runs once idle");
+
     void closeSession(session);
+    stopBusy();
     mock.timers.tick(0);
     await assert.rejects(measuring, { name: "AbortError" });
     assert.equal(requested.length, 65, "no other batch is asked for");

@@ -81,7 +81,8 @@ Next.js emit the files (`check:bundlers`); other bundlers take a copy of
 
 `DocumentSession` (`session.ts`) is one open document: pdf.js's
 `PDFDocumentProxy` and pages, the pages' sizes (the first page's for all at
-once, then the real ones in the background), and the document's data, each
+once, then the real ones in 64-page background tasks gated on quiet scrolling
+and idle renderers; decision 0050), and the document's data, each
 read once: page labels, outline, metadata, attachments, comments,
 permissions, the initial view, optional content, and the text read for
 search, `getText()`, and `findText()`. Resolved page sizes, permissions, direction, initial
@@ -268,7 +269,8 @@ the garbage collector takes with it (decision 0032).
   A mounted tagged page gives its text and annotation DOM ids unique to its
   structure tree, so its accessibility relationships stay in that viewer.
   Text layers keep the zoom they were laid out at and follow later zooms
-  with CSS. DOM layers scale their raw coordinates by the page's PDF
+  with CSS, while annotation link and popup layers update only on rotation
+  changes (decision 0050). DOM layers scale their raw coordinates by the page's PDF
   user-space unit, which pdf.js includes in the canvas viewport (decision
   0030). Text layers are built in the document per mounted page; unmounted
   pages keep no DOM text layers or hidden placeholders (decisions 0020 and
