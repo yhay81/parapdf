@@ -200,7 +200,8 @@ and `#start()` lays out warm sessions synchronously before `open()` returns
   values stay equal or no listener is attached, and `Store.batch()` /
   `ViewerStore.batch()` coalesce multi-step synchronous view transactions
   (`open()`, `#showReady()`, `#jump()`, `show()`, `setRotation()`, `setSpread()`,
-  `setScrollMode()`, `setScale()`, `#zoomTo()`, `configure()`, `bindControls.sync()`)
+  `setScrollMode()`, `setScale()`, `#zoomTo()`, `#onResize`, `configure()`,
+  `bindControls.sync()`)
   into one atomic publish with reverted keys pruned; `react/`, `features/`, and
   controller bindings subscribe to exact keys via `subscribeKeys()` and
   `useStoreKeys()` so window shifts, page changes, zoom commits, and option

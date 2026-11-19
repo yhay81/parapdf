@@ -17,8 +17,8 @@ export const pdfjsWorkerUrl = (): URL => new URL("../../pdfjs/pdf.worker.js", im
 
 /** The optional drawing worker, from the package or its copy under assetBase. */
 export const pdfjsRendererUrl = (assetBase?: string): URL =>
-  assetBase
-    ? new URL("pdf.renderer.js", assetBase)
+  assetBase !== undefined
+    ? new URL("pdf.renderer.js", assetBase.endsWith("/") ? assetBase : `${assetBase}/`)
     : new URL("../../pdfjs/pdf.renderer.js", import.meta.url);
 
 /**

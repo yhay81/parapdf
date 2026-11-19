@@ -316,8 +316,13 @@ try {
         const inset = scrollMode === "horizontal" ? old.gap : 0;
         // A quarter of the way through page 10, beyond the shorter
         // document's eventual end: resizing must clamp this old position.
+        const scrolled = new Promise<void>((resolve) => {
+          scroller.addEventListener("scroll", () => requestAnimationFrame(() => resolve()), {
+            once: true,
+          });
+        });
         scroller[axis] = (old[positions][9] ?? 0) + inset + 1000;
-        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        await scrolled;
         const before = viewer.store.get().currentPage;
         finishSizes();
         const deadline = performance.now() + 5000;

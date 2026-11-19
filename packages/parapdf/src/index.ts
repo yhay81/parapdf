@@ -3,6 +3,7 @@ export type { DocumentState, LoadProgress } from "./document/registry.ts";
 export type {
   DocumentPermissions,
   OutlineNode,
+  PageSize,
   PasswordReason,
   PdfAttachment,
   PdfComment,
@@ -41,7 +42,11 @@ export {
   type TextOptions,
   type TextPoint,
 } from "./features/text/index.ts";
-export type { Destination } from "./pdfjs/destinations.ts";
+export type {
+  Destination,
+  DestinationView,
+  ResolvedDestination,
+} from "./pdfjs/destinations.ts";
 export type { PageColors, Rotation } from "./pdfjs/draw.ts";
 export type {
   AnnotationAltText,

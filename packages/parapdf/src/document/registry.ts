@@ -359,9 +359,11 @@ function openEntry(
             if (entry.passwordRequest !== request) return;
             entry.passwordRequest = null;
             entry.nextPassword = undefined;
-            if (password !== null) entry.passwords.add(password);
-            readAnew(entry);
-            entry.state.set({ status: "loading", passwordReason: null });
+            if (!entry.signal.aborted) {
+              if (password !== null) entry.passwords.add(password);
+              readAnew(entry);
+              entry.state.set({ status: "loading", passwordReason: null });
+            }
             resolve(password);
           },
         };

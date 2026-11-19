@@ -325,9 +325,10 @@ describe("Renderer failures", () => {
     const { doc, renders } = await controlledDocument();
     const renderer = new Renderer(doc, drawingsOnly);
     t.after(() => renderer.dispose());
-    mount(renderer, 0);
+    const { base } = mount(renderer, 0);
     renderer.update(input());
     await settle();
+    assert.ok(base.width * base.height > 0);
     renders[0]?.task.cancel();
     await settle();
     assert.equal(renders.length, 2);
@@ -336,6 +337,21 @@ describe("Renderer failures", () => {
     assert.equal(renderer.hasPixels(0), true);
     assert.equal(renderer.stats.failed, 0);
     assert.equal(renderer.stats.cancelled, 1);
+  });
+
+  it("releases a failed base canvas's backing store so maxCanvasPixels is freed", async (t) => {
+    t.mock.method(console, "error", () => {});
+    const { doc, renders } = await controlledDocument();
+    const renderer = new Renderer(doc, drawingsOnly);
+    t.after(() => renderer.dispose());
+    const { base } = mount(renderer, 0);
+    renderer.update(input());
+    await settle();
+    assert.ok(base.width * base.height > 0, "drawPage sized the base canvas");
+    renders[0]?.reject(new Error("broken base"));
+    await settle();
+    assert.equal(base.width * base.height, 0, "failed base canvas gives its pixels back");
+    assert.equal(base.style.visibility, "hidden");
   });
 });
 
@@ -381,6 +397,86 @@ describe("Renderer lifecycle", () => {
     renderer.update(input());
     await settle();
     assert.equal(drawings.length, 1, "nothing is drawn after");
+  });
+
+  it("settles unmounted whenEditable waiters immediately on dispose", async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const { doc } = await controlledDocument();
+    const editor = { layerEditing: { editing: false } } as AnnotationSetup["editor"];
+    const renderer = new Renderer(doc, {
+      ...drawingsOnly,
+      annotationSetup: { ...DEFAULT_ANNOTATION_SETUP, editor },
+    });
+    const waiting = renderer.whenEditable(1);
+    renderer.dispose();
+    assert.equal(await waiting, false);
+  });
+
+  it("waits for an asynchronously cancelling render to finish before starting a rotated render on the same canvas", async (t) => {
+    let finishCancel!: () => void;
+    const { session } = await openSession({ pages: [LETTER] });
+    const origPage = await session.page(0);
+    const activeCanvases = new Set<HTMLCanvasElement>();
+    let collisions = 0;
+    const tasks: { resolve(): void }[] = [];
+    session.page = () =>
+      Promise.resolve({
+        ...origPage,
+        render(params: {
+          canvas: HTMLCanvasElement;
+          viewport: { scale: number; rotation: number };
+        }) {
+          if (activeCanvases.has(params.canvas)) collisions++;
+          activeCanvases.add(params.canvas);
+          let resolve!: () => void;
+          let reject!: (error: Error) => void;
+          const promise = new Promise<void>((done, fail) => {
+            resolve = () => {
+              activeCanvases.delete(params.canvas);
+              done();
+            };
+            reject = (err) => {
+              activeCanvases.delete(params.canvas);
+              fail(err);
+            };
+          });
+          tasks.push({ resolve });
+          return {
+            promise,
+            cancel() {
+              finishCancel = () => {
+                const err = new Error("cancelled");
+                err.name = "RenderingCancelledException";
+                reject(err);
+              };
+            },
+          };
+        },
+      } as never);
+    const renderer = new Renderer(session, { ...drawingsOnly, maxConcurrent: 2 });
+    t.after(() => renderer.dispose());
+    mount(renderer, 0);
+    renderer.update(input());
+    await settle();
+    assert.equal(tasks.length, 1);
+
+    renderer.rotate(90);
+    renderer.update(turned());
+    await settle();
+    assert.equal(
+      tasks.length,
+      1,
+      "does not start rotated render while cancelled task still owns canvas",
+    );
+    assert.equal(collisions, 0);
+
+    finishCancel();
+    await settle();
+    assert.equal(tasks.length, 2, "starts rotated render once cancelled task settles");
+    assert.equal(collisions, 0);
+    tasks[1]?.resolve();
+    await settle();
+    assert.equal(renderer.hasPixels(0), true);
   });
 });
 

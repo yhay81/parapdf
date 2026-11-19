@@ -237,7 +237,7 @@ export function bindAnnotationTool(
     if (controlled !== undefined) {
       if (justOpened) {
         reported = controlled;
-        if (current.tool !== controlled) void slot.editing?.setTool(controlled);
+        if (current.tool !== controlled) void slot.editing?.setTool(controlled).catch(() => {});
         return;
       }
       const last = reported ?? current.tool;
@@ -258,7 +258,7 @@ export function bindAnnotationTool(
     ) {
       appliedDefaultSession = viewer.session;
       reported = initial;
-      void slot.editing?.setTool(initial);
+      void slot.editing?.setTool(initial).catch(() => {});
       return;
     }
     const last = reported ?? "none";
@@ -277,7 +277,7 @@ export function bindAnnotationTool(
       reported = tool;
       const current = slot.editing?.store.get();
       if (current && current.state !== null && current.tool !== tool) {
-        void slot.editing?.setTool(tool);
+        void slot.editing?.setTool(tool).catch(() => {});
       }
     },
     disconnect: unsubscribe,

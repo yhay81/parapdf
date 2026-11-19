@@ -250,4 +250,53 @@ describe("DomLayers", () => {
     layers.rotate(180);
     assert.deepEqual(built[0]?.updates.at(-1), [1, 180]);
   });
+
+  it("applies a zoom that changed while an editor layer was built, settles failed whenEditable immediately, and does not starve when links is unset", async (t) => {
+    t.mock.method(console, "error", () => {});
+    const { session } = await openSession({ pages: [LETTER, LETTER] });
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const fake = fakeEditor();
+    const stats: DomLayerStats = {
+      text: 0,
+      textUpdates: 0,
+      annotations: 0,
+      editors: 0,
+      cancelled: 0,
+      failed: 0,
+    };
+    const layers = new DomLayers(
+      session,
+      { annotationSetup: { ...DEFAULT_ANNOTATION_SETUP, editor: fake.editor } },
+      stats,
+      () => false,
+    );
+    // `annotations: true` creates an annotation container while `links` is omitted.
+    layers.attach(0, mountPage(fakeHost(), { text: false, annotations: true, editor: true }));
+    layers.attach(1, mountPage(fakeHost(), { text: false, annotations: true, editor: true }));
+    layers.update(view(0, 1));
+    const editable0 = layers.whenEditable(0);
+    const editable1 = layers.whenEditable(1);
+    layers.schedule();
+    t.mock.timers.tick(16);
+    await settle();
+    assert.equal(fake.layers.length, 1, "missing links handler does not starve editor layers");
+
+    // Zoom changes from 1 to 2.5 and rotates to 90 while page 0's editor layer is building.
+    layers.update({
+      ...view(0, 1, true, 90),
+      layout: computeLayout([LETTER, LETTER], 2.5, { gap: 10, rotation: 90 }),
+    });
+    fake.layers[0]?.build();
+    await settle();
+    assert.equal(await editable0, true);
+    assert.deepEqual(fake.layers[0]?.updates, [[2.5, 90]]);
+
+    // Page 1's editor layer fails permanently: whenEditable settles false immediately without waiting 10s.
+    t.mock.timers.tick(16);
+    await settle();
+    fake.layers[1]?.fail(new Error("broken editor layer"));
+    await settle();
+    assert.equal(await editable1, false);
+    assert.equal(await layers.whenEditable(1), false);
+  });
 });

@@ -163,6 +163,10 @@ describe("getText", () => {
     assert.equal(await read({ to: 0 }), "One\ntwo");
     assert.equal(await read({ from: -3, to: 99 }), "One\ntwo\n\nThree\nfour\n\nFive");
     assert.equal(await read({ from: 2, to: 1 }), "");
+    assert.deepEqual(await getText(session, { from: 5, to: 10 }), { text: "", pages: [] });
+    assert.deepEqual(await getText(session, { from: -5, to: -1 }), { text: "", pages: [] });
+    assert.deepEqual(await getText(session, { from: Number.NaN }), { text: "", pages: [] });
+    assert.equal(await read({ from: 1.7, to: 1.9 }), "Three\nfour");
     // From "two" on the first page to before "four" on the second.
     const from = { pageIndex: 0, item: 1, offset: 0 };
     const to = { pageIndex: 1, item: 1, offset: 0 };
@@ -171,6 +175,10 @@ describe("getText", () => {
       await read({ from: { pageIndex: 1, item: 0, offset: 2 }, to: 1, lineBreaks: "join" }),
       "ree four",
     );
+
+    const emptyDoc = await open([]);
+    assert.deepEqual(await getText(emptyDoc.session), { text: "", pages: [] });
+    assert.deepEqual(emptyDoc.textsRead, []);
   });
 
   it("asks pdf.js for a few pages ahead, none past the end, and parses each once", async () => {

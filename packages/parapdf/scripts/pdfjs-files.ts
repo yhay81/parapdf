@@ -155,8 +155,8 @@ export const pdfjsWorkerUrl = (): URL => ${urlExpression("pdf.worker.js", "", "e
 
 /** The optional drawing worker, from the package or its copy under assetBase. */
 export const pdfjsRendererUrl = (assetBase?: string): URL =>
-  assetBase
-    ? new URL("pdf.renderer.js", assetBase)
+  assetBase !== undefined
+    ? new URL("pdf.renderer.js", assetBase.endsWith("/") ? assetBase : \`\${assetBase}/\`)
     : new URL("../../pdfjs/pdf.renderer.js", import.meta.url);
 
 /**
@@ -219,14 +219,14 @@ writeFileSync(
 
 /** The legacy build's worker script, after ParaPDF's prelude (scripts/worker-prelude.js). */
 export const pdfjsLegacyWorkerUrl = (assetBase?: string): URL =>
-  assetBase
-    ? new URL("pdf.worker.legacy.js", assetBase)
+  assetBase !== undefined
+    ? new URL("pdf.worker.legacy.js", assetBase.endsWith("/") ? assetBase : \`\${assetBase}/\`)
     : new URL("../../pdfjs/pdf.worker.legacy.js", import.meta.url);
 
 /** The legacy build's optional drawing worker. */
 export const pdfjsLegacyRendererUrl = (assetBase?: string): URL =>
-  assetBase
-    ? new URL("pdf.renderer.legacy.js", assetBase)
+  assetBase !== undefined
+    ? new URL("pdf.renderer.legacy.js", assetBase.endsWith("/") ? assetBase : \`\${assetBase}/\`)
     : new URL("../../pdfjs/pdf.renderer.legacy.js", import.meta.url);
 `,
 );

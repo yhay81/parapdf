@@ -338,10 +338,7 @@ export class Renderer {
   rotate(rotation: Rotation): void {
     this.#epoch++;
     for (const slot of this.#slots.values()) {
-      if (slot.job) {
-        slot.job.task.cancel();
-        slot.job = undefined;
-      }
+      slot.job?.task.cancel();
       slot.baseScale = 0;
       release(slot.elements.base);
       this.#clearDetail(slot);
@@ -349,7 +346,7 @@ export class Renderer {
     this.#layers.rotate(rotation);
     // Kept canvases show the old rotation.
     this.#kept.clear();
-    // The next update() brings the turned layout and starts the new drawings.
+    // Cancelled jobs free their slots in finally(); the next update() brings the turned layout.
   }
 
   /**
@@ -409,6 +406,7 @@ export class Renderer {
     // Closing pages keep nothing.
     this.#kept.close();
     for (const index of [...this.#slots.keys()]) this.detach(index);
+    this.#layers.dispose();
     for (const job of this.#extras.splice(0)) {
       job.cancelled = true;
       job.task?.cancel();
@@ -731,11 +729,13 @@ export class Renderer {
               };
             }
           }
-          if (layer !== "detail" || !current()) return;
-          if (intoSpare) {
+          if (this.#slots.get(slot.index) !== slot || slot.job?.task !== task) return;
+          if (layer === "base") {
+            if (slot.baseScale === 0) release(canvas);
+          } else if (intoSpare) {
             // The shown detail stays; the spare's half drawing goes.
             release(canvas);
-          } else {
+          } else if (slot.detailScale === 0) {
             // Hide a half-drawn detail layer so the base shows through.
             this.#clearDetail(slot);
           }

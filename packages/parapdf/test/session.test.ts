@@ -583,6 +583,22 @@ describe("DocumentSession", () => {
       name: "AbortError",
     });
     assert.equal(calls.opens, 1);
+
+    // A loadingTask.destroy() that rejects during abort does not produce an unhandled rejection.
+    let rejectOpen = (_error: unknown) => {};
+    const rejectingDestroy = fakePdfjs((task) => {
+      task.destroy = () => Promise.reject(new Error("worker gone"));
+      return new Promise((_, reject) => {
+        rejectOpen = reject;
+      });
+    });
+    const aborting = new AbortController();
+    const pending = DocumentSession.open(rejectingDestroy.loader, { url: "/c.pdf" }, aborting);
+    await settle();
+    aborting.abort();
+    rejectOpen(new Error("cancelled"));
+    await assert.rejects(pending, /cancelled/);
+    await settle();
   });
 
   it("explains a worker that did not load", async () => {

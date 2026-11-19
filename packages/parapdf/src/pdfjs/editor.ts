@@ -392,21 +392,26 @@ export function createPdfjsAnnotationEditor(
     };
     toolRevision++;
     options.onToolChange(toolOf(mode));
-    void manager.updateMode(
-      mode,
-      editId ?? null,
-      true,
-      isFromKeyboard ?? false,
-      mustEnterInEditMode ?? false,
-      editComment ?? false,
-    );
+    void manager
+      .updateMode(
+        mode,
+        editId ?? null,
+        true,
+        isFromKeyboard ?? false,
+        mustEnterInEditMode ?? false,
+        editComment ?? false,
+      )
+      .catch(() => {});
   });
   eventBus.on("showannotationeditorui", ({ mode }) => {
     toolRevision++;
     options.onToolChange(toolOf(mode));
-    void manager.updateMode(mode as number).then(() => {
-      eventBus.dispatch("annotationeditormodechanged", { source: null, mode });
-    });
+    void manager
+      .updateMode(mode as number)
+      .then(() => {
+        eventBus.dispatch("annotationeditormodechanged", { source: null, mode });
+      })
+      .catch(() => {});
   });
 
   /** A signature waiting for the editor that `addSignature` asked pdf.js to create. */
@@ -855,8 +860,12 @@ export function createPdfjsAnnotationEditor(
       if (!decoded) {
         // A download may finish after the viewer closed; release the cache
         // reference then, without keeping addImage() pending for its response.
-        if (destroyed)
-          void loading.then((image) => image && manager.imageManager.deleteId(image.id));
+        if (destroyed) {
+          void loading.then(
+            (image) => image && manager.imageManager.deleteId(image.id),
+            () => {},
+          );
+        }
         return false;
       }
       try {
@@ -1099,6 +1108,7 @@ export function createPdfjsAnnotationEditor(
         const drawLayer = new pdfjs.DrawLayer({ pageIndex });
         drawLayer.setParent(drawings);
         const observer = labelElements(container, options.labels);
+        let layerScale = cssScale;
         let layerRotation = turn;
         const layer = new pdfjs.AnnotationEditorLayer({
           uiManager: manager as never,
@@ -1137,7 +1147,8 @@ export function createPdfjsAnnotationEditor(
         layers.set(pageIndex, { layer, destroy });
         handle = {
           update(nextScale, nextRotation) {
-            if (removed || nextRotation === layerRotation) return;
+            if (removed || (nextScale === layerScale && nextRotation === layerRotation)) return;
+            layerScale = nextScale;
             layerRotation = nextRotation;
             layer.update({ viewport: pageViewport(page, nextScale, nextRotation) });
           },

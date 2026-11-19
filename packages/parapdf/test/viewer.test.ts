@@ -186,18 +186,35 @@ describe("a viewer's viewport", () => {
   const release: (() => void)[] = [];
   let resized: (() => void)[] = [];
   let frames: (() => void)[] = [];
+  let cancelledFrames: number[] = [];
 
   beforeEach(() => {
     mock.timers.enable({ apis: ["setTimeout"] });
     resized = [];
     frames = [];
+    cancelledFrames = [];
+    let nextFrameId = 0;
+    const byId = new Map<number, () => void>();
     Object.assign(globalThis, {
       window: {
         devicePixelRatio: 1,
         setTimeout: (callback: () => void, delay: number) => setTimeout(callback, delay),
       },
-      requestAnimationFrame: (callback: () => void) => frames.push(callback),
-      cancelAnimationFrame: () => {},
+      requestAnimationFrame: (callback: () => void) => {
+        const id = ++nextFrameId;
+        byId.set(id, callback);
+        frames.push(callback);
+        return id;
+      },
+      cancelAnimationFrame: (id: number) => {
+        cancelledFrames.push(id);
+        const cb = byId.get(id);
+        byId.delete(id);
+        if (cb) {
+          const index = frames.indexOf(cb);
+          if (index !== -1) frames.splice(index, 1);
+        }
+      },
       ResizeObserver: class {
         constructor(callback: () => void) {
           resized.push(callback);
@@ -265,9 +282,15 @@ describe("a viewer's viewport", () => {
   }
 
   /** Attach `scroller` to `viewer`'s viewport until the test ends. */
-  function attach(viewer: ViewerController, scroller: Scroller): () => void {
+  function attach(
+    viewer: ViewerController,
+    scroller: Scroller,
+    content: { style: Record<string, string>; classList: { remove: () => void } } = {
+      style: {},
+      classList: { remove: () => {} },
+    },
+  ): () => void {
     scroller.viewer = viewer;
-    const content = { style: {}, classList: { remove: () => {} } };
     const detach = viewer.attachViewport(
       scroller as unknown as HTMLElement,
       content as unknown as HTMLElement,
@@ -1002,5 +1025,56 @@ describe("a viewer's viewport", () => {
 
     unsubscribe();
     releaseWarmup();
+  });
+
+  it("batches fit-page resizes, cancels superseded animation frames, and clears transient state on stop", async () => {
+    const viewer = new ViewerController();
+    viewer.configure({ initialScale: "fit-page", initialPage: 2 });
+    const scroller = new Scroller();
+    const content: { style: Record<string, string>; classList: { remove: () => void } } = {
+      style: {},
+      classList: { remove: () => {} },
+    };
+    attach(viewer, scroller, content);
+    const document = fakeDocument({ pages: Array.from({ length: 5 }, () => LETTER) });
+    const shown = show(
+      viewer,
+      { url: "/fit-page.pdf" },
+      fakePdfjs(async () => document.proxy).loader,
+    );
+    release.push(shown.close);
+    await settle();
+    for (const frame of frames.splice(0)) frame();
+
+    let storePublishes = 0;
+    const viewStates: ViewState[] = [];
+    const unsubStore = viewer.store.subscribe(() => storePublishes++);
+    const unsubView = viewer.onViewStateChange((view) => viewStates.push(view));
+
+    // Resizing in fit-page mode runs #zoomTo + goToPage inside one batchView/store.batch.
+    resize(scroller, 1200, 1000);
+    assert.equal(storePublishes, 1, "fit-page resize publishes store state once");
+    assert.equal(viewStates.length, 1, "fit-page resize emits onViewStateChange once");
+    assert.equal(viewer.store.get().currentPage, 2);
+    unsubStore();
+    unsubView();
+
+    // A scroll schedules an animation frame; a direct synchronous update cancels it.
+    cancelledFrames.length = 0;
+    scroller.scrollTop += 20;
+    scroller.dispatchEvent(new Event("scroll"));
+    assert.equal(frames.length, 1);
+    viewer.goToPage(3);
+    assert.equal(cancelledFrames.length, 1);
+    assert.equal(frames.length, 0);
+
+    // Page scrollMode sets overflow on content; closing the document resets it and cancels pending frames.
+    viewer.setScrollMode("page");
+    assert.equal(content.style.overflow, "clip");
+    scroller.dispatchEvent(new Event("scroll"));
+    assert.equal(frames.length, 1);
+    shown.close();
+    assert.equal(content.style.overflow, "");
+    assert.equal(frames.length, 0);
   });
 });

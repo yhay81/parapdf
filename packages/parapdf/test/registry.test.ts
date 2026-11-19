@@ -640,9 +640,15 @@ describe("acquireSession with passwords and progress", () => {
     const { loader, calls } = lockedPdfjs();
     const lease = acquireSession(loader, { url: "/locked.pdf" });
     await settle();
+    assert.equal(lease.state.get().status, "password");
+    const statuses: string[] = [];
+    lease.state.subscribe((keys) => {
+      if (!keys || keys.has("status")) statuses.push(lease.state.get().status);
+    });
     lease.release();
     mock.timers.tick(1000);
     await settle();
+    assert.deepEqual(statuses, [], "closing an aborted password prompt publishes no loading state");
     assert.equal(calls.destroys, 1, "pdf.js's loading task is destroyed");
     await assert.rejects(lease.session, /destroyed/);
     // The next viewer opens it again.

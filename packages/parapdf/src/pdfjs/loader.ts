@@ -128,10 +128,23 @@ const canonical = (value: unknown): string =>
       : item,
   );
 
+const normalizeBase = (base: string | undefined): string | undefined =>
+  base === undefined ? undefined : base === "" ? "./" : base.endsWith("/") ? base : `${base}/`;
+
 /** Whether two configurations load pdf.js alike; loaders compare by presence. */
 const sameConfig = (a: PdfjsConfig, b: PdfjsConfig): boolean =>
-  canonical({ ...a, pdfjs: Boolean(a.pdfjs), build: a.build?.name }) ===
-  canonical({ ...b, pdfjs: Boolean(b.pdfjs), build: b.build?.name });
+  canonical({
+    ...a,
+    assetBase: normalizeBase(a.assetBase),
+    pdfjs: Boolean(a.pdfjs),
+    build: a.build?.name,
+  }) ===
+  canonical({
+    ...b,
+    assetBase: normalizeBase(b.assetBase),
+    pdfjs: Boolean(b.pdfjs),
+    build: b.build?.name,
+  });
 
 /**
  * Sets how ParaPDF loads pdf.js. Call it before the first document opens;
@@ -191,7 +204,8 @@ export function documentRequestMode(
 const isWebKit = (userAgent: string): boolean =>
   /\bAppleWebKit\//.test(userAgent) && !/(?:Chrome|Chromium)\//.test(userAgent);
 
-const absolute = (url: URL | string): string => new URL(String(url), document.baseURI).href;
+const absolute = (url: URL | string): string =>
+  new URL(String(url), typeof document === "undefined" ? undefined : document.baseURI).href;
 
 /**
  * A shipped file's URL without the query that keeps bundlers from inlining
@@ -248,8 +262,19 @@ const TRANSPARENT_ICONS = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/20
  * starts those itself, through a blob: URL.
  */
 function startWorker(url: string): Promise<Worker | null> {
-  if (new URL(url).origin !== location.origin) return Promise.resolve(null);
-  const worker = new Worker(url, { type: "module" });
+  if (typeof Worker !== "function" || typeof location === "undefined") {
+    return Promise.resolve(null);
+  }
+  let worker: Worker;
+  try {
+    const parsed = new URL(url);
+    if (location.origin === "null" || parsed.origin !== location.origin) {
+      return Promise.resolve(null);
+    }
+    worker = new Worker(url, { type: "module" });
+  } catch {
+    return Promise.resolve(null);
+  }
   return new Promise((resolve) => {
     // pdf.js's worker posts "ready" when its script has run.
     worker.addEventListener("message", () => resolve(worker), { once: true });
@@ -265,7 +290,7 @@ function startWorker(url: string): Promise<Worker | null> {
 }
 
 async function load(options: PdfjsConfig): Promise<LoadedPdfjs> {
-  const { assetBase } = options;
+  const assetBase = normalizeBase(options.assetBase);
   const shipped = assetBase === undefined && options.workerSrc === undefined;
   const pdfjsLoading = options.pdfjs?.() ?? options.build?.pdfjs() ?? import("pdfjs-dist");
   // The shipped worker's prelude routes its requests for the shipped files
@@ -275,81 +300,88 @@ async function load(options: PdfjsConfig): Promise<LoadedPdfjs> {
   let workerSrc: string;
   let workerLocation: string;
   let started: Promise<Worker | null> = Promise.resolve(null);
-  if (shipped) {
-    workerLocation = absolute((options.build?.workerUrl ?? pdfjsWorkerUrl)());
-    const urls = Object.entries(fileUrls()).map(([name, url]) => [name, shippedUrl(url)]);
-    workerSrc = `${workerLocation}#${encodeURIComponent(JSON.stringify(Object.fromEntries(urls)))}`;
-    started = startWorker(workerSrc);
-  } else {
-    workerSrc =
-      options.workerSrc ??
-      (options.build && assetBase !== undefined
-        ? options.build.workerUrl(absolute(assetBase)).href
-        : `${assetBase}pdf.worker.js`);
-    workerLocation = workerSrc;
+  try {
+    if (shipped) {
+      workerLocation = absolute((options.build?.workerUrl ?? pdfjsWorkerUrl)());
+      const urls = Object.entries(fileUrls()).map(([name, url]) => [name, shippedUrl(url)]);
+      workerSrc = `${workerLocation}#${encodeURIComponent(JSON.stringify(Object.fromEntries(urls)))}`;
+      started = startWorker(workerSrc);
+    } else {
+      workerSrc =
+        options.workerSrc ??
+        (options.build && assetBase !== undefined
+          ? options.build.workerUrl(absolute(assetBase)).href
+          : `${assetBase ?? ""}pdf.worker.js`);
+      workerLocation = workerSrc;
+    }
+    // Without a started worker, pdf.js starts its own from workerSrc, and
+    // parses on the page when that fails too.
+    const [pdfjs, port] = await Promise.all([pdfjsLoading, started]);
+    pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
+    if (options.rendererSrc) {
+      pdfjs.GlobalWorkerOptions.rendererSrc =
+        options.rendererSrc === true
+          ? (options.build?.rendererUrl ?? pdfjsRendererUrl)(
+              assetBase === undefined ? undefined : absolute(assetBase),
+            ).href
+          : options.rendererSrc;
+    }
+    const documentOptions: PdfjsDocumentOptions = {
+      ...(shipped ? SHIPPED_FILE_OPTIONS : {}),
+      ...options.documentOptions,
+    };
+    const imageResourcesPath =
+      options.imageResourcesPath ??
+      (assetBase !== undefined ? `${assetBase}web/images/` : TRANSPARENT_ICONS);
+    return {
+      pdfjs,
+      // Started now, while React mounts, instead of when the first document
+      // opens. pdf.js takes any Worker as its port; its typings infer the
+      // type from the default, null.
+      worker: new pdfjs.PDFWorker(
+        (port ? { port } : {}) as ConstructorParameters<typeof pdfjs.PDFWorker>[0],
+      ),
+      documentParameters: {
+        enableHWA: options.enableHWA ?? true,
+        ...(assetBase !== undefined
+          ? {
+              cMapUrl: `${assetBase}cmaps/`,
+              cMapPacked: true,
+              standardFontDataUrl: `${assetBase}standard_fonts/`,
+              wasmUrl: `${assetBase}wasm/`,
+              iccUrl: `${assetBase}iccs/`,
+            }
+          : {}),
+        ...documentOptions,
+      },
+      imageResourcesPath,
+      // The icons do not come with the worker: one of the application's own
+      // shows those the package ships, as the scripts' files are.
+      iconUrls:
+        assetBase === undefined && imageResourcesPath === TRANSPARENT_ICONS
+          ? Object.fromEntries(
+              Object.entries(iconUrls()).map(([name, url]) => [name, shippedUrl(url)]),
+            )
+          : null,
+      workerLocation,
+      scriptingUrls:
+        assetBase !== undefined
+          ? () => ({
+              module: `${assetBase}quickjs.js`,
+              quickjs: `${assetBase}wasm/quickjs-eval.js`,
+              wasm: `${assetBase}wasm/quickjs-eval.wasm`,
+            })
+          : () => {
+              const { module, quickjs, wasm } = scriptingUrls();
+              return {
+                module: shippedUrl(module),
+                quickjs: shippedUrl(quickjs),
+                wasm: shippedUrl(wasm),
+              };
+            },
+    };
+  } catch (error) {
+    void started.then((worker) => worker?.terminate());
+    throw error;
   }
-  // Without a started worker, pdf.js starts its own from workerSrc, and
-  // parses on the page when that fails too.
-  const [pdfjs, port] = await Promise.all([pdfjsLoading, started]);
-  pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
-  if (options.rendererSrc) {
-    pdfjs.GlobalWorkerOptions.rendererSrc =
-      options.rendererSrc === true
-        ? (options.build?.rendererUrl ?? pdfjsRendererUrl)(
-            assetBase === undefined ? undefined : absolute(assetBase),
-          ).href
-        : options.rendererSrc;
-  }
-  const documentOptions: PdfjsDocumentOptions = {
-    ...(shipped ? SHIPPED_FILE_OPTIONS : {}),
-    ...options.documentOptions,
-  };
-  const imageResourcesPath =
-    options.imageResourcesPath ?? (assetBase ? `${assetBase}web/images/` : TRANSPARENT_ICONS);
-  return {
-    pdfjs,
-    // Started now, while React mounts, instead of when the first document
-    // opens. pdf.js takes any Worker as its port; its typings infer the
-    // type from the default, null.
-    worker: new pdfjs.PDFWorker(
-      (port ? { port } : {}) as ConstructorParameters<typeof pdfjs.PDFWorker>[0],
-    ),
-    documentParameters: {
-      enableHWA: options.enableHWA ?? true,
-      ...(assetBase
-        ? {
-            cMapUrl: `${assetBase}cmaps/`,
-            cMapPacked: true,
-            standardFontDataUrl: `${assetBase}standard_fonts/`,
-            wasmUrl: `${assetBase}wasm/`,
-            iccUrl: `${assetBase}iccs/`,
-          }
-        : {}),
-      ...documentOptions,
-    },
-    imageResourcesPath,
-    // The icons do not come with the worker: one of the application's own
-    // shows those the package ships, as the scripts' files are.
-    iconUrls:
-      assetBase === undefined && imageResourcesPath === TRANSPARENT_ICONS
-        ? Object.fromEntries(
-            Object.entries(iconUrls()).map(([name, url]) => [name, shippedUrl(url)]),
-          )
-        : null,
-    workerLocation,
-    scriptingUrls: assetBase
-      ? () => ({
-          module: `${assetBase}quickjs.js`,
-          quickjs: `${assetBase}wasm/quickjs-eval.js`,
-          wasm: `${assetBase}wasm/quickjs-eval.wasm`,
-        })
-      : () => {
-          const { module, quickjs, wasm } = scriptingUrls();
-          return {
-            module: shippedUrl(module),
-            quickjs: shippedUrl(quickjs),
-            wasm: shippedUrl(wasm),
-          };
-        },
-  };
 }

@@ -115,6 +115,7 @@ export function createFormAccess(
       for (const { page } of widgets) if (typeof page === "number" && page >= 0) pages.add(page);
     }
     const entries = new Map<string, FieldEntry>();
+    const widgetsById = new Map<string, FieldEntry>();
     for (const pageIndex of [...pages].sort((a, b) => a - b)) {
       const page = await getPage(pageIndex);
       const viewport = page.getViewport({ scale: 1 });
@@ -173,13 +174,21 @@ export function createFormAccess(
               : entry.field.exportValues,
           widgets: [...entry.field.widgets, { id: data.id, pageIndex, rect }],
         };
-        byWidget.set(data.id, entry);
+        widgetsById.set(data.id, entry);
       }
     }
+    byWidget.clear();
+    for (const [id, entry] of widgetsById) byWidget.set(id, entry);
     return entries;
   };
   const loaded = () => {
-    fields ??= load();
+    if (!fields) {
+      const started = load().catch((error: unknown) => {
+        if (fields === started) fields = undefined;
+        throw error;
+      });
+      fields = started;
+    }
     return fields;
   };
 

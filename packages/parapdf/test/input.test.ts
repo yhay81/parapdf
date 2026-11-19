@@ -11,6 +11,7 @@ globalThis.Element ??= class {} as typeof Element;
 function fakeScroller(top = 0) {
   const listeners = new Map<string, (event: unknown) => void>();
   const classes = new Set<string>();
+  let scrollTos = 0;
   const scroller = {
     scrollTop: top,
     scrollLeft: 0,
@@ -28,6 +29,7 @@ function fakeScroller(top = 0) {
       listeners.set(type, listener),
     removeEventListener: (type: string) => listeners.delete(type),
     scrollTo(left: number, top: number) {
+      scrollTos++;
       this.scrollLeft = Math.min(left, this.scrollWidth - this.clientWidth);
       this.scrollTop = Math.min(top, this.scrollHeight - this.clientHeight);
     },
@@ -39,7 +41,7 @@ function fakeScroller(top = 0) {
     listeners.get(type)?.({ preventDefault: () => (prevented = true), ...event });
     return prevented;
   };
-  return { scroller, listeners, classes, fire };
+  return { scroller, listeners, classes, fire, scrollTos: () => scrollTos };
 }
 
 function setUp(
@@ -141,6 +143,33 @@ describe("ViewerInput", () => {
     })();
     assert.equal(fire("keydown", { key: "Home", target: nonControl }), true);
     assert.deepEqual(calls, ["page 0"]);
+  });
+
+  it("probes scroll edges in page mode only on forward navigation keys", () => {
+    const ltr = setUp({ tool: "select", scrollMode: "page" }, 500);
+    for (const event of [
+      { key: "Shift" },
+      { key: "Tab" },
+      { key: "Escape" },
+      { key: "a" },
+      { key: "f", ctrlKey: true },
+      { key: "Home" },
+      { key: "End" },
+      { key: "PageUp" },
+      { key: "ArrowUp" },
+      { key: " ", shiftKey: true },
+      { key: "ArrowLeft" },
+    ]) {
+      ltr.fire("keydown", event);
+    }
+    assert.equal(ltr.scrollTos(), 0);
+
+    const rtl = setUp({ tool: "select", scrollMode: "page", direction: "rtl" }, 500);
+    rtl.fire("keydown", { key: "ArrowLeft" });
+    assert.equal(rtl.scrollTos(), 0);
+
+    ltr.fire("keydown", { key: "PageDown" });
+    assert.ok(ltr.scrollTos() > 0);
   });
 
   it("scrolls with the hand tool's drag and lets go when the tool changes", () => {

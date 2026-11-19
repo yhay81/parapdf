@@ -232,7 +232,7 @@ outside them when given one; those that take none read the nearest
 | `useComments()` | The file's comments in page order, empty when there are none (see [Annotations](/guides/annotations/#the-files-comments)). |
 | `useLayers()` | The layers (optional content) and which show, following `setLayerVisible()` in any viewer of the document. |
 | `useFormFields()` | The form fields with their values as first read; `getFormFields()` reads them again (see [Forms](/guides/forms/)). |
-| `useInitialView()` | How the document asks to be shown: its /OpenAction destination, /PageLayout, and /PageMode; null when it cannot be read (see [Keeping the view](/guides/view-state/)). |
+| `useInitialView()` | How the document asks to be shown (`PdfInitialView`): its /OpenAction `destination` (`ResolvedDestination \| null`), /PageLayout, and /PageMode; null when it cannot be read (see [Keeping the view](/guides/view-state/)). |
 | `useSave(session?)`, `useSave(selector, session?)` | `{ save, download, saving }` for the nearest `PdfDocument`'s `PdfSession` (or `session`), shared across callers, tracking read fields or comparing `selector`'s result shallowly so components reading only `save` or `download` never re-render while `saving` changes (see [Forms, printing, and saving](/guides/forms/)). |
 | `usePrint(viewer?)`, `usePrint(selector, viewer?)` | `{ print, printing, progress, cancel }` shared across callers of the viewer, tracking `{ done, total }` while pages render for printing, tracking read fields or comparing `selector`'s result shallowly, and cancelling cleanly via `cancel()` or when the last `usePrint()` holder unmounts (see [Forms, printing, and saving](/guides/forms/)). |
 | `usePermits(what, viewer?)`, `usePermits(viewer?)` | Whether the viewer allows `what` (`"print"`, `"copy"`, `"annotate"`, or `"fillForms"`), or the `PermitsState` object tracking read fields; always true while `<PdfPermissions />` is not mounted, and updating automatically as documents open or close and `<PdfPermissions />` mounts or unmounts (see [Permissions](/guides/permissions/)). |
@@ -283,6 +283,7 @@ functions are tree-shaken out of your bundle.
 | `legacyBuild` | From `parapdf/legacy`: pdf.js's legacy build, for `configurePdfjs({ build })`. |
 
 Every type the API uses is exported as well, such as `PdfViewerProps`,
-`PdfViewProps`, `Zoom`, `Viewer`, `ViewerState`, `DocumentState`,
-`PdfSession`, `ViewState`, `PdfSource`, `SearchMatch`, `TextMatch`,
+`PdfViewProps`, `Zoom`, `Viewer`, `ViewerState`, `Layout`, `PageSize`,
+`DocumentState`, `PdfSession`, `ViewState`, `PdfSource`,
+`ResolvedDestination`, `DestinationView`, `SearchMatch`, `TextMatch`,
 `FindTextOptions`, `PdfRect`, `FormField`, and `SavedAnnotation`.

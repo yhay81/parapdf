@@ -104,6 +104,13 @@ export class TextSelectionTracker {
 
   /** Stops tracking a text layer before its content is removed. */
   remove(layer: HTMLElement): void {
+    if (
+      this.#previousRange &&
+      (layer.contains(this.#previousRange.startContainer) ||
+        layer.contains(this.#previousRange.endContainer))
+    ) {
+      this.#previousRange = null;
+    }
     this.#layers.delete(layer);
     if (this.#layers.size === 0) this.#stop();
   }
@@ -143,6 +150,7 @@ export class TextSelectionTracker {
     if (layer.lastChild !== end) layer.append(end);
     end.style.width = "";
     end.style.height = "";
+    end.style.userSelect = "";
   }
 
   #resetAll(): void {
@@ -364,6 +372,7 @@ export class TextSelectionTracker {
     if (this.#anchorPending) return;
     const selection = document.getSelection();
     if (!selection || selection.rangeCount === 0) {
+      this.#previousRange = null;
       this.#resetAll();
       return;
     }
@@ -377,7 +386,14 @@ export class TextSelectionTracker {
     // Move `.endOfContent` next to the end of the selection that is changing,
     // so a jump covers at most the run being dragged over.
     const range = selection.getRangeAt(0);
-    const previous = this.#previousRange;
+    const saved = this.#previousRange;
+    const previous =
+      saved?.startContainer.isConnected &&
+      saved.endContainer.isConnected &&
+      saved.startContainer.getRootNode() === range.startContainer.getRootNode()
+        ? saved
+        : null;
+    if (saved !== null && previous === null) this.#previousRange = null;
     // A pointer move marks the layers before its selectionchange comes, so the
     // same selection may come twice; unchanged, it would read as a change of
     // its start.

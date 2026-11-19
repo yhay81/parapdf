@@ -114,6 +114,21 @@ describe("LayerState", () => {
     layers.setVisible("a", true);
     assert.equal(layers.changed, true);
     assert.equal(heard, 0);
+
+    const active = new AbortController();
+    let removed = 0;
+    const origRemove = active.signal.removeEventListener.bind(active.signal);
+    active.signal.removeEventListener = ((
+      ...args: Parameters<AbortSignal["removeEventListener"]>
+    ) => {
+      if (args[0] === "abort") removed++;
+      return origRemove(...args);
+    }) as AbortSignal["removeEventListener"];
+    const unsubscribe = layers.subscribe(() => heard++, active.signal);
+    unsubscribe();
+    assert.equal(removed, 1, "manual unsubscribe detaches the abort listener from signal");
+    layers.setVisible("a", false);
+    assert.equal(heard, 0);
   });
 
   it("replays every change in order on each new configuration for printing", async () => {

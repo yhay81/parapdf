@@ -1,6 +1,5 @@
 import { type PdfSession, sessionControllerOf } from "../../document/pdf-session.ts";
 import type { PageText } from "../../pdfjs/text.ts";
-import { clamp } from "../../view/layout.ts";
 import { matchRects, pageIndex } from "../search/page-index.ts";
 import {
   findMatches,
@@ -78,11 +77,18 @@ export async function getText(
   if (!doc || work.aborted) throw new Error("No document is open");
   const { from, to, lineBreaks = "keep", signal } = options;
   signal?.throwIfAborted();
+  if (doc.pageCount === 0) return { text: "", pages: [] };
   const lastPage = doc.pageCount - 1;
   const start = typeof from === "number" ? { pageIndex: from } : from;
   const end = typeof to === "number" ? { pageIndex: to } : to;
-  const first = clamp(start?.pageIndex ?? 0, 0, lastPage);
-  const last = clamp(end?.pageIndex ?? lastPage, 0, lastPage);
+  const startPage = start?.pageIndex ?? 0;
+  const endPage = end?.pageIndex ?? lastPage;
+  if (Number.isNaN(startPage) || Number.isNaN(endPage)) return { text: "", pages: [] };
+  const truncStart = Math.trunc(startPage);
+  const truncEnd = Math.trunc(endPage);
+  const first = Math.max(0, truncStart);
+  const last = Math.min(lastPage, truncEnd);
+  if (first > last) return { text: "", pages: [] };
   // Pages are asked for ahead of the one being read: the worker parses
   // them one after another while the main thread joins the text.
   const requested = new Map<number, Promise<PageText>>();
@@ -101,8 +107,8 @@ export async function getText(
     requested.delete(pageIndex);
     signal?.throwIfAborted();
     if (work.aborted || !content) throw new Error("The document was closed");
-    const startsHere = start && "item" in start && start.pageIndex === pageIndex;
-    const endsHere = end && "item" in end && end.pageIndex === pageIndex;
+    const startsHere = start && "item" in start && truncStart === pageIndex;
+    const endsHere = end && "item" in end && truncEnd === pageIndex;
     const read = pageText(content, lineBreaks, startsHere ? start : null, endsHere ? end : null);
     if (pages.length > 0) text += PAGE_SEPARATOR;
     pages.push({ pageIndex, text: read, offset: text.length });

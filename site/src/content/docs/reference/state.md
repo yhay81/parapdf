@@ -38,7 +38,7 @@ and zoom gestures change nothing in it per frame.
 
 | Field | Meaning |
 |---|---|
-| `layout` | The pages laid out at the current zoom, null until a document shows: their sizes in PDF points (`layout.sizes`), boxes, rows, and the content's size. |
+| `layout` | The pages laid out at the current zoom (`Layout`), null until a document shows: their sizes in PDF points (`layout.sizes`, `readonly PageSize[]`), boxes, rows, and the content's size. |
 | `first`, `last` | The mounted pages: those in view and `overscan` beyond each edge. |
 | `currentPage` | The zero-based page being read: the one nearest the viewport's center, except that the current page stays current while all of it is in view, as in pdf.js. `goToPage()`, links, `back()`, and search make the page they show current. |
 | `scale` | CSS pixels per PDF point. |

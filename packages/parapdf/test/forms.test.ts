@@ -159,6 +159,23 @@ describe("form fields", () => {
     assert.equal(fieldReads(), 1);
   });
 
+  it("forgets a failed field read so the next call retries", async () => {
+    let attempts = 0;
+    const { session } = await openSession({
+      pages: [LETTER],
+      proxy: {
+        getFieldObjects: async () => {
+          if (++attempts === 1) throw new Error("transient read failure");
+          return null;
+        },
+      },
+    });
+    const forms = formsOf(session);
+    await assert.rejects(forms.getFormFields(), /transient read failure/);
+    assert.deepEqual(await forms.getFormFields(), []);
+    assert.equal(attempts, 2);
+  });
+
   it("gather a field's widgets from every page in page order, rectangles from the top-left", async () => {
     const pagesApart: Widget[] = [
       { ...(radios[1] as Widget), rect: [10, 20, 30, 60], page: 1 },

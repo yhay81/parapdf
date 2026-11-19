@@ -103,6 +103,7 @@ export class LayerState {
     this.#listeners.add(listener);
     const unsubscribe = () => {
       this.#listeners.delete(listener);
+      signal?.removeEventListener("abort", unsubscribe);
     };
     signal?.addEventListener("abort", unsubscribe, { once: true });
     return unsubscribe;

@@ -1017,12 +1017,29 @@ export class ViewerController implements Viewer {
     this.#gestures.drop();
     this.#input.release();
     this.#preDiverge = null;
+    this.#pendingFocus = null;
+    if (this.#focusFrame) {
+      cancelAnimationFrame(this.#focusFrame);
+      this.#focusFrame = 0;
+    }
+    if (this.#frame) {
+      cancelAnimationFrame(this.#frame);
+      this.#frame = 0;
+    }
+    if (this.#settleTimer) {
+      clearTimeout(this.#settleTimer);
+      this.#settleTimer = 0;
+    }
+    this.#scrolling.position = 0;
+    this.#scrolling.at = 0;
+    this.#scrolling.velocity = 0;
     // Whatever the viewport shows next starts with its own opening or
     // position. The old pages' dimensions and scroll offsets outlive their
     // React hosts.
     if (this.#content) {
       this.#content.style.width = "";
       this.#content.style.height = "";
+      this.#content.style.overflow = "";
     }
     if (this.#scroller) this.#scroller.scrollTo(0, 0);
     this.#fromRight = 0;
@@ -1146,6 +1163,11 @@ export class ViewerController implements Viewer {
       this.#extensions.closed(false);
       shown.savedPosition = null;
       shown.direction = null;
+      this.#pendingFocus = null;
+      if (this.#focusFrame) {
+        cancelAnimationFrame(this.#focusFrame);
+        this.#focusFrame = 0;
+      }
       this.#scroller?.scrollTo(0, 0);
       this.#firstPaintAt = null;
       this.#lastViewState = null;
@@ -1381,9 +1403,10 @@ export class ViewerController implements Viewer {
       const document = host.ownerDocument;
       const source = document.activeElement;
       const signal = this.signal;
-      if (source && host.contains(source)) {
+      const showing = this.#shown;
+      if (source && host.contains(source) && showing && this.store.get().layout) {
         queueMicrotask(() => {
-          if (signal.aborted) return;
+          if (signal.aborted || this.#shown !== showing || !this.store.get().layout) return;
           const active = document.activeElement;
           if (!active || active === document.body)
             this.#focusPage(this.store.get().currentPage, source);
@@ -2170,18 +2193,21 @@ export class ViewerController implements Viewer {
 
   #onResize = (): void => {
     const scroller = this.#scroller;
-    const mode = this.store.get().zoomMode;
-    if (scroller && refits(mode, scroller, this.#fittedWidth, this.#fittedHeight)) {
-      this.#gestures.finish();
-      this.#fit();
-    } else if (scroller && this.store.get().direction === "rtl") {
-      // The browser keeps the content's left edge in place; pages read from
-      // the right keep their right edge, as the viewport or a scrollbar
-      // changes. A browser that already moved them, clamping at the end of
-      // the row, scrolled to where they keep it.
-      scroller.scrollLeft = scroller.scrollWidth - scroller.clientWidth - this.#fromRight;
-    }
-    this.#rewrap();
+    if (!scroller) return;
+    this.batchView(() => {
+      const mode = this.store.get().zoomMode;
+      if (refits(mode, scroller, this.#fittedWidth, this.#fittedHeight)) {
+        this.#gestures.finish();
+        this.#fit();
+      } else if (this.store.get().direction === "rtl") {
+        // The browser keeps the content's left edge in place; pages read from
+        // the right keep their right edge, as the viewport or a scrollbar
+        // changes. A browser that already moved them, clamping at the end of
+        // the row, scrolled to where they keep it.
+        scroller.scrollLeft = scroller.scrollWidth - scroller.clientWidth - this.#fromRight;
+      }
+      this.#rewrap();
+    });
     this.#requestUpdate();
   };
 
@@ -2231,11 +2257,15 @@ export class ViewerController implements Viewer {
    */
   #onFrame = (): void => {
     this.#gestures.readTouches();
+    this.#frame = 0;
     this.#update();
   };
 
   #update = (): void => {
-    this.#frame = 0;
+    if (this.#frame) {
+      cancelAnimationFrame(this.#frame);
+      this.#frame = 0;
+    }
     const layout = this.store.get().layout;
     const scroller = this.#scroller;
     if (!layout || !scroller) return;

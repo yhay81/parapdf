@@ -76,32 +76,47 @@ export class ViewerInput {
    * and last page. Keys meant for a form field or a button stay theirs.
    */
   #pageKey(event: KeyboardEvent): void {
+    switch (event.key) {
+      case "PageDown":
+      case "ArrowDown":
+      case "PageUp":
+      case "ArrowUp":
+      case " ":
+      case "ArrowRight":
+      case "ArrowLeft":
+      case "Home":
+      case "End":
+        break;
+      default:
+        return;
+    }
     const host = this.#host;
     const scroller = host.scroller();
     const target = event.target instanceof Element ? event.target : null;
     // Arrow keys move a selected annotation.
     if (!scroller || target?.closest(CONTROLS)) return;
-    const { atTop, atBottom, atLeft, atRight } = scrollEdges(scroller);
     // → shows the page on the right: the next, or in "rtl" the previous.
     const rtl = host.state().direction === "rtl";
     let flipped = false;
     switch (event.key) {
       case "PageDown":
       case "ArrowDown":
-        flipped = atBottom && host.flip(1, "y");
+        flipped = scrollEdges(scroller).atBottom && host.flip(1, "y");
         break;
       case "PageUp":
       case "ArrowUp":
-        flipped = atTop && host.flip(-1, "y");
+        flipped = scroller.scrollTop <= 1 && host.flip(-1, "y");
         break;
       case " ":
-        flipped = event.shiftKey ? atTop && host.flip(-1, "y") : atBottom && host.flip(1, "y");
+        flipped = event.shiftKey
+          ? scroller.scrollTop <= 1 && host.flip(-1, "y")
+          : scrollEdges(scroller).atBottom && host.flip(1, "y");
         break;
       case "ArrowRight":
-        flipped = atRight && host.flip(rtl ? -1 : 1, "x");
+        flipped = scrollEdges(scroller).atRight && host.flip(rtl ? -1 : 1, "x");
         break;
       case "ArrowLeft":
-        flipped = atLeft && host.flip(rtl ? 1 : -1, "x");
+        flipped = scroller.scrollLeft <= 1 && host.flip(rtl ? 1 : -1, "x");
         break;
       case "Home":
         host.goToPage(0);

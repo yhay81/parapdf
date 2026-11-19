@@ -72,6 +72,11 @@ it("resolves the matching workers in a static copy of the package", () => {
   assert.equal(pdfjsRendererUrl(base).href, `${base}pdf.renderer.js`);
   assert.equal(legacyBuild.workerUrl(base).href, `${base}pdf.worker.legacy.js`);
   assert.equal(legacyBuild.rendererUrl?.(base).href, `${base}pdf.renderer.legacy.js`);
+  // Missing trailing slash still resolves inside the directory.
+  const noSlash = "https://example.org/static/pdfjs";
+  assert.equal(pdfjsRendererUrl(noSlash).href, `${base}pdf.renderer.js`);
+  assert.equal(legacyBuild.workerUrl(noSlash).href, `${base}pdf.worker.legacy.js`);
+  assert.equal(legacyBuild.rendererUrl?.(noSlash).href, `${base}pdf.renderer.legacy.js`);
 });
 
 // pdf.js loads once per page, so these come last and run in order: those
@@ -115,11 +120,75 @@ describe("loadPdfjs", () => {
     assert.equal(warn.mock.callCount(), 0, "nothing loaded, so it is configured again");
   });
 
-  it("forgets a failed load, and its configuration may still change", async (context) => {
+  it("forgets a failed load, terminates a started worker, catches synchronous CSP Worker errors, and normalizes assetBase", async (context) => {
     const warn = context.mock.method(console, "warn", () => {});
+    const savedGlobals = ["document", "location", "Worker"].map(
+      (name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)] as const,
+    );
+    context.after(() => {
+      for (const [name, desc] of savedGlobals) {
+        if (desc) Object.defineProperty(globalThis, name, desc);
+        else Reflect.deleteProperty(globalThis, name);
+      }
+    });
+
+    // 1. Synchronous SecurityError from `new Worker()` (e.g. strict CSP) falls back instead of throwing synchronously.
+    let workerConstructors = 0;
+    Object.assign(globalThis, {
+      document: { baseURI: "https://example.com/app/" },
+      location: { origin: "https://example.com" },
+      Worker: class {
+        constructor() {
+          workerConstructors++;
+          throw new DOMException("Blocked by CSP", "SecurityError");
+        }
+      },
+    });
+    configurePdfjs({
+      build: {
+        name: "csp-test",
+        pdfjs: async () => {
+          throw new Error("pdfjs load error after CSP fallback");
+        },
+        workerUrl: () => new URL("https://example.com/pdf.worker.js"),
+      },
+    });
+    await assert.rejects(loadPdfjs(), /pdfjs load error after CSP fallback/);
+    assert.equal(workerConstructors, 1);
+
+    // 2. If `pdfjsLoading` fails while a parallel `Worker` started, the worker is terminated instead of leaking.
+    let terminated = 0;
+    Object.assign(globalThis, {
+      Worker: class {
+        addEventListener(type: string, fn: () => void) {
+          if (type === "message") queueMicrotask(fn);
+        }
+        terminate() {
+          terminated++;
+        }
+      },
+    });
+    configurePdfjs({
+      build: {
+        name: "leak-test",
+        pdfjs: async () => {
+          throw new Error("chunk load failed");
+        },
+        workerUrl: () => new URL("https://example.com/pdf.worker.js"),
+      },
+    });
+    await assert.rejects(loadPdfjs(), /chunk load failed/);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(terminated, 1);
+
+    for (const [name, desc] of savedGlobals) {
+      if (desc) Object.defineProperty(globalThis, name, desc);
+      else Reflect.deleteProperty(globalThis, name);
+    }
+
     let attempts = 0;
     configurePdfjs({
-      assetBase: "/assets/",
+      assetBase: "/assets",
       pdfjs: async () => {
         attempts++;
         throw new Error("offline");
@@ -128,7 +197,8 @@ describe("loadPdfjs", () => {
     await assert.rejects(loadPdfjs(), /offline/);
     await assert.rejects(loadPdfjs(), /offline/);
     assert.equal(attempts, 2);
-    configurePdfjs(loaded());
+    // Pass assetBase without trailing slash into the real load below to verify normalization too.
+    configurePdfjs({ ...loaded(), assetBase: "/assets" });
     assert.equal(warn.mock.callCount(), 0);
   });
 

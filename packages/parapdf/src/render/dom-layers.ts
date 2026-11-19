@@ -206,6 +206,12 @@ export class DomLayers {
     structure?.replaceChildren();
   }
 
+  /** Settles any remaining editor layer waiters (including unmounted pages') when the renderer disposes. */
+  dispose(): void {
+    this.#input = undefined;
+    for (const index of [...this.#editorWaiters.keys()]) this.#editorBuilt(index, false);
+  }
+
   /** The view moved or zoomed: text layers follow a zoom with CSS. */
   update(input: ViewInput): void {
     if (input.layout.scale !== this.#input?.layout.scale) {
@@ -301,7 +307,9 @@ export class DomLayers {
     const visible = (page: PageLayerState) => page.index >= input.first && page.index <= input.last;
     const needsText = (page: PageLayerState) =>
       page.elements.text !== null && !page.textHandle && !page.textTask && !page.failed.has("text");
+    const hasLinks = this.#options.links !== undefined;
     const needsLinks = (page: PageLayerState) =>
+      hasLinks &&
       page.elements.annotations !== null &&
       !page.annotationHandle &&
       !page.annotationTask &&
@@ -313,7 +321,10 @@ export class DomLayers {
       !page.editorHandle &&
       !page.editorTask &&
       !page.failed.has("editor") &&
-      (page.elements.annotations === null || page.annotationHandle !== undefined);
+      (!hasLinks ||
+        page.elements.annotations === null ||
+        page.annotationHandle !== undefined ||
+        page.failed.has("annotations"));
     for (const inWindow of [visible, (page: PageLayerState) => !visible(page)]) {
       const text = pages.find((page) => inWindow(page) && needsText(page));
       if (text) {
@@ -366,8 +377,14 @@ export class DomLayers {
    * stops, or within EDITOR_WAIT_MS. The page need not be mounted yet.
    */
   whenEditable(index: number): Promise<boolean> {
-    if (this.#pages.get(index)?.editorHandle) return Promise.resolve(true);
-    if (!this.#options.annotationSetup.editor) return Promise.resolve(false);
+    const page = this.#pages.get(index);
+    if (page?.editorHandle) return Promise.resolve(true);
+    if (
+      !this.#options.annotationSetup.editor ||
+      (page !== undefined && (!page.elements.editor || page.failed.has("editor")))
+    ) {
+      return Promise.resolve(false);
+    }
     return new Promise((resolve) => {
       const waiters = this.#editorWaiters.get(index) ?? new Set();
       this.#editorWaiters.set(index, waiters);
@@ -436,14 +453,22 @@ export class DomLayers {
             return;
           }
           page.editorHandle = handle;
-          // A turn while it was built, which rotate() could not tell it of.
-          handle.update(cssScale, this.#input?.layout.rotation ?? rotation);
+          // A zoom or turn while it was built, which rotate() could not tell it of.
+          handle.update(
+            this.#input?.layout.scale ?? cssScale,
+            this.#input?.layout.rotation ?? rotation,
+          );
           this.#stats.editors++;
           this.#editorBuilt(page.index, true);
         },
         (error: unknown) => {
-          if (this.#failed(error, page, "annotation editor layer") && page.editorTask === task) {
+          if (
+            this.#failed(error, page, "annotation editor layer") &&
+            this.#current(page) &&
+            page.editorTask === task
+          ) {
             page.failed.add("editor");
+            this.#editorBuilt(page.index, false);
           }
         },
       )

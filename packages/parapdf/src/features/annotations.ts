@@ -187,6 +187,9 @@ export function attachAnnotationEditing(
   let kept: KeptAnnotations | null = null;
   /** The prior editor's complete snapshot remains authoritative until every page restores. */
   let restoring: Promise<void> | null = null;
+  /** Non-null when restoring `kept` failed: save/print refuses partial edits while editing recovers. */
+  let restoreError: unknown = null;
+  let editedAfterFailure = false;
   /**
    * Removes the kept annotations from the document's storage, where they
    * stay while only the viewport is away: other viewers save and print them.
@@ -227,7 +230,12 @@ export function attachAnnotationEditing(
         scale: layout?.scale ?? scale,
         rotation,
         onStateChange: (state) => {
-          if (created && !restoring && !signal.aborted) store.set({ state });
+          if (created && !restoring && !signal.aborted) {
+            if (restoreError !== null && (state.canUndo || state.canRedo)) {
+              editedAfterFailure = true;
+            }
+            store.set({ state });
+          }
         },
         onStylesChange: (styles) => {
           if (created && !restoring && !signal.aborted) store.set({ styles });
@@ -255,9 +263,12 @@ export function attachAnnotationEditing(
     };
     forgetKept?.();
     forgetKept = null;
+    restoreError = null;
+    editedAfterFailure = false;
     // Register before publishing the editor: a subscriber may immediately save.
     session.onCommit(() => {
       if (restoring) return restoring.then(() => editing.commit());
+      if (restoreError !== null) return Promise.reject(restoreError);
       editing.commit();
     }, signal);
     if (!kept || (!kept.annotations.length && !kept.deletions.length)) {
@@ -278,7 +289,11 @@ export function attachAnnotationEditing(
       publish();
     });
     restoring.catch((error: unknown) => {
-      if (!signal.aborted) console.error("restoring annotations failed", error);
+      if (signal.aborted || control !== started) return;
+      console.error("restoring annotations failed", error);
+      restoreError = error;
+      restoring = null;
+      publish();
     });
   };
 
@@ -289,8 +304,10 @@ export function attachAnnotationEditing(
    */
   const stop = (keep: boolean) => {
     const stopped = editor;
-    const interrupted = restoring !== null;
+    const incomplete = restoring !== null || (restoreError !== null && !editedAfterFailure);
     restoring = null;
+    restoreError = null;
+    editedAfterFailure = false;
     control?.abort();
     control = null;
     if (!keep) {
@@ -299,13 +316,13 @@ export function attachAnnotationEditing(
       forgetKept = null;
     }
     if (!stopped) return;
-    if (keep && !interrupted) {
+    if (keep && !incomplete) {
       stopped.commit();
       kept = stopped.snapshot();
     }
     editor = null;
     viewer.setAnnotationEditor(null);
-    const keepStorage = keep && !interrupted;
+    const keepStorage = keep && !incomplete;
     const forget = stopped.destroy(keepStorage);
     if (keepStorage) forgetKept = forget;
     viewer.content?.classList.remove("parapdf-annotating");
@@ -404,25 +421,25 @@ export function attachAnnotationEditing(
       await current.setTool(tool);
     },
     setStyle(tool, style) {
-      editor?.setStyle(tool, style);
+      if (!restoring) editor?.setStyle(tool, style);
     },
     undo() {
-      editor?.undo();
+      if (!restoring) editor?.undo();
     },
     redo() {
-      editor?.redo();
+      if (!restoring) editor?.redo();
     },
     deleteSelected() {
-      editor?.deleteSelected();
+      if (!restoring) editor?.deleteSelected();
     },
     selectAll() {
-      editor?.selectAll();
+      if (!restoring) editor?.selectAll();
     },
     setComment(comment) {
-      return editor?.setComment(comment) ?? false;
+      return !restoring && (editor?.setComment(comment) ?? false);
     },
     setAltText(altText) {
-      return editor?.setAltText(altText) ?? false;
+      return !restoring && (editor?.setAltText(altText) ?? false);
     },
     async addImage(image, { pageIndex, altText } = {}) {
       const page = await editablePage(pageIndex);
@@ -439,11 +456,16 @@ export function attachAnnotationEditing(
       return current.addSignature(page, signature, description);
     },
     export() {
-      return (restoring && kept ? kept.annotations : editor?.export()) ?? [];
+      if ((restoring || (restoreError !== null && !editedAfterFailure)) && kept) {
+        return kept.annotations;
+      }
+      return editor?.export() ?? [];
     },
     async import(annotations) {
       if (restoring && !(await restored())) return 0;
-      return (await editor?.import(annotations)) ?? 0;
+      const added = (await editor?.import(annotations)) ?? 0;
+      if (added > 0 && restoreError !== null) editedAfterFailure = true;
+      return added;
     },
     setLabels(next) {
       labels = { ...ANNOTATION_LABELS, ...next };

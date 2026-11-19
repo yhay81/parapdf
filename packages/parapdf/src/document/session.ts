@@ -400,7 +400,7 @@ export class DocumentSession {
       };
     }
     // Aborting stops a load in progress; a loaded document is destroyed by closeSession().
-    const abort = () => void loadingTask.destroy();
+    const abort = () => void loadingTask.destroy().catch(() => {});
     signal.addEventListener("abort", abort, { once: true });
     try {
       const proxy = await loadingTask.promise;

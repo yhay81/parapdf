@@ -13,6 +13,19 @@ change the API.
   `bounds` for `PdfPageOverlay`, `PdfPageRect`, and `viewer.revealRect()`,
   sharing the session's cached `PageText` and `PageIndex` without disturbing
   `useSearch()`.
+- Export `PageSize`, `ResolvedDestination`, and `DestinationView` for the page
+  dimensions and resolved destinations referenced by `Layout.sizes`,
+  `PdfInitialView.destination`, and `ShownView.target`.
+- Release cancelled or failed base canvases, serialize overlapping rotation
+  renders, clear detached selection ranges and inline `user-select` overrides,
+  settle failed editor layers and unmounted layer waiters, apply live zoom to
+  editor layers built across zoom changes, normalize `configurePdfjs({ assetBase })`
+  while falling back cleanly under strict worker CSP and terminating leaked
+  workers on failed loads, guard out-of-range `getText()` inputs, avoid forced
+  reflows on non-edge keys in `"page"` scroll mode, batch `"fit-page"` resize
+  updates, reset transient viewer and password-prompt state on close, retry
+  failed `getFormFields()` reads, and recover `useAnnotations()` controls after
+  a failed snapshot restore while still blocking partial saves and prints.
 
 ## 0.9.0 — 2026-11-16
 

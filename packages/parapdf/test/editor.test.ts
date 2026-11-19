@@ -1,9 +1,16 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it, mock } from "node:test";
 import type * as Pdfjs from "pdfjs-dist";
-import { ANNOTATION_LABELS } from "../src/features/annotations.ts";
+import { Store } from "../src/document/store.ts";
+import {
+  ANNOTATION_LABELS,
+  type AnnotationEditingStore,
+  attachAnnotationEditing,
+} from "../src/features/annotations.ts";
 import { createPdfjsAnnotationEditor } from "../src/pdfjs/editor.ts";
 import type { AnnotationEditingState } from "../src/pdfjs/editor-types.ts";
+import { ViewerController } from "../src/view/viewer.ts";
+import { fakeDocument, fakePdfjs, LETTER, settle, show } from "./fake-pdfjs.ts";
 
 /** pdf.js's manager of editors, which, like pdf.js's, numbers the ids it gives from 0. */
 class FakeManager {
@@ -328,5 +335,198 @@ describe("the annotation selected", () => {
     assert.deepEqual(editor.state.selected?.altText, { text: "", decorative: true });
     manager.undo();
     assert.deepEqual(editor.state.selected?.altText, { text: "", decorative: false });
+  });
+});
+
+describe("attachAnnotationEditing restore recovery", () => {
+  it("recovers editor controls and preserves kept annotations when restore fails, blocking partial commits until a retry succeeds", async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    t.mock.method(console, "error", () => {});
+
+    let canDecodeImage = false;
+    class RestoringManager extends FakeManager {
+      imageManager = {
+        getFromUrl: async () => (canDecodeImage ? { id: "img_0", bitmap: {}, isSvg: false } : null),
+      };
+      getEditors() {
+        return this.editors;
+      }
+      removeDeletedAnnotationElement() {}
+      addChangedExistingAnnotation() {}
+    }
+    class FakeDrawLayer {
+      setParent() {}
+      destroy() {}
+    }
+    class FakeEditorLayer {
+      static _initialized = true;
+      readonly pageIndex: number;
+      readonly div: { hidden: boolean };
+      readonly #manager: RestoringManager;
+      constructor(opts: {
+        uiManager: RestoringManager;
+        pageIndex: number;
+        div: { hidden: boolean };
+      }) {
+        this.#manager = opts.uiManager;
+        this.pageIndex = opts.pageIndex;
+        this.div = opts.div;
+      }
+      async deserialize(data: Record<string, unknown>) {
+        return {
+          ...editorData(data),
+          id: this.#manager.getId(),
+          editorType: "stamp",
+          isClone: false,
+          canAddComment: true,
+          translate() {},
+          remove() {},
+        };
+      }
+      addOrRebuild(ed: unknown) {
+        this.#manager.editors.push(ed);
+      }
+      getEditableAnnotation() {
+        return null;
+      }
+      destroy() {}
+    }
+
+    const globals = [
+      "window",
+      "document",
+      "MutationObserver",
+      "requestAnimationFrame",
+      "cancelAnimationFrame",
+      "ResizeObserver",
+    ];
+    const before = globals.map((name) => Object.getOwnPropertyDescriptor(globalThis, name));
+    Object.assign(globalThis, {
+      window: {
+        devicePixelRatio: 1,
+        setTimeout: (cb: () => void, ms: number) => setTimeout(cb, ms),
+      },
+      document: {
+        createElement: () => ({ hidden: false }),
+      },
+      MutationObserver: class {
+        observe() {}
+        disconnect() {}
+      },
+      requestAnimationFrame: () => 1,
+      cancelAnimationFrame: () => {},
+      ResizeObserver: class {
+        observe() {}
+        disconnect() {}
+      },
+    });
+    t.after(() => {
+      globals.forEach((name, idx) => {
+        const desc = before[idx];
+        if (desc) Object.defineProperty(globalThis, name, desc);
+        else Reflect.deleteProperty(globalThis, name);
+      });
+    });
+
+    const storage = new Map<string, unknown>();
+    const doc = fakeDocument({
+      pages: [LETTER],
+      proxy: {
+        annotationStorage: {
+          get size() {
+            return storage.size;
+          },
+          print: {},
+          setValue: (id: string, val: unknown) => storage.set(id, val),
+          remove: (id: string) => storage.delete(id),
+          resetModifiedIds() {},
+          [Symbol.iterator]: () => storage.entries(),
+        },
+        getPage: async () => {
+          const base = await fakeDocument({ pages: [LETTER] }).proxy.getPage(1);
+          return {
+            ...base,
+            getViewport: (opts: Parameters<typeof base.getViewport>[0]) => {
+              const vp = base.getViewport(opts);
+              return { ...vp, clone: () => vp };
+            },
+          };
+        },
+      },
+    });
+    const fake = fakePdfjs(async () => doc.proxy);
+    Object.assign(fake.loaded.pdfjs, {
+      ...pdfjs,
+      AnnotationEditorUIManager: RestoringManager,
+      AnnotationEditorLayer: FakeEditorLayer,
+      DrawLayer: FakeDrawLayer,
+    });
+
+    const makeElement = () =>
+      ({
+        clientWidth: 800,
+        clientHeight: 600,
+        scrollTop: 0,
+        scrollLeft: 0,
+        style: { setProperty() {}, removeProperty() {} },
+        classList: { add() {}, remove() {}, toggle() {} },
+        addEventListener() {},
+        removeEventListener() {},
+        contains: () => false,
+      }) as unknown as HTMLElement;
+
+    const viewer = new ViewerController();
+    const store = new Store<AnnotationEditingStore>({
+      tool: "none",
+      state: null,
+      styles: null,
+    });
+    const editing = attachAnnotationEditing(viewer, { store });
+    const detach1 = viewer.attachViewport(makeElement(), makeElement());
+    const shown = show(viewer, { url: "/restore.pdf" }, fake.loader);
+    await settle();
+
+    assert.ok(store.get().state);
+    FakeManager.last.editors = [
+      {
+        ...editorData({ bitmapUrl: "blob:stamp" }),
+        editorType: "stamp",
+      },
+    ];
+    assert.equal(editing.export().length, 1);
+
+    // Detach viewport -> snapshots `kept`, then reattach while decoding fails -> restore() rejects.
+    detach1();
+    const detach2 = viewer.attachViewport(makeElement(), makeElement());
+    await settle();
+
+    assert.notEqual(store.get().state, null, "editor state publishes despite restore failure");
+    assert.notEqual(store.get().styles, null, "editor styles publish despite restore failure");
+    await editing.setTool("ink");
+    assert.equal(store.get().tool, "ink", "tools remain usable after restore failure");
+    assert.equal(editing.export().length, 1, "export() preserves un-restored kept annotations");
+    assert.ok(viewer.session);
+    await assert.rejects(
+      viewer.session.commit(),
+      /Some annotations could not be restored/,
+      "commit() refuses to silently overwrite with partial annotations",
+    );
+
+    // Detach and reattach once image decoding succeeds -> kept snapshot retries and succeeds.
+    detach2();
+    canDecodeImage = true;
+    const detach3 = viewer.attachViewport(makeElement(), makeElement());
+    await settle();
+
+    assert.notEqual(store.get().state, null);
+    assert.equal(editing.export().length, 1);
+    await viewer.session.commit();
+
+    detach3();
+    editing.detach();
+    shown.close();
+    t.mock.timers.tick(1000);
+    await settle();
+    void mock;
   });
 });
