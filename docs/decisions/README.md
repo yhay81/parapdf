@@ -21,7 +21,7 @@ it. A new choice gets a new record, numbered next.
 | [0012](0012-demote-small-whole-page-detail.md) | A whole-page detail no larger than a base becomes the base | adopted |
 | [0013](0013-path-text.md) | Text drawn as paths (`disableFontFace`) by default | rejected |
 | [0014](0014-no-preload-in-webkit.md) | No PDF preload in WebKit browsers | adopted |
-| [0015](0015-toward-1.0.md) | What 1.0 requires, and what 1.x promises | proposed |
+| [0015](0015-toward-1.0.md) | What 1.0 requires, and what 1.x promises | adopted |
 | [0016](0016-form-scripts-after-first-paint.md) | Form scripts start after the first paint | adopted |
 | [0017](0017-measured-against-react-pdf.md) | ParaPDF is measured against react-pdf | adopted |
 | [0018](0018-keep-the-size-query-container.md) | The scroller stops being a size query container | rejected |

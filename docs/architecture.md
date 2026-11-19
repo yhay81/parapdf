@@ -548,4 +548,6 @@ the DOM declares `"use client"`.
 
 ## Open questions
 
-- What 1.0 requires and what 1.x promises: decision 0015, proposed.
+- Real iOS and iPadOS device verification, including whether iOS Safari counts
+  kept canvases toward its canvas memory cap (`maxKeptPixels`'s default), which
+  blocks 1.0 (decision 0015, #13).
