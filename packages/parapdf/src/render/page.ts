@@ -71,7 +71,7 @@ export function placeDetail(canvas: HTMLCanvasElement, region: PageArea | null):
   style.height = `${(area.maxY - area.minY) * 100}%`;
 }
 
-function createCanvas(document: Document): HTMLCanvasElement {
+export function createCanvas(document: Document): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
   canvas.style.cssText = LAYER_STYLE;
   // Canvas pixels are counted by size, and a new canvas is 300 by 150.

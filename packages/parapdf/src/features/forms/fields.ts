@@ -112,7 +112,16 @@ export function createFormAccess(
     const objects = (await doc.getFieldObjects()) as Map<string, { page?: number }[]> | null;
     const pages = new Set<number>();
     for (const widgets of objects?.values() ?? []) {
-      for (const { page } of widgets) if (typeof page === "number" && page >= 0) pages.add(page);
+      for (const { page } of widgets) {
+        if (
+          typeof page === "number" &&
+          Number.isInteger(page) &&
+          page >= 0 &&
+          page < doc.numPages
+        ) {
+          pages.add(page);
+        }
+      }
     }
     const entries = new Map<string, FieldEntry>();
     const widgetsById = new Map<string, FieldEntry>();

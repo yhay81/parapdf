@@ -282,8 +282,12 @@ functions are tree-shaken out of your bundle.
 | `pdfjsVersion` | The version of pdf.js the package ships. |
 | `legacyBuild` | From `parapdf/legacy`: pdf.js's legacy build, for `configurePdfjs({ build })`. |
 
-Every type the API uses is exported as well, such as `PdfViewerProps`,
-`PdfViewProps`, `Zoom`, `Viewer`, `ViewerState`, `Layout`, `PageSize`,
-`DocumentState`, `PdfSession`, `ViewState`, `PdfSource`,
+Every type the API uses is exported as well, such as `PdfDocumentProps`,
+`PdfViewerProps`, `PdfViewProps`, `PdfFormsProps`, `PdfAnnotationEditorProps`,
+`PdfAutoLinksProps`, `PdfPermissionsProps`, `PdfPageOverlayProps`,
+`PdfPageOverlaysProps`, `PdfPageRectProps`, `PdfSelectionPopoverProps`,
+`PopoverPlacement`, `PdfThumbnailsProps`, `PdfOutlineProps`,
+`PreloadDocumentOptions`, `SelectionOptions`, `Zoom`, `Viewer`, `ViewerState`,
+`Layout`, `PageSize`, `DocumentState`, `PdfSession`, `ViewState`, `PdfSource`,
 `ResolvedDestination`, `DestinationView`, `SearchMatch`, `TextMatch`,
 `FindTextOptions`, `PdfRect`, `FormField`, and `SavedAnnotation`.

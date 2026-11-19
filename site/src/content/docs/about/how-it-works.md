@@ -153,7 +153,7 @@ expose their text to assistive technology, in the structure a tagged PDF
 gives them. The
 renderer builds DOM layers one at a time, after scrolling settles, in idle
 time, never while a visible page still waits for its first pixels: text,
-then the annotations being edited, then links and forms. Text layers keep
+then links and forms, then the annotations being edited. Text layers keep
 the zoom they were laid out at and follow later zooms with CSS; a visible
 page's text is laid out again, one page per idle period, only once the zoom
 goes in past twice the one it was laid out at.

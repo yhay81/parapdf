@@ -42,9 +42,9 @@ export interface PdfjsConfig {
    */
   build?: PdfjsBuild;
   /**
-   * Base URL of a copy of the package's `pdfjs/` directory, ending with a
-   * slash, for bundlers that do not emit files referenced with
-   * `new URL(…, import.meta.url)`, such as esbuild, Bun, and Parcel. The
+   * Base URL of a copy of the package's `pdfjs/` directory (a trailing slash
+   * is added when omitted), for bundlers that do not emit files referenced
+   * with `new URL(…, import.meta.url)`, such as esbuild, Bun, and Parcel. The
    * worker is then `${assetBase}pdf.worker.js`.
    */
   assetBase?: string;
@@ -130,6 +130,34 @@ const canonical = (value: unknown): string =>
 
 const normalizeBase = (base: string | undefined): string | undefined =>
   base === undefined ? undefined : base === "" ? "./" : base.endsWith("/") ? base : `${base}/`;
+
+/**
+ * Resolves a path-relative `assetBase` (such as `"./pdfjs/"` or `"pdfjs/"`)
+ * against `document.baseURI` so pdf.js's worker does not resolve relative
+ * `cMapUrl` / `wasmUrl` / `iccUrl` / `standardFontDataUrl` paths against its
+ * own script directory instead of the page's.
+ */
+const resolveAssetBase = (base: string | undefined): string | undefined => {
+  const normalized = normalizeBase(base);
+  if (normalized === undefined) return undefined;
+  if (
+    !normalized.startsWith("/") &&
+    typeof document !== "undefined" &&
+    URL.canParse(normalized, document.baseURI)
+  ) {
+    return new URL(normalized, document.baseURI).href;
+  }
+  return normalized;
+};
+
+const urlUnderAssetBase = (buildUrl: (assetBase?: string) => URL, assetBase: string): string => {
+  const baseURI = typeof document === "undefined" ? undefined : document.baseURI;
+  if (URL.canParse(assetBase, baseURI)) {
+    return buildUrl(new URL(assetBase, baseURI).href).href;
+  }
+  const file = buildUrl("http://parapdf.local/").pathname.slice(1);
+  return `${assetBase}${file}`;
+};
 
 /** Whether two configurations load pdf.js alike; loaders compare by presence. */
 const sameConfig = (a: PdfjsConfig, b: PdfjsConfig): boolean =>
@@ -290,7 +318,7 @@ function startWorker(url: string): Promise<Worker | null> {
 }
 
 async function load(options: PdfjsConfig): Promise<LoadedPdfjs> {
-  const assetBase = normalizeBase(options.assetBase);
+  const assetBase = resolveAssetBase(options.assetBase);
   const shipped = assetBase === undefined && options.workerSrc === undefined;
   const pdfjsLoading = options.pdfjs?.() ?? options.build?.pdfjs() ?? import("pdfjs-dist");
   // The shipped worker's prelude routes its requests for the shipped files
@@ -310,7 +338,7 @@ async function load(options: PdfjsConfig): Promise<LoadedPdfjs> {
       workerSrc =
         options.workerSrc ??
         (options.build && assetBase !== undefined
-          ? options.build.workerUrl(absolute(assetBase)).href
+          ? urlUnderAssetBase(options.build.workerUrl, assetBase)
           : `${assetBase ?? ""}pdf.worker.js`);
       workerLocation = workerSrc;
     }
@@ -319,11 +347,12 @@ async function load(options: PdfjsConfig): Promise<LoadedPdfjs> {
     const [pdfjs, port] = await Promise.all([pdfjsLoading, started]);
     pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
     if (options.rendererSrc) {
+      const rendererUrl = options.build?.rendererUrl ?? pdfjsRendererUrl;
       pdfjs.GlobalWorkerOptions.rendererSrc =
         options.rendererSrc === true
-          ? (options.build?.rendererUrl ?? pdfjsRendererUrl)(
-              assetBase === undefined ? undefined : absolute(assetBase),
-            ).href
+          ? assetBase === undefined
+            ? rendererUrl().href
+            : urlUnderAssetBase(rendererUrl, assetBase)
           : options.rendererSrc;
     }
     const documentOptions: PdfjsDocumentOptions = {

@@ -46,7 +46,7 @@ const LABELS: Record<string, keyof AnnotationLabels> = {
 /** Gives `element` the label of its localization id, if ParaPDF has one. */
 function label(element: Element, labels: AnnotationLabels): void {
   const id = element.getAttribute("data-l10n-id");
-  const key = id ? LABELS[id] : undefined;
+  const key = id && Object.hasOwn(LABELS, id) ? LABELS[id] : undefined;
   if (!key) return;
   let text = labels[key];
   if (key === "signature") {
@@ -97,7 +97,7 @@ export function labelElements(container: HTMLElement, labels: AnnotationLabels):
  * elements with ids instead, which `labelElements` labels.
  */
 export const l10n = {
-  getLanguage: () => document.documentElement.lang || "en",
+  getLanguage: () => (typeof document !== "undefined" && document.documentElement?.lang) || "en",
   getDirection: () => "ltr",
   get: async (_id: string, _args?: unknown, fallback?: string) => fallback ?? "",
   translate: async () => {},

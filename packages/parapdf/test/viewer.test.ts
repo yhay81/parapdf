@@ -1077,4 +1077,53 @@ describe("a viewer's viewport", () => {
     assert.equal(content.style.overflow, "");
     assert.equal(frames.length, 0);
   });
+
+  it("keeps initial open silent during background page measurement and preserves RTL right-edge offset across programmatic jumps", async () => {
+    const mixedPages = [LETTER, { width: 842, height: 595 }, LETTER];
+    const mixedDoc = fakeDocument({ pages: mixedPages });
+    const mixedViewer = new ViewerController();
+    mixedViewer.configure({ initialPage: 1, initialScale: "fit-width" });
+    const mixedScroller = new Scroller();
+    attach(mixedViewer, mixedScroller);
+    const viewStates: ViewState[] = [];
+    const unsubView = mixedViewer.onViewStateChange((vs) => viewStates.push(vs));
+    const shownMixed = show(
+      mixedViewer,
+      { url: "/mixed-open.pdf" },
+      fakePdfjs(async () => mixedDoc.proxy).loader,
+    );
+    release.push(shownMixed.close, unsubView);
+    await settle();
+    for (const frame of frames.splice(0)) frame();
+    assert.equal(
+      viewStates.length,
+      0,
+      "background page measurement on untouched open never fires onViewStateChange",
+    );
+    assert.equal(mixedViewer.viewState()?.page, 1);
+
+    // RTL horizontal mode keeps #fromRight synced on programmatic goToPage before resize.
+    const rtlDoc = fakeDocument({ pages: [LETTER, LETTER, LETTER] });
+    const rtlViewer = new ViewerController();
+    rtlViewer.configure({
+      direction: "rtl",
+      initialScrollMode: "horizontal",
+      initialScale: 1,
+    });
+    const rtlScroller = new Scroller();
+    attach(rtlViewer, rtlScroller);
+    const shownRtl = show(
+      rtlViewer,
+      { url: "/rtl-sync.pdf" },
+      fakePdfjs(async () => rtlDoc.proxy).loader,
+    );
+    release.push(shownRtl.close);
+    await settle();
+    rtlViewer.goToPage(2);
+    assert.equal(rtlScroller.scrollLeft, 0);
+    resize(rtlScroller, 900, 800);
+    // Page 2 (leftmost in RTL) was scroller.scrollWidth - 1000 from the right edge; resizing to 900 shifts scrollLeft by +100.
+    const expectedFromRight = rtlScroller.scrollWidth - 1000;
+    assert.equal(rtlScroller.scrollLeft, rtlScroller.scrollWidth - 900 - expectedFromRight);
+  });
 });

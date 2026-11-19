@@ -76,9 +76,11 @@ export function viewStateAt(
   state: Pick<ViewerState, "zoomMode" | "spread" | "scrollMode">,
 ): ViewState {
   const { scrollLeft, scrollTop, clientWidth, clientHeight } = scroller;
-  // The gap above a row belongs to it: a page shown from its top, as
-  // `goToPage()` shows it, is the page of the view, not the one above.
-  const page = pageAtPoint(layout, scrollLeft, scrollTop + layout.gap, clientWidth);
+  // The gap before a row or page belongs to it: a page shown from its top or
+  // left edge, as `goToPage()` shows it, is the page of the view, not the one before.
+  const lookX = layout.scrollMode === "horizontal" ? scrollLeft + layout.gap / 2 : scrollLeft;
+  const lookY = layout.scrollMode === "horizontal" ? scrollTop : scrollTop + layout.gap;
+  const page = pageAtPoint(layout, lookX, lookY, clientWidth);
   const size = layout.sizes[page] ?? { width: 0, height: 0 };
   // The point on the page as it shows, turned back by the view's rotation.
   const point = turnBox(

@@ -26,11 +26,11 @@ security fix, a ParaPDF release moves to the fixed version, and its entry in
 [`CHANGELOG.md`](CHANGELOG.md) says so.
 
 ParaPDF runs the JavaScript a PDF holds only when the application asks for
-it with `formScripts`, and then in pdf.js's scripting sandbox: QuickJS
+it with `<PdfForms scripts />`, and then in pdf.js's scripting sandbox: QuickJS
 compiled to WebAssembly, which the package ships, with no access to the
 page beyond what pdf.js's sandbox passes it (field values, alerts, timers,
 and requests to change page, zoom, print, or save, which ParaPDF carries
-out). Without `formScripts`, the sandbox is never loaded and annotation
+out). Without `<PdfForms scripts />`, the sandbox is never loaded and annotation
 layers are built with scripting off. A script that escapes the sandbox, or
 makes ParaPDF act beyond those requests, is a vulnerability to report here.
 

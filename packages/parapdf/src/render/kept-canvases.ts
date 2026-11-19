@@ -51,7 +51,8 @@ export class KeptCanvases {
   readonly #view: () => ViewInput | undefined;
 
   constructor(maxPixels: number | undefined, view: () => ViewInput | undefined) {
-    this.#maxPixels = maxPixels;
+    this.#maxPixels =
+      maxPixels === undefined || Number.isNaN(maxPixels) ? undefined : Math.max(0, maxPixels);
     this.#view = view;
   }
 

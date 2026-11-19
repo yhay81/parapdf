@@ -385,7 +385,7 @@ function openEntry(
       if (session.pageCount > 0) void session.pageSizes().catch(() => null);
       void session.direction().catch(() => null);
       const permissions = await session.permissions().catch((error: unknown) => {
-        console.error("reading permissions failed", error);
+        if (!entry.signal.aborted) console.error("reading permissions failed", error);
         return null;
       });
       if (entry.signal.aborted) return;
@@ -414,6 +414,17 @@ function openEntry(
 }
 
 /**
+ * A changed password retries the shared load, including while pdf.js has not
+ * asked yet. Answer a pending request before replaying its old error.
+ */
+function supplyPassword(entry: Entry, password: string | undefined): void {
+  if (password !== undefined && !entry.passwords.has(password)) {
+    entry.nextPassword = password;
+    entry.passwordRequest?.answer(password);
+  }
+}
+
+/**
  * The session of the document `source` names, opened with the pdf.js
  * `pdfjs` loads unless it is open, for what reads it without holding it. It
  * stays open while it loads and while what was asked of it is read, and
@@ -423,6 +434,7 @@ export function sharedSession(pdfjs: PdfjsLoader, source: PdfSource): SharedSess
   const registry = registryOf(pdfjs);
   const key = sourceKey(source);
   const entry = registry.get(key) ?? openEntry(registry, key, pdfjs, source);
+  supplyPassword(entry, source.password);
   if (entry.users === 0) {
     // Released or at rest, it was about to close: this render gets its own time.
     entry.released = false;
@@ -461,12 +473,7 @@ export function acquireSession(pdfjs: PdfjsLoader, source: PdfSource): SessionLe
     held.failedReads.clear();
     held.state.publish();
   }
-  // A changed password retries the shared load, including while pdf.js has
-  // not asked yet. Answer a pending request before replaying its old error.
-  if (source.password !== undefined && !held.passwords.has(source.password)) {
-    held.nextPassword = source.password;
-    held.passwordRequest?.answer(source.password);
-  }
+  supplyPassword(held, source.password);
   const lease = new AbortController();
   // A lease ends with its session.
   held.signal.addEventListener("abort", () => lease.abort(), {

@@ -84,6 +84,7 @@ export interface AnnotationLayerHandle {
   /** pdf.js's layer, which the page's annotation editor layer takes the file's annotations from. */
   readonly layer: Pdfjs.AnnotationLayer;
   update(cssScale: number, rotation: Rotation): void;
+  destroy(): void;
 }
 
 export interface AnnotationLayerTask {
@@ -119,7 +120,7 @@ function createLinkService(
     addLinkAttributes(link: HTMLAnchorElement, url: string) {
       // Without an href the element is neither focusable nor a link, and the
       // text it covered stays readable in the text layer.
-      if (!external) return;
+      if (!external || !url) return;
       link.href = url;
       link.title = url;
       // External pages open in a new tab so the document keeps its position.
@@ -253,23 +254,41 @@ export function buildAnnotationLayer(
       linkService,
       annotationStorage: doc.annotationStorage,
     });
-    await layer.render({
-      annotations,
-      div: container as HTMLDivElement,
-      page,
-      viewport,
-      linkService: linkService as never,
-      downloadManager: createDownloadManager(links) as never,
-      annotationStorage: doc.annotationStorage,
-      imageResourcesPath,
-      renderForms: forms,
-      // Given only for a document with scripts (src/features/forms/scripts.ts).
-      enableScripting: forms && scripting !== null,
-      hasJSActions: forms && scripting !== null,
-      fieldObjects: fields,
-      ...(layers ? { optionalContentConfig: layers } : {}),
-    });
-    if (cancelled) throw new RenderCancelledError("annotation layer cancelled");
+    const destroy = () => {
+      if (form?.layer === layer) form.layer = null;
+      for (const canvas of container.querySelectorAll<HTMLCanvasElement>(
+        "canvas.annotationContent",
+      )) {
+        canvas.width = 0;
+        canvas.height = 0;
+      }
+      layer.destroy?.();
+    };
+    try {
+      await layer.render({
+        annotations,
+        div: container as HTMLDivElement,
+        page,
+        viewport,
+        linkService: linkService as never,
+        downloadManager: createDownloadManager(links) as never,
+        annotationStorage: doc.annotationStorage,
+        imageResourcesPath,
+        renderForms: forms,
+        // Given only for a document with scripts (src/features/forms/scripts.ts).
+        enableScripting: forms && scripting !== null,
+        hasJSActions: forms && scripting !== null,
+        fieldObjects: fields,
+        ...(layers ? { optionalContentConfig: layers } : {}),
+      });
+    } catch (error) {
+      destroy();
+      throw error;
+    }
+    if (cancelled) {
+      destroy();
+      throw new RenderCancelledError("annotation layer cancelled");
+    }
     structTree?.updateAnnotationLayer(container);
     if (iconUrls) placeIcons(container, imageResourcesPath, iconUrls);
     nameAnnotations(container, annotations as AnnotationData[]);
@@ -279,6 +298,7 @@ export function buildAnnotationLayer(
       update(nextScale, nextRotation) {
         layer.update({ viewport: pageViewport(page, nextScale, nextRotation) } as never);
       },
+      destroy,
     };
   });
   return {

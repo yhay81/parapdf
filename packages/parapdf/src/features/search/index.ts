@@ -155,7 +155,7 @@ function createSearchStore(viewer: ViewerController): ReadableStore<SearchContro
   const scrollToMatch = async (match: SearchMatch): Promise<void> => {
     const session = viewer.session;
     const signal = viewer.workSignal;
-    if (!session || !signal) return;
+    if (!session || !signal || signal.aborted) return;
     const text = await session.text(match.pageIndex);
     const { matches, current } = store.get();
     if (signal.aborted || matches[current] !== match) return;
@@ -226,7 +226,10 @@ function createSearchStore(viewer: ViewerController): ReadableStore<SearchContro
     closed(kept) {
       // A finished search holds for the session: its matches are
       // highlighted again on the pages the viewer shows next.
-      if (!kept) store.set(IDLE_SEARCH);
+      if (!kept) {
+        stop();
+        store.set(IDLE_SEARCH);
+      }
     },
     textLayer(pageIndex, handle) {
       if (handle) highlightPage(pageIndex);

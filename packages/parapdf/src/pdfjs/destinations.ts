@@ -45,7 +45,8 @@ function parseExplicitCoordinates(
   mode: { name?: string } | undefined,
   args: readonly unknown[],
 ): ExplicitCoordinates {
-  const num = (value: unknown) => (typeof value === "number" ? value : null);
+  const num = (value: unknown) =>
+    typeof value === "number" && Number.isFinite(value) ? value : null;
   let left: number | null = null;
   let top: number | null = null;
   let view: DestinationView | undefined;

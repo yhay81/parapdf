@@ -26,7 +26,8 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
-    "./legacy": "./src/legacy.ts"
+    "./legacy": "./src/legacy.ts",
+    "./package.json": "./package.json"
   },
   "publishConfig": {
     "exports": {

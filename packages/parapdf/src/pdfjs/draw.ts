@@ -121,6 +121,25 @@ export function formLayerOf(container: HTMLElement): {
   return entry;
 }
 
+/** Releases unconsumed form/editing canvases and detaches any stale AnnotationLayer reference. */
+export function clearFormLayer(container: HTMLElement): void {
+  const entry = formLayers.get(container);
+  if (!entry) return;
+  for (const item of entry.canvases.values() as Iterable<HTMLCanvasElement | HTMLCanvasElement[]>) {
+    if (Array.isArray(item)) {
+      for (const canvas of item) {
+        canvas.width = 0;
+        canvas.height = 0;
+      }
+    } else {
+      item.width = 0;
+      item.height = 0;
+    }
+  }
+  entry.canvases.clear();
+  entry.layer = null;
+}
+
 /**
  * Draw `source`, a drawing of a page, into `canvas`, scaled to `width` by
  * `height`, with the context pdf.js draws with, so that later drawings of

@@ -439,6 +439,16 @@ describe("toShownView, sameViewState, and viewer.viewState()", () => {
       assert.equal(snapshot.spread, "odd");
       assert.equal(snapshot.scrollMode, "vertical");
 
+      // Horizontal mode round-trips goToPage(1) to page === 1 across the inter-page gap.
+      viewer.setScrollMode("horizontal");
+      viewer.setSpread("none");
+      viewer.setRotation(0);
+      viewer.goToPage(1);
+      const horizontalSnapshot = viewer.viewState();
+      assert.ok(horizontalSnapshot);
+      assert.equal(horizontalSnapshot.page, 1);
+      assert.equal(horizontalSnapshot.scrollMode, "horizontal");
+
       release();
       detach();
     } finally {

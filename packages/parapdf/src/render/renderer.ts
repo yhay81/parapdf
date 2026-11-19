@@ -24,6 +24,7 @@ import {
 import { KeptCanvases, type KeptPage } from "./kept-canvases.ts";
 import {
   addEditorLayer,
+  createCanvas,
   mountPage,
   type PageElements,
   placeDetail,
@@ -56,6 +57,7 @@ interface Job extends RunningDrawing {
   readonly task: DrawTask;
   /** The canvas it draws into: the layer's own, or for a detail beside a shown one, the spare. */
   readonly canvas: HTMLCanvasElement;
+  cancelled: boolean;
 }
 
 /** A mounted page: its DOM, and what it shows and draws, which the planner reads. */
@@ -195,15 +197,24 @@ export class Renderer {
   readonly #extras: ExtraJob[] = [];
   /** The content version pages should show; see PlanContext. */
   #version = 0;
+  #disposed = false;
 
   constructor(session: DocumentSession, options: RendererOptions = {}) {
     this.#session = session;
-    this.#maxConcurrent = options.maxConcurrent ?? 2;
+    this.#maxConcurrent =
+      options.maxConcurrent !== undefined && Number.isFinite(options.maxConcurrent)
+        ? Math.max(1, Math.trunc(options.maxConcurrent))
+        : 2;
+    const budgetOption = (value: number | undefined, fallback: number): number =>
+      value === undefined || Number.isNaN(value) ? fallback : Math.max(0, value);
     this.#budgets = {
-      maxDetailPixels: options.maxDetailPixels ?? DEFAULT_BUDGETS.maxDetailPixels,
-      maxDetailViewports: options.maxDetailViewports ?? DEFAULT_BUDGETS.maxDetailViewports,
-      maxBasePixels: options.maxBasePixels ?? DEFAULT_BUDGETS.maxBasePixels,
-      maxCanvasPixels: options.maxCanvasPixels ?? DEFAULT_BUDGETS.maxCanvasPixels,
+      maxDetailPixels: budgetOption(options.maxDetailPixels, DEFAULT_BUDGETS.maxDetailPixels),
+      maxDetailViewports: budgetOption(
+        options.maxDetailViewports,
+        DEFAULT_BUDGETS.maxDetailViewports,
+      ),
+      maxBasePixels: budgetOption(options.maxBasePixels, DEFAULT_BUDGETS.maxBasePixels),
+      maxCanvasPixels: budgetOption(options.maxCanvasPixels, DEFAULT_BUDGETS.maxCanvasPixels),
     };
     this.#options = {
       ...options,
@@ -213,7 +224,14 @@ export class Renderer {
     this.#layers = new DomLayers(session, this.#options, this.stats, () =>
       this.#waitingForPixels(),
     );
-    options.signal?.addEventListener("abort", () => this.dispose(), { once: true });
+    if (options.signal?.aborted) this.dispose();
+    else options.signal?.addEventListener("abort", () => this.dispose(), { once: true });
+  }
+
+  #cancelJob(job: Job | undefined): void {
+    if (!job || job.cancelled) return;
+    job.cancelled = true;
+    job.task.cancel();
   }
 
   #context(): PlanContext | undefined {
@@ -241,6 +259,7 @@ export class Renderer {
    * and draws it; returns nothing, `detach` takes it down.
    */
   attach(index: number, host: HTMLElement): void {
+    if (this.#disposed) return;
     this.detach(index);
     const kept = this.#kept.take(index, this.#input?.layout.rotation ?? 0, this.#version);
     const elements = mountPage(
@@ -265,7 +284,7 @@ export class Renderer {
     const slot = this.#slots.get(index);
     if (!slot) return;
     this.#slots.delete(index);
-    slot.job?.task.cancel();
+    this.#cancelJob(slot.job);
     this.#layers.detach(index);
     const kept = this.#keep(slot);
     const { base, detail, spare } = slot.elements;
@@ -338,7 +357,7 @@ export class Renderer {
   rotate(rotation: Rotation): void {
     this.#epoch++;
     for (const slot of this.#slots.values()) {
-      slot.job?.task.cancel();
+      this.#cancelJob(slot.job);
       slot.baseScale = 0;
       release(slot.elements.base);
       this.#clearDetail(slot);
@@ -397,12 +416,13 @@ export class Renderer {
   invalidateDrawings(): void {
     this.#version++;
     this.#kept.clear();
-    for (const slot of this.#slots.values()) slot.job?.task.cancel();
+    for (const slot of this.#slots.values()) this.#cancelJob(slot.job);
     this.#pump();
   }
 
   /** Cancels all work and releases every page, for example when the document closes. */
   dispose(): void {
+    this.#disposed = true;
     // Closing pages keep nothing.
     this.#kept.close();
     for (const index of [...this.#slots.keys()]) this.detach(index);
@@ -419,6 +439,7 @@ export class Renderer {
    * on success, or the error. Returns the function that cancels the drawing.
    */
   enqueue(pageIndex: number, request: DrawRequest, done: (error: unknown) => void): () => void {
+    if (this.#disposed) return () => {};
     const job: ExtraJob = { pageIndex, request, done, task: undefined, cancelled: false };
     this.#extras.push(job);
     this.#pump();
@@ -461,13 +482,14 @@ export class Renderer {
   }
 
   update(input: ViewInput): void {
+    if (this.#disposed) return;
     this.#input = input;
     this.#layers.update(input);
     const context = this.#context();
     if (context) {
       for (const slot of this.#slots.values()) {
         const { cancel, clear } = staleDetail(context, slot);
-        if (cancel) slot.job?.task.cancel();
+        if (cancel) this.#cancelJob(slot.job);
         // Pages that left the viewport at a region-drawing zoom give their
         // detail memory back; their base layer still shows, a small
         // whole-page detail drawn into it first.
@@ -521,7 +543,7 @@ export class Renderer {
       const slot = this.#slots.get(index);
       if (!slot) continue;
       // A running drawing ends through its own promise, which frees its slot.
-      if (slot.job?.layer === layer) slot.job.task.cancel();
+      if (slot.job?.layer === layer) this.#cancelJob(slot.job);
       if (layer === "detail") this.#clearDetail(slot);
       else {
         slot.baseScale = 0;
@@ -553,8 +575,17 @@ export class Renderer {
     if (!unturned) return;
     const scale = Math.min(slot.detailScale, baseScale(context, slot.index));
     if (slot.baseVersion === context.version && slot.baseScale >= scale) return;
-    // A base being drawn would draw over the copy.
-    if (slot.job?.layer === "base") slot.job.task.cancel();
+    // A base being drawn would draw over the copy; swap a fresh canvas in so
+    // the asynchronously cancelling render cannot touch the demoted pixels.
+    if (slot.job?.layer === "base") {
+      this.#cancelJob(slot.job);
+      if (slot.job.canvas === slot.elements.base) {
+        const fresh = createCanvas(slot.elements.base.ownerDocument);
+        slot.elements.base.replaceWith(fresh);
+        release(slot.elements.base);
+        slot.elements.base = fresh;
+      }
+    }
     const size = turnedSize(unturned, layout.rotation);
     const { base, detail } = slot.elements;
     // Whole pixels, as pdf.js sizes a base drawn at this scale.
@@ -580,6 +611,7 @@ export class Renderer {
   }
 
   #pump(): void {
+    if (this.#disposed) return;
     const context = this.#context();
     if (context) {
       this.#trim(context);
@@ -670,14 +702,31 @@ export class Renderer {
       ...(layers ? { layers: layers.config } : {}),
     });
     const version = this.#version;
-    slot.job = { layer, scale, region, intoSpare, task, canvas };
+    const job: Job = { layer, scale, region, intoSpare, task, canvas, cancelled: false };
+    slot.job = job;
     this.#running++;
     const epoch = this.#epoch;
     const current = () => this.#slots.get(slot.index) === slot && epoch === this.#epoch;
+    const releaseDiscarded = () => {
+      if (this.#slots.get(slot.index) !== slot || slot.job !== job) return;
+      if (layer === "base") {
+        if (slot.baseScale === 0 || canvas !== elements.base) release(canvas);
+      } else if (intoSpare) {
+        // The shown detail stays; the spare's drawing goes.
+        release(canvas);
+      } else if (slot.detailScale === 0) {
+        // Hide a discarded detail layer so the base shows through.
+        this.#clearDetail(slot);
+      }
+    };
     task.promise
       .then(
         () => {
-          if (!current()) return;
+          if (job.cancelled || !current()) {
+            if (job.cancelled) this.stats.cancelled++;
+            releaseDiscarded();
+            return;
+          }
           delete slot.failures[layer];
           canvas.style.visibility = "";
           if (layer === "base") {
@@ -729,21 +778,12 @@ export class Renderer {
               };
             }
           }
-          if (this.#slots.get(slot.index) !== slot || slot.job?.task !== task) return;
-          if (layer === "base") {
-            if (slot.baseScale === 0) release(canvas);
-          } else if (intoSpare) {
-            // The shown detail stays; the spare's half drawing goes.
-            release(canvas);
-          } else if (slot.detailScale === 0) {
-            // Hide a half-drawn detail layer so the base shows through.
-            this.#clearDetail(slot);
-          }
+          releaseDiscarded();
         },
       )
       .finally(() => {
         this.#running--;
-        if (slot.job?.task === task) slot.job = undefined;
+        if (slot.job === job) slot.job = undefined;
         this.#pump();
       });
   }

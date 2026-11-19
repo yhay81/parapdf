@@ -142,30 +142,40 @@ type Listener = (event: Record<string, unknown>) => void;
  */
 class EditorEventBus {
   readonly #listeners = new Map<string, Set<Listener>>();
+  readonly #cleanups = new Map<string, Map<Listener, () => void>>();
 
   on(name: string, listener: Listener, options?: { once?: boolean; signal?: AbortSignal }): void {
     if (options?.signal?.aborted) return;
-    const listeners = this.#listeners.get(name) ?? new Set();
-    this.#listeners.set(name, listeners);
+    let listeners = this.#listeners.get(name);
+    if (!listeners) {
+      listeners = new Set();
+      this.#listeners.set(name, listeners);
+    }
+    let cleanups = this.#cleanups.get(name);
+    if (!cleanups) {
+      cleanups = new Map();
+      this.#cleanups.set(name, cleanups);
+    }
+    cleanups.get(listener)?.();
+    const signal = options?.signal;
+    const remove = () => {
+      listeners.delete(wrapped);
+      cleanups.delete(listener);
+      signal?.removeEventListener("abort", remove);
+    };
     const wrapped: Listener = options?.once
       ? (event) => {
-          listeners.delete(wrapped);
+          remove();
           listener(event);
         }
       : listener;
-    // `off` removes a listener by itself; `once` listeners are wrapped.
-    if (options?.once) this.#wrapped.set(listener, wrapped);
     listeners.add(wrapped);
-    options?.signal?.addEventListener("abort", () => listeners.delete(wrapped), { once: true });
+    cleanups.set(listener, remove);
+    signal?.addEventListener("abort", remove, { once: true });
   }
 
-  readonly #wrapped = new WeakMap<Listener, Listener>();
-
   off(name: string, listener: Listener): void {
-    const listeners = this.#listeners.get(name);
-    listeners?.delete(listener);
-    const wrapped = this.#wrapped.get(listener);
-    if (wrapped) listeners?.delete(wrapped);
+    this.#cleanups.get(name)?.get(listener)?.();
   }
 
   dispatch(name: string, event: Record<string, unknown>): void {
@@ -173,6 +183,10 @@ class EditorEventBus {
   }
 
   clear(): void {
+    for (const cleanups of this.#cleanups.values()) {
+      for (const cleanup of [...cleanups.values()]) cleanup();
+    }
+    this.#cleanups.clear();
     this.#listeners.clear();
   }
 }
@@ -719,7 +733,9 @@ export function createPdfjsAnnotationEditor(
   }
 
   /** Data pdf.js can create an editor from again where it was: images decoded, copies not moved. */
-  async function restorable(annotation: SavedAnnotation): Promise<object | null> {
+  async function restorable(
+    annotation: SavedAnnotation,
+  ): Promise<{ data: object; bitmapId?: string } | null> {
     const data = { ...(annotation.data as Record<string, unknown>) };
     if (annotation.type === "stamp" && typeof data.bitmapUrl === "string") {
       // Decoded before the editor is created, which then draws it at once:
@@ -727,8 +743,9 @@ export function createPdfjsAnnotationEditor(
       const image = await manager.imageManager.getFromUrl(data.bitmapUrl);
       if (!image) return null;
       Object.assign(data, { bitmapId: image.id, bitmap: image.bitmap, isSvg: image.isSvg });
+      return { data, bitmapId: image.id };
     }
-    return data;
+    return { data };
   }
 
   /** The editor `layer` created last for `create`, null when it created none. */
@@ -1002,82 +1019,105 @@ export function createPdfjsAnnotationEditor(
       };
       for (const [pageIndex, saved] of byPage) {
         // Images are decoded first, so that the layer is filled in one go.
-        const data = await Promise.all(saved.map(restorable));
-        if (destroyed) return imported();
-        count += await withLayer(pageIndex, async (layer) => {
-          const editors: PdfjsEditor[] = [];
-          const replacing = new Map<PdfjsEditor, { id: string; popupRef: unknown }>();
-          for (const item of data) {
-            // pdf.js makes an editor of the file's annotation only of its
-            // element; this one is made new, and takes its place below.
-            const { annotationElementId: id, ...rest } = (item ?? {}) as Record<string, unknown>;
-            const editor = item ? await layer.deserialize({ ...rest, pageIndex }) : null;
+        const decoded = await Promise.all(saved.map(restorable));
+        const unclaimed = new Set<string>();
+        for (const entry of decoded) {
+          if (entry?.bitmapId) unclaimed.add(entry.bitmapId);
+        }
+        try {
+          if (destroyed) return imported();
+          count += await withLayer(pageIndex, async (layer) => {
             if (destroyed) return 0;
-            if (editor && typeof id === "string")
-              replacing.set(editor, { id, popupRef: rest.popupRef });
-            // pdf.js saves a comment as the popup it serializes, and reads
-            // one back only from the file's annotations.
-            const popup = rest.popup as { contents?: unknown; deleted?: unknown } | undefined;
-            if (editor?.canAddComment && popup) {
-              if (popup.deleted) {
-                if (typeof id === "string") setCommentOf(editor, null);
-              } else if (typeof popup.contents === "string" && popup.contents) {
-                setCommentOf(editor, popup.contents);
+            const editors: PdfjsEditor[] = [];
+            const replacing = new Map<PdfjsEditor, { id: string; popupRef: unknown }>();
+            try {
+              for (const entry of decoded) {
+                const item = entry?.data ?? null;
+                // pdf.js makes an editor of the file's annotation only of its
+                // element; this one is made new, and takes its place below.
+                const { annotationElementId: id, ...rest } = (item ?? {}) as Record<
+                  string,
+                  unknown
+                >;
+                const editor = item ? await layer.deserialize({ ...rest, pageIndex }) : null;
+                if (editor && entry?.bitmapId) unclaimed.delete(entry.bitmapId);
+                if (destroyed) {
+                  if (editor) editor.remove();
+                  for (const prev of editors) prev.remove();
+                  return 0;
+                }
+                if (editor && typeof id === "string")
+                  replacing.set(editor, { id, popupRef: rest.popupRef });
+                // pdf.js saves a comment as the popup it serializes, and reads
+                // one back only from the file's annotations.
+                const popup = rest.popup as { contents?: unknown; deleted?: unknown } | undefined;
+                if (editor?.canAddComment && popup) {
+                  if (popup.deleted) {
+                    if (typeof id === "string") setCommentOf(editor, null);
+                  } else if (typeof popup.contents === "string" && popup.contents) {
+                    setCommentOf(editor, popup.contents);
+                  }
+                }
+                // In place: pdf.js moves a pasted copy beside its original,
+                // except a clone.
+                if (editor) editor.isClone = true;
+                if (editor) editors.push(editor);
+              }
+            } catch (error) {
+              for (const prev of editors) prev.remove();
+              throw error;
+            }
+            // An editor of the file's annotation already there, changed,
+            // deleted, or not, gives way.
+            for (const { id } of replacing.values()) {
+              for (const existing of [...manager.getEditors(pageIndex)]) {
+                if (existing.annotationElementId !== id) continue;
+                if (existing.deleted) manager.removeDeletedAnnotationElement(existing);
+                existing.remove();
               }
             }
-            // In place: pdf.js moves a pasted copy beside its original,
-            // except a clone.
-            if (editor) editor.isClone = true;
-            if (editor) editors.push(editor);
-          }
-          // An editor of the file's annotation already there, changed,
-          // deleted, or not, gives way.
-          for (const { id } of replacing.values()) {
-            for (const existing of [...manager.getEditors(pageIndex)]) {
-              if (existing.annotationElementId !== id) continue;
-              if (existing.deleted) manager.removeDeletedAnnotationElement(existing);
-              existing.remove();
-            }
-          }
-          if (layer.div) {
-            const { div } = layer;
-            // pdf.js hides a layer left empty as the tool goes back to none.
-            if (editors.length > 0) div.hidden = false;
-            quietly(manager, div, () => {
-              for (const editor of editors) layer.addOrRebuild(editor);
-            });
-            for (const editor of editors) {
-              // pdf.js moves a new text annotation up by its font size from
-              // where the reader clicked, and a clone too (mozilla/pdf.js#22271).
-              const { fontSize } = editor.serialize(true) ?? {};
-              if (editor.editorType === "freetext" && typeof fontSize === "number") {
-                editor.translate(0, fontSize * manager.viewParameters.realScale);
+            if (layer.div) {
+              const { div } = layer;
+              // pdf.js hides a layer left empty as the tool goes back to none.
+              if (editors.length > 0) div.hidden = false;
+              quietly(manager, div, () => {
+                for (const editor of editors) layer.addOrRebuild(editor);
+              });
+              for (const editor of editors) {
+                // pdf.js moves a new text annotation up by its font size from
+                // where the reader clicked, and a clone too (mozilla/pdf.js#22271).
+                const { fontSize } = editor.serialize(true) ?? {};
+                if (editor.editorType === "freetext" && typeof fontSize === "number") {
+                  editor.translate(0, fontSize * manager.viewParameters.realScale);
+                }
               }
             }
-          }
-          // Drawn, it becomes a change to the file's annotation, as an edit
-          // makes one: saved over it, and shown, drawn, and exported instead.
-          for (const [editor, { id, popupRef }] of replacing) {
-            editor.annotationElementId = id;
-            // Unlike any annotation of the file, so that it counts as changed.
-            editor._initialData = {
-              pageIndex: -1,
-              color: [],
-              accessibilityData: { altText: "" },
-              popupRef: typeof popupRef === "string" ? popupRef : "",
-            };
-            doc.annotationStorage.setValue(editor.id, editor);
-            manager.addChangedExistingAnnotation(editor);
-            replaced = true;
-            // On a page shown, the file's annotation hides while a tool is
-            // chosen, and shows the change, as pdf.js has it once the tool
-            // goes back to none, otherwise.
-            const element = layer.getEditableAnnotation(id);
-            if (element && editing) element.hide();
-            else if (element && editor.renderAnnotationElement(element)) editor.show(false);
-          }
-          return editors.length;
-        });
+            // Drawn, it becomes a change to the file's annotation, as an edit
+            // makes one: saved over it, and shown, drawn, and exported instead.
+            for (const [editor, { id, popupRef }] of replacing) {
+              editor.annotationElementId = id;
+              // Unlike any annotation of the file, so that it counts as changed.
+              editor._initialData = {
+                pageIndex: -1,
+                color: [],
+                accessibilityData: { altText: "" },
+                popupRef: typeof popupRef === "string" ? popupRef : "",
+              };
+              doc.annotationStorage.setValue(editor.id, editor);
+              manager.addChangedExistingAnnotation(editor);
+              replaced = true;
+              // On a page shown, the file's annotation hides while a tool is
+              // chosen, and shows the change, as pdf.js has it once the tool
+              // goes back to none, otherwise.
+              const element = layer.getEditableAnnotation(id);
+              if (element && editing) element.hide();
+              else if (element && editor.renderAnnotationElement(element)) editor.show(false);
+            }
+            return editors.length;
+          });
+        } finally {
+          for (const id of unclaimed) manager.imageManager.deleteId(id);
+        }
       }
       return imported();
     },

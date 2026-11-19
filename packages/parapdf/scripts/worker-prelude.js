@@ -10,24 +10,38 @@
  */
 {
   const hash = new URL(import.meta.url).hash;
-  // Only in a worker: when pdf.js cannot start one, it runs this script on
-  // the page, whose own requests stay untouched.
-  if (hash && typeof WorkerGlobalScope !== "undefined") {
-    const files = JSON.parse(decodeURIComponent(hash.slice(1)));
-    // pdf.js names a standard font as its directory URL plus its name, and
-    // ParaPDF leaves that directory unset, so it becomes "null" plus the name.
+  if (hash) {
+    const files = Object.assign(Object.create(null), JSON.parse(decodeURIComponent(hash.slice(1))));
+    // Shipped files are requested under "parapdf:/<name>" or, for standard
+    // fonts whose directory ParaPDF leaves unset, "null<name>". Matching only
+    // those prefixes keeps custom cMapUrl/wasmUrl overrides and, when pdf.js
+    // runs its worker on the main thread under strict worker CSP, the page's
+    // own requests untouched.
     const resolve = (url) => {
       const text = String(url);
-      const name = text.slice(text.lastIndexOf("/") + 1);
-      return files[name] ?? files[name.replace(/^null/, "")] ?? url;
+      if (text.startsWith("parapdf:/")) {
+        return files[text.slice("parapdf:/".length)] ?? url;
+      }
+      if (text.startsWith("null")) {
+        return files[text.slice("null".length)] ?? url;
+      }
+      const nullFont = /(?:^|\/)null([^/?#]+)$/.exec(text);
+      if (nullFont) {
+        return files[nullFont[1]] ?? url;
+      }
+      return url;
     };
     const fetch = globalThis.fetch;
-    globalThis.fetch = (input, init) =>
-      fetch(typeof input === "string" || input instanceof URL ? resolve(input) : input, init);
-    // The ICC profile and the color management decoder load synchronously.
-    const open = XMLHttpRequest.prototype.open;
-    XMLHttpRequest.prototype.open = function (method, url, ...rest) {
-      return open.call(this, method, resolve(url), ...rest);
-    };
+    if (typeof fetch === "function") {
+      globalThis.fetch = (input, init) =>
+        fetch(typeof input === "string" || input instanceof URL ? resolve(input) : input, init);
+    }
+    // The ICC profile and the color management decoder load synchronously in a worker.
+    if (typeof WorkerGlobalScope !== "undefined" && typeof XMLHttpRequest === "function") {
+      const open = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function (method, url, ...rest) {
+        return open.call(this, method, resolve(url), ...rest);
+      };
+    }
   }
 }

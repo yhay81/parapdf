@@ -115,7 +115,7 @@ function normalizeChar(char: string, options: SearchOptions): string {
 }
 
 /** True when `char` decomposes into a letter followed by combining marks. */
-const endsWithMark = (char: string): boolean => MARK.test(char.normalize("NFD").slice(-1));
+const endsWithMark = (char: string): boolean => /\p{M}$/u.test(char.normalize("NFD"));
 
 export function normalizeQuery(query: string, options: SearchOptions = {}): string {
   let out = "";
@@ -281,7 +281,9 @@ export function findMatches(
     if (at < 0) break;
     const end = at + query.length;
     if (
-      (options.matchDiacritics && MARK.test(index.text.charAt(end))) ||
+      (options.matchDiacritics &&
+        end < index.text.length &&
+        MARK.test(String.fromCodePoint(index.text.codePointAt(end) ?? 0))) ||
       (options.entireWord && !isEntireWord(index.text, at, query.length))
     ) {
       // A letter whose mark the query lacks, or part of a longer word: look on.

@@ -13,12 +13,9 @@ export interface PrintProgress {
   total: number;
 }
 
-export interface PrintState {
+export interface PrintControls {
   readonly printing: boolean;
   readonly progress: PrintProgress | null;
-}
-
-export interface PrintControls extends PrintState {
   /**
    * Prepare and print the document through the browser's print dialog.
    * Calling `cancel()` stops page preparation cleanly without rejecting.
@@ -27,6 +24,8 @@ export interface PrintControls extends PrintState {
   /** Abort page preparation in progress. */
   cancel(): void;
 }
+
+export type PrintState = Pick<PrintControls, "printing" | "progress">;
 
 export const IDLE_PRINT: PrintState = { printing: false, progress: null };
 
@@ -52,23 +51,29 @@ export async function print(viewer: Viewer, options?: PrintOptions): Promise<voi
     throw new Error("The document does not permit printing");
   }
   const work = controller.workSignal;
-  if (!session || !work) return;
+  if (!session || !work || work.aborted) return;
+  options?.signal?.throwIfAborted();
   // Closing the document stops printing it, as the application's signal does.
   const control = linked(work, options?.signal);
+  let willPrintSent = false;
   let ended = false;
   const end = () => {
-    if (ended) return;
+    if (!willPrintSent || ended) return;
     ended = true;
     void session.output("DidPrint");
   };
   try {
     // Include editing and restoration in every viewer of the document.
     await session.commit();
+    control.signal.throwIfAborted();
+    willPrintSent = true;
     await session.output("WillPrint");
+    const layers =
+      controller.layers ?? session.loadedLayers ?? (await session.layers().catch(() => null));
     await printDocument(session, {
       ...options,
       signal: control.signal,
-      layers: controller.layers,
+      layers,
       onEnd: end,
     });
   } catch (error) {
@@ -104,7 +109,7 @@ export function printOf(viewer: ViewerController): PrintSlot {
 
     const runPrint = async (options?: PrintOptions): Promise<void> => {
       const doc = viewer.session;
-      if (!doc || !viewer.workSignal || !permits(viewer, "print")) {
+      if (!doc || !viewer.workSignal || viewer.workSignal.aborted || !permits(viewer, "print")) {
         await print(viewer, options);
         return;
       }

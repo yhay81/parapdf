@@ -64,7 +64,10 @@ export class ThumbnailRenderer {
 
   constructor(host: ThumbnailHost) {
     this.#host = host;
-    this.#maxKeptPixels = host.maxKeptPixels ?? DEFAULT_MAX_KEPT_PIXELS;
+    this.#maxKeptPixels =
+      host.maxKeptPixels !== undefined && Number.isFinite(host.maxKeptPixels)
+        ? Math.max(0, host.maxKeptPixels)
+        : DEFAULT_MAX_KEPT_PIXELS;
   }
 
   /** Total device pixels currently held in the unmounted thumbnail LRU pool. */
@@ -125,7 +128,14 @@ export class ThumbnailRenderer {
   #draw(thumbnail: Thumbnail): void {
     const renderer = this.#host.renderer();
     const size = this.#host.pageSize(thumbnail.pageIndex);
-    if (!renderer || !size || size.width === 0 || size.height === 0) {
+    if (
+      !renderer ||
+      !size ||
+      !(size.width > 0) ||
+      !(size.height > 0) ||
+      !Number.isFinite(thumbnail.width) ||
+      thumbnail.width <= 0
+    ) {
       if (thumbnail.drawn !== null) this.#clear(thumbnail);
       return;
     }
@@ -160,6 +170,9 @@ export class ThumbnailRenderer {
         thumbnail.cancel = null;
         // A failed page stays blank; the renderer has logged the failure.
         if (error === null) thumbnail.drawn = key;
+        else if (this.#mounted.get(thumbnail.host) === thumbnail && !thumbnail.cancel) {
+          releaseCanvas(canvas);
+        }
       },
     );
   }

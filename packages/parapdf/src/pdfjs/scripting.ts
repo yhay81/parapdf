@@ -153,10 +153,18 @@ export function startScripting(
       doc.getJSActions(),
     ]);
     if (closing || (!objects && !actions)) return null;
-    const [info, created] = await Promise.all([
-      documentInfo(doc, filename),
-      createSandbox(loaded.scriptingUrls()),
-    ]);
+    const sandboxPromise = createSandbox(loaded.scriptingUrls());
+    let info: Awaited<ReturnType<typeof documentInfo>>;
+    let created: PdfjsSandbox;
+    try {
+      [info, created] = await Promise.all([documentInfo(doc, filename), sandboxPromise]);
+    } catch (error) {
+      void sandboxPromise.then(
+        (ready) => ready.nukeSandbox(),
+        () => {},
+      );
+      throw error;
+    }
     if (closing) {
       created.nukeSandbox();
       return null;
@@ -175,7 +183,7 @@ export function startScripting(
     });
     return created;
   })().catch((error: unknown) => {
-    console.error("starting the document's scripts failed", error);
+    if (!closing) console.error("starting the document's scripts failed", error);
     return null;
   });
 
@@ -189,12 +197,15 @@ export function startScripting(
     const sent = queue
       .then(async () => {
         const ready = await sandbox;
+        if (!ready || destroyed) return;
         const detail = typeof event === "function" ? await event() : event;
-        if (!ready || !detail || destroyed) return;
+        if (!detail || destroyed) return;
         await new Promise((resolve) => setTimeout(resolve, 0));
         if (!destroyed && (!before || before())) ready.dispatchEvent(detail);
       })
-      .catch((error: unknown) => console.error("dispatching a document script failed", error));
+      .catch((error: unknown) => {
+        if (!closing && !destroyed) console.error("dispatching a document script failed", error);
+      });
     queue = sent;
     return sent;
   };
@@ -214,6 +225,7 @@ export function startScripting(
       const first = !visited.has(index);
       visited.add(index);
       void send(async () => {
+        if (closing || destroyed) return null;
         // A page's own actions go with its first opening only, as in pdf.js's viewer.
         const actions = first ? await (await doc.getPage(index + 1)).getJSActions() : null;
         return { id: "page", name: "PageOpen", pageNumber: index + 1, actions };

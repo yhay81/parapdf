@@ -87,7 +87,7 @@ export type SignatureInput =
 
 /**
  * An annotation a viewer created, as JSON-compatible data the application
- * can keep and give back to `importAnnotations()`, in this or another
+ * can keep and give back to `useAnnotations().import()`, in this or another
  * session. `data` is pdf.js's: keep it as it is.
  */
 export interface SavedAnnotation {

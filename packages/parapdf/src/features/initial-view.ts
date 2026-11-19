@@ -47,7 +47,14 @@ const PAGE_LAYOUTS: Record<PdfPageLayout, { spread: SpreadMode; scrollMode: Scro
 type Explicit = Pick<
   ViewerOptions,
   "initialPage" | "initialScale" | "initialSpread" | "initialScrollMode"
->;
+> & {
+  controlled?: {
+    zoom?: ViewerOptions["initialScale"];
+    rotation?: ViewerOptions["initialRotation"];
+    spread?: SpreadMode;
+    scrollMode?: ScrollMode;
+  };
+};
 
 /** The views pdf.js's viewer names in a URL's `zoom`, as destinations. */
 const ZOOM_NAMES: Record<string, (left: number | null, top: number | null) => unknown[]> = {
@@ -145,14 +152,16 @@ export interface FragmentSource {
 }
 
 /** The fragment a viewer last applied, kept while its viewport is hidden. */
-const FRAGMENT_SLOT = createSlotKey<{ source: FragmentSource; seen: string }>("parapdf.fragment");
+const FRAGMENT_SLOT = createSlotKey<{ source: FragmentSource; seen: string | null }>(
+  "parapdf.fragment",
+);
 
 function fragmentState(viewer: ViewerController, source: FragmentSource) {
   let state = viewer.peekSlot(FRAGMENT_SLOT);
   if (!state || state.source !== source) {
     state = { source, seen: source.fragment };
     viewer.clearSlot(FRAGMENT_SLOT);
-    viewer.slot(FRAGMENT_SLOT, () => state as { source: FragmentSource; seen: string });
+    viewer.slot(FRAGMENT_SLOT, () => state as { source: FragmentSource; seen: string | null });
   }
   return state;
 }
@@ -174,6 +183,7 @@ export function followFragments(viewer: ViewerController, source: FragmentSource
     pending = null;
     const { fragment } = source;
     if (!ready || ready.aborted || fragment === state.seen) return;
+    state.seen = null;
     pending = linked(ready);
     const { signal } = pending;
     void goToFragment(viewer, fragment, signal).then(() => {
@@ -250,6 +260,31 @@ export function openingOf(
     }
     opening.view = shown;
   }
+  const { controlled } = options;
+  if (controlled) {
+    if (controlled.spread !== undefined && opening.spread !== undefined) {
+      opening.spread = controlled.spread;
+    }
+    if (controlled.scrollMode !== undefined && opening.scrollMode !== undefined) {
+      opening.scrollMode = controlled.scrollMode;
+    }
+    if (controlled.zoom !== undefined && opening.destination?.view) {
+      const { view: _, ...point } = opening.destination;
+      opening.destination = point;
+    }
+    if (opening.view) {
+      if (controlled.spread !== undefined) opening.view.spread = controlled.spread;
+      if (controlled.scrollMode !== undefined) opening.view.scrollMode = controlled.scrollMode;
+      if (controlled.rotation !== undefined) opening.view.rotation = controlled.rotation;
+      if (controlled.zoom !== undefined) {
+        opening.view.scale = controlled.zoom;
+        if (opening.view.target?.view) {
+          const { view: _, ...point } = opening.view.target;
+          opening.view.target = point;
+        }
+      }
+    }
+  }
   return Object.keys(opening).length > 0 ? opening : null;
 }
 
@@ -266,14 +301,20 @@ export function initialViewOpening(
   if (options.initialView !== "document" && !options.initialViewState && !fragment) {
     return undefined;
   }
+  const normalizeInitialPage = (raw: number | undefined, pageCount: number): number | undefined => {
+    if (raw === undefined) return undefined;
+    if (!Number.isFinite(raw) || pageCount <= 0) return 0;
+    return Math.max(0, Math.min(pageCount - 1, Math.trunc(raw)));
+  };
   return (session: DocumentSession) => {
+    const initialPage = normalizeInitialPage(options.initialPage, session.pageCount);
     if (options.initialView === "document" && session.knownInitialView === undefined) {
       return (async () => {
         const view = await session.initialView().catch((error: unknown) => {
           console.error("reading the initial view failed", error);
           return null;
         });
-        const page = options.initialPage ?? view?.destination?.pageIndex ?? 0;
+        const page = initialPage ?? view?.destination?.pageIndex ?? 0;
         const destinations = fragment ? fragmentDestinations(fragment(), page) : [];
         const linked = destinations.length > 0 ? await firstResolved(session, destinations) : null;
         return openingOf(view, session.pageCount, options, linked);
@@ -282,7 +323,7 @@ export function initialViewOpening(
     const view = options.initialView === "document" ? (session.knownInitialView ?? null) : null;
     // A zoom without a page applies to the page the document opens at otherwise.
     const page =
-      options.initialPage ??
+      initialPage ??
       (options.initialView === "document" ? view?.destination?.pageIndex : undefined) ??
       0;
     const destinations = fragment ? fragmentDestinations(fragment(), page) : [];

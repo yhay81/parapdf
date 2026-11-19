@@ -102,9 +102,9 @@ function annotationRects({
   rect: PdfRect;
   quadPoints?: ArrayLike<number> | null;
 }): PdfRect[] {
-  if (!quadPoints) return [rect];
+  if (!quadPoints || quadPoints.length < 8) return [rect];
   const rects: PdfRect[] = [];
-  for (let i = 2; i < quadPoints.length; i += 8) {
+  for (let i = 2; i + 5 < quadPoints.length; i += 8) {
     const [trX, trY, blX, blY] = [
       quadPoints[i],
       quadPoints[i + 1],
@@ -291,9 +291,11 @@ export function attachAutoLinks(viewer: ViewerController): () => void {
   };
 
   const run = (pageIndex: number) =>
-    link(pageIndex).catch((error: unknown) =>
-      console.error(`page ${pageIndex + 1}: finding links in the text failed`, error),
-    );
+    link(pageIndex).catch((error: unknown) => {
+      if (!stopped && session && !session.signal.aborted) {
+        console.error(`page ${pageIndex + 1}: finding links in the text failed`, error);
+      }
+    });
 
   const remove = viewer.extend({
     ready(opened) {

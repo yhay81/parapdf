@@ -193,15 +193,24 @@ let mathMLSanitizer: unknown | undefined;
 function getMathMLSanitizer(): unknown | null {
   if (mathMLSanitizer !== undefined) return mathMLSanitizer;
   const api = globalThis as unknown as Partial<SanitizerApi>;
-  mathMLSanitizer =
-    typeof api.Sanitizer === "function" && "setHTML" in Element.prototype
-      ? new api.Sanitizer({
-          elements: Array.from(MATHML_ELEMENTS, (name) => ({ name, namespace: MATHML_NAMESPACE })),
-          replaceWithChildrenElements: [{ name: "maction", namespace: MATHML_NAMESPACE }],
-          attributes: MATHML_ATTRIBUTES,
-          comments: false,
-        })
-      : null;
+  try {
+    mathMLSanitizer =
+      typeof api.Sanitizer === "function" &&
+      typeof Element !== "undefined" &&
+      "setHTML" in Element.prototype
+        ? new api.Sanitizer({
+            elements: Array.from(MATHML_ELEMENTS, (name) => ({
+              name,
+              namespace: MATHML_NAMESPACE,
+            })),
+            replaceWithChildrenElements: [{ name: "maction", namespace: MATHML_NAMESPACE }],
+            attributes: MATHML_ATTRIBUTES,
+            comments: false,
+          })
+        : null;
+  } catch {
+    mathMLSanitizer = null;
+  }
   return mathMLSanitizer;
 }
 
@@ -245,6 +254,7 @@ export class StructTreeBuilder {
   /** `tree` is the page's `getStructTree()`. */
   constructor(tree: Promise<unknown>, rawDims: RawDims | null) {
     this.#treeSource = tree as Promise<StructNode | null>;
+    this.#treeSource.catch(() => {});
     this.#rawDims = rawDims;
   }
 

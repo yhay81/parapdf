@@ -137,7 +137,7 @@ export class ViewerGestures {
    */
   #swipe: { id: number; x: number; y: number; edges: Edges; selection: string } | null = null;
   /** Gives the scroller its overflow back after a flip stopped a fling; null without one. */
-  #flingStop: (() => void) | null = null;
+  #flingStop: ((keepPosition?: boolean) => void) | null = null;
   /** Removes the window listeners that follow the touches down on the viewport. */
   #touchListeners: AbortController | null = null;
   /** The scale of Safari's gesture in progress at its latest event; null without one. */
@@ -255,17 +255,18 @@ export class ViewerGestures {
     const { scrollLeft, scrollTop } = scroller;
     const overflow = scroller.style.overflow;
     scroller.style.overflow = "hidden";
-    const restore = () => {
+    const restore = (keepPosition = true) => {
       if (this.#flingStop !== restore) return;
       this.#flingStop = null;
       clearTimeout(timer);
-      for (const type of FLING_ENDS) scroller.removeEventListener(type, restore, { capture: true });
+      for (const type of FLING_ENDS) scroller.removeEventListener(type, onInput, { capture: true });
       scroller.style.overflow = overflow;
-      scroller.scrollTo(scrollLeft, scrollTop);
+      if (keepPosition) scroller.scrollTo(scrollLeft, scrollTop);
     };
-    const timer = setTimeout(restore, FLING_STOP);
+    const onInput = () => restore(true);
+    const timer = setTimeout(() => restore(true), FLING_STOP);
     for (const type of FLING_ENDS)
-      scroller.addEventListener(type, restore, { capture: true, passive: true });
+      scroller.addEventListener(type, onInput, { capture: true, passive: true });
     this.#flingStop = restore;
   }
 
@@ -572,14 +573,17 @@ export class ViewerGestures {
 
   /** Commit a gesture in progress before something else changes the layout under its preview. */
   finish(): void {
+    this.#flingStop?.(false);
     if (this.#zoom) this.#commitZoom();
   }
 
   /** Forget a gesture without committing it: its viewport goes away. */
   drop(): void {
+    this.#flingStop?.(false);
     if (this.#zoom) clearTimeout(this.#zoom.timer);
     this.#zoom = null;
     this.#pinch = null;
+    this.#swipe = null;
     this.#touches.clear();
     this.#touchListeners?.abort();
     this.#touchListeners = null;

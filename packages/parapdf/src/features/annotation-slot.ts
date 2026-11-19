@@ -3,6 +3,7 @@
 import { createSlotKey, Store } from "../document/store.ts";
 import type {
   AnnotationAltText,
+  AnnotationEditingState,
   AnnotationLabels,
   AnnotationStyles,
   AnnotationTool,
@@ -16,7 +17,13 @@ import type {
   AnnotationEditingStore,
 } from "./annotations.ts";
 
-export interface AnnotationControls extends AnnotationEditingStore {
+export interface AnnotationControls {
+  /** What a pointer does on the pages; see `setTool()`. */
+  tool: AnnotationTool;
+  /** Undo, redo, and the selection of the annotations edited; null until editing starts. */
+  state: AnnotationEditingState | null;
+  /** The style of each tool; null until editing starts. */
+  styles: AnnotationStyles | null;
   setTool(tool: AnnotationTool): Promise<void>;
   setStyle<T extends keyof AnnotationStyles>(tool: T, style: Partial<AnnotationStyles[T]>): void;
   undo(): void;
@@ -77,6 +84,7 @@ export interface AnnotationSlot {
   readonly store: Store<AnnotationControls>;
   readonly initialControls: AnnotationControls;
   mounts: number;
+  defaultApplied: boolean;
   labels: Partial<AnnotationLabels> | undefined;
   editing: AnnotationEditing | null;
   removeViewportGuard: (() => void) | null;
@@ -123,6 +131,7 @@ export function annotationSlot(viewer: ViewerController): AnnotationSlot {
       const current = slot.editing;
       slot.editing = null;
       slot.labels = undefined;
+      slot.defaultApplied = false;
       current.detach();
       store.set(STOPPED);
     };
@@ -135,6 +144,7 @@ export function annotationSlot(viewer: ViewerController): AnnotationSlot {
       store,
       initialControls,
       mounts: 0,
+      defaultApplied: false,
       labels: undefined,
       editing: null,
       removeViewportGuard: null,
@@ -146,6 +156,9 @@ export function annotationSlot(viewer: ViewerController): AnnotationSlot {
           slot.removeViewportGuard = viewer.extend({
             viewport() {
               if (slot.mounts === 0) queueMicrotask(detachIfUnmounted);
+            },
+            closed(kept) {
+              if (!kept) slot.defaultApplied = false;
             },
           });
           slot.labels = labels;
@@ -221,15 +234,13 @@ export function bindAnnotationTool(
   onDiverge: () => void,
 ): { applyControlled(tool: AnnotationTool | undefined): void; disconnect(): void } {
   let reported: AnnotationTool | null = null;
-  let appliedDefaultSession: unknown = null;
-  let wasOpen = slot.store.get().state !== null;
+  let wasOpen = false;
 
   const sync = (initializing: boolean) => {
     const current = slot.store.get();
     const { tool: controlled, defaultTool: initial, onToolChange } = getBinding();
     if (current.state === null) {
       wasOpen = false;
-      if (!viewer.session) appliedDefaultSession = null;
       return;
     }
     const justOpened = !wasOpen;
@@ -254,18 +265,16 @@ export function bindAnnotationTool(
       initial !== undefined &&
       initial !== "none" &&
       viewer.session !== null &&
-      appliedDefaultSession !== viewer.session
+      !slot.defaultApplied
     ) {
-      appliedDefaultSession = viewer.session;
+      slot.defaultApplied = true;
       reported = initial;
       void slot.editing?.setTool(initial).catch(() => {});
       return;
     }
-    const last = reported ?? "none";
-    if (current.tool !== last) {
-      reported = current.tool;
-      if (!initializing) onToolChange?.(current.tool);
-    }
+    const last = reported ?? (initializing ? current.tool : "none");
+    reported = current.tool;
+    if (current.tool !== last && !initializing) onToolChange?.(current.tool);
   };
 
   sync(true);

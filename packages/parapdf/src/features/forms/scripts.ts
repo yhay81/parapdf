@@ -14,7 +14,7 @@ import type { FitMode, ViewerStoreKey } from "../../view/state.ts";
 import type { ViewerController } from "../../view/viewer.ts";
 import { PDF_TO_CSS } from "../../view/zoom.ts";
 
-/** A viewer whose form fields run the document's scripts (`formScripts`). */
+/** A viewer whose form fields run the document's scripts (`<PdfForms scripts>`). */
 export interface ScriptingViewer {
   readonly viewer: ViewerController;
   /** The scripts changed the value of the field `id`. */
@@ -116,7 +116,7 @@ function command(run: Running, session: DocumentSession, name: string, value: un
       break;
     case "print":
       import("../print/index.ts")
-        .then(({ print }) => print(viewer))
+        .then(({ printOf }) => printOf(viewer).store.get().print())
         .catch((error: unknown) =>
           console.error("printing for the document's scripts failed", error),
         );

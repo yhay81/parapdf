@@ -171,4 +171,11 @@ describe("search options", () => {
     assert.deepEqual(search(text, "café", { matchDiacritics: true }), ["café", "café"]);
     assert.deepEqual(search(text, "café", { matchDiacritics: true }), ["café", "café"]);
   });
+
+  it("respects supplementary combining marks (such as CJK variation selectors) when diacritics match", () => {
+    const ivs = "\u{E0100}";
+    const text = page([`葛${ivs} 葛`]);
+    assert.deepEqual(search(text, "葛", { matchDiacritics: true }), ["葛"]);
+    assert.deepEqual(search(text, `葛${ivs}`, { matchDiacritics: true }), [`葛${ivs}`]);
+  });
 });

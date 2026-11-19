@@ -83,7 +83,12 @@ export async function printDocument(
 ): Promise<void> {
   current?.cleanUp();
   signal?.throwIfAborted();
-  const scale = resolution / 72;
+  if (session.pageCount === 0) {
+    onEnd?.();
+    return;
+  }
+  const dpi = Number.isFinite(resolution) && resolution > 0 ? resolution : 150;
+  const scale = dpi / 72;
   const urls: string[] = [];
   const images: HTMLImageElement[] = [];
   const container = document.createElement("div");
@@ -109,7 +114,10 @@ export async function printDocument(
   };
   current = job;
   try {
-    const first = await session.pageSize(0);
+    const [first, printLayers] = await Promise.all([
+      session.pageSize(0),
+      layers ? layers.forPrint() : Promise.resolve(undefined),
+    ]);
     if (cleaned) return;
     style.textContent = printCss(first);
     for (let pageIndex = 0; pageIndex < session.pageCount; pageIndex++) {
@@ -131,7 +139,7 @@ export async function printDocument(
         // What was typed into form fields, and the layers as the viewer
         // shows them, on pdf.js's configuration for printing.
         print: session.proxy.annotationStorage.print,
-        ...(layers ? { layers: layers.forPrint() } : {}),
+        ...(printLayers ? { layers: printLayers } : {}),
       });
       const abort = () => task.cancel();
       cancelRender = abort;

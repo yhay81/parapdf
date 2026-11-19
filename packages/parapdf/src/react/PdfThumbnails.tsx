@@ -72,7 +72,8 @@ function measureScrollMetrics(ol: HTMLOListElement, scroller: HTMLElement | null
   if (scroller) {
     const listContentStart =
       ol.getBoundingClientRect().top -
-      scroller.getBoundingClientRect().top +
+      scroller.getBoundingClientRect().top -
+      scroller.clientTop +
       scroller.scrollTop +
       paddingTop;
     return {
@@ -268,7 +269,12 @@ export function PdfThumbnails({
     scrollMetricsRef.current = measureScrollMetrics(ol, scroller);
 
     const refreshOnResize = () => {
-      scrollMetricsRef.current = measureScrollMetrics(ol, scroller);
+      const prevHeight = scrollMetricsRef.current?.viewportHeight ?? 0;
+      const next = measureScrollMetrics(ol, scroller);
+      scrollMetricsRef.current = next;
+      if (prevHeight <= 0 && next.viewportHeight > 0) {
+        setChrome((prev) => ({ ...prev, measuredVersion: prev.measuredVersion + 1 }));
+      }
       syncWindowFromScroll();
     };
 
@@ -408,7 +414,7 @@ export function PdfThumbnails({
     const metrics = measureScrollMetrics(ol, scroller);
     scrollMetricsRef.current = metrics;
 
-    if (shouldAlign) {
+    if (shouldAlign && (!scroller || metrics.viewportHeight > 0)) {
       alignKeyRef.current = {
         currentPage,
         pageCount,

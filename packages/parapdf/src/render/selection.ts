@@ -92,7 +92,10 @@ export class TextSelectionTracker {
     this.#pages = pages;
     return () => {
       pages.classList.remove("selecting");
-      if (this.#pages === pages) this.#pages = null;
+      if (this.#pages === pages) {
+        this.#pages = null;
+        this.#endDrag();
+      }
     };
   }
 
@@ -162,17 +165,20 @@ export class TextSelectionTracker {
     this.#listeners = new AbortController();
     const options = { signal: this.#listeners.signal };
     const release = () => {
-      const anchor = this.#anchor;
-      const selection = document.getSelection();
-      if (anchor && !this.#anchorPending && selection) {
-        // WebKit may have restarted the drag at the pointer's last move.
-        this.#keepAnchor(selection);
-        // A drag that selected nothing leaves no selection, not an empty range.
-        if (isAt(selection, anchor) && selection.toString() === "") selection.removeAllRanges();
+      try {
+        const anchor = this.#anchor;
+        const selection = document.getSelection();
+        if (anchor && !this.#anchorPending && selection && isValidPoint(anchor)) {
+          // WebKit may have restarted the drag at the pointer's last move.
+          this.#keepAnchor(selection);
+          // A drag that selected nothing leaves no selection, not an empty range.
+          if (isAt(selection, anchor) && selection.toString() === "") selection.removeAllRanges();
+        }
+      } finally {
+        this.#pointerDown = false;
+        this.#resetAll();
+        this.#endDrag();
       }
-      this.#pointerDown = false;
-      this.#resetAll();
-      this.#endDrag();
     };
     document.addEventListener(
       "mousedown",
@@ -255,8 +261,8 @@ export class TextSelectionTracker {
       return;
     }
     const selection = document.getSelection();
-    if (!selection || !anchor.node.isConnected) {
-      // The page that held the anchor was unmounted.
+    if (!selection || !isValidPoint(anchor)) {
+      // The page that held the anchor was unmounted or the pages shrunk past its offset.
       this.#anchor = null;
       return;
     }
@@ -277,11 +283,18 @@ export class TextSelectionTracker {
   /** Puts the anchor of a drag from the pages element back where it started. */
   #keepAnchor(selection: Selection): void {
     const anchor = this.#anchor;
-    if (!anchor || selection.rangeCount === 0) return;
+    if (!anchor || !isValidPoint(anchor) || selection.rangeCount === 0) {
+      if (anchor && !isValidPoint(anchor)) this.#anchor = null;
+      return;
+    }
     const { focusNode, focusOffset } = selection;
-    if (isAt(selection, anchor) || !focusNode) {
+    if (
+      isAt(selection, anchor) ||
+      !focusNode ||
+      !isValidPoint({ node: focusNode, offset: focusOffset })
+    ) {
       if (selection.isCollapsed) selectAt(selection, anchor);
-    } else {
+    } else if (anchor.node.getRootNode() === focusNode.getRootNode()) {
       selection.setBaseAndExtent(anchor.node, anchor.offset, focusNode, focusOffset);
     }
   }
@@ -297,11 +310,18 @@ export class TextSelectionTracker {
     const active = new Set<HTMLElement>();
     for (const range of ranges) {
       for (const layer of this.#layers.keys()) {
-        if (!active.has(layer) && range.intersectsNode(layer)) active.add(layer);
+        if (
+          !active.has(layer) &&
+          range.startContainer.getRootNode() === layer.getRootNode() &&
+          range.intersectsNode(layer)
+        ) {
+          active.add(layer);
+        }
       }
     }
     let above: Range | null = null;
-    if (focus && this.#dragging && this.#quirks.endsAtStartOfBlankSpace) {
+    const focusRoot = focus && isValidPoint(focus) ? focus.node.getRootNode() : null;
+    if (focus && focusRoot && this.#dragging && this.#quirks.endsAtStartOfBlankSpace) {
       above = document.createRange();
       above.setStart(focus.node, focus.offset);
     }
@@ -309,7 +329,11 @@ export class TextSelectionTracker {
       if (active.has(layer)) {
         layer.classList.add("selecting");
         layer.classList.remove("before-selection");
-      } else if (above && above.comparePoint(layer, layer.childNodes.length) < 0) {
+      } else if (
+        above &&
+        focusRoot === layer.getRootNode() &&
+        above.comparePoint(layer, layer.childNodes.length) < 0
+      ) {
         this.#putBack(layer, end);
         layer.classList.add("selecting", "before-selection");
       } else {
@@ -494,6 +518,13 @@ function selectAt(selection: Selection, point: Point): void {
     else if (before) other = { node: before, offset: before.childNodes.length };
   }
   selection.setBaseAndExtent(node, offset, other.node, other.offset);
+}
+
+function isValidPoint(point: Point): boolean {
+  const { node, offset } = point;
+  if (!node.isConnected || offset < 0) return false;
+  const max = node.nodeType === 3 ? (node as Text).data.length : node.childNodes.length;
+  return offset <= max;
 }
 
 const isAt = (selection: Selection, point: Point): boolean =>

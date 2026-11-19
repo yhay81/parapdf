@@ -325,6 +325,7 @@ export class DocumentSession {
     this.pdfjs = pdfjs;
     this.proxy = proxy;
     this.pageCount = proxy.numPages;
+    if (this.pageCount === 0) this.#sizes = [];
     this.signal = controller.signal;
     this.#password = password;
     this.#close = () => {
@@ -427,18 +428,21 @@ export class DocumentSession {
     }
   }
 
-  /** pdf.js's page `pageIndex`, loaded once. */
+  /** pdf.js's page `pageIndex`, loaded once; evicted on rejection so retries can recover. */
   page(pageIndex: number): Promise<Pdfjs.PDFPageProxy> {
     let page = this.#pages.get(pageIndex);
     if (!page) {
-      page = this.proxy.getPage(pageIndex + 1);
-      page.then(
+      const started = this.proxy.getPage(pageIndex + 1);
+      started.then(
         (loaded) => {
           if (!this.signal.aborted) this.#knownPages.set(pageIndex, loaded);
         },
-        () => {},
+        () => {
+          if (this.#pages.get(pageIndex) === started) this.#pages.delete(pageIndex);
+        },
       );
-      this.#pages.set(pageIndex, page);
+      page = started;
+      this.#pages.set(pageIndex, started);
     }
     return page;
   }
@@ -858,14 +862,16 @@ export class DocumentSession {
       // typed or drawn, its pages come from its saved bytes, which have both.
       // pdf.js takes this document's pages from an entry whose `document` is
       // null, and leaves out one without it.
-      const own = this.proxy.annotationStorage.size > 0 ? await this.proxy.saveDocument() : null;
+      const usesOwn = pages.some((entry) => entry.document == null && !entry.image);
+      const own =
+        usesOwn && this.proxy.annotationStorage.size > 0 ? await this.proxy.saveDocument() : null;
       return this.proxy.extractPages(
         pages.map((entry) =>
           entry.document == null && !entry.image
             ? {
                 ...entry,
                 document: own,
-                ...(own && this.#password ? { password: this.#password } : {}),
+                ...(own && this.#password !== undefined ? { password: this.#password } : {}),
               }
             : entry,
         ),

@@ -207,6 +207,7 @@ export function shouldRedrawRegion(region: PageArea, visible: PageArea): boolean
 
 /** Lowers `scale` until a page of `size` points fits in `maxPixels`. */
 export function capScale(scale: number, size: PageSize | undefined, maxPixels: number): number {
+  if (maxPixels <= 0) return 0;
   if (!size) return scale;
   const pixels = size.width * scale * (size.height * scale);
   return pixels > maxPixels ? scale * Math.sqrt(maxPixels / pixels) : scale;
@@ -314,6 +315,7 @@ export function detailPlan(context: PlanContext, index: number): DetailPlan | nu
   let scale = layout.scale * devicePixelRatio;
   let pixels = size.width * scale * (size.height * scale);
   const budget = detailBudget(context, index);
+  if (budget <= 0) return null;
   if (pixels <= budget) return { scale, region: null };
   const visible = visibleArea(layout, index, context.input.viewport);
   if (!visible) return null;
@@ -443,6 +445,7 @@ export function snapRegion(
   const size = turnedSize(unturned, layout.rotation);
   const width = size.width * scale;
   const height = size.height * scale;
+  if (width <= 0 || height <= 0) return null;
   const x = Math.floor(region.minX * width);
   const y = Math.floor(region.minY * height);
   const right = Math.min(Math.ceil(width), Math.ceil(region.maxX * width));
@@ -568,7 +571,7 @@ export function nextDrawing(
       const plan: DetailPlan | null =
         layer === "base" ? { scale: baseScale(context, page.index), region: null } : planOf(page);
       // A base of no pixels, as with maxBasePixels 0, would be drawn again forever.
-      if (!plan || plan.scale === 0 || failed(context, page, layer, plan)) continue;
+      if (!plan || !(plan.scale > 0) || failed(context, page, layer, plan)) continue;
       // A page that shows a detail keeps it until the next one, drawn into
       // the spare canvas, is complete.
       const intoSpare =

@@ -35,7 +35,7 @@ export interface Opening {
 
 /**
  * How a viewer shows documents, set by its `PdfViewer`'s props. They change
- * while it shows one (`setViewerOptions()`); the initial ones apply as it
+ * while it shows one (`viewer.configure()`); the initial ones apply as it
  * opens a document.
  */
 export interface ViewerOptions {

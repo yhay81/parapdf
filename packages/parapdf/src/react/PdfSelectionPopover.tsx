@@ -154,6 +154,7 @@ export function PdfSelectionPopover({
     if (typeof ResizeObserver === "function") {
       resizeObserver = new ResizeObserver(update);
       resizeObserver.observe(el);
+      if (scroller) resizeObserver.observe(scroller);
     }
 
     return () => {

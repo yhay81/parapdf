@@ -301,10 +301,9 @@ of its own, and detaching it undoes what it added. The core imports no feature.
   stateful action and permission flows belong exclusively to `useSave()`,
   `usePrint()`, and `usePermits()`. Low-level
   feature plumbing (`searchOf`, `historyOf`, `printOf`, `saveOf`, `save`,
-  `download`, `print`, `permits`, `permitsStoreOf`, `attachThumbnail`,
-  `enforcePermissions`, `annotationSlot`, `getSelection`, `getViewState`,
-  `setViewState`) stays internal to the package (decisions 0035, 0041, 0046, and
-  0047).
+  `download`, `print`, `permits`, `permitsStoreOf`,
+  `enforcePermissions`, `annotationSlot`, `getSelection`) stays internal to the
+  package (decisions 0035, 0041, 0046, and 0047).
   Each stateful feature owns its single reactive store or listener registry
   directly in a typed `SlotKey<T>` slot on `ViewerController`,
   `PdfSessionController`, or `DocumentSession` (`ReadableStore<SearchControls>`,
@@ -419,11 +418,11 @@ the DOM declares `"use client"`.
   `PdfAnnotationEditor`, `PdfAutoLinks`, `PdfPermissions`, each wrapped in
   `memo`) mount synchronously with `useLayoutEffect` before the browser paints,
   without async layout deferrals. `PdfAnnotationEditor` renders its `<style
-  precedence="parapdf">` directly, synchronizes its attachment, labels
-  (`sameAnnotationLabels`), and controlled or initial tool (`tool`,
-  `defaultTool`, `onToolChange`) through `annotationSlot(viewer).bindControls()`
-  in a single `useLayoutEffect`, and preserves kept snapshots when
-  hidden with its viewport (`<Activity>` or unmounting `PdfViewer`) while
+  precedence="parapdf">` directly, attaches through
+  `annotationSlot(viewer).bindControls()` on mount, synchronizes its labels
+  (`sameAnnotationLabels`), `onToolChange`, and controlled or initial tool
+  (`tool`, `defaultTool`) in `useLayoutEffect`, and preserves kept snapshots
+  when hidden with its viewport (`<Activity>` or unmounting `PdfViewer`) while
   detaching immediately when removed from an attached viewport (decisions
   0034, 0041, and 0044). Cleanup waits until the commit finishes so a sibling
   editor can mount after the viewport and reclaim its kept annotations.

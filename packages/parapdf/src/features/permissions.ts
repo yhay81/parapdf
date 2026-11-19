@@ -108,7 +108,7 @@ export function enforcePermissions(viewer: ViewerController): () => void {
   if (++policy.holders === 1) {
     policy.sync(viewer.permissions);
     policy.stopCopyProtection = protectCopy(viewer);
-    for (const listener of policy.listeners) listener();
+    for (const listener of [...policy.listeners]) listener();
   }
   let released = false;
   return () => {
@@ -118,28 +118,42 @@ export function enforcePermissions(viewer: ViewerController): () => void {
     policy.sync(null);
     policy.stopCopyProtection?.();
     delete policy.stopCopyProtection;
-    for (const listener of policy.listeners) listener();
+    for (const listener of [...policy.listeners]) listener();
   };
 }
 
 function protectCopy(viewer: ViewerController): () => void {
+  let scroller: HTMLElement | null = null;
   let content: HTMLElement | null = null;
   const apply = () => content?.classList.toggle("parapdf-no-copy", !permits(viewer, "copy"));
   const onCopy = (event: ClipboardEvent) => {
-    if (!permits(viewer, "copy")) event.preventDefault();
+    if (permits(viewer, "copy")) return;
+    const target = event.target;
+    if (
+      target === scroller ||
+      target === content ||
+      (target instanceof Node && content?.contains(target))
+    ) {
+      event.preventDefault();
+    }
   };
   const detachExtension = viewer.extend({
     // Each document's permissions are known before its pages are laid out.
     prepare: apply,
-    viewport(_scroller, pages, signal) {
+    closed() {
+      content?.classList.remove("parapdf-no-copy");
+    },
+    viewport(nextScroller, pages, signal) {
+      scroller = nextScroller;
       content = pages;
-      pages.addEventListener("copy", onCopy, { signal });
-      pages.addEventListener("cut", onCopy, { signal });
+      nextScroller.addEventListener("copy", onCopy, { signal });
+      nextScroller.addEventListener("cut", onCopy, { signal });
       apply();
       signal.addEventListener(
         "abort",
         () => {
           pages.classList.remove("parapdf-no-copy");
+          if (scroller === nextScroller) scroller = null;
           if (content === pages) content = null;
         },
         { once: true },
@@ -148,9 +162,10 @@ function protectCopy(viewer: ViewerController): () => void {
   });
   return () => {
     detachExtension();
-    content?.removeEventListener("copy", onCopy);
-    content?.removeEventListener("cut", onCopy);
+    scroller?.removeEventListener("copy", onCopy);
+    scroller?.removeEventListener("cut", onCopy);
     content?.classList.remove("parapdf-no-copy");
+    scroller = null;
     content = null;
   };
 }

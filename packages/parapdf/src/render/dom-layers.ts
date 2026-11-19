@@ -12,7 +12,7 @@ import {
   buildAnnotationLayer,
   type LinkHandlers,
 } from "../pdfjs/annotation-layer.ts";
-import { isRenderCancelled, type Rotation } from "../pdfjs/draw.ts";
+import { clearFormLayer, isRenderCancelled, type Rotation } from "../pdfjs/draw.ts";
 import type {
   AnnotationEditor,
   AnnotationEditorLayerTask,
@@ -191,6 +191,7 @@ export class DomLayers {
     this.#pages.delete(index);
     page.textTask?.cancel();
     page.annotationTask?.cancel();
+    page.annotationHandle?.destroy();
     page.editorTask?.cancel();
     page.editorHandle?.destroy();
     this.#editorBuilt(index, false);
@@ -202,7 +203,10 @@ export class DomLayers {
       text.replaceChildren();
       pinTextLayer(text, null);
     }
-    annotations?.replaceChildren();
+    if (annotations) {
+      clearFormLayer(annotations);
+      annotations.replaceChildren();
+    }
     structure?.replaceChildren();
   }
 
@@ -257,6 +261,9 @@ export class DomLayers {
    * annotations from them after them.
    */
   invalidateAnnotations(): void {
+    const keepCanvases =
+      this.#options.annotationSetup.forms ||
+      (this.#options.annotationSetup.editor?.layerEditing.editing ?? false);
     for (const page of this.#pages.values()) {
       page.failed.delete("annotations");
       page.failed.delete("editor");
@@ -268,8 +275,12 @@ export class DomLayers {
       if (!annotations) continue;
       page.annotationTask?.cancel();
       page.annotationTask = undefined;
-      if (page.annotationHandle) this.#options.onAnnotationsRemoved?.(page.index);
+      if (page.annotationHandle) {
+        page.annotationHandle.destroy();
+        this.#options.onAnnotationsRemoved?.(page.index);
+      }
       page.annotationHandle = undefined;
+      if (!keepCanvases) clearFormLayer(annotations);
       annotations.replaceChildren();
     }
   }
@@ -377,6 +388,9 @@ export class DomLayers {
    * stops, or within EDITOR_WAIT_MS. The page need not be mounted yet.
    */
   whenEditable(index: number): Promise<boolean> {
+    if (!Number.isInteger(index) || index < 0 || index >= this.#session.pageCount) {
+      return Promise.resolve(false);
+    }
     const page = this.#pages.get(index);
     if (page?.editorHandle) return Promise.resolve(true);
     if (
@@ -502,10 +516,16 @@ export class DomLayers {
     task.promise
       .then(
         (handle) => {
-          if (!this.#current(page) || page.annotationTask !== task) return;
+          if (!this.#current(page) || page.annotationTask !== task) {
+            handle.destroy();
+            return;
+          }
+          const liveScale = this.#input?.layout.scale ?? cssScale;
+          const liveRotation = this.#input?.layout.rotation ?? rotation;
+          if (liveRotation !== rotation) handle.update(liveScale, liveRotation);
           page.annotationHandle = handle;
-          page.annotationScale = cssScale;
-          page.annotationRotation = rotation;
+          page.annotationScale = liveRotation !== rotation ? liveScale : cssScale;
+          page.annotationRotation = liveRotation;
           this.#stats.annotations++;
           this.#options.onAnnotationsReady?.(page.index, handle);
         },
@@ -541,6 +561,8 @@ export class DomLayers {
       .then(
         (handle) => {
           if (!this.#current(page) || page.textTask !== task) return;
+          const liveRotation = this.#input?.layout.rotation ?? rotation;
+          if (liveRotation !== rotation) handle.update(cssScale, liveRotation);
           // Like pdf.js's viewer, end with an element that catches drags past
           // the last run so selections do not jump to the page's start.
           const end = container.ownerDocument.createElement("div");
@@ -548,13 +570,17 @@ export class DomLayers {
           container.append(end);
           this.#options.selection?.add(container, end);
           page.textHandle = handle;
-          page.textRotation = rotation;
+          page.textRotation = liveRotation;
+          followZoom(page, this.#input?.layout.scale ?? cssScale);
           this.#stats.text++;
           this.#options.onTextReady?.(page.index, handle);
         },
         (error: unknown) => {
-          if (this.#failed(error, page, "text layer") && page.textTask === task) {
-            page.failed.add("text");
+          const failed = this.#failed(error, page, "text layer");
+          if (this.#current(page) && page.textTask === task) {
+            page.textScale = 0;
+            pinTextLayer(container, null);
+            if (failed) page.failed.add("text");
           }
         },
       )

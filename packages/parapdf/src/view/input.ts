@@ -43,12 +43,14 @@ export class ViewerInput {
     scroller.addEventListener("pointermove", this.#onGrabMove, { passive: true });
     scroller.addEventListener("pointerup", this.#onGrabEnd, { passive: true });
     scroller.addEventListener("pointercancel", this.#onGrabEnd, { passive: true });
+    scroller.addEventListener("lostpointercapture", this.#onGrabEnd, { passive: true });
     scroller.addEventListener("keydown", this.#onKeyDown);
     return () => {
       scroller.removeEventListener("pointerdown", this.#onGrabStart);
       scroller.removeEventListener("pointermove", this.#onGrabMove);
       scroller.removeEventListener("pointerup", this.#onGrabEnd);
       scroller.removeEventListener("pointercancel", this.#onGrabEnd);
+      scroller.removeEventListener("lostpointercapture", this.#onGrabEnd);
       scroller.removeEventListener("keydown", this.#onKeyDown);
       this.#grab = null;
       scroller.classList.remove("parapdf-grabbing");
@@ -170,7 +172,11 @@ export class ViewerInput {
     if (!scroller) return;
     scroller.focus({ preventScroll: true });
     this.#grab = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
-    scroller.setPointerCapture(event.pointerId);
+    try {
+      scroller.setPointerCapture(event.pointerId);
+    } catch {
+      // Synthetic or already-released pointers cannot be captured.
+    }
     scroller.classList.add("parapdf-grabbing");
   };
 

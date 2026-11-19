@@ -277,7 +277,8 @@ function ViewerViewport({
         if (event.defaultPrevented || event.button !== 0 || viewer.pointerClaimed) return;
         if (down && Math.hypot(event.clientX - down.x, event.clientY - down.y) > 4) return;
         const target = event.target instanceof Element ? event.target : null;
-        if (target?.closest(INTERACTIVE_CLICK_TARGETS)) return;
+        if (!target || !viewer.content?.contains(target)) return;
+        if (target.closest(INTERACTIVE_CLICK_TARGETS)) return;
         const selection = (event.currentTarget.ownerDocument ?? document).getSelection();
         if (
           selection &&
@@ -442,6 +443,12 @@ const ViewerControlSync = memo(function ViewerControlSync({
         initialSpread,
         initialScrollMode,
         initialPage: defaultPage,
+        controlled: {
+          zoom,
+          rotation,
+          spread,
+          scrollMode,
+        },
         fragment: () => openingFragment(viewer, session),
       }),
     [
@@ -453,6 +460,10 @@ const ViewerControlSync = memo(function ViewerControlSync({
       initialSpread,
       initialScrollMode,
       defaultPage,
+      zoom,
+      rotation,
+      spread,
+      scrollMode,
     ],
   );
 

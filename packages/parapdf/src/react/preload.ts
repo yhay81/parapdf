@@ -41,14 +41,13 @@ export function preloadDocumentWith(
   const stripped: PdfSource =
     "url" in resolved && resolved.url !== url ? { ...resolved, url } : resolved;
   const shared = sharedSession(pdfjs, stripped);
+  void shared.read("initialView", (doc) => doc.initialView(), null);
+  void shared.read("pageLabels", (doc) => doc.pageLabels(), null);
   void shared.session.then(
     (doc) => {
       if (shared.signal.aborted) return;
-      void doc.pageSizes().catch(() => {});
-      void doc.permissions().catch(() => {});
+      if (doc.pageCount > 0) void doc.pageSizes().catch(() => {});
       void doc.direction().catch(() => {});
-      void doc.initialView().catch(() => {});
-      void doc.pageLabels().catch(() => {});
       if (fragment) {
         for (const dest of fragmentDestinations(fragment, 0)) {
           void doc.resolveDestination(dest).catch(() => {});

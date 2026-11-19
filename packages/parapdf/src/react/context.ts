@@ -124,10 +124,11 @@ export function useStoreKeys<T, S>(
           });
           return () => {
             created.passiveActive = false;
+            created.dirty = true;
             unsubscribe();
           };
         },
-        dirty: false,
+        dirty: true,
         passiveActive: false,
         layoutUnsub: null,
         shown: undefined,
@@ -267,6 +268,7 @@ export interface TrackedSnapshot<T extends object> {
   readonly proxy: T;
   readonly tracked: Set<PropertyKey>;
   readonly fallback: ReadonlySet<PropertyKey> | null;
+  committed: boolean;
 }
 
 interface SliceState<T extends object, S> {
@@ -279,6 +281,7 @@ interface SliceState<T extends object, S> {
   shownSelected: S | undefined;
   hasShownSelected: boolean;
   shownTracked: TrackedSnapshot<T> | null;
+  committedTracked: TrackedSnapshot<T> | null;
   trackedClient: TrackedSnapshot<T> | null;
   trackedServer: TrackedSnapshot<T> | null;
   selectedClient: SelectedCache<T, S> | null;
@@ -318,6 +321,7 @@ export function createTrackedSnapshot<T extends object>(
     proxy: undefined as unknown as T,
     tracked: new Set<PropertyKey>(),
     fallback,
+    committed: false,
   };
   (snapshot as { proxy: T }).proxy = new Proxy(
     snapshot as unknown as TrackedSnapshot<object>,
@@ -329,7 +333,19 @@ export function createTrackedSnapshot<T extends object>(
 export function activeTracked<T extends object>(
   snapshot: TrackedSnapshot<T>,
 ): ReadonlySet<PropertyKey> | null {
-  return snapshot.tracked.size > 0 ? snapshot.tracked : snapshot.fallback;
+  return snapshot.tracked.size > 0 || snapshot.committed ? snapshot.tracked : snapshot.fallback;
+}
+
+function unionTracked(
+  a: ReadonlySet<PropertyKey> | null,
+  b: ReadonlySet<PropertyKey> | null,
+): ReadonlySet<PropertyKey> | null {
+  if (!a) return b;
+  if (!b) return a;
+  if (a === b) return a;
+  const merged = new Set<PropertyKey>(a);
+  for (const key of b) merged.add(key);
+  return merged;
 }
 
 export function hasTrackedChange<T extends object>(
@@ -399,7 +415,12 @@ export function useStoreSlice<T extends object, S>(
                 return;
               }
               if (!created.hasSelector && changedKeys && created.trackedClient) {
-                const tracked = activeTracked(created.trackedClient);
+                const tracked = created.trackedClient.committed
+                  ? activeTracked(created.trackedClient)
+                  : unionTracked(
+                      activeTracked(created.trackedClient),
+                      created.committedTracked ? activeTracked(created.committedTracked) : null,
+                    );
                 let hit = false;
                 if (tracked) {
                   for (const key of changedKeys) {
@@ -411,6 +432,12 @@ export function useStoreSlice<T extends object, S>(
                 }
                 if (!hit) {
                   created.trackedClient.raw = store.get();
+                  if (
+                    created.committedTracked &&
+                    created.committedTracked !== created.trackedClient
+                  ) {
+                    created.committedTracked.raw = created.trackedClient.raw;
+                  }
                   return;
                 }
               }
@@ -430,6 +457,7 @@ export function useStoreSlice<T extends object, S>(
         shownSelected: undefined,
         hasShownSelected: false,
         shownTracked: null,
+        committedTracked: null,
         trackedClient: null,
         trackedServer: null,
         selectedClient: null,
@@ -463,12 +491,18 @@ export function useStoreSlice<T extends object, S>(
                 raw,
                 state.trackedServer ? activeTracked(state.trackedServer) : null,
               );
-      } else if (
-        hasTrackedChange(state.trackedClient.raw, raw, activeTracked(state.trackedClient))
-      ) {
-        state.trackedClient = createTrackedSnapshot(raw, activeTracked(state.trackedClient));
       } else {
-        state.trackedClient.raw = raw;
+        const effective = state.trackedClient.committed
+          ? activeTracked(state.trackedClient)
+          : unionTracked(
+              activeTracked(state.trackedClient),
+              state.committedTracked ? activeTracked(state.committedTracked) : null,
+            );
+        if (hasTrackedChange(state.trackedClient.raw, raw, effective)) {
+          state.trackedClient = createTrackedSnapshot(raw, effective);
+        } else {
+          state.trackedClient.raw = raw;
+        }
       }
       state.shownTracked = state.trackedClient;
       state.hasShownSelected = false;
@@ -495,6 +529,15 @@ export function useStoreSlice<T extends object, S>(
       return state.trackedServer.proxy;
     },
   );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: snapshot triggers committing the newly created TrackedSnapshot once render commits.
+  useLayoutEffect(() => {
+    if (!selectorRef.current && sliceState.shownTracked) {
+      sliceState.shownTracked.committed = true;
+      sliceState.committedTracked = sliceState.shownTracked;
+    } else {
+      sliceState.committedTracked = null;
+    }
+  }, [sliceState, snapshot]);
   useLayoutEffect(() => {
     if (sliceState.passiveActive) return;
     const check = (changedKeys?: ReadonlySet<PropertyKey>) => {

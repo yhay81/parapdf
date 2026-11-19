@@ -139,11 +139,12 @@ function SelectedAnnotation() {
   selects it. `altText` describes it to assistive technology, in the saved
   PDF too.
 - `addSignature(signature, { pageIndex, description })` adds a signature the
-  same way, from typed text (`{ text, fontFamily }`, italic serif by
-  default), an image (`{ image }`, whose outline is traced), or strokes the
-  application drew (`{ strokes, width, height, thickness }`, each stroke a
-  list of x and y coordinates in a box of `width` by `height`). ParaPDF shows
-  no signature pad or dialog of its own.
+  same way, from typed text (`{ text, fontFamily, fontStyle, fontWeight }`,
+  italic serif by default), an image (`{ image }`, a `Blob` or `ImageBitmap`
+  whose outline is traced), or strokes the application drew
+  (`{ strokes, width, height, thickness }`, each stroke a list of alternating x
+  and y coordinates in a box of `width` by `height`). ParaPDF shows no
+  signature pad or dialog of its own.
 
 Both resolve to `true` once the annotation is ready to save or export, or
 `false` if it cannot be added. Await them before saving: an image's download,

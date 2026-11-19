@@ -21,7 +21,9 @@ jobs:
   site:
     name: Build and deploy the site
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
+      BROWSER: chromium
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
@@ -32,9 +34,15 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: .github/scripts/install-browser.sh chromium
+        timeout-minutes: 14
       # The demo's samples include generated documents.
       - run: pnpm --filter @parapdf/bench corpus
       - run: pnpm --filter @parapdf/site build
+      - name: Check the site demo and interactive showcases
+        run: |
+          pnpm --filter @parapdf/site check:demo
+          pnpm --filter @parapdf/site check:showcases
       - name: Check the development and preview launchers
         run: node --test .claude/launch.test.mjs
       # Pull requests only build.

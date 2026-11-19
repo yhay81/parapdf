@@ -101,7 +101,8 @@ that matters for performance or direction gets a decision record.
   `PdfPermissions`), declarative page overlays (`PdfPageOverlay`,
   `PdfPageOverlays`, `PdfPageRect`), `PdfSelectionPopover`,
   `PdfThumbnails`, `PdfOutline`, `useViewer()`, `useCreateViewer()`,
-  `useSave()`, `usePrint()`, `usePermits()`, and the hooks (`src/react/`, `"use client"`); unit tests in Node, which stand in for pdf.js with
+  `useSave()`, `usePrint()`, `usePermits()`, `getText()`, `findText()`, and
+  the hooks (`src/react/`, `"use client"`); unit tests in Node, which stand in for pdf.js with
   `test/fake-pdfjs.ts` and for the elements of a page the renderer builds
   with `test/fake-dom.ts` (`test/`).
   `scripts/pdfjs-files.ts`, run by `pnpm install` and `build`, copies
@@ -121,7 +122,7 @@ that matters for performance or direction gets a decision record.
   and the fragment of its source's URL (`?fragment=`,
   `__setFragment`), and, through `src/internals.ts`, show a document a
   pdf.js of their own opens (`__showWith`). `minimal.html` is the demo
-  without search, forms, annotation editing, and print. `compare.html` shows
+  without search, forms, annotation editing, autoLinks, and print. `compare.html` shows
   a document with react-pdf (with or without react-window), which
   `scroll-bench.ts` measures against ParaPDF with `VARIANTS=react-pdf` and
   `react-pdf-window`; react-pdf and react-window are pinned devDependencies
@@ -185,7 +186,7 @@ that matters for performance or direction gets a decision record.
   shows with `?lifetimes=` (`src/Lifetimes.tsx`). `check:options` covers
   `PdfViewer`'s live options and controlled view state. `check:modules` builds the demo with source maps and
   checks which features' modules each page loads: `minimal.html` none of
-  search, forms, annotation editing, and print. Each feature has one primary home among
+  search, forms, annotation editing, autoLinks, and print. Each feature has one primary home among
   them; extend that check
   instead of duplicating it. They default to `ENGINE=pdfjs-next`, which
   needs `bench/scripts/build-pdfjs-next.sh`. CI (`.github/workflows/ci.yml`)
@@ -211,9 +212,12 @@ that matters for performance or direction gets a decision record.
 - Runtime benchmarks in `examples/prototype/scripts/`: `scroll-bench.ts`
   (also `pnpm --filter @parapdf/prototype bench`), `commit-bench.ts` (zoom
   commits), `zoom-bench.ts`, `return-bench.ts` (pages the reader comes back
-  to after they unmounted), `main-thread-bench.ts`, and `hwa-bench.ts`,
+  to after they unmounted), `navigation-bench.ts` (`PdfThumbnails` and
+  `PdfOutline`), `text-virtualization-bench.ts`, `main-thread-bench.ts`, and
+  `hwa-bench.ts`,
   each documented in its header comment. `scroll-bench.ts`,
-  `commit-bench.ts`, `zoom-bench.ts`, and `return-bench.ts` measure the
+  `commit-bench.ts`, `zoom-bench.ts`, `return-bench.ts`, and
+  `navigation-bench.ts` measure the
   build in `DIST` against the one in `BEFORE` (built from the commit before
   the change, in a directory of its own) in the same run, job by job.
 - `pnpm bench:build` and `pnpm bench` run the engine benchmark (`BROWSER`,
@@ -287,9 +291,10 @@ that development ports stay outside the functional checks' range.
    the changes since the last release in `CHANGELOG.md` into the release's
    entry, which lists every break.
 2. Run `pnpm check`, `pnpm typecheck`, `pnpm test`, `pnpm --filter parapdf
-   check:package`, and every functional check in Chromium, WebKit, and
-   Firefox with `ENGINE=pdfjs`; commit, push `main`, and wait for CI to
-   pass.
+   check:package`, every functional check in Chromium, WebKit, and
+   Firefox with `ENGINE=pdfjs`, and `pnpm --filter @parapdf/site build`,
+   `check:demo`, and `check:showcases`; commit, push `main`, and wait for CI
+   to pass.
 3. Tag that commit on `main` `vX.Y.Z` and push the tag, which deploys
    the documentation site (`.github/workflows/site.yml`).
 4. Run `pnpm --filter parapdf publish` from that commit, in a checkout with

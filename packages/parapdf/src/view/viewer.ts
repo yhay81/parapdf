@@ -91,7 +91,7 @@ const whole = (area: PageArea | null): boolean =>
   area !== null && area.minX === 0 && area.minY === 0 && area.maxX === 1 && area.maxY === 1;
 
 /**
- * What a viewer holds of the session it shows, from `openViewer()` until
+ * What a viewer holds of the session it shows, from `viewer.open()` until
  * another session opens: the document while it shows it, and where it
  * showed it, for when it shows it again.
  */
@@ -293,7 +293,7 @@ export class ViewerController implements Viewer {
   /** A feature took the pointer, which the hand tool then leaves alone. */
   #pointerClaimed = false;
   readonly #selection = new TextSelectionTracker();
-  /** The document this viewer shows, from `openViewer()` until it closes. */
+  /** The document this viewer shows, from `viewer.open()` until it closes. */
   #shown: Showing | null = null;
   /** The viewport's lifetime, independent of the document and other viewers. */
   #viewportControl = new AbortController();
@@ -326,6 +326,7 @@ export class ViewerController implements Viewer {
   #controlDiverged = false;
   #flushingView = false;
   #navigated = false;
+  #userMoved = false;
   #preDiverge: PreDivergeSnapshot | null = null;
   #sizes: PageSize[] = [];
   /** The hosts of the mounted pages, by page. */
@@ -492,6 +493,7 @@ export class ViewerController implements Viewer {
 
   #changeView<T>(fn: () => T): T {
     this.#viewDirty = true;
+    this.#userMoved = true;
     return this.batchView(fn);
   }
 
@@ -705,6 +707,7 @@ export class ViewerController implements Viewer {
             ) {
               scroller.scrollLeft = preDiverge.scrollLeft;
               scroller.scrollTop = preDiverge.scrollTop;
+              this.#syncFromRight();
               this.store.set({ currentPage: preDiverge.currentPage });
               this.#update();
             }
@@ -1043,6 +1046,7 @@ export class ViewerController implements Viewer {
     }
     if (this.#scroller) this.#scroller.scrollTo(0, 0);
     this.#fromRight = 0;
+    this.#userMoved = false;
     this.#sizes = [];
     this.#textPages.clear();
     this.#annotationPages.clear();
@@ -1243,12 +1247,15 @@ export class ViewerController implements Viewer {
       // Where a viewport showed the document, it shows it again at once.
       const saved = shown.savedPosition;
       shown.savedPosition = null;
+      const targetPage =
+        view?.view?.target?.pageIndex ??
+        (this.#initialPage > 0 ? this.#initialPage : (view?.destination?.pageIndex ?? 0));
       const scale = clamp(
         saved
           ? saved.zoomMode === "custom" || !this.#scroller?.clientWidth
             ? saved.scale
             : (this.#fitScale(saved.current, saved.zoomMode) ?? saved.scale)
-          : this.#resolveInitialScale(),
+          : this.#resolveInitialScale(targetPage),
         this.#minScale,
         this.#maxScale,
       );
@@ -1260,9 +1267,14 @@ export class ViewerController implements Viewer {
       else if (view?.destination) this.#jump(view.destination, this.#destinationZoom);
       // A row of pages read from the right starts at its right end.
       else if (this.store.get().direction === "rtl") this.goToPage(0);
+      this.#syncFromRight();
       this.#update();
-      if (!saved) this.#lastViewState = this.viewState();
-      else this.#lastViewState ??= this.viewState();
+      if (!saved) {
+        this.#lastViewState = this.viewState();
+        this.#userMoved = false;
+      } else {
+        this.#lastViewState ??= this.viewState();
+      }
       this.#viewDirty = false;
     });
     this.#extensions.ready(session, signal);
@@ -1504,11 +1516,15 @@ export class ViewerController implements Viewer {
    * row instead of the one it showed.
    */
   goToPage(index: number): void {
-    const current = this.store.get().layout;
     const scroller = this.#scroller;
-    if (!current || !scroller || current.tops.length === 0 || Number.isNaN(index)) return;
-    const target = clamp(Math.trunc(index), 0, current.tops.length - 1);
-    this.#goTo(current, scroller, target, (layout) => pageTarget(layout, target, scroller));
+    if (!scroller || Number.isNaN(index) || !this.store.get().layout) return;
+    this.#changeView(() => {
+      this.#gestures.finish();
+      const current = this.store.get().layout;
+      if (!current || current.tops.length === 0) return;
+      const target = clamp(Math.trunc(index), 0, current.tops.length - 1);
+      this.#goTo(current, scroller, target, (layout) => pageTarget(layout, target, scroller));
+    });
   }
 
   /** Go to the next page, or the next spread or row of pages; "page" mode flips to it. */
@@ -1528,12 +1544,14 @@ export class ViewerController implements Viewer {
    * the other axis.
    */
   #flip(direction: 1 | -1, axis: "x" | "y" | null = null): boolean {
-    const { layout, currentPage, spread } = this.store.get();
     const scroller = this.#scroller;
-    if (!layout || !scroller) return false;
-    const target = flipTarget(layout, spread, currentPage, direction);
-    if (target === null) return false;
+    if (!scroller || !this.store.get().layout) return false;
     return this.#changeView(() => {
+      this.#gestures.finish();
+      const { layout, currentPage, spread } = this.store.get();
+      if (!layout) return false;
+      const target = flipTarget(layout, spread, currentPage, direction);
+      if (target === null) return false;
       const { scrollLeft, scrollTop } = scroller;
       this.goToPage(target);
       // The browser clamps the far edge to the scrollable range.
@@ -1546,6 +1564,7 @@ export class ViewerController implements Viewer {
         const rightward = direction > 0 !== (layout.direction === "rtl");
         scroller.scrollLeft = rightward ? 0 : scroller.scrollWidth;
       }
+      this.#syncFromRight();
       return true;
     });
   }
@@ -1575,6 +1594,7 @@ export class ViewerController implements Viewer {
       const target = at(next);
       scroller.scrollTop = target.top;
       if (target.left !== null) scroller.scrollLeft = target.left;
+      this.#syncFromRight();
       this.store.set({ currentPage: current });
       this.#update();
     });
@@ -1713,11 +1733,25 @@ export class ViewerController implements Viewer {
     pageIndex: number,
     rect: { x: number; y: number; width: number; height: number },
   ): void {
-    const current = this.store.get().layout;
     const scroller = this.#scroller;
+    if (
+      !scroller ||
+      !Number.isFinite(pageIndex) ||
+      !Number.isFinite(rect.x) ||
+      !Number.isFinite(rect.y) ||
+      !Number.isFinite(rect.width) ||
+      !Number.isFinite(rect.height) ||
+      !this.store.get().layout
+    ) {
+      return;
+    }
     const index = Math.trunc(pageIndex);
-    if (!current || !scroller || !(index >= 0 && index < current.tops.length)) return;
-    this.#goTo(current, scroller, index, (layout) => rectTarget(layout, index, rect, scroller));
+    this.#changeView(() => {
+      this.#gestures.finish();
+      const current = this.store.get().layout;
+      if (!current || !(index >= 0 && index < current.tops.length)) return;
+      this.#goTo(current, scroller, index, (layout) => rectTarget(layout, index, rect, scroller));
+    });
   }
 
   /**
@@ -2092,20 +2126,21 @@ export class ViewerController implements Viewer {
     // restored before React re-renders the mounted pages.
     scroller.scrollTop = target.top;
     scroller.scrollLeft = target.left;
+    this.#syncFromRight();
   }
 
   #initialZoomMode(): ZoomMode {
     return typeof this.#initialScale === "number" ? "custom" : this.#initialScale;
   }
 
-  #resolveInitialScale(): number {
+  #resolveInitialScale(targetPage = this.#initialPage): number {
     if (typeof this.#initialScale === "number") return this.#initialScale;
     const scroller = this.#scroller;
     if (!scroller || scroller.clientWidth === 0) return 1;
-    const scale = this.#fitScale(
-      clamp(this.#initialPage, 0, this.#sizes.length - 1),
-      this.#initialScale,
-    );
+    const page = Number.isFinite(targetPage)
+      ? clamp(Math.trunc(targetPage), 0, Math.max(0, this.#sizes.length - 1))
+      : 0;
+    const scale = this.#fitScale(page, this.#initialScale);
     if (scale === null) return 1;
     this.#markFitted(scroller);
     return scale;
@@ -2116,6 +2151,7 @@ export class ViewerController implements Viewer {
     const layout = computeLayout(this.#sizes, scale, this.#layoutOptions(page));
     this.#sizeContent(layout);
     this.store.set({ layout });
+    this.#syncFromRight();
     return layout;
   }
 
@@ -2176,19 +2212,74 @@ export class ViewerController implements Viewer {
       return !current || current.width !== size.width || current.height !== size.height;
     });
     if (!changed) return;
-    this.#changeView(() => {
+    const moved = this.#userMoved;
+    const run = <T>(fn: () => T): T => (moved ? this.#changeView(fn) : this.batchView(fn));
+    run(() => {
       this.#gestures.finish();
       const scroller = this.#scroller;
-      const layout = this.store.get().layout;
-      const scale = this.store.get().scale;
+      const state = this.store.get();
+      const layout = state.layout;
       this.#sizes = [...sizes];
+      let scale = state.scale;
+      if (state.zoomMode !== "custom" && scroller && scroller.clientWidth > 0) {
+        const fitted = this.#fitScale(state.currentPage, state.zoomMode);
+        if (fitted !== null) {
+          scale = fitted;
+          this.#markFitted(scroller);
+        }
+      }
       // Keep the point at the viewport's top-left corner where it is.
-      if (scroller && layout) this.#relayout(layout, scroller, scale, { x: 0, y: 0 });
-      else this.#applyLayout(scale);
+      if (scroller && layout) {
+        if (state.zoomMode === "fit-page") {
+          this.#applyLayout(scale, state.currentPage);
+          this.store.set({ scale });
+          const prevNavigated = this.#navigated;
+          const prevDirty = this.#viewDirty;
+          const prevMoved = this.#userMoved;
+          this.goToPage(state.currentPage);
+          this.#navigated = prevNavigated;
+          this.#viewDirty = prevDirty;
+          this.#userMoved = prevMoved;
+        } else {
+          const lookX =
+            layout.scrollMode === "horizontal"
+              ? scroller.scrollLeft + layout.gap / 2
+              : scroller.scrollLeft;
+          const lookY =
+            layout.scrollMode === "horizontal"
+              ? scroller.scrollTop
+              : scroller.scrollTop + layout.gap;
+          const page = pageAtPoint(layout, lookX, lookY, scroller.clientWidth);
+          const dx = scroller.scrollLeft - pageLeft(layout, page, scroller.clientWidth);
+          const dy = scroller.scrollTop - pageTop(layout, page, scroller.clientHeight);
+          const next = this.#applyLayout(scale);
+          this.store.set({ scale });
+          scroller.scrollLeft =
+            pageLeft(next, page, scroller.clientWidth) +
+            (dx < 0 ? dx : (dx / (layout.widths[page] || 1)) * (next.widths[page] ?? 0));
+          scroller.scrollTop =
+            pageTop(next, page, scroller.clientHeight) +
+            (dy < 0 ? dy : (dy / (layout.heights[page] || 1)) * (next.heights[page] ?? 0));
+          this.#syncFromRight();
+        }
+      } else {
+        this.#applyLayout(scale);
+        this.store.set({ scale });
+      }
       this.#update();
-      // The page at the center may turn out wider or narrower than the first.
-      this.#fit();
+      if (!moved) this.#lastViewState = this.viewState();
     });
+  }
+
+  #syncFromRight(): void {
+    const scroller = this.#scroller;
+    if (!scroller || this.store.get().direction !== "rtl") return;
+    const layout = this.store.get().layout;
+    const scrollWidth = Number.isFinite(scroller.scrollWidth)
+      ? scroller.scrollWidth
+      : Math.max(scroller.clientWidth, layout?.totalWidth ?? 0);
+    const maxLeft = Math.max(0, scrollWidth - scroller.clientWidth);
+    this.#fromRight = maxLeft - clamp(scroller.scrollLeft, 0, maxLeft);
   }
 
   #onResize = (): void => {
@@ -2233,9 +2324,8 @@ export class ViewerController implements Viewer {
   #onScroll = (): void => {
     const scroller = this.#scroller;
     if (!scroller) return;
-    if (this.store.get().direction === "rtl") {
-      this.#fromRight = scroller.scrollWidth - scroller.scrollLeft - scroller.clientWidth;
-    }
+    this.#userMoved = true;
+    this.#syncFromRight();
     move(
       this.#scrolling,
       positionOf(this.store.get().scrollMode, viewportOf(scroller)),

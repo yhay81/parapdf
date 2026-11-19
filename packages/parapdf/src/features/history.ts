@@ -2,19 +2,18 @@ import { createSlotKey, type ReadableStore, Store } from "../document/store.ts";
 import type { ViewerPosition } from "../view/navigation.ts";
 import type { ViewerController } from "../view/viewer.ts";
 
-export interface HistoryState {
+export interface HistoryControls {
   /** Whether `back()` can return to a position before a link or outline jump. */
   canGoBack: boolean;
   /** Whether `forward()` can return to a position `back()` left. */
   canGoForward: boolean;
-}
-
-export interface HistoryControls extends HistoryState {
   /** Return to the position, and the zoom, before the most recent link or outline jump. */
   back(): void;
   /** Return to the position the most recent `back()` left. */
   forward(): void;
 }
+
+export type HistoryState = Pick<HistoryControls, "canGoBack" | "canGoForward">;
 
 /** Jumps kept for `back()`. */
 export const HISTORY_LIMIT = 50;

@@ -15,7 +15,7 @@ import {
 export interface FormLayers {
   /**
    * Run the document's scripts in the fields, or stop running them
-   * (`formScripts`): calculations, validation, formatting, and actions.
+   * (`<PdfForms scripts>`): calculations, validation, formatting, and actions.
    */
   setScripts(scripts: boolean): void;
   /** Synchronize `scripts` and optional `onChange` listener from `<PdfForms>`. */
@@ -46,7 +46,11 @@ export function attachFormLayers(viewer: ViewerController, { scripts = false } =
           if (!change || signal.aborted) return;
           notifyViewerFormChange(viewer, change);
         },
-        (error: unknown) => console.error("reading a form change failed", error),
+        (error: unknown) => {
+          if (!signal.aborted && !session.signal.aborted) {
+            console.error("reading a form change failed", error);
+          }
+        },
       );
   };
 
@@ -59,17 +63,28 @@ export function attachFormLayers(viewer: ViewerController, { scripts = false } =
    * document closes or scripts are turned off.
    */
   const startScripts = (): void => {
-    if (!scripts || !open || !painted || scripting?.session === open.session) return;
+    if (
+      !scripts ||
+      !open ||
+      !painted ||
+      !permits(viewer, "fillForms") ||
+      scripting?.session === open.session
+    ) {
+      return;
+    }
     stopScripts();
     const { session } = open;
     const current = { session, leave: null as (() => void) | null };
     scripting = current;
     session.proxy
       .hasJSActions()
-      .then((has) => (has ? import("./scripts.ts") : null))
+      .then((has) => (has && scripting === current ? import("./scripts.ts") : null))
       .then(
         (module) => {
-          if (!module || scripting !== current) return;
+          if (!module || scripting !== current) {
+            if (!module && scripting === current) scripting = null;
+            return;
+          }
           const joined = module.joinScripting(session, {
             viewer,
             changed: (id) => {
@@ -81,7 +96,12 @@ export function attachFormLayers(viewer: ViewerController, { scripts = false } =
           current.leave = joined.leave;
           viewer.setFormScripting(joined.layer);
         },
-        (error: unknown) => console.error("starting the document's scripts failed", error),
+        (error: unknown) => {
+          if (scripting === current) scripting = null;
+          if (!session.signal.aborted) {
+            console.error("starting the document's scripts failed", error);
+          }
+        },
       );
   };
 
@@ -118,7 +138,12 @@ export function attachFormLayers(viewer: ViewerController, { scripts = false } =
     report(open.session, signal, id);
   };
 
-  const applyPermissions = () => viewer.setFormLayers(permits(viewer, "fillForms"));
+  const applyPermissions = () => {
+    const allowed = permits(viewer, "fillForms");
+    viewer.setFormLayers(allowed);
+    if (allowed) startScripts();
+    else stopScripts();
+  };
   const unsubscribePermissions = onEnforcementChange(viewer, applyPermissions);
   const detachExtension = viewer.extend({
     prepare: applyPermissions,

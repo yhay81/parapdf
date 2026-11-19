@@ -26,6 +26,19 @@ change the API.
   updates, reset transient viewer and password-prompt state on close, retry
   failed `getFormFields()` reads, and recover `useAnnotations()` controls after
   a failed snapshot restore while still blocking partial saves and prints.
+- Harden package exports and build declarations (`./package.json` export map,
+  `.tsx` declaration specifier rewriting, and line-1 `"use client"` directives),
+  resolve relative `configurePdfjs({ assetBase })` URLs against
+  `document.baseURI` while preserving custom `cMapUrl` overrides and main-thread
+  worker-CSP asset resolution, release QuickJS sandboxes, RichMedia annotation
+  layers, form widget canvas maps, and unclaimed stamp bitmaps on aborted loads
+  or unmounts, preserve committed `useViewState()` / `useDocumentState()`
+  tracked fields across concurrent renders while clearing `useSelection()` on
+  hidden viewports, keep controlled `<PdfViewer>` props authoritative over
+  initial view states and URL fragments, avoid spurious `onViewStateChange`
+  emissions during background page-size measurement, and align horizontal and
+  RTL navigation, `viewState()`, and `PdfThumbnails` metrics across gaps and
+  hidden containers.
 
 ## 0.9.0 — 2026-11-16
 

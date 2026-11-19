@@ -86,9 +86,11 @@ export async function save(
     // reader clicks away.
     await doc.commit();
     await doc.output("WillSave");
-    const bytes = await doc.save(pages);
-    await doc.output("DidSave");
-    return bytes;
+    try {
+      return await doc.save(pages);
+    } finally {
+      await doc.output("DidSave");
+    }
   });
 }
 
@@ -103,14 +105,16 @@ export async function download(
 ): Promise<void> {
   const controller = sessionControllerOf(session);
   const doc = controller.openDocument();
-  if (!doc) return;
+  const work = controller.signal;
+  if (!doc || work.aborted) return;
   const sourceName = "url" in controller.source ? filenameFromUrl(controller.source.url) : null;
   await saveOf(controller).run(async () => {
     const bytes = await save(controller, { pages });
-    if (!bytes) return;
+    if (!bytes || work.aborted) return;
     // A document whose metadata fails to read still downloads, under its URL.
     // An empty name is none.
     const served = filename ? null : await doc.metadata().catch(() => null);
+    if (work.aborted) return;
     const name = filename || served?.filename || sourceName || "document.pdf";
     downloadBytes(bytes, name, "application/pdf");
   });

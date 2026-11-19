@@ -103,6 +103,15 @@ describe("pageTarget", () => {
     // Page 1 is at the right end of the row of 1,484 CSS pixels.
     assert.deepEqual(pageTarget(rtl, 0, at()), { top: 0, left: 1484 - 1000 });
   });
+
+  it("aligns the right edge of a wide RTL page when scrolling sideways in vertical mode", () => {
+    const wideRtl = computeLayout([{ width: 1200, height: 792 }], 1, {
+      gap: 10,
+      direction: "rtl",
+    });
+    // Left = 10, right = 1210; aligning right + gap (1220) to clientWidth (1000) gives left = 220.
+    assert.deepEqual(pageTarget(wideRtl, 0, at(0, 0)), { top: 0, left: 220 });
+  });
 });
 
 describe("destinationTarget", () => {
@@ -220,5 +229,15 @@ describe("positionAt and positionTarget", () => {
     const target = positionTarget(rtl, position, at());
     assert.ok(Math.abs(target.top) < 1e-9);
     assert.ok(Math.abs((target.left ?? 0) - 300) < 1e-9);
+  });
+
+  it("anchors to the target page at the gap offset produced by pageTarget in vertical and horizontal modes", () => {
+    const verticalJump = pageTarget(column, 1, at());
+    assert.equal(positionAt(column, at(0, verticalJump.top), view).pageIndex, 1);
+    const horizontalJump = pageTarget(row, 1, at());
+    assert.equal(
+      positionAt(row, at(horizontalJump.left ?? 0, horizontalJump.top), view).pageIndex,
+      1,
+    );
   });
 });

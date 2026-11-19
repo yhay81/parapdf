@@ -152,7 +152,9 @@ try {
     configFile: false,
     logLevel: "warn",
     build: {
-      rollupOptions: { input: { main: join(app, "index.html"), legacy: join(app, "legacy.html") } },
+      rolldownOptions: {
+        input: { main: join(app, "index.html"), legacy: join(app, "legacy.html") },
+      },
     },
   });
   // Vite inlines files under 4 KB as data: URLs unless told not to, which

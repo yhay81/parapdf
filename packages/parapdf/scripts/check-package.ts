@@ -128,6 +128,32 @@ try {
     withoutDirective.join(", "),
   );
 
+  // Emitted declarations must rewrite every relative .ts and .tsx specifier to
+  // .js, and emitted JavaScript must carry no dangling triple-slash references.
+  const distEntries = readdirSync(join(installed, "dist"), { recursive: true, encoding: "utf8" });
+  const unrewrittenDts = distEntries.filter(
+    (name) =>
+      name.endsWith(".d.ts") &&
+      /(?:from|import)\s*\(?\s*["']\.{1,2}\/[^"']*\.tsx?["']/.test(
+        readFileSync(join(installed, "dist", name), "utf8"),
+      ),
+  );
+  check(
+    "emitted declarations contain no .ts or .tsx relative specifiers",
+    unrewrittenDts.length === 0,
+    unrewrittenDts.join(", "),
+  );
+  const danglingReference = distEntries.filter(
+    (name) =>
+      (name.endsWith(".js") || name.endsWith(".d.ts")) &&
+      /^\/\/\/\s*<reference\s+path=/m.test(readFileSync(join(installed, "dist", name), "utf8")),
+  );
+  check(
+    "emitted dist files contain no dangling triple-slash path references",
+    danglingReference.length === 0,
+    danglingReference.join(", "),
+  );
+
   // The peers and the dependency, as the application would install them.
   for (const name of ["react", "react-dom", "pdfjs-dist", "@types/react", "@types/react-dom"]) {
     const target = join(project, "node_modules", name);

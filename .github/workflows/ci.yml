@@ -101,6 +101,7 @@ jobs:
   bundlers:
     name: Packaged assets in webpack, Rsbuild, and Next.js
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       BROWSER: chromium
       DIAGNOSTICS: ${{ github.workspace }}/diagnostics

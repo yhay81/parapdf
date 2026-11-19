@@ -262,9 +262,12 @@ export function getSelection(viewer: ViewerController): PdfSelection | null {
   if (!content || !layout || !selection || selection.isCollapsed || viewer.textLayers.size === 0) {
     return null;
   }
+  const shown = layout.shown ?? null;
   const rectsByPage = new Map<number, PdfRect[]>();
   let text = "";
   let outside = false;
+  let firstIntersecting: Range | null = null;
+  let lastIntersecting: Range | null = null;
   for (let at = 0; at < selection.rangeCount; at++) {
     const range = selection.getRangeAt(at);
     if (!range.intersectsNode(content)) {
@@ -272,13 +275,18 @@ export function getSelection(viewer: ViewerController): PdfSelection | null {
       continue;
     }
     if (!content.contains(range.commonAncestorContainer)) outside = true;
-    text += range.toString();
+    let matchedPage = false;
     for (const [pageIndex, handle] of viewer.textLayers) {
+      if (shown !== null && (pageIndex < shown.first || pageIndex > shown.last)) {
+        if (range.intersectsNode(handle.layer)) outside = true;
+        continue;
+      }
       const { layer } = handle;
       if (!range.intersectsNode(layer)) continue;
       const section = viewer.pageHost?.(pageIndex) ?? layer.parentElement;
       const size = layout.sizes[pageIndex];
       if (!section || !size) continue;
+      matchedPage = true;
       let rects = rectsByPage.get(pageIndex);
       if (!rects) {
         rects = [];
@@ -286,10 +294,15 @@ export function getSelection(viewer: ViewerController): PdfSelection | null {
       }
       selectedRects(range, layer, section, size, layout.rotation, rects);
     }
+    if (matchedPage) {
+      firstIntersecting ??= range;
+      lastIntersecting = range;
+      text += range.toString();
+    } else {
+      outside = true;
+    }
   }
-  if (rectsByPage.size === 0) return null;
-  const first = selection.getRangeAt(0);
-  const last = selection.getRangeAt(selection.rangeCount - 1);
+  if (rectsByPage.size === 0 || !firstIntersecting || !lastIntersecting) return null;
   const pages = [...rectsByPage]
     .sort(([a], [b]) => a - b)
     .map(([pageIndex, rects]) => ({ pageIndex, rects }));
@@ -297,8 +310,8 @@ export function getSelection(viewer: ViewerController): PdfSelection | null {
     // The selection's own text keeps its line breaks.
     text: outside ? text : selection.toString(),
     pages,
-    start: textPointAt(viewer, first.startContainer, first.startOffset),
-    end: textPointAt(viewer, last.endContainer, last.endOffset),
+    start: textPointAt(viewer, firstIntersecting.startContainer, firstIntersecting.startOffset),
+    end: textPointAt(viewer, lastIntersecting.endContainer, lastIntersecting.endOffset),
     anchor: createSelectionAnchor(viewer, pages),
   };
 }

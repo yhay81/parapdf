@@ -190,6 +190,8 @@ export function attachAnnotationEditing(
   /** Non-null when restoring `kept` failed: save/print refuses partial edits while editing recovers. */
   let restoreError: unknown = null;
   let editedAfterFailure = false;
+  let preservedSession: { tool: AnnotationTool; styles: AnnotationStyles | null } | null = null;
+  let actionRevision = 0;
   /**
    * Removes the kept annotations from the document's storage, where they
    * stay while only the viewport is away: other viewers save and print them.
@@ -258,8 +260,20 @@ export function attachAnnotationEditing(
     editorPage = currentPage;
     editing.setCurrentPage(currentPage);
     const publish = () => {
+      const preserved = preservedSession;
+      preservedSession = null;
+      if (preserved?.styles) {
+        for (const key of ["highlight", "freetext", "ink"] as const) {
+          editing.setStyle(key, preserved.styles[key]);
+        }
+      }
       viewer.setAnnotationEditor(editing);
-      store.set({ tool: "none", state: editing.state, styles: editing.styles });
+      const nextTool = preserved?.tool ?? "none";
+      store.set({ tool: nextTool, state: editing.state, styles: editing.styles });
+      if (nextTool !== "none") {
+        showTool(nextTool);
+        void editing.setTool(nextTool).catch(() => {});
+      }
     };
     forgetKept?.();
     forgetKept = null;
@@ -312,6 +326,7 @@ export function attachAnnotationEditing(
     control = null;
     if (!keep) {
       kept = null;
+      preservedSession = null;
       forgetKept?.();
       forgetKept = null;
     }
@@ -401,22 +416,36 @@ export function attachAnnotationEditing(
     if (restoring && !(await restored())) return null;
     const renderer = viewer.renderer;
     const signal = viewer.workSignal;
-    const { currentPage, first, last } = viewer.store.get();
+    const { currentPage, first, last, layout } = viewer.store.get();
     const pageCount = viewer.session?.pageCount ?? 0;
-    const pageIndex = requested ?? currentPage;
-    if (!renderer || !signal || !editor || pageIndex < 0 || pageIndex >= pageCount) {
+    const raw = requested ?? currentPage;
+    if (!Number.isFinite(raw)) return null;
+    const pageIndex = Math.trunc(raw);
+    if (
+      !renderer ||
+      !signal ||
+      signal.aborted ||
+      !editor ||
+      pageIndex < 0 ||
+      pageIndex >= pageCount
+    ) {
       return null;
     }
-    if (pageIndex < first || pageIndex > last) viewer.goToPage(pageIndex);
+    const hidden =
+      layout?.shown !== null &&
+      layout?.shown !== undefined &&
+      (pageIndex < layout.shown.first || pageIndex > layout.shown.last);
+    if (pageIndex < first || pageIndex > last || hidden) viewer.goToPage(pageIndex);
     return (await renderer.whenEditable(pageIndex)) && !signal.aborted ? pageIndex : null;
   };
 
   return {
     store,
     async setTool(tool) {
+      const rev = ++actionRevision;
       if (restoring && !(await restored())) return;
       const current = editor;
-      if (!current) return;
+      if (!current || rev !== actionRevision) return;
       showTool(tool);
       await current.setTool(tool);
     },
@@ -442,16 +471,18 @@ export function attachAnnotationEditing(
       return !restoring && (editor?.setAltText(altText) ?? false);
     },
     async addImage(image, { pageIndex, altText } = {}) {
+      const rev = ++actionRevision;
       const page = await editablePage(pageIndex);
       const current = editor;
-      if (page === null || !current) return false;
+      if (page === null || !current || rev !== actionRevision) return false;
       showTool("stamp");
       return current.addImage(page, image, altText);
     },
     async addSignature(signature, { pageIndex, description } = {}) {
+      const rev = ++actionRevision;
       const page = await editablePage(pageIndex);
       const current = editor;
-      if (page === null || !current) return false;
+      if (page === null || !current || rev !== actionRevision) return false;
       showTool("signature");
       return current.addSignature(page, signature, description);
     },
@@ -470,6 +501,8 @@ export function attachAnnotationEditing(
     setLabels(next) {
       labels = { ...ANNOTATION_LABELS, ...next };
       if (!editor) return;
+      const { tool, styles } = store.get();
+      preservedSession = { tool, styles };
       stop(true);
       start();
     },

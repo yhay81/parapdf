@@ -126,6 +126,16 @@ describe("getter-tracked snapshots", () => {
       hasTrackedChange(snap2.raw, { status: "ready", progress: 90 }, activeTracked(snap2)),
       false,
     );
+
+    // A render that reads zero fields drops fallback once committed.
+    const snap3 = createTrackedSnapshot(ready, activeTracked(snap1));
+    assert.equal(activeTracked(snap3), activeTracked(snap1));
+    snap3.committed = true;
+    assert.equal(activeTracked(snap3)?.size, 0);
+    assert.equal(
+      hasTrackedChange(snap3.raw, { status: "loading", progress: 99 }, activeTracked(snap3)),
+      false,
+    );
   });
 
   it("supports object spread and Object.keys cleanly without leaking carrier fields", () => {

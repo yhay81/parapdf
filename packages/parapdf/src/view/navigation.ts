@@ -92,7 +92,14 @@ export function pageTarget(layout: Layout, index: number, scroller: ScrollBox): 
   // A page of a spread wider than the viewport may lie beside it.
   const right = left + (layout.widths[index] ?? 0);
   const beside = left < scroller.scrollLeft || right > scroller.scrollLeft + scroller.clientWidth;
-  return { top: rowTop, left: beside ? left - gap : null };
+  return {
+    top: rowTop,
+    left: beside
+      ? layout.direction === "rtl"
+        ? right + gap - scroller.clientWidth
+        : left - gap
+      : null,
+  };
 }
 
 /**
@@ -168,7 +175,9 @@ export function positionAt(
   view: Pick<ViewerState, "currentPage" | "zoomMode">,
 ): ViewerPosition {
   const { scrollLeft: x, scrollTop: y, clientWidth, clientHeight } = scroller;
-  const pageIndex = pageAtPoint(layout, x, y, clientWidth);
+  const lookX = layout.scrollMode === "horizontal" ? x + layout.gap / 2 : x;
+  const lookY = layout.scrollMode === "horizontal" ? y : y + layout.gap;
+  const pageIndex = pageAtPoint(layout, lookX, lookY, clientWidth);
   return {
     pageIndex,
     x: (x - pageLeft(layout, pageIndex, clientWidth)) / (layout.widths[pageIndex] || 1),

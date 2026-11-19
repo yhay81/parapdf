@@ -238,6 +238,32 @@ describe("a URL's open parameters", () => {
       scale: 2,
       target: linked,
     });
+    // Controlled props win over initialViewState and URL zoom fragments without losing the target page.
+    assert.deepEqual(
+      openingOf(
+        asked(),
+        5,
+        {
+          initialView: "document",
+          initialViewState: {
+            page: 3,
+            scale: 2,
+            rotation: 180,
+            spread: "even",
+            scrollMode: "page",
+          },
+          controlled: { zoom: 1.5, rotation: 90, spread: "odd", scrollMode: "vertical" },
+        },
+        { pageIndex: 3, x: null, y: null, view: { fit: "zoom", zoom: 4 } },
+      )?.view,
+      {
+        scale: 1.5,
+        rotation: 90,
+        spread: "odd",
+        scrollMode: "vertical",
+        target: { pageIndex: 3, x: null, y: null },
+      },
+    );
   });
 
   it("resolves the fragment as the document opens, past a name it lacks", async () => {
@@ -324,5 +350,55 @@ describe("following URL fragments", () => {
     assert.equal(moves.length, 4, "reattaching without a new fragment keeps the view");
     detach();
     assert.equal(moves[3]?.signal.aborted, true);
+
+    // Reverting back to the previous fragment while an async jump is still pending re-applies it cleanly.
+    const revertSource = new PdfSessionController({ url: "/revert.pdf#page=1" });
+    slots.clear();
+    moves.length = 0;
+    let resolvePending = () => {};
+    const asyncViewer = {
+      ...viewer,
+      async goToDestination(destination: Destination, signal: AbortSignal) {
+        moves.push({ destination, signal });
+        await new Promise<void>((resolve) => {
+          resolvePending = resolve;
+          signal.addEventListener("abort", () => resolve(), { once: true });
+        });
+        return !signal.aborted;
+      },
+    } as unknown as ViewerController;
+    assert.equal(openingFragment(asyncViewer, revertSource), "page=1");
+    const stopRevert = followFragments(asyncViewer, revertSource);
+    ready();
+    revertSource.setFragment("page=2");
+    assert.equal(moves.length, 1);
+    revertSource.setFragment("page=1");
+    assert.equal(
+      moves.length,
+      2,
+      "reverting to page=1 before page=2 settled triggers goToDestination",
+    );
+    assert.equal(moves[0]?.signal.aborted, true);
+    resolvePending();
+    await settle();
+    stopRevert();
+  });
+
+  it("clamps out-of-range initialPage before resolving a zoom-only URL fragment", () => {
+    const doc = {
+      pageCount: 3,
+      knownPageSizes: [LETTER, LETTER, LETTER],
+      knownInitialView: null,
+      knownDestinations: new Map(),
+    } as unknown as DocumentSession;
+    const opening = initialViewOpening({
+      initialPage: 99,
+      fragment: () => "zoom=200",
+    });
+    assert.ok(opening);
+    const result = opening(doc);
+    assert.ok(!(result instanceof Promise));
+    assert.equal(result?.view?.target?.pageIndex, 2);
+    assert.deepEqual(result?.view?.target?.view, { fit: "zoom", zoom: 2 });
   });
 });

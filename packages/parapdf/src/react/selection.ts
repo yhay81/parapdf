@@ -206,10 +206,17 @@ function useViewerSelection(resolved: ViewerController, settleDrag: boolean): Pd
         })
       : null;
 
+    const unsubscribeLayout = resolved.store.subscribeKeys(["layout"], onChange);
+    const unsubscribeViewport = resolved.extend({
+      detaching: clear,
+      closed: clear,
+    });
     document.addEventListener("selectionchange", onChange);
     read();
     return () => {
       document.removeEventListener("selectionchange", onChange);
+      unsubscribeLayout();
+      unsubscribeViewport();
       unsubscribeDrag?.();
       cancelAnimationFrame(frame);
     };
