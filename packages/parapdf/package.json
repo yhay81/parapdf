@@ -1,6 +1,6 @@
 {
   "name": "parapdf",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "A fast PDF viewer for React, built on pdf.js",
   "keywords": [
     "pdf",

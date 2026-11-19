@@ -6,6 +6,8 @@ change the API.
 
 ## Unreleased
 
+## 0.9.1 — 2026-11-20
+
 ### Features and improvements
 
 - Add `findText(session, query, options?)` (`FindTextOptions`, `TextMatch`) to
@@ -16,33 +18,34 @@ change the API.
 - Export `PageSize`, `ResolvedDestination`, and `DestinationView` for the page
   dimensions and resolved destinations referenced by `Layout.sizes`,
   `PdfInitialView.destination`, and `ShownView.target`.
-- Release cancelled or failed base canvases, serialize overlapping rotation
-  renders, clear detached selection ranges and inline `user-select` overrides,
-  settle failed editor layers and unmounted layer waiters, apply live zoom to
-  editor layers built across zoom changes, normalize `configurePdfjs({ assetBase })`
-  while falling back cleanly under strict worker CSP and terminating leaked
-  workers on failed loads, guard out-of-range `getText()` inputs, avoid forced
-  reflows on non-edge keys in `"page"` scroll mode, batch `"fit-page"` resize
-  updates, reset transient viewer and password-prompt state on close, retry
-  failed `getFormFields()` reads, and recover `useAnnotations()` controls after
-  a failed snapshot restore while still blocking partial saves and prints.
 - Harden package exports and build declarations (`./package.json` export map,
-  `.tsx` declaration specifier rewriting, and line-1 `"use client"` directives),
-  resolve relative `configurePdfjs({ assetBase })` URLs against
-  `document.baseURI` while preserving custom `cMapUrl` overrides and main-thread
-  worker-CSP asset resolution, release QuickJS sandboxes, RichMedia annotation
-  layers, form widget canvas maps, and unclaimed stamp bitmaps on aborted loads
-  or unmounts, preserve committed `useViewState()` / `useDocumentState()`
-  tracked fields across concurrent renders while clearing `useSelection()` on
-  hidden viewports, keep controlled `<PdfViewer>` props authoritative over
-  initial view states and URL fragments, avoid spurious `onViewStateChange`
-  emissions during background page-size measurement, and align horizontal and
-  RTL navigation, `viewState()`, and `PdfThumbnails` metrics across gaps and
-  hidden containers.
+  `.tsx` declaration specifier rewriting, and line-1 `"use client"` directives).
 - Yield before background page-size measurement batches and pause them while
   visible pages draw or the viewport scrolls, read `scrollLeft` / `scrollTop`
-  directly on scroll events without per-event viewport layout reads, and skip
-  no-op scale-only `AnnotationLayer.update()` idle passes after zoom commits.
+  directly on scroll events without per-event viewport layout reads, skip forced
+  reflows on non-edge keys in `"page"` scroll mode, batch `"fit-page"` resize
+  updates, and skip no-op scale-only `AnnotationLayer.update()` idle passes
+  after zoom commits.
+- Keep controlled `PdfViewer` props authoritative over initial view states and
+  URL fragments, avoid spurious `onViewStateChange` emissions during background
+  page-size measurement, preserve committed `useViewState()` and
+  `useDocumentState()` tracked fields across concurrent renders, clear
+  `useSelection()` when the viewport hides, and align horizontal and RTL
+  navigation, `viewState()`, and `PdfThumbnails` metrics across gaps and hidden
+  containers.
+- Normalize `configurePdfjs({ assetBase })` against `document.baseURI` while
+  preserving custom `cMapUrl` overrides, fall back cleanly to main-thread asset
+  resolution under strict worker CSP, and terminate leaked workers on failed
+  loads.
+- Serialize overlapping rotation renders, release cancelled or failed base
+  canvases, QuickJS sandboxes, RichMedia annotation layers, form widget canvas
+  maps, and unclaimed stamp bitmaps on aborted loads or unmounts, clear detached
+  selection ranges and inline `user-select` overrides, settle failed editor
+  layers and unmounted layer waiters, apply live zoom to editor layers built
+  across zoom changes, guard out-of-range `getText()` inputs, retry failed
+  `getFormFields()` reads, reset transient viewer and password-prompt state on
+  close, and recover `useAnnotations()` controls after a failed snapshot restore
+  while still blocking partial saves and prints.
 
 ## 0.9.0 — 2026-11-16
 
