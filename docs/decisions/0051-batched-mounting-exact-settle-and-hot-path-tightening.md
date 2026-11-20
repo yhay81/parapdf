@@ -259,6 +259,15 @@ failed render. Firefox recorded the largest timing regression in this run.
 The one-minute system load rose from 10.7 to 14.5 on 12 logical cores. Its
 five first paints ranged from 277 to 678 ms before and 266 to 470 ms after.
 
+A second five-pair Firefox run used the same builds and waited for a
+one-minute load average of at most 9 before each sample. Median first paint
+was 288.0 → 278.9 ms, blocked time 71.6 → 52.0 ms, and maximum timer lag
+13.3 → 11.6 ms. Both builds dropped zero median frames. One changed-build
+first paint still took 512.8 ms. The direction of the timing changes reversed
+while the commit counts stayed at 25 → 11 in both runs. The timing regression
+in the first run did not reproduce under the load cap.
+[Firefox with MAX_LOAD=9](../../examples/prototype/results/scroll-release-to-page-hosts-firefox-load-limited.md).
+
 The runner waited 47 minutes and repeated three overlapping Chromium samples
 in the reviewed comparison. We discarded an interrupted WebKit run and
 restarted all 40 samples. We used the runner's `IGNORE_PIDS` for unrelated
