@@ -60,6 +60,7 @@ it. A new choice gets a new record, numbered next.
 | [0051](0051-batched-mounting-exact-settle-and-hot-path-tightening.md) | Controller-owned page hosts, batched rendering, exact settle timers, uniform zoom previews, and streaming search | adopted |
 | [0052](0052-search-memory-and-page-work.md) | Compact search positions and bound per-page work | adopted |
 | [0053](0053-page-hosts-and-display-preloading.md) | Page host ownership and display preloading | adopted |
+| [0054](0054-first-visible-drawing.md) | Draw visible pages first and prepare one neighboring preview on open | adopted |
 
 ## Template
 

@@ -39,8 +39,12 @@ direction, with their evidence. The site's reference
    layout and mounted page range. `PageHosts` creates the page sections
    the renderer draws into. [View and layout](../packages/parapdf/src/view/)
 3. The renderer asks the planner what to draw next, then calls pdf.js to draw
-   the chosen pages or regions into canvases. Text and annotation layers
-   follow when the visible pages have pixels and scrolling settles. [Rendering](../packages/parapdf/src/render/) · [pdf.js integration](../packages/parapdf/src/pdfjs/)
+   the chosen pages or regions into canvases. While the visible pages are
+   drawing their first pixels, a spare slot may draw one low-resolution
+   neighboring page. Its canvas is released when full-page detail covers it.
+   The first visible drawing starts the viewer's waiting extensions. Text and
+   annotation layers follow when the visible pages have pixels and scrolling
+   settles. [Rendering](../packages/parapdf/src/render/) · [pdf.js integration](../packages/parapdf/src/pdfjs/)
 
 Only the bindings import React. Optional features depend on the core,
 attaching search, forms, and other capabilities to a session or viewer.
@@ -52,7 +56,9 @@ attaching search, forms, and other capabilities to a session or viewer.
 with every viewer; `configurePdfjs()` takes one configuration (the same
 again changes nothing; another is ignored with a warning), and
 `parapdf/legacy` (`src/legacy.ts`, `legacy-files.ts`) gives pdf.js's legacy
-build, whose worker only applications importing it emit. The rest is how
+build, whose worker only applications importing it emit. A packaged worker
+served on the same origin starts alongside the pdf.js module, including
+when served from a static `assetBase`. The rest is how
 ParaPDF drives pdf.js, with pdf.js's own types and no interface between:
 drawing a page or a region (`draw.ts`), the text layer and its language fix
 (`text.ts`), destinations, the annotation layer and its link service,
@@ -95,7 +101,8 @@ and 0044).
 
 The registry asks the session to `preloadLayout()` when a document opens.
 This starts the first page's size and the reading direction while the registry
-waits for permissions. Cold viewer startup and `preloadDocument()` also call
+waits for permissions. Preloads and viewers share the first size read. Cold
+viewer startup and `preloadDocument()` also call
 `preloadDisplayLayers()` to start the optional-content read. The viewer can
 lay out the pages while that read is pending (decision 0053).
 
@@ -187,7 +194,9 @@ and `#start()` lays out warm sessions synchronously before `open()` returns
 (decisions 0041, 0045, and 0046).
 
 - `layout.ts` computes immutable geometry for each zoom, scroll mode, spread,
-  and reading direction. Single-page rows share the row and page arrays.
+  and reading direction. Without spreads, vertical and single-page layouts
+  store just each page's top, width and height. Its row bounds follow from
+  the page index and its horizontal offset is zero.
   Uniform single-page rows have O(log N) zoom previews. A single shown page
   needs O(1) geometry even in a mixed-size document (decisions 0051 and 0052).
   `zoom.ts` and `navigation.ts` hold the pure

@@ -59,6 +59,29 @@ describe("DocumentSession", () => {
     assert.deepEqual(requested, [0, 1, 2]);
   });
 
+  it("shares the first viewport read across preloads and viewers and retries a failure", async (t) => {
+    const { session, proxy } = await openSession({ pages: [LETTER, A4] });
+    const first = await proxy.getPage(1);
+    const viewport = t.mock.method(first, "getViewport");
+    viewport.mock.mockImplementationOnce(() => {
+      throw new Error("viewport unavailable");
+    });
+
+    session.preloadLayout();
+    await assert.rejects(session.pageSizes(), /viewport unavailable/);
+    assert.equal(viewport.mock.callCount(), 1);
+    assert.equal(session.knownPageSizes, null);
+
+    session.preloadLayout();
+    const [left, right] = await Promise.all([session.pageSizes(), session.pageSizes()]);
+    assert.equal(left, right);
+    assert.deepEqual(left, [LETTER, LETTER]);
+    const measured = await session.measurePages();
+    assert.deepEqual(measured, [LETTER, A4]);
+    assert.equal(await session.pageSizes(), measured);
+    assert.equal(viewport.mock.callCount(), 2);
+  });
+
   it("measures every page once, a batch at a time, whatever their number", async () => {
     for (const count of [1, 2, 65, 66, 129, 130]) {
       const pages = Array.from({ length: count }, (_, index) => (index % 3 === 1 ? A4 : LETTER));

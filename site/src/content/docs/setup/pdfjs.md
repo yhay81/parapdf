@@ -51,8 +51,10 @@ synchronously before the first paint; if nothing mounts, the registry closes it
 automatically.
 
 When you do not know which document will open yet, `preloadPdfjs()` starts
-loading pdf.js and its worker alone. The first `PdfDocument` starts it anyway,
-with the worker's download beside pdf.js's module rather than after it.
+loading pdf.js and its worker alone. The first `PdfDocument` also starts
+this load. With the built-in modern or legacy build, the worker and the
+pdf.js module load in parallel when the worker is on the same origin,
+including a static copy served from `assetBase`.
 
 ## The legacy build
 

@@ -223,7 +223,7 @@ export function capScale(scale: number, size: PageSize | undefined, maxPixels: n
 
 export const sameScale = (a: number, b: number): boolean => Math.abs(a - b) <= b * 0.01;
 
-const isVisible = (input: ViewInput, index: number): boolean =>
+export const isVisible = (input: ViewInput, index: number): boolean =>
   index >= input.first && index <= input.last;
 
 /** Pixels of page `index` drawn at `scale` device pixels per point, over `region` or all of it. */

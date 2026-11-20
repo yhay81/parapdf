@@ -232,8 +232,11 @@ export function documentRequestMode(
 const isWebKit = (userAgent: string): boolean =>
   /\bAppleWebKit\//.test(userAgent) && !/(?:Chrome|Chromium)\//.test(userAgent);
 
-const absolute = (url: URL | string): string =>
-  new URL(String(url), typeof document === "undefined" ? undefined : document.baseURI).href;
+// Some bundlers emit a relative URL object with an empty protocol.
+const absolute = (url: URL): string =>
+  url.protocol
+    ? url.href
+    : new URL(url.href, typeof document === "undefined" ? undefined : document.baseURI).href;
 
 /**
  * A shipped file's URL without the query that keeps bundlers from inlining
@@ -243,6 +246,12 @@ const absolute = (url: URL | string): string =>
  */
 const shippedUrl = (url: URL): string =>
   absolute(url).replace(/\?(?:no-inline&url|no-inline|url)$/, "");
+
+function shippedUrls(files: Record<string, URL>): Record<string, string> {
+  const urls: Record<string, string> = {};
+  for (const name of Object.keys(files)) urls[name] = shippedUrl(files[name] as URL);
+  return urls;
+}
 
 /** pdf.js loaded on first use and shared by every viewer: one worker parses every document. */
 export function loadPdfjs(): Promise<LoadedPdfjs> {
@@ -295,25 +304,27 @@ function startWorker(url: string): Promise<Worker | null> {
   }
   let worker: Worker;
   try {
-    const parsed = new URL(url);
+    const parsed = new URL(url, typeof document === "undefined" ? undefined : document.baseURI);
     if (location.origin === "null" || parsed.origin !== location.origin) {
       return Promise.resolve(null);
     }
-    worker = new Worker(url, { type: "module" });
+    worker = new Worker(parsed, { type: "module" });
   } catch {
     return Promise.resolve(null);
   }
   return new Promise((resolve) => {
     // pdf.js's worker posts "ready" when its script has run.
-    worker.addEventListener("message", () => resolve(worker), { once: true });
-    worker.addEventListener(
-      "error",
-      () => {
-        worker.terminate();
-        resolve(null);
-      },
-      { once: true },
-    );
+    function ready() {
+      worker.removeEventListener("error", failed);
+      resolve(worker);
+    }
+    function failed() {
+      worker.removeEventListener("message", ready);
+      worker.terminate();
+      resolve(null);
+    }
+    worker.addEventListener("message", ready, { once: true });
+    worker.addEventListener("error", failed, { once: true });
   });
 }
 
@@ -331,9 +342,7 @@ async function load(options: PdfjsConfig): Promise<LoadedPdfjs> {
   try {
     if (shipped) {
       workerLocation = absolute((options.build?.workerUrl ?? pdfjsWorkerUrl)());
-      const urls = Object.entries(fileUrls()).map(([name, url]) => [name, shippedUrl(url)]);
-      workerSrc = `${workerLocation}#${encodeURIComponent(JSON.stringify(Object.fromEntries(urls)))}`;
-      started = startWorker(workerSrc);
+      workerSrc = `${workerLocation}#${encodeURIComponent(JSON.stringify(shippedUrls(fileUrls())))}`;
     } else {
       workerSrc =
         options.workerSrc ??
@@ -341,6 +350,10 @@ async function load(options: PdfjsConfig): Promise<LoadedPdfjs> {
           ? urlUnderAssetBase(options.build.workerUrl, assetBase)
           : `${assetBase ?? ""}pdf.worker.js`);
       workerLocation = workerSrc;
+    }
+    // A static copy of the package has the same worker entry point.
+    if (shipped || (options.workerSrc === undefined && options.pdfjs === undefined)) {
+      started = startWorker(workerSrc);
     }
     // Without a started worker, pdf.js starts its own from workerSrc, and
     // parses on the page when that fails too.
@@ -362,6 +375,7 @@ async function load(options: PdfjsConfig): Promise<LoadedPdfjs> {
     const imageResourcesPath =
       options.imageResourcesPath ??
       (assetBase !== undefined ? `${assetBase}web/images/` : TRANSPARENT_ICONS);
+    let icons: Record<string, string> | undefined;
     return {
       pdfjs,
       // Started now, while React mounts, instead of when the first document
@@ -386,12 +400,11 @@ async function load(options: PdfjsConfig): Promise<LoadedPdfjs> {
       imageResourcesPath,
       // The icons do not come with the worker: one of the application's own
       // shows those the package ships, as the scripts' files are.
-      iconUrls:
-        assetBase === undefined && imageResourcesPath === TRANSPARENT_ICONS
-          ? Object.fromEntries(
-              Object.entries(iconUrls()).map(([name, url]) => [name, shippedUrl(url)]),
-            )
-          : null,
+      get iconUrls() {
+        if (assetBase !== undefined || imageResourcesPath !== TRANSPARENT_ICONS) return null;
+        icons ??= shippedUrls(iconUrls());
+        return icons;
+      },
       workerLocation,
       scriptingUrls:
         assetBase !== undefined

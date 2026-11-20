@@ -49,16 +49,16 @@ export interface Layout {
   readonly heights: Float64Array;
   /**
    * Each page's distance from its row's left edge: in "rtl", the row's
-   * first page is at its right end.
+   * first page is at its right end. Null for single-page rows, whose offset is zero.
    */
-  readonly offsets: Float64Array;
+  readonly offsets: Float64Array | null;
   /** The top, width, and height of each page's row. */
   readonly rowTops: Float64Array;
   readonly rowWidths: Float64Array;
   readonly rowHeights: Float64Array;
-  /** The first and last page of each page's row. */
-  readonly rowFirst: Int32Array;
-  readonly rowLast: Int32Array;
+  /** The first and last page of each page's row. Null when each page is its own row. */
+  readonly rowFirst: Int32Array | null;
+  readonly rowLast: Int32Array | null;
   /**
    * In "page" mode, the first and last page of the row shown; every row sits
    * in the same place, and the others are hidden. Null in the other modes.
@@ -120,14 +120,11 @@ export function computeLayout(
   let uniform = count > 0;
 
   // Single-page rows ("vertical" or "page" with spread "none") share row and
-  // page arrays directly: rowTops === tops, rowWidths === widths,
-  // rowHeights === heights, rowFirst === rowLast, and offsets are all zero.
+  // page geometry. Their row bounds and offset need no storage.
   if (spread === "none" && (scrollMode === "vertical" || scrollMode === "page")) {
     const tops = new Float64Array(count);
     const widths = new Float64Array(count);
     const heights = new Float64Array(count);
-    const offsets = new Float64Array(count);
-    const rowFirst = new Int32Array(count);
     const stacked = scrollMode === "vertical";
     let y = gap;
     let maxWidth = 0;
@@ -144,7 +141,6 @@ export function computeLayout(
       widths[index] = w;
       heights[index] = h;
       tops[index] = stacked ? y : gap;
-      rowFirst[index] = index;
       y += h + gap;
       if (w > maxWidth) maxWidth = w;
       if (h > maxHeight) maxHeight = h;
@@ -160,12 +156,12 @@ export function computeLayout(
       tops,
       widths,
       heights,
-      offsets,
+      offsets: null,
       rowTops: tops,
       rowWidths: widths,
       rowHeights: heights,
-      rowFirst,
-      rowLast: rowFirst,
+      rowFirst: null,
+      rowLast: null,
       shown: null,
       totalHeight: stacked ? y : maxHeight + 2 * gap,
       totalWidth: maxWidth + 2 * gap,
@@ -276,7 +272,7 @@ function withShownRow(layout: Layout, page: number): Layout {
   const index = Math.min(Math.max(0, page), layout.tops.length - 1);
   return {
     ...layout,
-    shown: { first: layout.rowFirst[index] ?? 0, last: layout.rowLast[index] ?? 0 },
+    shown: { first: rowStart(layout, index), last: rowEnd(layout, index) },
     totalHeight: (layout.rowHeights[index] ?? 0) + 2 * layout.gap,
     totalWidth: (layout.rowWidths[index] ?? 0) + 2 * layout.gap,
   };
@@ -295,18 +291,20 @@ export function showPage(layout: Layout, index: number): Layout {
 
 /** Whether two layouts break their pages into the same rows. */
 export function sameRows(a: Layout, b: Layout): boolean {
-  if (a.rowFirst.length !== b.rowFirst.length) return false;
-  for (let index = 0; index < a.rowFirst.length; index++) {
-    if (a.rowFirst[index] !== b.rowFirst[index]) return false;
+  if (a.sizes.length !== b.sizes.length) return false;
+  if (a.rowFirst === b.rowFirst) return true;
+  for (let index = 0; index < a.sizes.length; index++) {
+    if (rowStart(a, index) !== rowStart(b, index)) return false;
   }
   return true;
 }
 
 /** The first page of the row that page `index` is in. */
-export const rowStart = (layout: Layout, index: number): number => layout.rowFirst[index] ?? index;
+export const rowStart = (layout: Layout, index: number): number =>
+  layout.rowFirst?.[index] ?? index;
 
 /** The last page of the row that page `index` is in. */
-export const rowEnd = (layout: Layout, index: number): number => layout.rowLast[index] ?? index;
+export const rowEnd = (layout: Layout, index: number): number => layout.rowLast?.[index] ?? index;
 
 /**
  * The row at the content's height `y`: in the modes that stack rows, the last
@@ -426,7 +424,7 @@ export interface Viewport {
 export function pageLeft(layout: Layout, index: number, viewportWidth: number): number {
   return (
     Math.max(layout.gap, (viewportWidth - (layout.rowWidths[index] ?? 0)) / 2) +
-    (layout.offsets[index] ?? 0)
+    (layout.offsets?.[index] ?? 0)
   );
 }
 

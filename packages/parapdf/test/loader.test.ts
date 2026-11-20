@@ -158,10 +158,16 @@ describe("loadPdfjs", () => {
 
     // 2. If `pdfjsLoading` fails while a parallel `Worker` started, the worker is terminated instead of leaking.
     let terminated = 0;
+    const workerUrls: string[] = [];
+    let started!: EventTarget;
+    let startupEvent = "message";
     Object.assign(globalThis, {
-      Worker: class {
-        addEventListener(type: string, fn: () => void) {
-          if (type === "message") queueMicrotask(fn);
+      Worker: class extends EventTarget {
+        constructor(url: URL | string) {
+          super();
+          started = this;
+          workerUrls.push(String(url));
+          queueMicrotask(() => this.dispatchEvent(new Event(startupEvent)));
         }
         terminate() {
           terminated++;
@@ -180,6 +186,37 @@ describe("loadPdfjs", () => {
     await assert.rejects(loadPdfjs(), /chunk load failed/);
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(terminated, 1);
+
+    // A static copy starts its matching worker while the pdf.js module is still loading.
+    let rejectModule!: (error: Error) => void;
+    const pending = new Promise<typeof Pdfjs>((_, reject) => {
+      rejectModule = reject;
+    });
+    const build = { ...legacyBuild, pdfjs: () => pending };
+    configurePdfjs({ assetBase: "./pdfjs", build });
+    const opening = loadPdfjs();
+    assert.deepEqual(workerUrls.slice(1), ["https://example.com/app/pdfjs/pdf.worker.legacy.js"]);
+    await Promise.resolve();
+    started.dispatchEvent(new Event("error"));
+    assert.equal(terminated, 1, "an error after startup must not terminate the shared worker");
+    rejectModule(new Error("static module unavailable"));
+    await assert.rejects(opening, /static module unavailable/);
+    assert.equal(terminated, 2);
+
+    // Cross-origin assets and an explicit worker keep pdf.js's normal startup path.
+    for (const options of [
+      { assetBase: "//cdn.example/pdfjs" },
+      { assetBase: "/pdfjs", workerSrc: "/custom-worker.js" },
+    ]) {
+      configurePdfjs({ ...options, build });
+      await assert.rejects(loadPdfjs(), /static module unavailable/);
+    }
+    assert.equal(workerUrls.length, 2);
+
+    startupEvent = "error";
+    configurePdfjs({ assetBase: "/pdfjs", build });
+    await assert.rejects(loadPdfjs(), /static module unavailable/);
+    assert.equal(terminated, 3, "a worker that failed to start is terminated once");
 
     for (const [name, desc] of savedGlobals) {
       if (desc) Object.defineProperty(globalThis, name, desc);

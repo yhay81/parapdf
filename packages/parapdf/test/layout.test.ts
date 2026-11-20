@@ -232,7 +232,7 @@ describe("spreads", () => {
   it("lays pairs side by side and centers each page in its row's height", () => {
     const layout = computeLayout(pages, 1, { gap: 10, spread: "odd" });
     assert.deepEqual([...layout.rowTops], [10, 10, 812, 812, 1614, 1614]);
-    assert.deepEqual([...layout.offsets], [0, 622, 0, 622, 0, 622]);
+    assert.deepEqual(layout.offsets, Float64Array.of(0, 622, 0, 622, 0, 622));
     assert.deepEqual([...layout.rowWidths], [1234, 1234, 1234, 1234, 1464, 1464]);
     // The landscape page is shorter than its partner: it sits in the middle.
     assert.equal(layout.tops[5], 1614 + Math.round((792 - 595) / 2));
@@ -262,7 +262,7 @@ describe("spreads", () => {
   it("is the single-page layout without spreads", () => {
     const layout = computeLayout(pages, 1, { gap: 10 });
     assert.deepEqual([...layout.rowTops], [...layout.tops]);
-    assert.deepEqual([...layout.offsets], [0, 0, 0, 0, 0, 0]);
+    assert.equal(layout.offsets, null);
     assert.deepEqual([...layout.rowWidths], [...layout.widths]);
   });
 });
@@ -271,7 +271,7 @@ describe("horizontal scrolling", () => {
   const layout = computeLayout(sizes, 1, { gap: 10, scrollMode: "horizontal" });
 
   it("puts every page in one row, each centered in the row's height", () => {
-    assert.deepEqual([...layout.offsets], [0, 622]);
+    assert.deepEqual(layout.offsets, Float64Array.of(0, 622));
     assert.deepEqual([...layout.rowTops], [10, 10]);
     assert.deepEqual([...layout.rowHeights], [792, 792]);
     assert.deepEqual([...layout.tops], [10, 10 + Math.round((792 - 595) / 2)]);
@@ -321,13 +321,13 @@ describe("right-to-left page order", () => {
       direction: "rtl",
     });
     assert.equal(layout.direction, "rtl");
-    assert.deepEqual([...layout.offsets], [622, 0, 852, 0]);
+    assert.deepEqual(layout.offsets, Float64Array.of(622, 0, 852, 0));
     assert.deepEqual([...layout.rowWidths], [1234, 1234, 1464, 1464]);
     assert.equal(pageAtPoint(layout, 0, 900, 1254), 3);
     assert.equal(pageAtPoint(layout, 1000, 900, 1254), 2);
     // Pages alone in their row sit where they would from the left.
     const single = computeLayout([letter, a4], 1, { gap: 10, direction: "rtl" });
-    assert.deepEqual([...single.offsets], [0, 0]);
+    assert.deepEqual([pageLeft(single, 0, 1000), pageLeft(single, 1, 1000)], [194, 79]);
   });
 
   it("runs the horizontal row from right to left", () => {
@@ -336,7 +336,7 @@ describe("right-to-left page order", () => {
       scrollMode: "horizontal",
       direction: "rtl",
     });
-    assert.deepEqual([...layout.offsets], [852, 0]);
+    assert.deepEqual(layout.offsets, Float64Array.of(852, 0));
     assert.deepEqual([pageLeft(layout, 0, 1000), pageLeft(layout, 1, 1000)], [862, 10]);
     // The boundary is the middle of the gap between the pages.
     assert.equal(pageAtPoint(layout, 856, 0, 1000), 1);
@@ -367,8 +367,8 @@ describe("right-to-left page order", () => {
       viewportWidth: 700,
     });
     // Two pages of 306 CSS pixels fit 700 with the gaps; the third wraps.
-    assert.deepEqual([...layout.offsets], [316, 0, 0]);
-    assert.deepEqual([...layout.rowFirst], [0, 0, 2]);
+    assert.deepEqual(layout.offsets, Float64Array.of(316, 0, 0));
+    assert.deepEqual(layout.rowFirst, Int32Array.of(0, 0, 2));
   });
 });
 
@@ -381,9 +381,9 @@ describe("wrapped scrolling", () => {
 
   it("fills rows with as many pages as fit the viewport's width with the gaps", () => {
     const layout = wrapped(1000);
-    assert.deepEqual([...layout.rowFirst], [0, 0, 0, 3, 3, 3]);
+    assert.deepEqual(layout.rowFirst, Int32Array.of(0, 0, 0, 3, 3, 3));
     assert.deepEqual([...layout.rowTops], [10, 10, 10, 416, 416, 416]);
-    assert.deepEqual([...layout.offsets], [0, 316, 632, 0, 316, 632]);
+    assert.deepEqual(layout.offsets, Float64Array.of(0, 316, 632, 0, 316, 632));
     assert.equal(layout.totalHeight, 822);
     assert.equal(pageLeft(layout, 1, 1000), (1000 - 938) / 2 + 316);
     assert.deepEqual(visibleRange(layout, view(0, 420, 1000, 100)), { first: 3, last: 5 });
@@ -391,21 +391,25 @@ describe("wrapped scrolling", () => {
   });
 
   it("keeps at least one page in a row, and spreads whole", () => {
-    assert.deepEqual([...wrapped(200).rowFirst], [0, 1, 2, 3, 4, 5]);
+    assert.deepEqual(wrapped(200).rowFirst, Int32Array.of(0, 1, 2, 3, 4, 5));
     // Page 1 alone, then pairs 2–3 and 4–5, then page 6: a pair never breaks.
-    assert.deepEqual([...wrapped(1000, "even").rowFirst], [0, 0, 0, 3, 3, 3]);
-    assert.deepEqual([...wrapped(900, "even").rowFirst], [0, 1, 1, 3, 3, 5]);
+    assert.deepEqual(wrapped(1000, "even").rowFirst, Int32Array.of(0, 0, 0, 3, 3, 3));
+    assert.deepEqual(wrapped(900, "even").rowFirst, Int32Array.of(0, 1, 1, 3, 3, 5));
   });
 
   it("keeps a page in a row that it and the gaps fill exactly", () => {
     // Two pages of 306 CSS pixels, the gap between them, and one on each side.
-    assert.deepEqual([...wrapped(642).rowFirst], [0, 0, 2, 2, 4, 4]);
-    assert.deepEqual([...wrapped(641).rowFirst], [0, 1, 2, 3, 4, 5]);
+    assert.deepEqual(wrapped(642).rowFirst, Int32Array.of(0, 0, 2, 2, 4, 4));
+    assert.deepEqual(wrapped(641).rowFirst, Int32Array.of(0, 1, 2, 3, 4, 5));
   });
 
   it("tells whether another width wraps pages into other rows", () => {
     assert.equal(sameRows(wrapped(1000), wrapped(1100)), true);
     assert.equal(sameRows(wrapped(1000), wrapped(900)), false);
+    const single = computeLayout(pages, 0.5, { gap: 10 });
+    assert.equal(sameRows(single, wrapped(200)), true);
+    assert.equal(sameRows(single, wrapped(1000)), false);
+    assert.equal(sameRows(single, computeLayout(pages.slice(1), 0.5, { gap: 10 })), false);
   });
 });
 
@@ -484,7 +488,10 @@ describe("single-page array sharing and previewZoomMetrics", () => {
       assert.equal(layout.rowTops, layout.tops);
       assert.equal(layout.rowWidths, layout.widths);
       assert.equal(layout.rowHeights, layout.heights);
-      assert.equal(layout.rowFirst, layout.rowLast);
+      assert.equal(layout.rowFirst, null);
+      assert.equal(layout.rowLast, null);
+      assert.equal(layout.offsets, null);
+      assert.deepEqual([rowStart(layout, 4), rowEnd(layout, 4)], [4, 4]);
       assert.equal(layout.uniform, true);
     }
     const mixed = computeLayout(sizes, 1, { gap: 10 });

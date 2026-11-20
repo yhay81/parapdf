@@ -49,6 +49,20 @@ median across files (2026-10-18;
 No engine beat pdf.js across the corpus, so ParaPDF uses pdf.js alone, and
 directly.
 
+## Opening a document
+
+While visible pages draw, a spare slot can prepare one neighboring page at
+low resolution. This keeps the first page's canvas allocation close to that
+of drawing a single page with pdf.js and lets an immediate page flip show
+the preview while sharp text or images arrive. Normal prefetch resumes as
+soon as a visible page has pixels. The neighboring page releases its preview
+canvas storage when full-page detail covers it.
+
+The cold-open benchmark compares the viewer with a full-page pdf.js draw
+at the same resolution and checks the pixels. The results include time to
+first and sharp drawings, immediate page flips, and settled memory.
+[Decision 0054 and measurements](https://github.com/yhay81/parapdf/blob/main/docs/decisions/0054-first-visible-drawing.md)
+
 ## Scrolling
 
 A scripted scroll of the demo at 1280×900, devicePixelRatio 2, fit-width,

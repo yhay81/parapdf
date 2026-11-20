@@ -124,26 +124,35 @@ describe("Renderer page DOM", () => {
 });
 
 describe("Renderer failures", () => {
-  it("tries a base after detail fails, then leaves both failed layers alone", async (t) => {
+  it("tries a base after detail fails, then lets overscan draw while the visible page stays blank", async (t) => {
     t.mock.method(console, "error", () => {});
     const { doc, renders } = await controlledDocument();
-    const renderer = new Renderer(doc, drawingsOnly);
+    const renderer = new Renderer(doc, { ...drawingsOnly, maxConcurrent: 1 });
     t.after(() => renderer.dispose());
     mount(renderer, 0);
+    mount(renderer, 1);
     const view = input(1, true);
+    view.layout = computeLayout([LETTER, LETTER], 1, { gap: 10 });
+    view.viewport = { ...view.viewport, height: 700, scrollerHeight: 700 };
     renderer.update(view);
     await settle();
     assert.equal(renders.length, 1);
     assert.equal(renders[0]?.request.scale, 1);
     renders[0]?.reject(new Error("unsupported drawing"));
     await settle();
-    assert.equal(renders.length, 2);
+    assert.deepEqual(
+      renders.map((draw) => draw.pageIndex),
+      [0, 0],
+    );
     assert.equal(renders[1]?.request.scale, 0.5);
     renders[1]?.reject(new Error("unsupported drawing"));
     await settle();
     for (let frame = 0; frame < 10; frame++) renderer.update(view);
     await settle();
-    assert.equal(renders.length, 2);
+    assert.deepEqual(
+      renders.map((draw) => draw.pageIndex),
+      [0, 0, 1],
+    );
     assert.equal(renderer.stats.failed, 2);
     assert.equal(renderer.hasPixels(0), false);
   });
@@ -585,10 +594,17 @@ describe("Renderer drawings for others", () => {
     assert.equal(renderer.stats.failed, 1);
   });
 
-  it("batches synchronous page mounts so visible focus draws ahead of earlier overscan pages", async (t) => {
+  it("starts only one neighboring preview until the visible page draws, then releases the covered preview", async (t) => {
     const pages = Array.from({ length: 60 }, () => LETTER);
     const { session, drawings: renders } = await openSession({ pages });
-    const renderer = new Renderer(session, { ...drawingsOnly, maxConcurrent: 2 });
+    let firstVisiblePaints = 0;
+    const renderer = new Renderer(session, {
+      ...drawingsOnly,
+      maxConcurrent: 4,
+      onFirstVisiblePaint: () => {
+        firstVisiblePaints++;
+      },
+    });
     t.after(() => renderer.dispose());
 
     const layout = computeLayout(pages, 1, { gap: 10 });
@@ -602,9 +618,9 @@ describe("Renderer drawings for others", () => {
         left: 0,
         top,
         width: 800,
-        height: 900,
+        height: 700,
         scrollerWidth: 800,
-        scrollerHeight: 900,
+        scrollerHeight: 700,
       },
       devicePixelRatio: 1,
       settled: true,
@@ -615,10 +631,116 @@ describe("Renderer drawings for others", () => {
     assert.equal(renderer.busy, true, "busy while the batched pump microtask is queued");
     await settle();
     assert.equal(renders.length, 2);
-    assert.equal(renders[0]?.pageIndex, 50, "visible focus page draws first");
-    assert.ok(
-      renders[1]?.pageIndex === 49 || renders[1]?.pageIndex === 51,
-      "nearest neighbor draws second ahead of page 48",
+    assert.equal(renders[0]?.pageIndex, 50);
+    assert.equal(renders[0]?.request.scale, 1);
+    const preview = renders[1];
+    assert.ok(preview && Math.abs(preview.pageIndex - 50) === 1);
+    assert.equal(preview.request.scale, 0.5);
+    preview.resolve();
+    await settle();
+    assert.equal(renderer.hasPixels(preview.pageIndex), true);
+    assert.equal(renderer.hasPixels(50), false);
+    assert.equal(firstVisiblePaints, 0);
+    assert.equal(renders.length, 2, "an early offscreen paint does not unlock more drawings");
+
+    renders[0]?.resolve();
+    await settle();
+    assert.equal(firstVisiblePaints, 1);
+    const details = renders.slice(2);
+    assert.equal(details.length, 4, "visible ink unlocks all four spare slots");
+    const covering = details.find((draw) => draw.pageIndex === preview.pageIndex);
+    assert.ok(covering);
+    assert.equal(covering.request.scale, 1);
+    assert.equal(covering.request.region, undefined);
+    const base = preview.request.canvas;
+    assert.ok(base.width * base.height > 0, "keep the preview during its replacement");
+    covering.resolve();
+    await settle();
+    assert.equal(base.width * base.height, 0, "full-page detail releases the preview backing");
+    assert.equal(renderer.hasPixels(preview.pageIndex), true);
+    assert.equal(firstVisiblePaints, 1);
+  });
+
+  it("notifies once when the reader moves to a finished preview before the first page draws", async (t) => {
+    const { doc, renders } = await controlledDocument();
+    const onFirstVisiblePaint = t.mock.fn();
+    const renderer = new Renderer(doc, { ...drawingsOnly, onFirstVisiblePaint });
+    t.after(() => renderer.dispose());
+    mount(renderer, 0);
+    mount(renderer, 1);
+    const view = input(1, true);
+    const layout = computeLayout([LETTER, LETTER], 1, { gap: 10 });
+    const viewport = { ...view.viewport, height: 700, scrollerHeight: 700 };
+    renderer.update({ ...view, layout, viewport, ...visibleRange(layout, viewport) });
+    await settle();
+    const preview = renders[1];
+    assert.equal(preview?.pageIndex, 1);
+    preview.resolve();
+    await settle();
+    assert.equal(onFirstVisiblePaint.mock.callCount(), 0);
+    assert.equal(renderer.hasPixels(0), false);
+
+    const next = { ...viewport, top: layout.tops[1] ?? 0 };
+    const nextView = { ...view, layout, viewport: next, ...visibleRange(layout, next) };
+    renderer.update(nextView);
+    assert.equal(onFirstVisiblePaint.mock.callCount(), 1);
+    renderer.update(nextView);
+    for (const drawing of renders) drawing.resolve();
+    await settle();
+    assert.equal(onFirstVisiblePaint.mock.callCount(), 1);
+  });
+
+  it("starts a neighboring preview only when its pixels fit beside the visible drawing", async (t) => {
+    const view = input(1, true);
+    const layout = computeLayout([LETTER, LETTER], 1, { gap: 10 });
+    const viewport = { ...view.viewport, height: 700, scrollerHeight: 700 };
+    const drawing = { ...view, layout, viewport, ...visibleRange(layout, viewport) };
+    for (const maxCanvasPixels of [100_000, 680_000]) {
+      const { doc, renders } = await controlledDocument();
+      const renderer = new Renderer(doc, { ...drawingsOnly, maxCanvasPixels });
+      t.after(() => renderer.dispose());
+      mount(renderer, 0);
+      const neighbor = mount(renderer, 1);
+      renderer.update(drawing);
+      await settle();
+      const visible = renders[0]?.request.canvas;
+      assert.ok(visible);
+      const visiblePixels = visible.width * visible.height;
+      if (maxCanvasPixels === 100_000) {
+        assert.ok(visiblePixels > maxCanvasPixels, "the visible base needs the whole budget");
+        assert.equal(renders.length, 1);
+      } else {
+        assert.equal(visiblePixels, LETTER.width * LETTER.height);
+        assert.ok(visiblePixels * 2 > maxCanvasPixels, "a neighboring detail would not fit");
+        assert.equal(renders.length, 2);
+        assert.equal(renders[1]?.request.canvas, neighbor.base);
+        assert.ok(visiblePixels + neighbor.base.width * neighbor.base.height <= maxCanvasPixels);
+      }
+    }
+  });
+
+  it("draws two visible pages together and starts overscan when either shows pixels", async (t) => {
+    const pages = [LETTER, LETTER, LETTER];
+    const { session, drawings } = await openSession({ pages });
+    const renderer = new Renderer(session, drawingsOnly);
+    t.after(() => renderer.dispose());
+    for (let i = 0; i < pages.length; i++) mount(renderer, i);
+    const view = input(1, true);
+    view.layout = computeLayout(pages, 1, { gap: 10 });
+    Object.assign(view, visibleRange(view.layout, view.viewport));
+    renderer.update(view);
+    await settle();
+    assert.deepEqual(
+      drawings.map((draw) => draw.pageIndex),
+      [0, 1],
+    );
+
+    drawings[1]?.resolve();
+    await settle();
+    assert.equal(renderer.hasPixels(0), false);
+    assert.deepEqual(
+      drawings.map((draw) => draw.pageIndex),
+      [0, 1, 2],
     );
   });
 
@@ -825,10 +947,11 @@ describe("Renderer view changes", () => {
 
 describe("Renderer whole-page details zoomed past their budget (decision 0012)", () => {
   const copies = (canvas: HTMLCanvasElement) => (canvas as unknown as FakeElement).copied;
-  const twoPages = (scale: number): ViewInput => ({
-    ...input(scale, true),
-    layout: computeLayout([LETTER, LETTER], scale, { gap: 10 }),
-  });
+  const twoPages = (scale: number): ViewInput => {
+    const view = input(scale, true);
+    const layout = computeLayout([LETTER, LETTER], scale, { gap: 10 });
+    return { ...view, layout, ...visibleRange(layout, view.viewport) };
+  };
   const demoteOptions = { ...drawingsOnly, maxDetailPixels: 1_000_000 };
 
   async function zoomedOut(

@@ -1218,7 +1218,6 @@ export class ViewerController implements Viewer {
     if (signal.aborted) return;
     const loadedLayers = session.loadedLayers;
     if (loadedLayers) shown.layers = loadedLayers;
-    let painted = false;
     const renderer = new Renderer(session, {
       ...rendererOptions(this.#options),
       ...(loadedLayers ? { layers: loadedLayers } : {}),
@@ -1229,11 +1228,8 @@ export class ViewerController implements Viewer {
         if (pageIndex === 0 && this.#firstPaintAt === null) {
           this.#firstPaintAt = performance.now();
         }
-        if (!painted) {
-          painted = true;
-          this.#extensions.painted();
-        }
       },
+      onFirstVisiblePaint: () => this.#extensions.painted(),
       onTextReady: (pageIndex, handle) => {
         this.#textPages.set(pageIndex, handle);
         this.#extensions.textLayer(pageIndex, handle);

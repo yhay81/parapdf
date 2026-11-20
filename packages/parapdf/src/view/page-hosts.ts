@@ -19,7 +19,7 @@ function stylePageHost(host: HTMLElement, layout: Layout, index: number, centere
   const rowWidth = layout.rowWidths[index] ?? 0;
   const rowHeight = centered ? (layout.rowHeights[index] ?? 0) : null;
   const hidden = layout.shown !== null && (index < layout.shown.first || index > layout.shown.last);
-  const offset = layout.offsets[index] ?? 0;
+  const offset = layout.offsets?.[index] ?? 0;
   const width = layout.widths[index] ?? 0;
   const height = layout.heights[index] ?? 0;
   const { style } = host;

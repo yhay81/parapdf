@@ -6,8 +6,21 @@ change the API.
 
 ## Unreleased
 
+### Breaking changes
+
+- `Layout.offsets`, `rowFirst`, and `rowLast` are null in vertical and
+  single-page scroll modes without spreads. For page `i`, read its horizontal
+  offset with `layout.offsets?.[i] ?? 0` and its row bounds with
+  `layout.rowFirst?.[i] ?? i` and `layout.rowLast?.[i] ?? i`.
+
 ### Features and improvements
 
+- On open, draw the visible pages and at most one low-resolution neighboring
+  page. This reduces canvas memory while keeping the next page readable on
+  an immediate flip. Vertical and single-page layouts without spreads use one
+  third less memory for their geometry arrays. Concurrent viewers share the
+  first page's size read, annotation icon URLs resolve on demand, and a
+  same-origin static copy of the packaged worker loads alongside pdf.js.
 - Store search item IDs and offsets at the width each page needs. Moving to
   the next or previous match updates only the affected highlight ranges.
 - Release parsed pages after thumbnail-only draws and enforce the default

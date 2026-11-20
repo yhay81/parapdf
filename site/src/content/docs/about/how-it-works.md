@@ -99,14 +99,21 @@ visible bases, and no base is drawn under a whole-page detail.
 Each mounted page stacks two canvases:
 
 - a **base** at half a device pixel per CSS pixel, at most 2 MP
-  (`maxBasePixels`), drawn first so scrolling never shows a blank page;
+  (`maxBasePixels`), to show pixels quickly during a scroll or while a large
+  detail is pending;
 - a **detail** at full device resolution, drawn once scrolling settles. A
   page whose full-resolution drawing fits in 16 MP (`maxDetailPixels`) gets
   detail for all of it; larger pages get it only around the visible area,
   redrawn as the view moves away, as pdf.js's viewer does.
 
-Visible pages draw first. Pages that slow scrolling brings into the mounted
-window draw their detail before they scroll in, and get a base only once
+On open, a visible page whose whole detail fits within four times the base
+budget (about 8.4 MP by default) can go straight to full resolution. Visible
+pages can draw in parallel. A spare slot can draw one nearby page at low
+resolution so an immediate page flip has something to show. Once a visible
+page has pixels, normal prefetch resumes. The nearby page releases its
+preview when its full-page detail is ready.
+Pages that slow scrolling brings into the mounted window draw their detail
+before they scroll in, and get a base only once
 they need one in view. After a zoom, a page draws its new detail into a
 spare canvas while the old one, scaled, still shows, so it never shows
 white or only its base.

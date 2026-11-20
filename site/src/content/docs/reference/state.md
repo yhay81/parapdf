@@ -50,6 +50,13 @@ and zoom gestures change nothing in it per frame.
 | `tool` | What a mouse drag does: `"select"` text, or scroll the document with the `"hand"`. |
 | `direction` | The order of pages in a row, `"ltr"` or `"rtl"`: `PdfViewer`'s `direction`, or the document's `/ViewerPreferences /Direction` (see [Right to left](/guides/layout/#right-to-left)). |
 
+When `spread` is `"none"` and `scrollMode` is `"vertical"` or `"page"`,
+every page is its own row. The exported `Layout` represents this with null
+`rowFirst`, `rowLast`, and `offsets`. To read raw row geometry in any mode,
+use `layout.rowFirst?.[i] ?? i` and `layout.rowLast?.[i] ?? i` for the
+first and last page indices, and `layout.offsets?.[i] ?? 0` for the page's
+horizontal offset within the row.
+
 ## Document state
 
 `useDocumentState()` and `useDocumentState(selector)` read the `DocumentState`

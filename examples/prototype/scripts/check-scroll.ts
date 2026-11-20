@@ -54,7 +54,7 @@ interface Viewer {
       direction: "ltr" | "rtl";
       layout: {
         gap: number;
-        rowFirst: Int32Array;
+        rowFirst: Int32Array | null;
         shown: { first: number; last: number } | null;
         totalWidth: number;
         totalHeight: number;
@@ -128,7 +128,10 @@ const geometry = (page: Page): Promise<Geometry> =>
       scale: state?.scale ?? 0,
       gap: state?.layout?.gap ?? 0,
       shown: state?.layout?.shown ?? null,
-      rowFirst: [...(state?.layout?.rowFirst ?? [])],
+      rowFirst: Array.from(
+        { length: state?.pageCount ?? 0 },
+        (_, i) => state?.layout?.rowFirst?.[i] ?? i,
+      ),
       pages: [...scroller.querySelectorAll<HTMLElement>("section[data-page]")]
         .map((section) => {
           const rect = section.getBoundingClientRect();

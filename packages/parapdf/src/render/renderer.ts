@@ -39,6 +39,7 @@ import {
   DEFAULT_BUDGETS,
   demotes,
   type FailedDrawing,
+  isVisible,
   type Layer,
   type PageState,
   type PlanContext,
@@ -133,6 +134,7 @@ export interface RendererOptions extends Partial<Budgets> {
    */
   maxKeptPixels?: number;
   onPainted?: (pageIndex: number, layer: Layer) => void;
+  onFirstVisiblePaint?: () => void;
   onTextReady?: (pageIndex: number, handle: TextLayerHandle) => void;
   onTextRemoved?: (pageIndex: number) => void;
   onAnnotationsReady?: (pageIndex: number, handle: AnnotationLayerHandle) => void;
@@ -195,6 +197,9 @@ export class Renderer {
   #running = 0;
   #runningExtras = 0;
   #pumpQueued = false;
+  #firstVisiblePainted = false;
+  /** Page receiving the opening preview, even if it unmounts and returns before its detail. */
+  #openingPreview: number | null | undefined;
   /** Bumped when every canvas becomes stale, so drawings started before are dropped. */
   #epoch = 0;
   /** Drawings outside the page layers, in the order they were asked for. */
@@ -519,6 +524,7 @@ export class Renderer {
     if (this.#disposed) return;
     const previous = this.#input;
     this.#input = input;
+    if (!this.#firstVisiblePainted) this.#checkFirstVisiblePaint();
     if (
       this.#kept.pixels > 0 &&
       previous &&
@@ -563,6 +569,18 @@ export class Renderer {
   /** See DomLayers.whenEditable. */
   whenEditable(index: number): Promise<boolean> {
     return this.#layers.whenEditable(index);
+  }
+
+  /** A completed opening preview can also become visible when the reader moves to it. */
+  #checkFirstVisiblePaint(): void {
+    const input = this.#input;
+    if (!input) return;
+    for (let i = input.first; i <= input.last; i++) {
+      if (!this.hasPixels(i)) continue;
+      this.#firstVisiblePainted = true;
+      this.#options.onFirstVisiblePaint?.();
+      return;
+    }
   }
 
   /** Whether a visible page draws its first pixels now. */
@@ -687,8 +705,33 @@ export class Renderer {
       const free = this.#maxConcurrent - this.#running;
       if (free > 0) {
         for (const drawing of plan(context, this.#slots.values(), free)) {
+          // On open, let visible pages use the worker and canvas memory first.
+          // A failed or unrenderable page has no running job to wait for.
+          if (
+            !this.#firstVisiblePainted &&
+            !isVisible(context.input, drawing.index) &&
+            this.#waitingForPixels()
+          )
+            break;
           const slot = this.#slots.get(drawing.index);
           if (slot) this.#start(slot, drawing);
+        }
+        if (
+          !this.#firstVisiblePainted &&
+          this.#openingPreview === undefined &&
+          this.#running < this.#maxConcurrent &&
+          this.#waitingForPixels()
+        ) {
+          // Keep the next flip readable at the cost of one budgeted base.
+          const moving = { ...context, input: { ...context.input, settled: false } };
+          const preview = plan(moving, this.#slots.values(), 1)[0];
+          if (preview?.layer === "base" && !isVisible(context.input, preview.index)) {
+            const slot = this.#slots.get(preview.index);
+            if (slot) {
+              this.#openingPreview = slot.index;
+              this.#start(slot, preview);
+            }
+          }
         }
       }
     }
@@ -839,9 +882,15 @@ export class Renderer {
             slot.detailScale = scale;
             slot.detailVersion = version;
             slot.detailRegion = region;
+            if (this.#openingPreview === slot.index && region === null) {
+              release(elements.base);
+              slot.baseScale = 0;
+              this.#openingPreview = null;
+            }
             this.stats.detail++;
           }
           this.#options.onPainted?.(slot.index, layer);
+          if (!this.#firstVisiblePainted) this.#checkFirstVisiblePaint();
         },
         (error: unknown) => {
           if (isRenderCancelled(error)) this.stats.cancelled++;

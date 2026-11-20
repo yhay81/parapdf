@@ -470,7 +470,7 @@ export class DocumentSession {
    */
   async pageSizes(): Promise<readonly PageSize[]> {
     if (this.#sizes) return this.#sizes;
-    const first = await this.pageSize(0);
+    const first = await this.#once("firstPageSize", () => this.pageSize(0));
     this.#sizes ??= Array<PageSize>(this.pageCount).fill(first);
     return this.#sizes;
   }

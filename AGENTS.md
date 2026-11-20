@@ -191,7 +191,12 @@ through these directories.
   to after they unmounted), `navigation-bench.ts` (`PdfThumbnails` and
   `PdfOutline`), `text-virtualization-bench.ts`, `main-thread-bench.ts`, and
   `hwa-bench.ts`,
-  each documented in its header comment. `search-index-bench.ts` compares index
+  each documented in its header comment. `startup-bench.ts` compares cold
+  client opens in `DIST` and `BEFORE` with one page drawn directly by pdf.js.
+  It checks full-resolution pixels and records the first and next drawings,
+  canvas bytes and worker requests. `startup-flip-bench.ts` clicks Next on the
+  first drawing and after a short delay to measure page 2's ink, full resolution
+  and blank frames. `search-index-bench.ts` compares index
   memory, construction time and exact match positions against the source in
   `BEFORE_SRC` using the same extracted PDF text. `scroll-bench.ts`,
   `commit-bench.ts`, `zoom-bench.ts`, `return-bench.ts`, and

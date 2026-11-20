@@ -208,7 +208,7 @@ interface AnnotationData {
  * file attachments, and, with `forms`, form fields.
  */
 export function buildAnnotationLayer(
-  { pdfjs, imageResourcesPath, iconUrls }: LoadedPdfjs,
+  loaded: LoadedPdfjs,
   doc: Pdfjs.PDFDocumentProxy,
   page: Promise<Pdfjs.PDFPageProxy>,
   {
@@ -223,6 +223,7 @@ export function buildAnnotationLayer(
     scripting = null,
   }: AnnotationLayerRequest,
 ): AnnotationLayerTask {
+  const { pdfjs, imageResourcesPath } = loaded;
   let cancelled = false;
   // The fields of every page, which radio buttons and fields shown on
   // several pages use to keep their widgets in step; pdf.js keeps them.
@@ -293,7 +294,7 @@ export function buildAnnotationLayer(
     }
     if (annotations.length > 0 && (!container.children || container.children.length > 0)) {
       structTree?.updateAnnotationLayer(container);
-      if (iconUrls) placeIcons(container, imageResourcesPath, iconUrls);
+      if (loaded.iconUrls) placeIcons(container, imageResourcesPath, loaded.iconUrls);
       nameAnnotations(container, annotations as AnnotationData[]);
     }
     if (form) form.layer = layer;

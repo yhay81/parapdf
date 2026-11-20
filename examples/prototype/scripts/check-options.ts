@@ -323,7 +323,7 @@ try {
             once: true,
           });
         });
-        scroller[axis] = (old[positions][9] ?? 0) + inset + 1000;
+        scroller[axis] = (old[positions]?.[9] ?? 0) + inset + 1000;
         await scrolled;
         const before = viewer.store.get().currentPage;
         finishSizes();
@@ -332,7 +332,7 @@ try {
           await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
         }
         const state = viewer.store.get();
-        const expected = (state.layout?.[positions][9] ?? 0) + inset + 250;
+        const expected = (state.layout?.[positions]?.[9] ?? 0) + inset + 250;
         const position = scroller[axis];
         viewer.setTool("hand");
         const replacementReady = new Promise<void>((resolve) => {
