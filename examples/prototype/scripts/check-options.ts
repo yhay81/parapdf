@@ -21,6 +21,7 @@ import {
   restoreScaleFactor,
 } from "../../../bench/scripts/browsers.ts";
 import type { LoadedPdfjs } from "../../../packages/parapdf/src/pdfjs/loader.ts";
+import { SETTLE_DELAY } from "../../../packages/parapdf/src/view/scrolling.ts";
 import type { ViewState } from "../../../packages/parapdf/src/view/view-state.ts";
 import type { ViewerController } from "../../../packages/parapdf/src/view/viewer.ts";
 
@@ -1082,7 +1083,7 @@ try {
   );
   await settle(persisted, { quiet: true });
   await persisted.waitForTimeout(250);
-  const viewStateEvents = await persisted.evaluate(async () => {
+  const viewStateEvents = await persisted.evaluate(async (settleDelay) => {
     const win = window as unknown as Demo;
     const scroller = document.querySelector(".parapdf-viewport") as HTMLElement;
     const nextFrame = () =>
@@ -1095,22 +1096,52 @@ try {
     win.__viewer.goToPage(6);
     const afterJump = [...(win.__viewStates ?? [])];
 
-    const beforeScroll = win.__viewStates?.length ?? 0;
-    scroller.scrollTop += 60;
-    await nextFrame();
-    const duringScroll = (win.__viewStates?.length ?? 0) - beforeScroll;
-    await wait(300);
+    const scrollBy = (pixels: number) =>
+      new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("No scroll event")), 5_000);
+        scroller.addEventListener(
+          "scroll",
+          () => {
+            clearTimeout(timer);
+            resolve();
+          },
+          { once: true },
+        );
+        scroller.scrollTop += pixels;
+      });
+    // Frame intervals on a busy browser can exceed the entire quiet period.
+    let scrollAt = 0;
+    scroller.addEventListener(
+      "scroll",
+      () => {
+        scrollAt = performance.now();
+      },
+      {
+        capture: true,
+        once: true,
+      },
+    );
+    const delays: number[] = [];
+    let unsubscribe = () => {};
+    const firstNotice = new Promise<void>((resolve) => {
+      unsubscribe = win.__viewer.onViewStateChange(() => {
+        delays.push(scrollAt ? performance.now() - scrollAt : -1);
+        resolve();
+      });
+    });
+    await scrollBy(60);
+    await Promise.race([firstNotice, wait(5_000)]);
+    await wait(settleDelay);
+    unsubscribe();
     const afterSettle = [...(win.__viewStates ?? [])];
 
+    await scrollBy(45);
     const beforePagehide = win.__viewStates?.length ?? 0;
-    scroller.scrollTop += 45;
-    await nextFrame();
     window.dispatchEvent(new PageTransitionEvent("pagehide"));
     const afterPagehide = (win.__viewStates?.length ?? 0) - beforePagehide;
 
+    await scrollBy(45);
     const beforeUnmount = win.__viewStates?.length ?? 0;
-    scroller.scrollTop += 45;
-    await nextFrame();
     win.__lifecycle.unmount();
     await nextFrame();
     const afterUnmount = (win.__viewStates?.length ?? 0) - beforeUnmount;
@@ -1119,19 +1150,20 @@ try {
     return {
       afterOpen,
       afterJump,
-      duringScroll,
+      delays,
       settledCount: afterSettle.length - afterJump.length,
       afterPagehide,
       afterUnmount,
       finalState,
     };
-  });
+  }, SETTLE_DELAY);
   check(
     "onViewStateChange skips initial open, coalesces scrolls until settled, and flushes on pagehide and unmount",
     viewStateEvents.afterOpen.length === 0 &&
       viewStateEvents.afterJump.length === 1 &&
       viewStateEvents.afterJump[0]?.page === 6 &&
-      viewStateEvents.duringScroll === 0 &&
+      viewStateEvents.delays.length === 1 &&
+      (viewStateEvents.delays[0] ?? -1) >= SETTLE_DELAY &&
       viewStateEvents.settledCount === 1 &&
       viewStateEvents.afterPagehide === 1 &&
       viewStateEvents.afterUnmount === 1 &&
