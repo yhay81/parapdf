@@ -89,7 +89,7 @@ children of `<PdfViewer>` so bundlers exclude unused features statically (see
 | `maxDetailViewports` | unlimited | The same limit as a multiple of the viewport's device pixels, so the sharp margin around the visible area follows the viewport's size; `maxDetailPixels` still caps it. At 1 the detail holds just the viewport; below 1 the visible area loses resolution. |
 | `maxBasePixels` | 2,097,152 | Pixels of one page's low-resolution canvas. |
 | `maxCanvasPixels` | unlimited | Pixels of all of this viewer's canvases together. Pages outside the viewport give theirs back first, farthest first and detail before base; past the budget, visible pages lose their sharp margin and then resolution, in quarter-octave steps, but keep their low-resolution canvases, so a visible page never goes blank. |
-| `maxKeptPixels` | twelve viewports' worth of device pixels | Pixels kept of the canvases of pages that leave the mounted window, so that a page the reader comes back to shows at once; `0` keeps none, and pages whose form fields are shown keep nothing. Within `maxCanvasPixels`, kept canvases count and go first. |
+| `maxKeptPixels` | twelve viewports' worth of device pixels | Pixels kept of the canvases of pages that leave the mounted window, so that a page the reader comes back to shows at once; `0` keeps none, and pages whose form fields are shown keep nothing. The default follows viewport size and display density, including after a resize. Kept canvases also count toward `maxCanvasPixels` and are released first. |
 | `maxConcurrentRenders` | `2` | Pages drawn at once. |
 
 `maxCanvasPixels` exists for browsers that cap all canvases together, as iOS

@@ -8,6 +8,7 @@ import {
   pageAtPoint,
   pageLeft,
   pageTop,
+  previewZoomMetrics,
   rowBounds,
   rowEnd,
   rowStart,
@@ -471,5 +472,106 @@ describe("page scrolling", () => {
     assert.equal(empty.shown, null);
     assert.deepEqual(visibleRange(empty, view(0, 0, 1000, 1000)), { first: 0, last: -1 });
     assert.equal(pageAtPoint(empty, 0, 0, 1000), 0);
+  });
+});
+
+describe("single-page array sharing and previewZoomMetrics", () => {
+  const uniformPages = Array.from({ length: 12 }, () => ({ width: 612, height: 792 }));
+
+  it("shares row and page typed arrays in vertical and page modes without spreads", () => {
+    for (const scrollMode of ["vertical", "page"] as const) {
+      const layout = computeLayout(uniformPages, 1.25, { gap: 10, scrollMode, page: 4 });
+      assert.equal(layout.rowTops, layout.tops);
+      assert.equal(layout.rowWidths, layout.widths);
+      assert.equal(layout.rowHeights, layout.heights);
+      assert.equal(layout.rowFirst, layout.rowLast);
+      assert.equal(layout.uniform, true);
+    }
+    const mixed = computeLayout(sizes, 1, { gap: 10 });
+    assert.equal(mixed.uniform, false);
+  });
+
+  it("uses only the shown page during a mixed-size single-page zoom", () => {
+    const scroller = { width: 820, height: 640 };
+    const anchor = { x: 137, y: 251 };
+    const point = { x: 318, y: 492 };
+    for (const rotation of [0, 90] as const) {
+      const options = { gap: 8.25, scrollMode: "page", page: 1, rotation } as const;
+      const current = computeLayout(sizes, 1, options);
+      const next = computeLayout(sizes, 1.75, options);
+      assert.deepEqual(previewZoomMetrics(current, 1.75, scroller, anchor, point), {
+        ...zoomTarget(current, next, scroller, anchor, point),
+        totalHeight: next.totalHeight,
+        totalWidth: next.totalWidth,
+      });
+    }
+  });
+
+  it("matches computeLayout + zoomTarget across scroll modes, directions, and rotations", () => {
+    const scroller = { width: 1000, height: 800 };
+    const anchor = { x: 420, y: 310 };
+    const points = [
+      { x: 420, y: 310 },
+      { x: 180, y: 4200 },
+      { x: 2600, y: 250 },
+    ];
+    for (const scrollMode of ["vertical", "page", "horizontal"] as const) {
+      for (const direction of ["ltr", "rtl"] as const) {
+        for (const rotation of [0, 90, 180, 270] as Rotation[]) {
+          const layout = computeLayout(uniformPages, 1.1, {
+            gap: 10,
+            scrollMode,
+            direction,
+            rotation,
+            page: 5,
+          });
+          for (const nextScale of [0.45, 1.75, 3.2]) {
+            const next = computeLayout(uniformPages, nextScale, {
+              gap: 10,
+              scrollMode,
+              direction,
+              rotation,
+              page: 5,
+            });
+            for (const point of points) {
+              const expected = zoomTarget(layout, next, scroller, anchor, point);
+              const fast = previewZoomMetrics(layout, nextScale, scroller, anchor, point);
+              assert.ok(fast !== null);
+              assert.ok(Math.abs(fast.left - expected.left) < 1e-9);
+              assert.ok(Math.abs(fast.top - expected.top) < 1e-9);
+              assert.equal(fast.totalWidth, next.totalWidth);
+              assert.equal(fast.totalHeight, next.totalHeight);
+            }
+          }
+        }
+      }
+    }
+
+    // Falls back to null for non-uniform pages, spreads, or wrapped rows.
+    const pt = { x: 420, y: 310 };
+    assert.equal(
+      previewZoomMetrics(computeLayout(sizes, 1, { gap: 10 }), 2, scroller, anchor, pt),
+      null,
+    );
+    assert.equal(
+      previewZoomMetrics(
+        computeLayout(uniformPages, 1, { gap: 10, spread: "odd" }),
+        2,
+        scroller,
+        anchor,
+        pt,
+      ),
+      null,
+    );
+    assert.equal(
+      previewZoomMetrics(
+        computeLayout(uniformPages, 1, { gap: 10, scrollMode: "wrapped", viewportWidth: 1000 }),
+        2,
+        scroller,
+        anchor,
+        pt,
+      ),
+      null,
+    );
   });
 });

@@ -65,6 +65,7 @@ export class TextSelectionTracker {
   /** The anchor is selected at the first pointer move, after the browser has handled the press. */
   #anchorPending = false;
   #previousRange: Range | null = null;
+  #hasMarked = false;
   #quirks: SelectionQuirks | undefined;
   #pages: HTMLElement | null = null;
 
@@ -128,6 +129,7 @@ export class TextSelectionTracker {
     this.#listeners?.abort();
     this.#listeners = null;
     this.#pointerDown = false;
+    this.#hasMarked = false;
     this.#endDrag();
     this.#previousRange = null;
   }
@@ -157,6 +159,8 @@ export class TextSelectionTracker {
   }
 
   #resetAll(): void {
+    if (!this.#hasMarked) return;
+    this.#hasMarked = false;
     for (const [layer, end] of this.#layers) this.#reset(layer, end);
   }
 
@@ -191,6 +195,7 @@ export class TextSelectionTracker {
         // A touch sends its mouse events after the pointer is up: no drag follows.
         const primary = event.button === 0 && this.#pointerDown;
         if (layer instanceof HTMLElement && this.#layers.has(layer)) {
+          this.#hasMarked = true;
           layer.classList.add("selecting");
           if (primary) {
             this.#setDragging(true);
@@ -304,15 +309,19 @@ export class TextSelectionTracker {
    * and Firefox during a drag, the layers that end before `focus` the
    * `selecting` and `before-selection` classes; resets every other layer.
    */
-  #mark(ranges: readonly Range[], focus: Point | null): void {
+  #mark(ranges: readonly Range[], focus: Point | null): boolean {
     this.#quirks ??= selectionQuirks();
+    const pages = this.#pages;
+    const pagesRoot = pages ? pages.getRootNode() : null;
     // Firefox makes one range per page when a selection spans pages.
     const active = new Set<HTMLElement>();
     for (const range of ranges) {
+      const rangeRoot = range.startContainer.getRootNode();
+      if (pages && rangeRoot === pagesRoot && !range.intersectsNode(pages)) continue;
       for (const layer of this.#layers.keys()) {
         if (
           !active.has(layer) &&
-          range.startContainer.getRootNode() === layer.getRootNode() &&
+          rangeRoot === layer.getRootNode() &&
           range.intersectsNode(layer)
         ) {
           active.add(layer);
@@ -325,6 +334,11 @@ export class TextSelectionTracker {
       above = document.createRange();
       above.setStart(focus.node, focus.offset);
     }
+    if (active.size === 0 && !above) {
+      this.#resetAll();
+      return false;
+    }
+    this.#hasMarked = true;
     for (const [layer, end] of this.#layers) {
       if (active.has(layer)) {
         layer.classList.add("selecting");
@@ -340,6 +354,7 @@ export class TextSelectionTracker {
         this.#reset(layer, end);
       }
     }
+    return active.size > 0;
   }
 
   /**
@@ -403,7 +418,14 @@ export class TextSelectionTracker {
     const ranges: Range[] = [];
     for (let i = 0; i < selection.rangeCount; i++) ranges.push(selection.getRangeAt(i));
     const { focusNode, focusOffset } = selection;
-    this.#mark(ranges, focusNode ? { node: focusNode, offset: focusOffset } : null);
+    const inLayers = this.#mark(
+      ranges,
+      focusNode ? { node: focusNode, offset: focusOffset } : null,
+    );
+    if (!inLayers && !this.#dragging) {
+      this.#previousRange = null;
+      return;
+    }
 
     this.#quirks ??= selectionQuirks();
     if (this.#quirks.keepsSelectionInRuns) return;
@@ -465,6 +487,7 @@ export class TextSelectionTracker {
 
   /** Stretches `end` over `layer` and puts it before `next` in `parent`. */
   #moveEnd(layer: HTMLElement, end: HTMLElement, next: Node | null, parent: Node = layer): void {
+    this.#hasMarked = true;
     end.style.width = layer.style.width;
     end.style.height = layer.style.height;
     end.style.userSelect = "text";

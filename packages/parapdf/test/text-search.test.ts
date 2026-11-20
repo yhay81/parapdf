@@ -3,9 +3,11 @@ import { describe, it } from "node:test";
 import {
   buildPageIndex,
   findMatches,
+  joinLines,
   normalizeQuery,
   type SearchMatch,
   type SearchOptions,
+  sourceChars,
 } from "../src/features/search/text-search.ts";
 import type { PageText } from "../src/pdfjs/text.ts";
 
@@ -45,6 +47,32 @@ describe("normalizeQuery", () => {
 
   it("is empty for a query of spaces", () => {
     assert.equal(normalizeQuery(" \t "), "");
+  });
+});
+
+describe("search index position widths", () => {
+  it("keeps full source positions across integer widths and normalization growth", () => {
+    for (const [max, bytes] of [
+      [255, 1],
+      [256, 2],
+      [65535, 2],
+      [65536, 4],
+    ] as const) {
+      const items = Array<string>(max + 1).fill("");
+      // Each fraction expands to three UTF-16 units, also exercising buffer growth.
+      items[max] = "½".repeat(max);
+      const index = buildPageIndex(page(items));
+      assert.equal(index.itemOf.BYTES_PER_ELEMENT, bytes);
+      assert.equal(index.startOf.BYTES_PER_ELEMENT, bytes);
+      assert.equal(index.endOf.BYTES_PER_ELEMENT, bytes);
+      assert.equal(index.itemOf.at(-1), max);
+      assert.equal(index.startOf.at(-1), max - 1);
+      assert.equal(index.endOf.at(-1), max);
+      assert.equal(index.text.length, 3 * max);
+    }
+    const manyShort = buildPageIndex(page(Array<string>(257).fill("A")));
+    assert.equal(manyShort.itemOf.BYTES_PER_ELEMENT, 2);
+    assert.equal(manyShort.endOf.BYTES_PER_ELEMENT, 1);
   });
 });
 
@@ -177,5 +205,75 @@ describe("search options", () => {
     const text = page([`葛${ivs} 葛`]);
     assert.deepEqual(search(text, "葛", { matchDiacritics: true }), ["葛"]);
     assert.deepEqual(search(text, `葛${ivs}`, { matchDiacritics: true }), [`葛${ivs}`]);
+  });
+
+  it("matches joinLines(sourceChars(page)) exactly across ASCII, CJK, hyphens, ligatures, and marks", () => {
+    const samples: PageText[] = [
+      page([], []),
+      page(["", ""], [true, true]),
+      page(
+        [
+          "  ASCII\tlines-\n",
+          "joined",
+          "PRE-",
+          "VIEW",
+          "2020-",
+          "",
+          "2025",
+          "Café-",
+          "Bar ﬁnd ½ “quote” ΟΔΟΣ ς",
+          "厚生",
+          "労働省 ﾃﾞｰﾀ 𠮷野家 葛\u{E0100} cafe\u0301",
+          "-",
+          "end-",
+        ],
+        [false, true, true, true, true, true, true, true, true, true, true, true, true],
+      ),
+    ];
+
+    for (const sample of samples) {
+      for (const caseSensitive of [false, true]) {
+        for (const matchDiacritics of [false, true]) {
+          for (const keepDashes of [false, true]) {
+            const options = { caseSensitive, matchDiacritics, keepDashes };
+            const actual = buildPageIndex(sample, options);
+
+            const parts: string[] = [];
+            const itemOf: number[] = [];
+            const startOf: number[] = [];
+            const endOf: number[] = [];
+            let lastWasSpace = true;
+            for (const source of joinLines(sourceChars(sample), keepDashes)) {
+              const single = buildPageIndex(page([source.char], [false]), {
+                caseSensitive,
+                matchDiacritics,
+              }).text;
+              const rawSpace = /\s/u.test(source.char);
+              const normalized = !single && rawSpace ? " " : single;
+              const last = endOf.length - 1;
+              if (!normalized && itemOf[last] === source.item && endOf[last] === source.start) {
+                endOf[last] = source.end;
+              }
+              for (const unit of normalized) {
+                const space = unit === " ";
+                if (space && lastWasSpace) continue;
+                parts.push(unit);
+                for (let k = 0; k < unit.length; k++) {
+                  itemOf.push(source.item);
+                  startOf.push(source.start);
+                  endOf.push(source.end);
+                }
+                lastWasSpace = space;
+              }
+            }
+
+            assert.equal(actual.text, parts.join(""));
+            assert.deepEqual([...actual.itemOf], itemOf);
+            assert.deepEqual([...actual.startOf], startOf);
+            assert.deepEqual([...actual.endOf], endOf);
+          }
+        }
+      }
+    }
   });
 });

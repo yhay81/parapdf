@@ -60,6 +60,17 @@ const yieldToMain = (): Promise<void> => {
 /** Each viewer's own search store, which `useSearch()` shows. */
 const SEARCH_SLOT = createSlotKey<ReadableStore<SearchControls>>("parapdf.search");
 
+function firstMatchOnPage(matches: readonly SearchMatch[], pageIndex: number): number {
+  let low = 0;
+  let high = matches.length;
+  while (low < high) {
+    const mid = (low + high) >>> 1;
+    if ((matches[mid]?.pageIndex ?? 0) < pageIndex) low = mid + 1;
+    else high = mid;
+  }
+  return low;
+}
+
 /** `viewer`'s own search store, attached at first use for the lifetime of `viewer`. */
 export function searchOf(viewer: ViewerController): ReadableStore<SearchControls> {
   return viewer.slot(SEARCH_SLOT, () => createSearchStore(viewer));
@@ -143,8 +154,13 @@ function createSearchStore(viewer: ViewerController): ReadableStore<SearchContro
       highlights.clearPage(pageIndex);
       return;
     }
-    const pageMatches = matches.filter((match) => match.pageIndex === pageIndex);
-    highlights.setPage(pageIndex, handle.elements, pageMatches, matches[current] ?? null);
+    highlights.setPage(
+      pageIndex,
+      handle.elements,
+      matches,
+      firstMatchOnPage(matches, pageIndex),
+      current,
+    );
   };
 
   const refreshHighlights = () => {
@@ -166,8 +182,11 @@ function createSearchStore(viewer: ViewerController): ReadableStore<SearchContro
     const search = store.get();
     const match = search.matches[index];
     if (!match) return;
+    const previous = search.matches[search.current];
+    if (previous && previous.pageIndex !== match.pageIndex)
+      highlights.select(previous.pageIndex, -1);
+    highlights.select(match.pageIndex, index);
     store.set({ current: index });
-    refreshHighlights();
     background(scrollToMatch(match), viewer.workSignal);
   };
 

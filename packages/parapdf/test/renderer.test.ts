@@ -584,6 +584,138 @@ describe("Renderer drawings for others", () => {
     assert.deepEqual(heard.slice(1), [[], [null], []], "cancelled ones hear nothing");
     assert.equal(renderer.stats.failed, 1);
   });
+
+  it("batches synchronous page mounts so visible focus draws ahead of earlier overscan pages", async (t) => {
+    const pages = Array.from({ length: 60 }, () => LETTER);
+    const { session, drawings: renders } = await openSession({ pages });
+    const renderer = new Renderer(session, { ...drawingsOnly, maxConcurrent: 2 });
+    t.after(() => renderer.dispose());
+
+    const layout = computeLayout(pages, 1, { gap: 10 });
+    const top = layout.tops[50] ?? 0;
+    renderer.update({
+      layout,
+      first: 50,
+      last: 50,
+      focus: 50,
+      viewport: {
+        left: 0,
+        top,
+        width: 800,
+        height: 900,
+        scrollerWidth: 800,
+        scrollerHeight: 900,
+      },
+      devicePixelRatio: 1,
+      settled: true,
+    });
+
+    // React mounts [first - overscan .. last + overscan] in ascending order.
+    for (const index of [48, 49, 50, 51, 52]) mount(renderer, index);
+    assert.equal(renderer.busy, true, "busy while the batched pump microtask is queued");
+    await settle();
+    assert.equal(renders.length, 2);
+    assert.equal(renders[0]?.pageIndex, 50, "visible focus page draws first");
+    assert.ok(
+      renders[1]?.pageIndex === 49 || renders[1]?.pageIndex === 51,
+      "nearest neighbor draws second ahead of page 48",
+    );
+  });
+
+  it("waits for initial visible pixels before extras, orders extras by focus, and skips via copyPage", async (t) => {
+    const pages = Array.from({ length: 5 }, () => LETTER);
+    const { session, drawings: renders } = await openSession({ pages });
+    const renderer = new Renderer(session, { ...drawingsOnly, maxConcurrent: 2 });
+    t.after(() => renderer.dispose());
+
+    // Enqueue thumbnails in sidebar order before <PdfViewer> attaches its page hosts in the same commit.
+    const thumb0 = sized(120, 155);
+    const thumb3 = sized(120, 155);
+    const thumb4 = sized(120, 155);
+    const completed: number[] = [];
+    renderer.enqueue(
+      0,
+      { scale: 0.2, canvas: thumb0 as unknown as HTMLCanvasElement },
+      (err) => {
+        if (err === null) completed.push(0);
+      },
+      () => renderer.copyPage(0, thumb0 as unknown as HTMLCanvasElement, 0),
+    );
+    renderer.enqueue(
+      4,
+      { scale: 0.2, canvas: thumb4 as unknown as HTMLCanvasElement },
+      (err) => {
+        if (err === null) completed.push(4);
+      },
+      () => renderer.copyPage(4, thumb4 as unknown as HTMLCanvasElement, 0),
+    );
+    renderer.enqueue(
+      3,
+      { scale: 0.2, canvas: thumb3 as unknown as HTMLCanvasElement },
+      (err) => {
+        if (err === null) completed.push(3);
+      },
+      () => renderer.copyPage(3, thumb3 as unknown as HTMLCanvasElement, 0),
+    );
+
+    const page3 = mount(renderer, 3);
+    const layout = computeLayout(pages, 1, { gap: 10 });
+    renderer.update({
+      layout,
+      first: 3,
+      last: 3,
+      focus: 3,
+      viewport: {
+        left: 0,
+        top: layout.tops[3] ?? 0,
+        width: 800,
+        height: 900,
+        scrollerWidth: 800,
+        scrollerHeight: 900,
+      },
+      devicePixelRatio: 1,
+      settled: true,
+    });
+    await settle();
+
+    // Even with a second concurrent slot free, extras wait while visible page 3 draws its first pixels.
+    assert.equal(renders.length, 1);
+    assert.equal(renders[0]?.pageIndex, 3);
+
+    renders[0]?.resolve();
+    await settle();
+
+    // Once page 3 finishes, thumb3 copies page 3's detail canvas without starting a duplicate drawPage,
+    // and thumb4 (distance 1 from focus 3) starts ahead of thumb0 (distance 3).
+    assert.deepEqual(thumb3.copied, [page3.detail]);
+    assert.deepEqual(completed, [3]);
+    assert.equal(renders.length, 2);
+    assert.equal(renders[1]?.pageIndex, 4);
+  });
+});
+
+describe("extra page drawings", () => {
+  it("releases thumbnail-only parsing results after completion or cancellation and respects other holds", async (t) => {
+    for (const outcome of ["done", "cancel", "held"]) {
+      const { session, drawings, cleaned } = await openSession();
+      const renderer = new Renderer(session, drawingsOnly);
+      t.after(() => renderer.dispose());
+      if (outcome === "held") session.holdPage(0);
+      const canvas = sized(120, 155) as unknown as HTMLCanvasElement;
+      const cancel = renderer.enqueue(0, { canvas, scale: 0.2 }, () => {});
+      await settle();
+      assert.equal(drawings.length, 1);
+      if (outcome === "cancel") cancel();
+      else drawings[0]?.resolve();
+      await settle();
+      if (outcome === "held") {
+        assert.deepEqual(cleaned, []);
+        session.releasePage(0);
+        await settle();
+      }
+      assert.deepEqual(cleaned, [0]);
+    }
+  });
 });
 
 describe("Renderer view changes", () => {

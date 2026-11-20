@@ -67,8 +67,8 @@ export class KeptCanvases {
     if (this.#maxPixels !== undefined) return this.#maxPixels;
     const input = this.#view();
     if (!input) return 0;
-    const { width, height } = input.viewport;
-    return KEPT_VIEWPORTS * width * height * input.devicePixelRatio ** 2;
+    const { scrollerWidth, scrollerHeight } = input.viewport;
+    return KEPT_VIEWPORTS * scrollerWidth * scrollerHeight * input.devicePixelRatio ** 2;
   }
 
   /**
@@ -105,7 +105,7 @@ export class KeptCanvases {
       this.#trimQueued = true;
       queueMicrotask(() => {
         this.#trimQueued = false;
-        this.trim(this.#budget());
+        this.trim();
       });
     }
     return true;
@@ -133,7 +133,7 @@ export class KeptCanvases {
   }
 
   /** Releases the least recently kept while they hold more than `limit` pixels. */
-  trim(limit: number): void {
+  trim(limit = this.#budget()): void {
     while (this.#pixels > limit && this.#pages.size > 0) {
       const oldest = this.#pages.keys().next();
       if (!oldest.done) this.#forget(oldest.value);

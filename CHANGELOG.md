@@ -6,6 +6,40 @@ change the API.
 
 ## Unreleased
 
+### Features and improvements
+
+- Store search item IDs and offsets at the width each page needs. Moving to
+  the next or previous match updates only the affected highlight ranges.
+- Release parsed pages after thumbnail-only draws and enforce the default
+  kept-canvas budget when the viewport shrinks. A print job takes one
+  snapshot of committed annotations and form values for all sheets.
+- Share the visible-area calculation across pages with a finite canvas budget,
+  skip total pixel counting when unlimited, and preview zoom on a single shown
+  page in constant space even when other pages have different dimensions.
+- Batch synchronous `Renderer.attach()` and `Renderer.enqueue()` calls onto a
+  microtask pump so visible focus pages claim render slots ahead of lower-index
+  overscan pages and sibling `PdfThumbnails`, hold extra renders until visible
+  pages paint their first pixels, and copy finished page canvases into queued
+  thumbnails without duplicate pdf.js renders.
+- Arm the post-scroll settle timer for the exact remaining `SETTLE_DELAY`
+  without an extra animation-frame hop, pipeline optional-content layer loading
+  during viewer open and `preloadDocument()`, skip untagged `StructTree` waits
+  and empty annotation-layer DOM walks, share single-page `Layout` typed arrays,
+  compute uniform wheel and pinch zoom previews in O(log N) without per-event
+  full relayouts, and tighten planner, selection, thumbnail-scroll, and
+  `PdfSelectionPopover` hot paths.
+- Stream `buildPageIndex()` directly into typed arrays with an ASCII fast path
+  and bounded Unicode normalization cache, binary-search per-page search
+  matches, and swap active `SearchHighlights` `Range`s in O(1) across progress
+  updates and `next()` / `previous()` navigation.
+- Manage mounted `<section>` page hosts directly in `ViewerController` so newly
+  entering pages attach and start rendering synchronously in the same animation
+  frame. Insert new page hosts in one pass and keep each fixed overlay's
+  input state and focus when dynamic overlays toggle. Page clicks bubble from
+  dynamic overlays to the viewport. Dispatch `ViewerStore.subscribeKeys()` via a
+  14-bit mask, and isolate `onPageChange` from controlled-prop inspection in
+  `ViewerController.bindControls()`.
+
 ## 0.9.1 — 2026-11-20
 
 ### Features and improvements

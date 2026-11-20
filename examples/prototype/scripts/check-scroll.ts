@@ -399,6 +399,28 @@ try {
   // --- The current page, zooming around a point, mode switches, and fits ---
   for (const mode of MODES) {
     const { page, errors } = await open(launched.browser, demo(`scroll=${mode}&scale=1`));
+    if (mode === "page") {
+      const order = await page.evaluate(() => {
+        const viewer = (window as unknown as Demo).__viewer;
+        const hosts = () => [...document.querySelectorAll<HTMLElement>(".parapdf-pages > section")];
+        viewer?.goToPage(7);
+        const previous = hosts();
+        viewer?.goToPage(4);
+        const current = hosts();
+        return {
+          previous: previous.map((host) => Number(host.dataset.page)),
+          current: current.map((host) => Number(host.dataset.page)),
+          kept: previous.filter((host) => current.includes(host)).length,
+        };
+      });
+      check(
+        "jumping back inserts new page hosts in reading order and preserves overlapping hosts",
+        order.previous.join() === "6,7,8" &&
+          order.current.join() === "3,4,5,6,7" &&
+          order.kept === 2,
+        JSON.stringify(order),
+      );
+    }
     // The current page is the one at the viewport's center.
     await page.evaluate(() => (window as unknown as Demo).__viewer?.goToPage(3));
     await frames(page);

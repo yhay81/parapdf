@@ -3,10 +3,9 @@
 import type { PageArea } from "../view/layout.ts";
 
 /**
- * The DOM the renderer builds for a page inside the host React places: the
- * canvases, and the containers of the text, annotation, editor, and
- * structure layers. React renders the host and what applications draw over
- * the page; everything else in it is the renderer's.
+ * The renderer builds the canvases and the text, annotation, editor, and
+ * structure layer containers inside the host placed by ViewerController.
+ * React portals application overlays into the same host.
  */
 export interface PageElements {
   readonly host: HTMLElement;

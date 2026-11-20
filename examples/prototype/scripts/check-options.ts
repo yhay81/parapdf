@@ -251,6 +251,7 @@ try {
           width: width * scale,
           height: height * scale,
         }),
+        cleanup: () => {},
       });
       const doc = {
         numPages: 20,
@@ -840,6 +841,7 @@ try {
     __setViewerProps(props: Record<string, unknown>): void;
     __lifecycle: { stats: { opens: number }; unmount(): void };
     __reported?: { pages: number[]; rotations: number[] };
+    __pageClicks?: number[];
     __viewStates?: ViewState[];
   };
   const frames = (page: Page) =>
@@ -989,6 +991,42 @@ try {
       Math.abs(zoomBack.scrollTop - controlledZoom.scrollTop) <= 1 &&
       zoomBack.emittedViewStates === 0,
     JSON.stringify({ controlledZoom, zoomBack }),
+  );
+  await live.evaluate(() => {
+    const demo = window as unknown as Demo;
+    demo.__pageClicks = [];
+    window.__setViewerProps?.({
+      rotation: 0,
+      onPageClick: (point) => demo.__pageClicks?.push(point.pageIndex),
+    });
+    window.__setOverlayTest?.({ editableNote: true });
+  });
+  const note = live.getByRole("textbox", { name: "Overlay note" });
+  await note.fill("Unfinished note");
+  const noteStayed = () =>
+    note.evaluate(
+      (input) =>
+        input instanceof HTMLInputElement &&
+        input === document.activeElement &&
+        input.value === "Unfinished note",
+    );
+  await live.evaluate(() => window.__setOverlayTest?.({ dynamicBadge: "tag" }));
+  const badge = live.locator('section[data-page="1"] .test-dynamic-overlay');
+  await badge.waitFor({ state: "visible" });
+  const keptOnAdd = await noteStayed();
+  await badge.click();
+  const clicks = await live.evaluate(() => (window as unknown as Demo).__pageClicks);
+  check(
+    "a click on a dynamic overlay reaches the viewport's onPageClick once",
+    clicks?.length === 1 && clicks[0] === 0,
+    JSON.stringify(clicks),
+  );
+  await note.focus();
+  await live.evaluate(() => window.__setOverlayTest?.({ dynamicBadge: null }));
+  await badge.waitFor({ state: "detached" });
+  check(
+    "toggling dynamic overlays preserves a fixed overlay's focused input and draft",
+    keptOnAdd && (await noteStayed()),
   );
   const dynamicOverlays = await live.evaluate(async () => {
     const win = window as unknown as {

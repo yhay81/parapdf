@@ -105,8 +105,8 @@ describe("search highlights", () => {
   it("paint the selected match apart, and replace or clear a page's alone", () => {
     const highlights = new SearchHighlights();
     const first = [match([0, 0], [0, 1]), match([0, 2], [0, 3]), match([1, 0], [1, 0])];
-    highlights.setPage(0, spans("abc", ""), first, first[1] ?? null);
-    highlights.setPage(1, spans("xyz"), [match([0, 0], [0, 2], 1)], null);
+    highlights.setPage(0, spans("abc", ""), first, 0, 1);
+    highlights.setPage(1, spans("xyz"), [match([0, 0], [0, 2], 1)], 0, -1);
     const all = registry.get(SEARCH_HIGHLIGHT);
     const current = registry.get(CURRENT_HIGHLIGHT);
     assert.deepEqual([all?.priority, current?.priority], [0, 1]);
@@ -116,7 +116,7 @@ describe("search highlights", () => {
     ]);
     assert.deepEqual([...(current ?? [])].map(ends), [["abc", 2, "abc", 3]]);
     // A page's matches replace its own, and the selected one leaves with them.
-    highlights.setPage(0, spans("abc"), first.slice(0, 1), null);
+    highlights.setPage(0, spans("abc"), first.slice(0, 1), 0, -1);
     assert.deepEqual([all?.size, current?.size], [2, 0]);
     highlights.clearPage(1);
     assert.deepEqual([...(all ?? [])].map(ends), [["abc", 0, "abc", 1]]);
@@ -124,10 +124,48 @@ describe("search highlights", () => {
     assert.equal(all?.size, 0);
   });
 
+  it("swaps the selected match in place without recreating Range instances when elements and matches stay the same", () => {
+    const highlights = new SearchHighlights();
+    const elements = spans("alpha beta gamma");
+    const matches = [match([0, 0], [0, 5]), match([0, 6], [0, 10]), match([0, 11], [0, 16])];
+    highlights.setPage(0, elements, matches, 0, 0);
+
+    const all = registry.get(SEARCH_HIGHLIGHT);
+    const current = registry.get(CURRENT_HIGHLIGHT);
+    const initialRanges = [...(current ?? []), ...(all ?? [])];
+    assert.equal(initialRanges.length, 3);
+
+    // Moving `current` to matches[2] and then `null` reuses the exact same 3 FakeRange objects.
+    highlights.select(0, 2);
+    assert.deepEqual([...(current ?? [])].map(ends), [
+      ["alpha beta gamma", 11, "alpha beta gamma", 16],
+    ]);
+    assert.equal(all?.size, 2);
+    for (const r of [...(current ?? []), ...(all ?? [])]) {
+      assert.ok(initialRanges.includes(r), "reused existing Range instance");
+    }
+
+    // Earlier pages arrive after a search wraps around. The same ranges now
+    // have a new offset in the published result list.
+    const laterPage = matches.map((entry) => ({ ...entry, pageIndex: 1 }));
+    highlights.clear();
+    highlights.setPage(1, elements, laterPage, 0, 0);
+    const firstRange = [...(current ?? [])][0];
+    highlights.setPage(1, elements, [match([0, 0], [0, 1]), ...laterPage], 1, 2);
+    assert.deepEqual([...(current ?? [])].map(ends), [
+      ["alpha beta gamma", 6, "alpha beta gamma", 10],
+    ]);
+    highlights.select(1, 1);
+    assert.equal([...(current ?? [])][0], firstRange);
+    highlights.select(1, -1);
+    assert.equal(current?.size, 0);
+    assert.equal(all?.size, 3);
+  });
+
   it("do nothing where the browser has no custom highlights", () => {
     install({ CSS: {} });
     const highlights = new SearchHighlights();
-    highlights.setPage(0, spans("abc"), [match([0, 0], [0, 1])], null);
+    highlights.setPage(0, spans("abc"), [match([0, 0], [0, 1])], 0, -1);
     highlights.clearPage(0);
     highlights.clear();
     assert.equal(registry.size, 0);

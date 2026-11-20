@@ -48,6 +48,7 @@ export function preloadDocumentWith(
       if (shared.signal.aborted) return;
       if (doc.pageCount > 0) void doc.pageSizes().catch(() => {});
       void doc.direction().catch(() => {});
+      void doc.layers().catch(() => {});
       if (fragment) {
         for (const dest of fragmentDestinations(fragment, 0)) {
           void doc.resolveDestination(dest).catch(() => {});

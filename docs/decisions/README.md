@@ -57,6 +57,8 @@ it. A new choice gets a new record, numbered next.
 | [0048](0048-session-text-locator.md) | Session-level `findText()` and directional text-item boxes | adopted |
 | [0049](0049-virtualized-text-layers.md) | Unmounted pages keep no DOM text layers | rejected |
 | [0050](0050-quiet-page-measurement-and-scroll-hot-path.md) | Quiet-gated background page measurement, direct scroll-event offsets, and rotation-only annotation layer updates | adopted |
+| [0051](0051-batched-mounting-exact-settle-and-hot-path-tightening.md) | Controller-owned page hosts, batched rendering, exact settle timers, uniform zoom previews, and streaming search | adopted |
+| [0052](0052-search-memory-and-page-work.md) | Compact search positions and bound per-page work | adopted |
 
 ## Template
 

@@ -1,5 +1,5 @@
 import type { PageSize } from "../document/session.ts";
-import { Store, subscribeKeys } from "../document/store.ts";
+import { Store } from "../document/store.ts";
 import type { Rotation } from "../pdfjs/draw.ts";
 import type { Direction, Layout, ScrollMode, SpreadMode } from "./layout.ts";
 
@@ -78,15 +78,55 @@ export const INITIAL_VIEWER_STATE: ViewerState = {
   direction: "ltr",
 };
 
+/** Bitmask positions for the 14 fixed `ViewerStoreKey`s. */
+const VIEWER_KEY_BITS: Readonly<Record<ViewerStoreKey, number>> = {
+  layout: 1 << 0,
+  pageCount: 1 << 1,
+  first: 1 << 2,
+  last: 1 << 3,
+  currentPage: 1 << 4,
+  scale: 1 << 5,
+  zoomMode: 1 << 6,
+  tool: 1 << 7,
+  rotation: 1 << 8,
+  spread: 1 << 9,
+  scrollMode: 1 << 10,
+  direction: 1 << 11,
+  sizes: 1 << 12,
+  externalLinks: 1 << 13,
+};
+
+const ALL_VIEWER_KEYS_MASK = (1 << 14) - 1;
+
+function bitOf(key: PropertyKey): number {
+  return typeof key === "string" ? (VIEWER_KEY_BITS[key as ViewerStoreKey] ?? 0) : 0;
+}
+
+function maskOf(keys: readonly PropertyKey[]): number {
+  let mask = 0;
+  for (let index = 0; index < keys.length; index++) {
+    mask |= bitOf(keys[index] as PropertyKey);
+  }
+  return mask;
+}
+
+interface KeyedListener {
+  readonly mask: number;
+  readonly listener: () => void;
+}
+
 /**
  * A viewer's single key-filtered store: publishes `ViewerState` along with
  * derived unrotated `sizes` (`"sizes"` only when `layout?.sizes` changes) and
  * `externalLinks` (`"externalLinks"`), installing all snapshots atomically
- * before notifying listeners.
+ * before notifying listeners. Keyed subscribers dispatch through a 14-bit
+ * mask with zero `Set` lookups or key-array scans per publish.
  */
 export class ViewerStore extends Store<ViewerState> {
   #externalLinks: "new-tab" | "disabled" = "new-tab";
   #batchExternalLinks: "new-tab" | "disabled" | null = null;
+  #pendingMask = 0;
+  readonly #keyListeners = new Set<KeyedListener>();
 
   constructor(value: ViewerState = INITIAL_VIEWER_STATE) {
     super(value);
@@ -100,8 +140,44 @@ export class ViewerStore extends Store<ViewerState> {
     return this.#externalLinks;
   }
 
-  subscribeKeys = (keys: readonly ViewerStoreKey[], listener: () => void): (() => void) =>
-    subscribeKeys(this, keys, listener);
+  subscribeKeys = (keys: readonly PropertyKey[], listener: () => void): (() => void) => {
+    const entry: KeyedListener = { mask: maskOf(keys), listener };
+    this.#keyListeners.add(entry);
+    return () => {
+      this.#keyListeners.delete(entry);
+    };
+  };
+
+  override update(patch: Partial<ViewerState>): boolean {
+    const prev = this.get();
+    if (!super.update(patch)) return false;
+    const next = this.get();
+    if (!Object.is(prev.layout, next.layout)) this.#pendingMask |= VIEWER_KEY_BITS.layout;
+    if (!Object.is(prev.pageCount, next.pageCount)) this.#pendingMask |= VIEWER_KEY_BITS.pageCount;
+    if (!Object.is(prev.first, next.first)) this.#pendingMask |= VIEWER_KEY_BITS.first;
+    if (!Object.is(prev.last, next.last)) this.#pendingMask |= VIEWER_KEY_BITS.last;
+    if (!Object.is(prev.currentPage, next.currentPage))
+      this.#pendingMask |= VIEWER_KEY_BITS.currentPage;
+    if (!Object.is(prev.scale, next.scale)) this.#pendingMask |= VIEWER_KEY_BITS.scale;
+    if (!Object.is(prev.zoomMode, next.zoomMode)) this.#pendingMask |= VIEWER_KEY_BITS.zoomMode;
+    if (!Object.is(prev.tool, next.tool)) this.#pendingMask |= VIEWER_KEY_BITS.tool;
+    if (!Object.is(prev.rotation, next.rotation)) this.#pendingMask |= VIEWER_KEY_BITS.rotation;
+    if (!Object.is(prev.spread, next.spread)) this.#pendingMask |= VIEWER_KEY_BITS.spread;
+    if (!Object.is(prev.scrollMode, next.scrollMode))
+      this.#pendingMask |= VIEWER_KEY_BITS.scrollMode;
+    if (!Object.is(prev.direction, next.direction)) this.#pendingMask |= VIEWER_KEY_BITS.direction;
+    return true;
+  }
+
+  override markChanged(key: PropertyKey): void {
+    super.markChanged(key);
+    this.#pendingMask |= bitOf(key);
+  }
+
+  override unmarkChanged(key: PropertyKey): void {
+    super.unmarkChanged(key);
+    this.#pendingMask &= ~bitOf(key);
+  }
 
   override batch<R>(fn: () => R): R {
     const outer = !this.batching;
@@ -110,12 +186,51 @@ export class ViewerStore extends Store<ViewerState> {
   }
 
   protected override finalizeBatch(base: ViewerState): void {
-    if (!Object.is(base.layout?.sizes, this.sizes)) this.markChanged("sizes");
-    else this.unmarkChanged("sizes");
+    const next = this.get();
+    let mask = 0;
+    if (!Object.is(base.layout, next.layout)) mask |= VIEWER_KEY_BITS.layout;
+    if (!Object.is(base.pageCount, next.pageCount)) mask |= VIEWER_KEY_BITS.pageCount;
+    if (!Object.is(base.first, next.first)) mask |= VIEWER_KEY_BITS.first;
+    if (!Object.is(base.last, next.last)) mask |= VIEWER_KEY_BITS.last;
+    if (!Object.is(base.currentPage, next.currentPage)) mask |= VIEWER_KEY_BITS.currentPage;
+    if (!Object.is(base.scale, next.scale)) mask |= VIEWER_KEY_BITS.scale;
+    if (!Object.is(base.zoomMode, next.zoomMode)) mask |= VIEWER_KEY_BITS.zoomMode;
+    if (!Object.is(base.tool, next.tool)) mask |= VIEWER_KEY_BITS.tool;
+    if (!Object.is(base.rotation, next.rotation)) mask |= VIEWER_KEY_BITS.rotation;
+    if (!Object.is(base.spread, next.spread)) mask |= VIEWER_KEY_BITS.spread;
+    if (!Object.is(base.scrollMode, next.scrollMode)) mask |= VIEWER_KEY_BITS.scrollMode;
+    if (!Object.is(base.direction, next.direction)) mask |= VIEWER_KEY_BITS.direction;
+    if (!Object.is(base.layout?.sizes, this.sizes)) {
+      this.markChanged("sizes");
+      mask |= VIEWER_KEY_BITS.sizes;
+    } else {
+      this.unmarkChanged("sizes");
+    }
     const prevLinks = this.#batchExternalLinks;
     this.#batchExternalLinks = null;
-    if (prevLinks !== null && prevLinks === this.#externalLinks) {
+    if (prevLinks !== null && prevLinks !== this.#externalLinks) {
+      mask |= VIEWER_KEY_BITS.externalLinks;
+    } else if (prevLinks !== null) {
       this.unmarkChanged("externalLinks");
+    }
+    this.#pendingMask = mask;
+  }
+
+  override publish(): void {
+    const mask = this.#pendingMask || ALL_VIEWER_KEYS_MASK;
+    this.#pendingMask = 0;
+    super.publish();
+    const size = this.#keyListeners.size;
+    if (size === 0) return;
+    if (size === 1) {
+      for (const entry of this.#keyListeners) {
+        if ((entry.mask & mask) !== 0) entry.listener();
+        break;
+      }
+      return;
+    }
+    for (const entry of [...this.#keyListeners]) {
+      if ((entry.mask & mask) !== 0 && this.#keyListeners.has(entry)) entry.listener();
     }
   }
 

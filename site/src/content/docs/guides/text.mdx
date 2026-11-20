@@ -157,7 +157,8 @@ re-rendering:
 
 - `PdfPageOverlay` takes a zero-based `page` prop and plain `children` (no
   function prop), so Server Components can pass streamed JSX directly through it
-  while unmounted pages mount nothing.
+  while unmounted pages mount nothing. Toggling `PdfPageOverlays` preserves
+  input state and focus in fixed overlays on pages that stay mounted.
 - `PdfPageOverlays` evaluates `children(pageIndex)` inside each mounted page's
   memoized subtree, so scrolling the mounted window never re-evaluates overlays
   on pages that stay mounted.
@@ -166,4 +167,6 @@ re-rendering:
 - `PdfViewer`'s `onPageClick(point, event)` and `viewer.pointAt(event)` map
   client coordinates to `{ pageIndex, x, y }` in the same unturned PDF points
   across view rotations (`0`, `90`, `180`, `270`), zoom previews, and `/UserUnit`
-  pages (`null` in gaps or outside the viewport).
+  pages (`null` in gaps or outside the viewport). A dynamic overlay that opts
+  into pointer events also delivers page clicks to `onPageClick`. Links,
+  buttons, and other interactive controls handle their own clicks.

@@ -12,6 +12,7 @@ export function createSlotKey<T>(description: string): SlotKey<T> {
 export interface ReadableStore<T> {
   get(): T;
   subscribe(listener: StoreListener): () => void;
+  subscribeKeys?(keys: readonly PropertyKey[], listener: () => void): () => void;
 }
 
 /**
@@ -157,6 +158,7 @@ export function subscribeKeys(
   keys: readonly PropertyKey[],
   listener: () => void,
 ): () => void {
+  if (store.subscribeKeys) return store.subscribeKeys(keys, listener);
   return store.subscribe((changedKeys) => {
     if (changedKeys) {
       let hit = false;

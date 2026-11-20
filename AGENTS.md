@@ -89,7 +89,7 @@ that matters for performance or direction gets a decision record.
   (`files.ts`) (`src/view/`); rendering: the planner, a pure
   function that decides what each page draws (`planner.ts`), and the
   renderer, which builds each page's canvases and layer containers inside
-  the host React places, carries out the plans, keeps the canvases of pages
+  the page host placed by `ViewerController`, carries out the plans, keeps the canvases of pages
   that unmount (`kept-canvases.ts`), and builds the DOM layers; with them,
   the text selection tracker the viewer keeps drags in text layers with
   (`src/render/`); the features, each attaching to a
@@ -216,7 +216,9 @@ that matters for performance or direction gets a decision record.
   to after they unmounted), `navigation-bench.ts` (`PdfThumbnails` and
   `PdfOutline`), `text-virtualization-bench.ts`, `main-thread-bench.ts`, and
   `hwa-bench.ts`,
-  each documented in its header comment. `scroll-bench.ts`,
+  each documented in its header comment. `search-index-bench.ts` compares index
+  memory, construction time and exact match positions against the source in
+  `BEFORE_SRC` using the same extracted PDF text. `scroll-bench.ts`,
   `commit-bench.ts`, `zoom-bench.ts`, `return-bench.ts`, and
   `navigation-bench.ts` measure the
   build in `DIST` against the one in `BEFORE` (built from the commit before

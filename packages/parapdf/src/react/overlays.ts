@@ -357,11 +357,8 @@ export interface PdfPageOverlayLayerProps {
 }
 
 /**
- * Rendered directly as a JSX child at the end of `<section>` inside `PdfPage`
- * while `OverlayStore` is active for this page, with zero per-page store
- * subscriptions. `<PdfPageOverlays>` renders inline without portaling;
- * `<PdfPageOverlay page={index}>` portals into the same `.parapdf-overlay-layer`
- * element published by `attachLayer`.
+ * PageOverlayPortal renders this layer inside its page host. It renders dynamic
+ * overlay content and publishes the same element as the target for fixed overlays.
  */
 export function PdfPageOverlayLayer({
   viewer,

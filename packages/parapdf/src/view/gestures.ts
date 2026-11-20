@@ -4,6 +4,7 @@ import {
   clamp,
   type Direction,
   type Layout,
+  previewZoomMetrics,
   type ScrollMode,
   type Viewport,
   zoomTarget,
@@ -56,6 +57,8 @@ interface ZoomGesture {
   /** What the preview adds to the pan to show the content where the commit puts it. */
   shiftX: number;
   shiftY: number;
+  /** Whether `transformOrigin` has been written to `content.style` for this gesture. */
+  originApplied: boolean;
   /**
    * How the content the preview shows moves. It is kept apart from
    * scrolling's: a zoom's commit jumps to another scroll position, which,
@@ -453,6 +456,7 @@ export class ViewerGestures {
       panY: 0,
       shiftX: 0,
       shiftY: 0,
+      originApplied: false,
       motion: {
         position: positionOf(this.#host.state().scrollMode, viewportOf(scroller)),
         at: performance.now(),
@@ -487,24 +491,38 @@ export class ViewerGestures {
     const left = scroller.scrollLeft;
     const top = scroller.scrollTop;
     // The scroll position the commit asks for, and the one it gets.
-    let next = layout;
-    let target = { left: left - zoom.panX, top: top - zoom.panY };
+    let totalWidth = layout.totalWidth;
+    let totalHeight = layout.totalHeight;
+    let targetLeft = left - zoom.panX;
+    let targetTop = top - zoom.panY;
     const scale = layout.scale * zoom.factor;
     if (Math.abs(scale - layout.scale) >= 1e-4) {
-      next = this.#host.layoutAt(scale);
-      target = zoomTarget(
-        layout,
-        next,
-        sizeOf(scroller),
-        { x: zoom.originX + zoom.panX - left, y: zoom.originY + zoom.panY - top },
-        { x: zoom.originX, y: zoom.originY },
-      );
+      const scrollerSize = sizeOf(scroller);
+      const anchor = { x: zoom.originX + zoom.panX - left, y: zoom.originY + zoom.panY - top };
+      const point = { x: zoom.originX, y: zoom.originY };
+      const fast = previewZoomMetrics(layout, scale, scrollerSize, anchor, point);
+      if (fast) {
+        targetLeft = fast.left;
+        targetTop = fast.top;
+        totalWidth = fast.totalWidth;
+        totalHeight = fast.totalHeight;
+      } else {
+        const next = this.#host.layoutAt(scale);
+        const target = zoomTarget(layout, next, scrollerSize, anchor, point);
+        targetLeft = target.left;
+        targetTop = target.top;
+        totalWidth = next.totalWidth;
+        totalHeight = next.totalHeight;
+      }
     }
-    const maxLeft = Math.max(0, next.totalWidth - scroller.clientWidth);
-    const maxTop = Math.max(0, next.totalHeight - scroller.clientHeight);
-    zoom.shiftX = target.left - clamp(target.left, 0, maxLeft);
-    zoom.shiftY = target.top - clamp(target.top, 0, maxTop);
-    content.style.transformOrigin = `${zoom.originX}px ${zoom.originY}px`;
+    const maxLeft = Math.max(0, totalWidth - scroller.clientWidth);
+    const maxTop = Math.max(0, totalHeight - scroller.clientHeight);
+    zoom.shiftX = targetLeft - clamp(targetLeft, 0, maxLeft);
+    zoom.shiftY = targetTop - clamp(targetTop, 0, maxTop);
+    if (!zoom.originApplied) {
+      content.style.transformOrigin = `${zoom.originX}px ${zoom.originY}px`;
+      zoom.originApplied = true;
+    }
     content.style.transform = `translate(${zoom.panX + zoom.shiftX}px, ${zoom.panY + zoom.shiftY}px) scale(${zoom.factor})`;
     this.#host.previewChanged?.();
     this.#host.requestUpdate();

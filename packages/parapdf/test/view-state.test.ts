@@ -5,6 +5,7 @@ import { Store, subscribeKeys } from "../src/document/store.ts";
 import { computeLayout } from "../src/view/layout.ts";
 import { sameViewState, toShownView, type ViewState } from "../src/view/view-state.ts";
 import { ViewerController } from "../src/view/viewer.ts";
+import { FakeDocument } from "./fake-dom.ts";
 import { fakeDocument, fakePdfjs, LETTER, settle } from "./fake-pdfjs.ts";
 
 describe("Store and subscribeKeys", () => {
@@ -451,6 +452,155 @@ describe("toShownView, sameViewState, and viewer.viewState()", () => {
 
       release();
       detach();
+    } finally {
+      names.forEach((name, index) => {
+        const descriptor = before[index];
+        if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+        else Reflect.deleteProperty(globalThis, name);
+      });
+    }
+  });
+
+  it("ViewerStore bitmask subscribeKeys prunes reverted batch keys, handles re-entrant sets, and wakes on unkeyed publish", () => {
+    const { store } = new ViewerController();
+    let pageHits = 0;
+    let toolHits = 0;
+    const unsubPage = subscribeKeys(store, ["currentPage"], () => {
+      pageHits++;
+      if (pageHits === 1) store.set({ tool: "hand" });
+    });
+    const unsubTool = store.subscribeKeys(["tool"], () => {
+      toolHits++;
+    });
+
+    // Reverted key inside batch fires neither listener.
+    store.batch(() => {
+      store.set({ currentPage: 3 });
+      store.set({ currentPage: 0 });
+    });
+    assert.equal(pageHits, 0);
+    assert.equal(toolHits, 0);
+
+    // Changing currentPage triggers re-entrant tool update cleanly.
+    store.set({ currentPage: 2 });
+    assert.equal(pageHits, 1);
+    assert.equal(toolHits, 1);
+
+    // Unkeyed publish() wakes all keyed listeners.
+    store.publish();
+    assert.equal(pageHits, 2);
+    assert.equal(toolHits, 2);
+
+    unsubPage();
+    unsubTool();
+  });
+
+  it("ViewerController manages owned <section> hosts synchronously, updates aria-label via setPageLabel, and scopes onPageHostChange", async () => {
+    const names = [
+      "window",
+      "requestAnimationFrame",
+      "cancelAnimationFrame",
+      "ResizeObserver",
+    ] as const;
+    const before = names.map((name) => Object.getOwnPropertyDescriptor(globalThis, name));
+    Object.assign(globalThis, {
+      window: {
+        devicePixelRatio: 1,
+        setTimeout: (fn: () => void, ms: number) => setTimeout(fn, ms),
+      },
+      requestAnimationFrame: () => 1,
+      cancelAnimationFrame: () => {},
+      ResizeObserver: class {
+        observe() {}
+        disconnect() {}
+      },
+    });
+    try {
+      const doc = new FakeDocument();
+      const scroller = doc.createElement("div") as unknown as HTMLElement & {
+        clientWidth: number;
+        clientHeight: number;
+        scrollLeft: number;
+        scrollTop: number;
+      };
+      scroller.clientWidth = 800;
+      scroller.clientHeight = 600;
+      scroller.scrollLeft = 0;
+      scroller.scrollTop = 0;
+      scroller.scrollTo = ((xOrOptions?: number | ScrollToOptions, y?: number) => {
+        if (typeof xOrOptions === "number") {
+          scroller.scrollLeft = xOrOptions;
+          scroller.scrollTop = y ?? 0;
+        } else if (xOrOptions) {
+          if (xOrOptions.left !== undefined) scroller.scrollLeft = xOrOptions.left;
+          if (xOrOptions.top !== undefined) scroller.scrollTop = xOrOptions.top;
+        }
+      }) as typeof scroller.scrollTo;
+      scroller.addEventListener = () => {};
+      scroller.removeEventListener = () => {};
+      Object.defineProperty(scroller, "classList", {
+        value: { add() {}, remove() {}, toggle() {} },
+      });
+      const content = doc.createElement("div") as unknown as HTMLElement;
+      content.addEventListener = () => {};
+      content.removeEventListener = () => {};
+      Object.defineProperty(content, "classList", {
+        value: { add() {}, remove() {}, toggle() {} },
+      });
+      scroller.append(content);
+
+      const viewer = new ViewerController();
+      viewer.configure({ initialScale: 1, overscan: 0 });
+      viewer.setPageLabel((n, total) => `P.${n}/${total}`);
+      const page0Changes: (HTMLElement | undefined)[] = [];
+      const page2Changes: (HTMLElement | undefined)[] = [];
+      const unsub0 = viewer.onPageHostChange(0, () => page0Changes.push(viewer.pageHost(0)));
+      const unsub2 = viewer.onPageHostChange(2, () => page2Changes.push(viewer.pageHost(2)));
+
+      let diverges = 0;
+      const reportedPages: number[] = [];
+      const binding = viewer.bindControls(() => diverges++);
+      binding.setCallbacks({ page: (p) => reportedPages.push(p) });
+
+      const detach = viewer.attachViewport(scroller, content);
+      const { loader } = fakePdfjs(
+        async () => fakeDocument({ pages: [LETTER, LETTER, LETTER, LETTER] }).proxy,
+      );
+      const session = new PdfSessionController({ url: "/owned-hosts.pdf" }, { pdfjs: loader });
+      const release = session.connect();
+      viewer.open(session);
+      await settle();
+
+      // Page 0 host mounted synchronously with custom aria-label.
+      const host0 = viewer.pageHost(0);
+      assert.ok(host0);
+      assert.equal(host0.getAttribute("data-page"), "1");
+      assert.equal(host0.getAttribute("aria-label"), "P.1/4");
+      assert.equal(page0Changes.length, 1);
+      assert.equal(page2Changes.length, 0);
+
+      // Live setPageLabel updates mounted hosts in place.
+      viewer.setPageLabel((n, total) => `Page ${n} / ${total}`);
+      assert.equal(host0.getAttribute("aria-label"), "Page 1 / 4");
+
+      // Navigating to page 2 unmounts page 0 and mounts page 2 synchronously, reporting currentPage without diverging.
+      viewer.goToPage(2);
+      assert.equal(viewer.pageHost(0), undefined);
+      assert.ok(viewer.pageHost(2));
+      assert.equal(page0Changes.length, 2);
+      assert.equal(page2Changes.length, 1);
+      assert.deepEqual(reportedPages, [2]);
+      assert.equal(diverges, 0);
+
+      // Detaching viewport removes owned hosts and notifies page 2 listeners.
+      detach();
+      assert.equal(viewer.pageHost(2), undefined);
+      assert.equal(page2Changes.length, 2);
+
+      unsub0();
+      unsub2();
+      binding.disconnect();
+      release();
     } finally {
       names.forEach((name, index) => {
         const descriptor = before[index];

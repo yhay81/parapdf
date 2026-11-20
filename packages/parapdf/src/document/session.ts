@@ -308,9 +308,7 @@ export class DocumentSession {
   readonly #contentListeners = new Set<() => void>();
   readonly #busyChecks = new Set<() => boolean>();
   readonly #idleWaiters = new Set<() => void>();
-  /** Initial uniform page-size array once page 1's size is known, before `measurePages()` finishes. */
-  #firstSizes: readonly PageSize[] | null = null;
-  /** Every page's size, once the background pass has learned them. */
+  /** Page-size estimates, replaced by the measured sizes when the background pass finishes. */
   #sizes: readonly PageSize[] | null = null;
   #knownPermissions: DocumentPermissions | undefined = undefined;
   #knownInitialView: PdfInitialView | undefined = undefined;
@@ -471,16 +469,15 @@ export class DocumentSession {
    * every page until `measurePages()` has learned the others.
    */
   async pageSizes(): Promise<readonly PageSize[]> {
-    if (this.knownPageSizes) return this.knownPageSizes;
-    const first = await this.pageSize(0);
     if (this.#sizes) return this.#sizes;
-    this.#firstSizes ??= Array.from({ length: this.pageCount }, () => first);
-    return this.#firstSizes;
+    const first = await this.pageSize(0);
+    this.#sizes ??= Array<PageSize>(this.pageCount).fill(first);
+    return this.#sizes;
   }
 
   /** Synchronously known page sizes (`pageSizes()` or `measurePages()`), or null before page 1 is read. */
   get knownPageSizes(): readonly PageSize[] | null {
-    return this.#sizes ?? this.#firstSizes;
+    return this.#sizes;
   }
 
   /** Synchronously known document permissions once `permissions()` has resolved. */
@@ -548,7 +545,9 @@ export class DocumentSession {
    */
   measurePages(): Promise<readonly PageSize[]> {
     return this.#once("sizes", async () => {
-      const sizes = [...(await this.pageSizes())];
+      const initial = await this.pageSizes();
+      const first = initial[0];
+      let sizes: PageSize[] | null = null;
       for (let index = 1; index < this.pageCount; index += MEASURED_PAGES) {
         await nextTask();
         await this.#whenIdle();
@@ -556,13 +555,20 @@ export class DocumentSession {
         const count = Math.min(MEASURED_PAGES, this.pageCount - index);
         const batch = Array.from({ length: count }, (_, offset) => this.pageSize(index + offset));
         const results = await Promise.all(batch);
-        results.forEach((size, offset) => {
-          sizes[index + offset] = size;
-        });
+        for (let offset = 0; offset < results.length; offset++) {
+          const size = results[offset] as PageSize;
+          if (first && size.width === first.width && size.height === first.height) {
+            if (sizes) sizes[index + offset] = first;
+          } else {
+            sizes ??= [...initial];
+            sizes[index + offset] = size;
+          }
+        }
       }
       this.signal.throwIfAborted();
-      this.#sizes = sizes;
-      return sizes;
+      const resolved = sizes ?? initial;
+      this.#sizes = resolved;
+      return resolved;
     });
   }
 
@@ -604,7 +610,7 @@ export class DocumentSession {
     // and a viewer may show the page again first.
     this.#pages.get(pageIndex)?.then(
       (page) => {
-        if (!this.#holds.has(pageIndex)) page.cleanup();
+        if (!this.#holds.has(pageIndex)) page.cleanup?.();
       },
       () => {},
     );

@@ -60,6 +60,7 @@ export function PdfSelectionPopover({
   const latestRef = useRef({ selection, placement, offset });
   latestRef.current = { selection, placement, offset };
   const updateRef = useRef<(() => void) | null>(null);
+  const measureRef = useRef<(() => void) | null>(null);
 
   const rendered = selection ? children(selection) : null;
   const active =
@@ -68,6 +69,7 @@ export function PdfSelectionPopover({
   useLayoutEffect(() => {
     if (!active) {
       updateRef.current = null;
+      measureRef.current = null;
       return;
     }
     const el = popoverRef.current;
@@ -75,6 +77,27 @@ export function PdfSelectionPopover({
     const hostDoc = el.ownerDocument;
     const win = hostDoc.defaultView;
     let dragging = false;
+    let cachedPopWidth = 0;
+    let cachedPopHeight = 0;
+
+    const measure = () => {
+      const width = el.offsetWidth;
+      const height = el.offsetHeight;
+      if (width > 0 && height > 0) {
+        cachedPopWidth = width;
+        cachedPopHeight = height;
+        return;
+      }
+      const rect = el.getBoundingClientRect();
+      cachedPopWidth = width || rect.width;
+      cachedPopHeight = height || rect.height;
+    };
+    measureRef.current = measure;
+
+    const hide = () => {
+      if (el.style.visibility !== "hidden") el.style.visibility = "hidden";
+      if (el.style.pointerEvents !== "none") el.style.pointerEvents = "none";
+    };
 
     const update = () => {
       const {
@@ -84,8 +107,7 @@ export function PdfSelectionPopover({
       } = latestRef.current;
       const scroller = resolved.scroller;
       if (!current || !scroller) {
-        el.style.visibility = "hidden";
-        el.style.pointerEvents = "none";
+        hide();
         return;
       }
       const anchorBox = current.anchor.getBoundingClientRect();
@@ -102,29 +124,27 @@ export function PdfSelectionPopover({
         width: vpWidth,
         height: vpHeight,
       };
-      const measured = el.getBoundingClientRect();
-      const popWidth = el.offsetWidth || measured.width;
-      const popHeight = el.offsetHeight || measured.height;
+      if (cachedPopWidth <= 0 || cachedPopHeight <= 0) measure();
       const placed = computePopoverPosition({
         anchorBox,
         viewportBox,
         windowWidth: win?.innerWidth ?? viewportBox.right,
         windowHeight: win?.innerHeight ?? viewportBox.bottom,
-        popoverWidth: popWidth,
-        popoverHeight: popHeight,
+        popoverWidth: cachedPopWidth,
+        popoverHeight: cachedPopHeight,
         placement: currentPlacement,
         offset: currentOffset,
       });
       if (!placed) {
-        el.style.visibility = "hidden";
-        el.style.pointerEvents = "none";
+        hide();
         return;
       }
 
-      el.dataset.placement = placed.side;
+      if (el.dataset.placement !== placed.side) el.dataset.placement = placed.side;
       el.style.transform = `translate3d(${placed.x}px, ${placed.y}px, 0)`;
-      el.style.visibility = "visible";
-      el.style.pointerEvents = dragging ? "none" : "auto";
+      if (el.style.visibility !== "visible") el.style.visibility = "visible";
+      const nextPointerEvents = dragging ? "none" : "auto";
+      if (el.style.pointerEvents !== nextPointerEvents) el.style.pointerEvents = nextPointerEvents;
     };
     updateRef.current = update;
 
@@ -152,13 +172,17 @@ export function PdfSelectionPopover({
 
     let resizeObserver: ResizeObserver | null = null;
     if (typeof ResizeObserver === "function") {
-      resizeObserver = new ResizeObserver(update);
-      resizeObserver.observe(el);
+      resizeObserver = new ResizeObserver(() => {
+        measure();
+        update();
+      });
+      resizeObserver.observe(el, { box: "border-box" });
       if (scroller) resizeObserver.observe(scroller);
     }
 
     return () => {
       updateRef.current = null;
+      measureRef.current = null;
       scroller?.removeEventListener("scroll", update);
       scroller?.removeEventListener("pointerdown", onPointerDown);
       win?.removeEventListener("scroll", update, { capture: true });
@@ -174,6 +198,7 @@ export function PdfSelectionPopover({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: repositions in place when selection, placement, or offset updates without tearing down active listeners or ResizeObserver.
   useLayoutEffect(() => {
+    measureRef.current?.();
     updateRef.current?.();
   }, [active, resolved, selection, placement, offset]);
 

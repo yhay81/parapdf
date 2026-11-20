@@ -1321,6 +1321,26 @@ try {
       popoverScrolled.commitsDelta === 0,
     JSON.stringify({ before: popoverBefore?.popTop, after: popoverScrolled }),
   );
+  const paddedPopover = await page.evaluate(async () => {
+    const pop = document.querySelector<HTMLElement>(".test-selection-popover");
+    if (!pop) return null;
+    const before = pop.getBoundingClientRect();
+    pop.style.paddingInline = "20px";
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const after = pop.getBoundingClientRect();
+    pop.style.removeProperty("padding-inline");
+    return {
+      widthChange: after.width - before.width,
+      centerChange: after.left + after.width / 2 - (before.left + before.width / 2),
+    };
+  });
+  check(
+    "PdfSelectionPopover stays centered when its padding changes",
+    paddedPopover !== null &&
+      paddedPopover.widthChange === 40 &&
+      Math.abs(paddedPopover.centerChange) <= 1,
+    JSON.stringify(paddedPopover),
+  );
   await page.locator(".test-popover-action").click();
   const afterPopoverClick = await page.evaluate(() => ({
     clickedText: window.__popoverClickedText ?? null,

@@ -164,7 +164,7 @@ export class ThumbnailRenderer {
         scale: width / turned.width,
         rotation,
         canvas,
-        ...(layers ? { layers: layers.config } : {}),
+        ...(layers ? { layers: layers.configPromise } : {}),
       },
       (error) => {
         thumbnail.cancel = null;
@@ -174,6 +174,7 @@ export class ThumbnailRenderer {
           releaseCanvas(canvas);
         }
       },
+      () => renderer.copyPage(thumbnail.pageIndex, canvas, rotation),
     );
   }
 

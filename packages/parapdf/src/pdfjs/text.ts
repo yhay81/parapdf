@@ -236,6 +236,7 @@ export function buildTextLayer(
     });
     layer = rendered;
     await rendered.render();
+    let hasStructTree = false;
     if (tree && structure) {
       // An untagged page has no tree; a broken one leaves the text as it is.
       const dom = await tree.render().catch((error: unknown) => {
@@ -244,6 +245,7 @@ export function buildTextLayer(
       });
       if (cancelled) throw new RenderCancelledError("text layer cancelled");
       if (dom) {
+        hasStructTree = true;
         tree.updateTextLayer(container.querySelectorAll<HTMLElement>(".markedContent[id]"));
         structure.replaceChildren(dom);
       }
@@ -251,7 +253,7 @@ export function buildTextLayer(
     return {
       layer: container,
       elements: rendered.textDivs,
-      structTree: tree,
+      structTree: hasStructTree ? tree : null,
       update(nextScale, nextRotation) {
         rendered.update({ viewport: pageViewport(page, nextScale, nextRotation) });
       },

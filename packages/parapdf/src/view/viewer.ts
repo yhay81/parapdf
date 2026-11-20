@@ -90,6 +90,9 @@ import { destinationScale, fitScale, refits, requestedZoom } from "./zoom.ts";
 const whole = (area: PageArea | null): boolean =>
   area !== null && area.minX === 0 && area.minY === 0 && area.maxX === 1 && area.maxY === 1;
 
+const defaultPageLabel = (pageNumber: number, pageCount: number) =>
+  `Page ${pageNumber} of ${pageCount}`;
+
 /**
  * What a viewer holds of the session it shows, from `viewer.open()` until
  * another session opens: the document while it shows it, and where it
@@ -190,7 +193,6 @@ const BOUND_CONTROL_KEYS: readonly ViewerStoreKey[] = [
   "spread",
   "scrollMode",
   "tool",
-  "currentPage",
 ];
 const CURRENT_PAGE_KEYS: readonly ViewerStoreKey[] = ["currentPage"];
 
@@ -328,9 +330,15 @@ export class ViewerController implements Viewer {
   #navigated = false;
   #userMoved = false;
   #preDiverge: PreDivergeSnapshot | null = null;
-  #sizes: PageSize[] = [];
+  #sizes: readonly PageSize[] = [];
   /** The hosts of the mounted pages, by page. */
   #pageHosts = new Map<number, HTMLElement>();
+  /** `<section>` hosts created and owned directly by this controller. */
+  #ownedHosts = new Set<HTMLElement>();
+  /** Layout last applied to `#ownedHosts` styles. */
+  #hostedLayout: Layout | null = null;
+  #pageLabel: (pageNumber: number, pageCount: number) => string = defaultPageLabel;
+  readonly #pageHostListeners = new Map<number, Set<() => void>>();
   /** The page that takes the focus next, and the element it moves from. */
   #pendingFocus: { index: number; source: Element } | null = null;
   #focusFrame = 0;
@@ -601,6 +609,14 @@ export class ViewerController implements Viewer {
     let laidOut = this.store.get().layout !== null;
     let inSync = false;
 
+    const unsubscribePage = this.store.subscribeKeys(CURRENT_PAGE_KEYS, () => {
+      const current = this.store.get().currentPage;
+      if (current !== page) {
+        page = current;
+        currentCallbacks.page?.(page);
+      }
+    });
+
     const unsubscribeStore = this.store.subscribeKeys(BOUND_CONTROL_KEYS, () => {
       const state = this.store.get();
       const view = viewValuesOf(state);
@@ -616,10 +632,6 @@ export class ViewerController implements Viewer {
             ? { zoom: currentControlled.zoom }
             : {}),
         };
-        if (state.currentPage !== page) {
-          page = state.currentPage;
-          currentCallbacks.page?.(page);
-        }
         laidOut = state.layout !== null;
         return;
       }
@@ -644,10 +656,6 @@ export class ViewerController implements Viewer {
         }
       }
       reported = view;
-      if (state.currentPage !== page) {
-        page = state.currentPage;
-        currentCallbacks.page?.(page);
-      }
       if (differs) {
         this.#controlDiverged = true;
         onDiverge();
@@ -732,6 +740,7 @@ export class ViewerController implements Viewer {
         }
         unsubscribeViewState();
         unsubscribeStore();
+        unsubscribePage();
       },
     };
   }
@@ -823,6 +832,51 @@ export class ViewerController implements Viewer {
   /** The mounted `<section>` host of page `index`, if attached. */
   pageHost(index: number): HTMLElement | undefined {
     return this.#pageHosts.get(index);
+  }
+
+  /** Set the accessible `aria-label` formatter for mounted `<section>` page hosts. */
+  setPageLabel(label: ((pageNumber: number, pageCount: number) => string) | undefined): void {
+    const next = label ?? defaultPageLabel;
+    if (this.#pageLabel === next) return;
+    this.#pageLabel = next;
+    const pageCount = this.store.get().layout?.sizes.length ?? 0;
+    if (pageCount <= 0) return;
+    for (const [index, host] of this.#pageHosts) {
+      if (this.#ownedHosts.has(host)) {
+        host.setAttribute("aria-label", next(index + 1, pageCount));
+      }
+    }
+  }
+
+  /** Subscribe to mount/unmount transitions of page `index`'s `<section>` host. */
+  onPageHostChange(index: number, listener: () => void): () => void {
+    let set = this.#pageHostListeners.get(index);
+    if (!set) {
+      set = new Set();
+      this.#pageHostListeners.set(index, set);
+    }
+    set.add(listener);
+    return () => {
+      const current = this.#pageHostListeners.get(index);
+      if (!current) return;
+      current.delete(listener);
+      if (current.size === 0) this.#pageHostListeners.delete(index);
+    };
+  }
+
+  #notifyPageHost(index: number): void {
+    const set = this.#pageHostListeners.get(index);
+    if (!set || set.size === 0) return;
+    if (set.size === 1) {
+      for (const listener of set) {
+        listener();
+        break;
+      }
+      return;
+    }
+    for (const listener of [...set]) {
+      if (set.has(listener)) listener();
+    }
   }
 
   /** The text layers of the mounted pages that have one, by page. */
@@ -1038,7 +1092,7 @@ export class ViewerController implements Viewer {
     this.#scrolling.velocity = 0;
     // Whatever the viewport shows next starts with its own opening or
     // position. The old pages' dimensions and scroll offsets outlive their
-    // React hosts.
+    // page hosts.
     if (this.#content) {
       this.#content.style.width = "";
       this.#content.style.height = "";
@@ -1050,6 +1104,7 @@ export class ViewerController implements Viewer {
     this.#sizes = [];
     this.#textPages.clear();
     this.#annotationPages.clear();
+    this.#clearOwnedHosts();
     this.store.set({ layout: null, first: 0, last: -1 });
   }
 
@@ -1139,6 +1194,10 @@ export class ViewerController implements Viewer {
     signal.throwIfAborted();
     this.#prepareFingerprints(shown, session);
     const opening = shown.savedPosition ? undefined : this.#options.opening;
+    // Pipeline optional-content layer lookup beside page 1's box, permissions,
+    // and direction so the worker resolves all four in one round-trip burst and
+    // the first page render already has `loadedLayers` warm.
+    if (!session.loadedLayers) void session.layers().catch(() => null);
     // Fetched beside the first page's size: features read the permissions
     // before the pages are drawn, and the first layout follows the opening.
     const [sizes, permissions, direction, view] = await Promise.all([
@@ -1194,7 +1253,7 @@ export class ViewerController implements Viewer {
     shown.permissions = permissions;
     shown.direction = direction;
     // Every page has the first one's size until the background pass knows better.
-    this.#sizes = [...sizes];
+    this.#sizes = sizes;
     this.#extensions.prepare(session, signal);
     if (signal.aborted) return;
     const loadedLayers = session.loadedLayers;
@@ -1341,9 +1400,10 @@ export class ViewerController implements Viewer {
       scroller.scrollTo(0, 0);
     }
     this.#shown?.renderer?.setKeeping(true);
-    const layout = this.store.get().layout;
+    const { layout, first, last } = this.store.get();
     if (layout) {
       this.#sizeContent(layout);
+      if (last >= first) this.#syncPageHosts(layout, first, last);
       this.#lastViewState ??= this.viewState();
     }
     scroller.addEventListener("scroll", this.#onScroll, { passive: true });
@@ -1375,7 +1435,12 @@ export class ViewerController implements Viewer {
       this.#extensions.detaching();
       control.abort();
       if (shown) shown.renderer = null;
-      this.#pageHosts.clear();
+      this.#clearOwnedHosts();
+      if (this.#pageHosts.size > 0) {
+        const remaining = [...this.#pageHosts.keys()];
+        this.#pageHosts.clear();
+        for (const index of remaining) this.#notifyPageHost(index);
+      }
       clearTimeout(this.#settleTimer);
       this.#settleTimer = 0;
       scroller.removeEventListener("scroll", this.#onScroll);
@@ -1399,34 +1464,150 @@ export class ViewerController implements Viewer {
     };
   }
 
+  #stylePageHost(host: HTMLElement, layout: Layout, index: number, centered: boolean): void {
+    const top = layout.tops[index] ?? 0;
+    const gap = layout.gap;
+    const rowWidth = layout.rowWidths[index] ?? 0;
+    const rowHeight = centered ? (layout.rowHeights[index] ?? 0) : null;
+    const hidden =
+      layout.shown !== null && (index < layout.shown.first || index > layout.shown.last);
+    const offset = layout.offsets[index] ?? 0;
+    const width = layout.widths[index] ?? 0;
+    const height = layout.heights[index] ?? 0;
+    const { style } = host;
+    style.top =
+      rowHeight === null
+        ? `${top}px`
+        : `calc(${top}px + max(0px, (100cqh - ${rowHeight}px) / 2 - ${gap}px))`;
+    style.left = `calc(max(${gap}px, (100cqw - ${rowWidth}px) / 2) + ${offset}px)`;
+    style.visibility = hidden ? "hidden" : "";
+    style.width = `${width}px`;
+    style.height = `${height}px`;
+    style.setProperty("--scale-factor", String(layout.scale));
+  }
+
+  #recoverFocusFromHost(host: HTMLElement): void {
+    const document = host.ownerDocument;
+    const source = document.activeElement;
+    const signal = this.signal;
+    const showing = this.#shown;
+    if (source && host.contains(source) && showing && this.store.get().layout) {
+      queueMicrotask(() => {
+        if (signal.aborted || this.#shown !== showing || !this.store.get().layout) return;
+        const active = document.activeElement;
+        if (!active || active === document.body) {
+          this.#focusPage(this.store.get().currentPage, source);
+        }
+      });
+    }
+  }
+
+  #clearOwnedHosts(): void {
+    if (this.#ownedHosts.size === 0) {
+      this.#hostedLayout = null;
+      return;
+    }
+    for (const [index, host] of [...this.#pageHosts]) {
+      if (!this.#ownedHosts.has(host)) continue;
+      this.#pageHosts.delete(index);
+      this.#ownedHosts.delete(host);
+      this.#shown?.renderer?.detach(index);
+      host.remove();
+      this.#notifyPageHost(index);
+    }
+    this.#hostedLayout = null;
+  }
+
   /**
-   * Register a mounted page's host, the element React places for page
-   * `index`; returns the function that releases it. The renderer builds the
-   * page's canvases and layers at the start of the host, before what React
-   * renders there.
+   * Synchronize controller-owned `<section>` page hosts inside `#content` for
+   * `[first..last]` so new pages mount and attach to `Renderer` synchronously
+   * in the same frame before `renderer.update()` pumps, without requiring a
+   * React commit on scroll window shifts.
+   */
+  #syncPageHosts(layout: Layout, first: number, last: number): void {
+    const content = this.#content;
+    if (!content) return;
+    const doc = content.ownerDocument;
+    if (!doc || typeof doc.createElement !== "function" || typeof content.append !== "function") {
+      return;
+    }
+    if (last < first) {
+      this.#clearOwnedHosts();
+      return;
+    }
+    const layoutChanged = this.#hostedLayout !== layout;
+    const pageCount = layout.sizes.length;
+    const pageCountChanged = (this.#hostedLayout?.sizes.length ?? -1) !== pageCount;
+    const centered = layout.scrollMode === "horizontal" || layout.shown !== null;
+
+    for (const [index, host] of [...this.#pageHosts]) {
+      if (!this.#ownedHosts.has(host)) continue;
+      if (index < first || index > last) {
+        this.#recoverFocusFromHost(host);
+        this.#pageHosts.delete(index);
+        this.#ownedHosts.delete(host);
+        this.#shown?.renderer?.detach(index);
+        host.remove();
+        this.#notifyPageHost(index);
+      }
+    }
+
+    let nextHost = first;
+    let anchor: HTMLElement | null = null;
+    for (let index = first; index <= last; index++) {
+      const existing = this.#pageHosts.get(index);
+      if (existing) {
+        if (layoutChanged && this.#ownedHosts.has(existing)) {
+          this.#stylePageHost(existing, layout, index, centered);
+          if (pageCountChanged) {
+            existing.setAttribute("aria-label", this.#pageLabel(index + 1, pageCount));
+          }
+        }
+        continue;
+      }
+      const host = doc.createElement("section");
+      host.setAttribute("data-page", String(index + 1));
+      host.setAttribute("aria-label", this.#pageLabel(index + 1, pageCount));
+      host.tabIndex = -1;
+      this.#stylePageHost(host, layout, index, centered);
+      // A run of missing pages all goes before the same surviving host.
+      if (nextHost <= index || (anchor && anchor.parentNode !== content)) {
+        anchor = null;
+        for (nextHost = index + 1; nextHost <= last; nextHost++) {
+          const candidate = this.#pageHosts.get(nextHost);
+          if (candidate?.parentNode === content) {
+            anchor = candidate;
+            break;
+          }
+        }
+      }
+      if (anchor) content.insertBefore(host, anchor);
+      else content.append(host);
+      this.#ownedHosts.add(host);
+      this.#pageHosts.set(index, host);
+      this.#shown?.renderer?.attach(index, host);
+      if (index === this.#pendingFocus?.index) this.#focusPage(index, this.#pendingFocus.source);
+      this.#notifyPageHost(index);
+    }
+    this.#hostedLayout = layout;
+  }
+
+  /**
+   * Register an external page host for page `index`; returns the function that
+   * releases it. Used by unit tests; mounted viewports manage `<section>` hosts
+   * directly in `#syncPageHosts()`.
    */
   attachPage(index: number, host: HTMLElement): () => void {
     this.#shown?.renderer?.attach(index, host);
     this.#pageHosts.set(index, host);
     if (index === this.#pendingFocus?.index) this.#focusPage(index, this.#pendingFocus.source);
+    this.#notifyPageHost(index);
     return () => {
       if (this.#pageHosts.get(index) !== host) return;
-      // React removes the host after this, and browsers move the focus it
-      // holds to the body without telling anyone.
-      const document = host.ownerDocument;
-      const source = document.activeElement;
-      const signal = this.signal;
-      const showing = this.#shown;
-      if (source && host.contains(source) && showing && this.store.get().layout) {
-        queueMicrotask(() => {
-          if (signal.aborted || this.#shown !== showing || !this.store.get().layout) return;
-          const active = document.activeElement;
-          if (!active || active === document.body)
-            this.#focusPage(this.store.get().currentPage, source);
-        });
-      }
+      this.#recoverFocusFromHost(host);
       this.#pageHosts.delete(index);
       this.#shown?.renderer?.detach(index);
+      this.#notifyPageHost(index);
     };
   }
 
@@ -1451,7 +1632,7 @@ export class ViewerController implements Viewer {
   }
 
   /**
-   * Move the focus to page `index` at the next frame, once React has shown
+   * Move the focus to page `index` at the next frame, once the viewport has shown
    * it (a hidden page takes no focus, and the page that held it may be
    * hidden by then), or, when it is not mounted yet, once it mounts; without
    * scrolling: the view already shows it.
@@ -2120,11 +2301,12 @@ export class ViewerController implements Viewer {
     scale: number,
     anchor = { x: scroller.clientWidth / 2, y: scroller.clientHeight / 2 },
     point = { x: scroller.scrollLeft + anchor.x, y: scroller.scrollTop + anchor.y },
+    precomputed?: Layout,
   ): void {
-    const next = this.#applyLayout(scale);
+    const next = this.#applyLayout(scale, undefined, precomputed);
     const target = zoomTarget(layout, next, sizeOf(scroller), anchor, point);
     // The content is resized imperatively, so the scroll position can be
-    // restored before React re-renders the mounted pages.
+    // restored before updating the mounted page window.
     scroller.scrollTop = target.top;
     scroller.scrollLeft = target.left;
     this.#syncFromRight();
@@ -2148,8 +2330,8 @@ export class ViewerController implements Viewer {
   }
 
   /** Lay the pages out at `scale`; in "page" mode, showing the row of page `page`. */
-  #applyLayout(scale: number, page?: number): Layout {
-    const layout = computeLayout(this.#sizes, scale, this.#layoutOptions(page));
+  #applyLayout(scale: number, page?: number, precomputed?: Layout): Layout {
+    const layout = precomputed ?? computeLayout(this.#sizes, scale, this.#layoutOptions(page));
     this.#sizeContent(layout);
     this.store.set({ layout });
     this.#syncFromRight();
@@ -2207,7 +2389,7 @@ export class ViewerController implements Viewer {
    */
   async #measurePages(session: DocumentSession, signal: AbortSignal): Promise<void> {
     const sizes = await session.measurePages();
-    if (signal.aborted) return;
+    if (signal.aborted || sizes === this.#sizes) return;
     const changed = sizes.some((size, index) => {
       const current = this.#sizes[index];
       return !current || current.width !== size.width || current.height !== size.height;
@@ -2220,7 +2402,7 @@ export class ViewerController implements Viewer {
       const scroller = this.#scroller;
       const state = this.store.get();
       const layout = state.layout;
-      this.#sizes = [...sizes];
+      this.#sizes = sizes;
       let scale = state.scale;
       if (state.zoomMode !== "custom" && scroller && scroller.clientWidth > 0) {
         const fitted = this.#fitScale(state.currentPage, state.zoomMode);
@@ -2319,11 +2501,19 @@ export class ViewerController implements Viewer {
     const layout = this.store.get().layout;
     const scroller = this.#scroller;
     if (!layout || !scroller || layout.scrollMode !== "wrapped") return;
-    if (sameRows(layout, computeLayout(this.#sizes, layout.scale, this.#layoutOptions()))) return;
+    const precomputed = computeLayout(this.#sizes, layout.scale, this.#layoutOptions());
+    if (sameRows(layout, precomputed)) return;
     this.#changeView(() => {
       this.#gestures.finish();
       const current = this.store.get().layout ?? layout;
-      this.#relayout(current, scroller, current.scale);
+      this.#relayout(
+        current,
+        scroller,
+        current.scale,
+        undefined,
+        undefined,
+        current === layout ? precomputed : undefined,
+      );
       this.#update();
     });
   }
@@ -2396,19 +2586,35 @@ export class ViewerController implements Viewer {
     // The current page stays current while all of it is in view: at the start
     // of a row of pages narrower than half the viewport, the page at the
     // center is the second or third.
-    const { currentPage } = this.store.get();
+    const state = this.store.get();
+    const { currentPage } = state;
     const kept =
-      currentPage >= first &&
-      currentPage <= last &&
-      whole(visibleArea(layout, currentPage, viewport));
-    // Publishing is cheap when nothing changed: the store ignores equal values.
-    this.store.set({
-      first: mountedFirst,
-      last: mountedLast,
-      currentPage: kept ? currentPage : focus,
-    });
+      currentPage === focus ||
+      (currentPage >= first &&
+        currentPage <= last &&
+        whole(visibleArea(layout, currentPage, viewport)));
+    const nextCurrent = kept ? currentPage : focus;
+    if (
+      this.#hostedLayout !== layout ||
+      state.first !== mountedFirst ||
+      state.last !== mountedLast
+    ) {
+      this.#syncPageHosts(layout, mountedFirst, mountedLast);
+    }
+    if (
+      state.first !== mountedFirst ||
+      state.last !== mountedLast ||
+      state.currentPage !== nextCurrent
+    ) {
+      this.store.set({
+        first: mountedFirst,
+        last: mountedLast,
+        currentPage: nextCurrent,
+      });
+    }
     const motion = zoomMotion ?? this.#scrolling;
-    const quiet = performance.now() - motion.at > SETTLE_DELAY;
+    const elapsed = performance.now() - motion.at;
+    const quiet = elapsed > SETTLE_DELAY;
     // A zoom preview's commit draws the pages again at its zoom: until then
     // the preview counts as fast scrolling.
     const settled =
@@ -2426,10 +2632,11 @@ export class ViewerController implements Viewer {
       this.#shown?.session?.notifyIdle();
       this.#notifyViewState();
     } else if (!quiet && !this.#settleTimer) {
+      const delay = Math.max(1, Math.ceil(SETTLE_DELAY - elapsed) + 1);
       this.#settleTimer = window.setTimeout(() => {
         this.#settleTimer = 0;
-        this.#requestUpdate();
-      }, SETTLE_DELAY);
+        if (!this.#frame) this.#update();
+      }, delay);
     }
   };
 }

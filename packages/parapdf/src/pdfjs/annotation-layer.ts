@@ -256,11 +256,13 @@ export function buildAnnotationLayer(
     });
     const destroy = () => {
       if (form?.layer === layer) form.layer = null;
-      for (const canvas of container.querySelectorAll<HTMLCanvasElement>(
-        "canvas.annotationContent",
-      )) {
-        canvas.width = 0;
-        canvas.height = 0;
+      if (!container.children || container.children.length > 0) {
+        for (const canvas of container.querySelectorAll<HTMLCanvasElement>(
+          "canvas.annotationContent",
+        )) {
+          canvas.width = 0;
+          canvas.height = 0;
+        }
       }
       layer.destroy?.();
     };
@@ -289,9 +291,11 @@ export function buildAnnotationLayer(
       destroy();
       throw new RenderCancelledError("annotation layer cancelled");
     }
-    structTree?.updateAnnotationLayer(container);
-    if (iconUrls) placeIcons(container, imageResourcesPath, iconUrls);
-    nameAnnotations(container, annotations as AnnotationData[]);
+    if (annotations.length > 0 && (!container.children || container.children.length > 0)) {
+      structTree?.updateAnnotationLayer(container);
+      if (iconUrls) placeIcons(container, imageResourcesPath, iconUrls);
+      nameAnnotations(container, annotations as AnnotationData[]);
+    }
     if (form) form.layer = layer;
     return {
       layer,

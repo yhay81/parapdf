@@ -1,5 +1,10 @@
 import type { PageText } from "../../pdfjs/text.ts";
-import { joinLines, sourceChars, type TextPosition } from "../search/text-search.ts";
+import {
+  isSpaceCodePoint,
+  joinLines,
+  sourceChars,
+  type TextPosition,
+} from "../search/text-search.ts";
 
 /** A place in the document's text: before `offset` UTF-16 code units of item `item` of a page. */
 export interface TextPoint extends TextPosition {
@@ -64,15 +69,16 @@ export function pageText(
   if (lineBreaks === "keep" && !from && !to) {
     let text = "";
     const last = page.items.length - 1;
-    page.items.forEach((str, item) => {
-      text += str;
+    for (let item = 0; item <= last; item++) {
+      text += page.items[item] ?? "";
       if (page.endsLine[item] && item < last) text += "\n";
-    });
+    }
     return text;
   }
   const chars = sourceChars(page);
   const stream = lineBreaks === "join" ? joinLines(chars) : chars;
   let text = "";
+  let lastWasSpace = true;
   // A line end read as a space is written only before more text, and only
   // between characters that are not spaces already.
   let pendingSpace = false;
@@ -81,13 +87,19 @@ export function pageText(
     if (to && !before(item, start, to)) break;
     const lineEnd = char === "\n" || (lineBreaks === "join" && start === page.items[item]?.length);
     if (lineEnd) {
-      if (lineBreaks === "keep") text += "\n";
-      else if (text && !/\s$/u.test(text)) pendingSpace = true;
+      if (lineBreaks === "keep") {
+        text += "\n";
+        lastWasSpace = true;
+      } else if (!lastWasSpace) {
+        pendingSpace = true;
+      }
       continue;
     }
-    if (pendingSpace && !/^\s/u.test(char)) text += " ";
+    const charIsSpace = isSpaceCodePoint(char.codePointAt(0) ?? 0);
+    if (pendingSpace && !charIsSpace) text += " ";
     pendingSpace = false;
     text += char;
+    lastWasSpace = charIsSpace;
   }
   // Drop only the synthetic line end after the last item, not a newline in
   // the item's text itself.

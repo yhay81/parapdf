@@ -81,6 +81,8 @@ export const DEFAULT_BUDGETS: Budgets = {
 export interface PlanContext {
   readonly input: ViewInput;
   readonly budgets: Budgets;
+  /** Finite canvas budget shares for this viewport, starting at input.first. */
+  readonly visibleShares?: Float64Array;
   /**
    * Bumped when what pages show changes but not where, as when a layer is
    * shown or hidden: pixels of an older version stay until new ones replace
@@ -162,9 +164,15 @@ export const QUICK_DETAIL_BASES = 4;
  * drawn: the page shows its base alone.
  */
 export const REDUCED_DETAIL_STEP = 2 ** -0.25;
+const LOG_REDUCED_DETAIL_STEP = Math.log(REDUCED_DETAIL_STEP);
 
 /** A detail canvas holding this much more than its page's budget allows is drawn again, smaller. */
 export const OVER_BUDGET = 1.25;
+
+const NO_STALE_DETAIL: { readonly cancel: boolean; readonly clear: boolean } = {
+  cancel: false,
+  clear: false,
+};
 
 /**
  * pdf.js's PDFPageDetailView redraws its region once the visible area leaves
@@ -258,20 +266,46 @@ export function detailBudget(context: PlanContext, index: number): number {
   const budget = Math.min(budgets.maxDetailPixels, viewports);
   if (budgets.maxCanvasPixels === Number.POSITIVE_INFINITY) return budget;
   if (!isVisible(input, index)) return budget;
-  const scale = input.layout.scale * devicePixelRatio;
+  if (input.first === input.last) {
+    const base = visibleArea(input.layout, index, viewport)
+      ? pagePixels(input, index, baseScale(context, index), null)
+      : 0;
+    return Math.min(budget, Math.max(0, budgets.maxCanvasPixels - base));
+  }
+  const shares = context.visibleShares ?? visibleShares(context);
+  return Math.min(budget, shares[index - input.first] ?? 0);
+}
+
+function visibleShares(context: PlanContext): Float64Array {
+  const { input, budgets } = context;
+  const scale = input.layout.scale * input.devicePixelRatio;
+  const shares = new Float64Array(input.last - input.first + 1);
   let bases = 0;
   let visibleTotal = 0;
-  let own = 0;
   for (let page = input.first; page <= input.last; page++) {
-    const area = visibleArea(input.layout, page, viewport);
+    const area = visibleArea(input.layout, page, input.viewport);
     if (!area) continue;
-    const visiblePixels = areaSize(area) * pagePixels(input, page, scale, null);
+    const pixels = areaSize(area) * pagePixels(input, page, scale, null);
+    shares[page - input.first] = pixels;
     bases += pagePixels(input, page, baseScale(context, page), null);
-    visibleTotal += visiblePixels;
-    if (page === index) own = visiblePixels;
+    visibleTotal += pixels;
   }
   const left = Math.max(0, budgets.maxCanvasPixels - bases);
-  return Math.min(budget, visibleTotal > 0 ? (left * own) / visibleTotal : left);
+  for (let i = 0; i < shares.length; i++) {
+    shares[i] = visibleTotal > 0 ? (left * (shares[i] ?? 0)) / visibleTotal : left;
+  }
+  return shares;
+}
+
+/** Share one area calculation across every drawing considered for the same view. */
+export function preparePlan(context: PlanContext): PlanContext {
+  if (
+    context.visibleShares ||
+    !Number.isFinite(context.budgets.maxCanvasPixels) ||
+    context.input.last <= context.input.first
+  )
+    return context;
+  return { ...context, visibleShares: visibleShares(context) };
 }
 
 /**
@@ -325,7 +359,7 @@ export function detailPlan(context: PlanContext, index: number): DetailPlan | nu
   // a third of the cases, which cost a whole step of resolution.
   if (share * pixels > budget) {
     const steps = Math.ceil(
-      Math.log(Math.sqrt(budget / (share * pixels))) / Math.log(REDUCED_DETAIL_STEP),
+      Math.log(Math.sqrt(budget / (share * pixels))) / LOG_REDUCED_DETAIL_STEP,
     );
     scale *= REDUCED_DETAIL_STEP ** steps;
     if (scale <= baseScale(context, index)) return null;
@@ -459,139 +493,210 @@ export function snapRegion(
 const byDistance = (input: ViewInput, pages: Iterable<PageState>): PageState[] =>
   [...pages].sort((a, b) => Math.abs(a.index - input.focus) - Math.abs(b.index - input.focus));
 
+type PlanLookup = (index: number) => DetailPlan | null;
+
+function createPlanLookup(context: PlanContext): PlanLookup {
+  let cache: Map<number, DetailPlan | null> | undefined;
+  return (index: number) => {
+    if (!cache) cache = new Map();
+    let plan = cache.get(index);
+    if (plan === undefined) {
+      plan = detailPlan(context, index);
+      cache.set(index, plan);
+    }
+    return plan ?? null;
+  };
+}
+
+function wantsDetail(context: PlanContext, page: PageState, planOf: PlanLookup): boolean {
+  const plan = planOf(page.index);
+  return plan !== null && needsDetail(context, page, plan);
+}
+
+// A base drawn at a very different zoom still beats an empty page, so
+// refreshing it comes last.
+function staleBase(context: PlanContext, page: PageState): boolean {
+  if (page.baseScale <= 0) return false;
+  if (page.baseVersion !== context.version) return true;
+  const target = baseScale(context, page.index);
+  return page.baseScale > target * 2 || page.baseScale < target / 2;
+}
+
+// A base under whole-page detail would never show: under a current one,
+// or under a stale one that stays until a whole-page detail drawn into the
+// spare replaces it, as after a zoom, or a detail of part of the page
+// does, and the whole-page one becomes the base. Once scrolling settles, a page
+// outside the viewport that gets whole-page detail draws it without a
+// base first: the detail has time to arrive before the page scrolls in,
+// and drawing both doubled the work for every page that slow scrolling
+// brought in.
+function coveredByDetail(
+  context: PlanContext,
+  page: PageState,
+  planOf: PlanLookup,
+  total: number,
+): boolean {
+  if (page.detailScale === 0 || page.detailRegion !== null) return false;
+  const plan = planOf(page.index);
+  // One no longer planned shows only until a base replaces it (staleDetail).
+  if (!plan) return false;
+  if (!needsDetail(context, page, plan)) return true;
+  return (
+    (plan.region === null || demotes(context, page)) &&
+    !failed(context, page, "detail", plan) &&
+    keepsDetail(
+      context,
+      page,
+      pagePixels(context.input, page.index, plan.scale, plan.region),
+      total,
+    )
+  );
+}
+
+// A base of an older content version shows wherever the detail does not.
+function needsBase(
+  context: PlanContext,
+  page: PageState,
+  planOf: PlanLookup,
+  total: number,
+): boolean {
+  return (
+    (page.baseScale === 0 || page.baseVersion !== context.version) &&
+    !coveredByDetail(context, page, planOf, total)
+  );
+}
+
+function detailFirst(context: PlanContext, page: PageState, planOf: PlanLookup): boolean {
+  if (!context.input.settled) return false;
+  const plan = planOf(page.index);
+  return plan !== null && plan.region === null && !failed(context, page, "detail", plan);
+}
+
+// See QUICK_DETAIL_BASES.
+function quickDetail(context: PlanContext, page: PageState, planOf: PlanLookup): boolean {
+  const { input, budgets } = context;
+  if (!input.settled || page.baseScale > 0 || page.detailScale > 0) return false;
+  const plan = planOf(page.index);
+  return (
+    plan !== null &&
+    plan.region === null &&
+    !failed(context, page, "detail", plan) &&
+    pagePixels(input, page.index, plan.scale, null) <= budgets.maxBasePixels * QUICK_DETAIL_BASES
+  );
+}
+
+function fitsLayer(
+  context: PlanContext,
+  page: PageState,
+  layer: Layer,
+  planOf: PlanLookup,
+  total: number,
+): boolean {
+  const { input, budgets } = context;
+  if (budgets.maxCanvasPixels === Number.POSITIVE_INFINITY) return true;
+  const plan = layer === "detail" ? planOf(page.index) : null;
+  const pixels =
+    layer === "base"
+      ? pagePixels(input, page.index, baseScale(context, page.index), null)
+      : plan
+        ? pagePixels(input, page.index, plan.scale, plan.region)
+        : 0;
+  return total - layerPixels(context, page, layer) + pixels <= budgets.maxCanvasPixels;
+}
+
+function buildPlannedDrawing(
+  context: PlanContext,
+  page: PageState,
+  layer: Layer,
+  planOf: PlanLookup,
+  total: number,
+): { drawing: PlannedDrawing } | undefined {
+  const { input } = context;
+  const plan: DetailPlan | null =
+    layer === "base" ? { scale: baseScale(context, page.index), region: null } : planOf(page.index);
+  // A base of no pixels, as with maxBasePixels 0, would be drawn again forever.
+  if (!plan || !(plan.scale > 0) || failed(context, page, layer, plan)) return undefined;
+  // A page that shows a detail keeps it until the next one, drawn into
+  // the spare canvas, is complete.
+  const intoSpare =
+    layer === "detail" &&
+    keepsDetail(context, page, pagePixels(input, page.index, plan.scale, plan.region), total);
+  const snapped = plan.region
+    ? snapRegion(input.layout, page.index, plan.scale, plan.region)
+    : null;
+  return {
+    drawing: {
+      index: page.index,
+      layer,
+      scale: plan.scale,
+      plannedRegion: plan.region,
+      region: snapped ? snapped.region : plan.region,
+      ...(snapped ? { pixels: snapped.pixels } : {}),
+      intoSpare,
+    },
+  };
+}
+
+function nextDrawingFromOrdered(
+  context: PlanContext,
+  ordered: readonly PageState[],
+  planOf: PlanLookup,
+): { drawing: PlannedDrawing; slotIndex: number } | undefined {
+  const { input } = context;
+  // Pages outside the viewport draw only within maxCanvasPixels.
+  const total = Number.isFinite(context.budgets.maxCanvasPixels)
+    ? canvasPixels(context, ordered)
+    : 0;
+
+  for (let phase = 0; phase < 5; phase++) {
+    if (!input.settled && (phase === 1 || phase === 3 || phase === 4)) continue;
+    const layer: Layer = phase === 1 || phase === 3 ? "detail" : "base";
+    for (let i = 0; i < ordered.length; i++) {
+      const page = ordered[i];
+      if (!page || page.job !== undefined) continue;
+      const visible = isVisible(input, page.index);
+      let matches = false;
+      if (phase === 0) {
+        matches =
+          visible && needsBase(context, page, planOf, total) && !quickDetail(context, page, planOf);
+      } else if (phase === 1) {
+        matches = visible && wantsDetail(context, page, planOf);
+      } else if (phase === 2) {
+        matches =
+          !visible &&
+          needsBase(context, page, planOf, total) &&
+          !detailFirst(context, page, planOf) &&
+          fitsLayer(context, page, "base", planOf, total);
+      } else if (phase === 3) {
+        matches =
+          !visible &&
+          wantsDetail(context, page, planOf) &&
+          fitsLayer(context, page, "detail", planOf, total);
+      } else {
+        // Under whole-page detail, only to give back the pixels of a base drawn
+        // at a larger zoom (decision 0025).
+        matches =
+          staleBase(context, page) &&
+          (!coveredByDetail(context, page, planOf, total) ||
+            page.baseScale > baseScale(context, page.index) * 2) &&
+          (visible || fitsLayer(context, page, "base", planOf, total));
+      }
+      if (!matches) continue;
+      const built = buildPlannedDrawing(context, page, layer, planOf, total);
+      if (built) return { drawing: built.drawing, slotIndex: i };
+    }
+  }
+  return undefined;
+}
+
 /** The highest-priority drawing an idle page needs, or nothing to do. */
 export function nextDrawing(
   context: PlanContext,
   pages: Iterable<PageState>,
 ): PlannedDrawing | undefined {
-  const { input, budgets, version } = context;
-  const all = [...pages];
-  const idle = byDistance(input, all).filter((page) => page.job === undefined);
-  const visible = (page: PageState) => isVisible(input, page.index);
-  const plans = new Map<PageState, DetailPlan | null>();
-  const planOf = (page: PageState) => {
-    if (!plans.has(page)) plans.set(page, detailPlan(context, page.index));
-    return plans.get(page) ?? null;
-  };
-  const wantsDetail = (page: PageState) => {
-    const plan = planOf(page);
-    return plan !== null && needsDetail(context, page, plan);
-  };
-  // A base drawn at a very different zoom still beats an empty page, so
-  // refreshing it comes last.
-  const staleBase = (page: PageState) => {
-    const target = baseScale(context, page.index);
-    return (
-      page.baseScale > 0 &&
-      (page.baseScale > target * 2 || page.baseScale < target / 2 || page.baseVersion !== version)
-    );
-  };
-
-  // Pages outside the viewport draw only within maxCanvasPixels.
-  const total = canvasPixels(context, all);
-  // A base under whole-page detail would never show: under a current one,
-  // or under a stale one that stays until a whole-page detail drawn into the
-  // spare replaces it, as after a zoom, or a detail of part of the page
-  // does, and the whole-page one becomes the base. Once scrolling settles, a page
-  // outside the viewport that gets whole-page detail draws it without a
-  // base first: the detail has time to arrive before the page scrolls in,
-  // and drawing both doubled the work for every page that slow scrolling
-  // brought in.
-  const coveredByDetail = (page: PageState) => {
-    if (page.detailScale === 0 || page.detailRegion !== null) return false;
-    // One no longer planned shows only until a base replaces it (staleDetail).
-    if (!wantsDetail(page)) return planOf(page) !== null;
-    const plan = planOf(page);
-    return (
-      plan !== null &&
-      (plan.region === null || demotes(context, page)) &&
-      !failed(context, page, "detail", plan) &&
-      keepsDetail(context, page, pagePixels(input, page.index, plan.scale, plan.region), total)
-    );
-  };
-  // A base of an older content version shows wherever the detail does not.
-  const needsBase = (page: PageState) =>
-    (page.baseScale === 0 || page.baseVersion !== version) && !coveredByDetail(page);
-  const detailFirst = (page: PageState) => {
-    const plan = planOf(page);
-    return (
-      input.settled &&
-      plan !== null &&
-      plan.region === null &&
-      !failed(context, page, "detail", plan)
-    );
-  };
-  // See QUICK_DETAIL_BASES.
-  const quickDetail = (page: PageState) => {
-    if (!input.settled || page.baseScale > 0 || page.detailScale > 0) return false;
-    const plan = planOf(page);
-    return (
-      plan !== null &&
-      plan.region === null &&
-      !failed(context, page, "detail", plan) &&
-      pagePixels(input, page.index, plan.scale, null) <= budgets.maxBasePixels * QUICK_DETAIL_BASES
-    );
-  };
-  const fits = (page: PageState, layer: Layer) => {
-    const plan = layer === "detail" ? planOf(page) : null;
-    const pixels =
-      layer === "base"
-        ? pagePixels(input, page.index, baseScale(context, page.index), null)
-        : plan
-          ? pagePixels(input, page.index, plan.scale, plan.region)
-          : 0;
-    return total - layerPixels(context, page, layer) + pixels <= budgets.maxCanvasPixels;
-  };
-
-  const phases: [(page: PageState) => boolean, Layer][] = [
-    [(page) => visible(page) && needsBase(page) && !quickDetail(page), "base"],
-    [(page) => input.settled && visible(page) && wantsDetail(page), "detail"],
-    [
-      (page) => !visible(page) && needsBase(page) && !detailFirst(page) && fits(page, "base"),
-      "base",
-    ],
-    [
-      (page) => input.settled && !visible(page) && wantsDetail(page) && fits(page, "detail"),
-      "detail",
-    ],
-    // Under whole-page detail, only to give back the pixels of a base drawn
-    // at a larger zoom (decision 0025).
-    [
-      (page) =>
-        input.settled &&
-        staleBase(page) &&
-        (!coveredByDetail(page) || page.baseScale > baseScale(context, page.index) * 2) &&
-        (visible(page) || fits(page, "base")),
-      "base",
-    ],
-  ];
-  for (const [matches, layer] of phases) {
-    for (const page of idle) {
-      if (!matches(page)) continue;
-      const plan: DetailPlan | null =
-        layer === "base" ? { scale: baseScale(context, page.index), region: null } : planOf(page);
-      // A base of no pixels, as with maxBasePixels 0, would be drawn again forever.
-      if (!plan || !(plan.scale > 0) || failed(context, page, layer, plan)) continue;
-      // A page that shows a detail keeps it until the next one, drawn into
-      // the spare canvas, is complete.
-      const intoSpare =
-        layer === "detail" &&
-        keepsDetail(context, page, pagePixels(input, page.index, plan.scale, plan.region), total);
-      const snapped = plan.region
-        ? snapRegion(input.layout, page.index, plan.scale, plan.region)
-        : null;
-      return {
-        index: page.index,
-        layer,
-        scale: plan.scale,
-        plannedRegion: plan.region,
-        region: snapped ? snapped.region : plan.region,
-        ...(snapped ? { pixels: snapped.pixels } : {}),
-        intoSpare,
-      };
-    }
-  }
-  return undefined;
+  const ordered = byDistance(context.input, pages);
+  if (ordered.length === 0) return undefined;
+  return nextDrawingFromOrdered(context, ordered, createPlanLookup(context))?.drawing;
 }
 
 /** What `page` shows and draws once `drawing` starts. */
@@ -632,15 +737,19 @@ export function plan(
   pages: Iterable<PageState>,
   limit: number,
 ): PlannedDrawing[] {
-  const current = new Map<number, PageState>();
-  for (const page of pages) current.set(page.index, page);
+  if (limit <= 0) return [];
+  const ordered = byDistance(context.input, pages);
+  if (ordered.length === 0) return [];
+  context = preparePlan(context);
+  const planOf = createPlanLookup(context);
   const drawings: PlannedDrawing[] = [];
   while (drawings.length < limit) {
-    const drawing = nextDrawing(context, current.values());
-    if (!drawing) break;
-    drawings.push(drawing);
-    const page = current.get(drawing.index);
-    if (page) current.set(drawing.index, started(page, drawing));
+    const picked = nextDrawingFromOrdered(context, ordered, planOf);
+    if (!picked) break;
+    drawings.push(picked.drawing);
+    if (drawings.length === limit) break;
+    const page = ordered[picked.slotIndex];
+    if (page) ordered[picked.slotIndex] = started(page, picked.drawing);
   }
   return drawings;
 }
@@ -688,6 +797,8 @@ export function staleDetail(
   context: PlanContext,
   page: PageState,
 ): { cancel: boolean; clear: boolean } {
+  const { job } = page;
+  if (job?.layer !== "detail" && page.detailScale === 0) return NO_STALE_DETAIL;
   const { input } = context;
   const planned = detailPlan(context, page.index);
   // A page that scrolls in during a fling while its first drawing, a
@@ -697,15 +808,13 @@ export function staleDetail(
     page.baseScale === 0 &&
     page.detailScale === 0 &&
     isVisible(input, page.index);
-  const { job } = page;
-  return {
-    cancel:
-      job?.layer === "detail" && (!planned || !sameScale(job.scale, planned.scale) || blankInView),
-    clear:
-      !planned &&
-      page.detailScale > 0 &&
-      (page.baseScale > 0 || !isVisible(input, page.index) || demotes(context, page)),
-  };
+  const cancel =
+    job?.layer === "detail" && (!planned || !sameScale(job.scale, planned.scale) || blankInView);
+  const clear =
+    !planned &&
+    page.detailScale > 0 &&
+    (page.baseScale > 0 || !isVisible(input, page.index) || demotes(context, page));
+  return cancel || clear ? { cancel, clear } : NO_STALE_DETAIL;
 }
 
 /**

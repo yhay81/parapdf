@@ -133,6 +133,31 @@ describe("Renderer kept canvases", () => {
     assert.equal(renders.at(-1)?.request.canvas, spare);
   });
 
+  it("shrinks the viewport-based cache without another unmount", async (t) => {
+    for (const fixed of [false, true]) {
+      const { doc, renders } = await controlledDocument();
+      const renderer = new Renderer(doc, fixed ? { maxKeptPixels: 600_000 } : {});
+      t.after(() => renderer.dispose());
+      mount(renderer, 0);
+      const large = input(1);
+      renderer.update(large);
+      await settle();
+      renders[0]?.resolve();
+      await settle();
+      renderer.detach(0);
+      await settle();
+      assert.equal(renderer.keptPixels, 612 * 792);
+      const preview = { ...large.viewport, width: 100, height: 100 };
+      renderer.update({ ...large, viewport: preview });
+      assert.equal(renderer.keptPixels, 612 * 792, "a zoom preview keeps the same viewport budget");
+      renderer.update({
+        ...large,
+        viewport: { ...preview, scrollerWidth: 100, scrollerHeight: 100 },
+      });
+      assert.equal(renderer.keptPixels, fixed ? 612 * 792 : 0);
+    }
+  });
+
   it("lets the least recently kept canvases go beyond its budget", async (t) => {
     const { doc, renders } = await controlledDocument();
     // Room for one page's drawing.

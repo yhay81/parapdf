@@ -45,6 +45,7 @@ import {
   type PlannedDrawing,
   pageSharpness,
   plan,
+  preparePlan,
   type RunningDrawing,
   staleDetail,
   trim,
@@ -145,13 +146,14 @@ interface ExtraJob {
   readonly pageIndex: number;
   readonly request: DrawRequest;
   readonly done: (error: unknown) => void;
+  readonly skip: (() => boolean) | undefined;
   task: DrawTask | undefined;
   cancelled: boolean;
 }
 
 /**
- * Draws a viewer's mounted pages: builds each page's DOM in the host React
- * places, carries out the planner's plans, starting, cancelling, and
+ * Draws a viewer's mounted pages: builds each page's DOM in the host its viewer
+ * provides, carries out the planner's plans, starting, cancelling, and
  * releasing drawings, keeps the canvases of pages that unmount, and builds
  * the DOM layers.
  *
@@ -191,6 +193,8 @@ export class Renderer {
   readonly #kept: KeptCanvases;
   #input: ViewInput | undefined;
   #running = 0;
+  #runningExtras = 0;
+  #pumpQueued = false;
   /** Bumped when every canvas becomes stale, so drawings started before are dropped. */
   #epoch = 0;
   /** Drawings outside the page layers, in the order they were asked for. */
@@ -235,7 +239,7 @@ export class Renderer {
     return (
       !this.#disposed &&
       this.#input !== undefined &&
-      (!this.#input.settled || this.#running > 0 || this.#waitingForPixels())
+      (!this.#input.settled || this.#pumpQueued || this.#running > 0 || this.#waitingForPixels())
     );
   }
 
@@ -251,7 +255,9 @@ export class Renderer {
 
   #context(): PlanContext | undefined {
     const input = this.#input;
-    return input ? { input, budgets: this.#budgets, version: this.#version } : undefined;
+    return input
+      ? preparePlan({ input, budgets: this.#budgets, version: this.#version })
+      : undefined;
   }
 
   /** Pixels of the canvases kept from pages that unmounted. */
@@ -292,7 +298,7 @@ export class Renderer {
     // pdf.js keeps the page's parsing results while a viewer of the session shows it.
     this.#session.holdPage(index);
     if (kept) this.#restore(slot, kept);
-    this.#pump();
+    this.#schedulePump();
   }
 
   detach(index: number): void {
@@ -438,6 +444,7 @@ export class Renderer {
   /** Cancels all work and releases every page, for example when the document closes. */
   dispose(): void {
     this.#disposed = true;
+    this.#pumpQueued = false;
     this.#stopActivity();
     // Closing pages keep nothing.
     this.#kept.close();
@@ -451,19 +458,30 @@ export class Renderer {
 
   /**
    * Draw page `pageIndex` as `request` asks once no page layer waits for a
-   * drawing slot: thumbnails never delay the pages in view. `done` hears null
-   * on success, or the error. Returns the function that cancels the drawing.
+   * drawing slot: thumbnails never delay the pages in view. When `skip` returns
+   * true before the job starts (for example, `copyPage` succeeded once the
+   * viewer finished drawing the page), `done(null)` is called without running
+   * pdf.js again. `done` hears null on success, or the error. Returns the
+   * function that cancels the drawing.
    */
-  enqueue(pageIndex: number, request: DrawRequest, done: (error: unknown) => void): () => void {
+  enqueue(
+    pageIndex: number,
+    request: DrawRequest,
+    done: (error: unknown) => void,
+    skip?: () => boolean,
+  ): () => void {
     if (this.#disposed) return () => {};
-    const job: ExtraJob = { pageIndex, request, done, task: undefined, cancelled: false };
+    const job: ExtraJob = { pageIndex, request, done, skip, task: undefined, cancelled: false };
     this.#extras.push(job);
-    this.#pump();
+    this.#schedulePump();
     return () => {
       if (job.cancelled) return;
       job.cancelled = true;
       if (job.task) job.task.cancel();
-      else this.#extras.splice(this.#extras.indexOf(job), 1);
+      else {
+        const at = this.#extras.indexOf(job);
+        if (at >= 0) this.#extras.splice(at, 1);
+      }
     };
   }
 
@@ -499,7 +517,17 @@ export class Renderer {
 
   update(input: ViewInput): void {
     if (this.#disposed) return;
+    const previous = this.#input;
     this.#input = input;
+    if (
+      this.#kept.pixels > 0 &&
+      previous &&
+      (previous.viewport.scrollerWidth !== input.viewport.scrollerWidth ||
+        previous.viewport.scrollerHeight !== input.viewport.scrollerHeight ||
+        previous.devicePixelRatio !== input.devicePixelRatio)
+    ) {
+      this.#kept.trim();
+    }
     this.#layers.update(input);
     const context = this.#context();
     if (context) {
@@ -515,7 +543,7 @@ export class Renderer {
         }
       }
     }
-    this.#pump();
+    this.#pump(context);
   }
 
   hasPixels(index: number): boolean {
@@ -574,7 +602,7 @@ export class Renderer {
    * and the pages' canvases, the drawings running included, exceed it.
    */
   #trimKept(context: PlanContext): void {
-    if (this.#budgets.maxCanvasPixels === Number.POSITIVE_INFINITY) return;
+    if (!this.#kept.pixels || this.#budgets.maxCanvasPixels === Number.POSITIVE_INFINITY) return;
     this.#kept.trim(this.#budgets.maxCanvasPixels - canvasPixels(context, this.#slots.values()));
   }
 
@@ -626,9 +654,34 @@ export class Renderer {
     release(slot.elements.spare);
   }
 
-  #pump(): void {
+  #schedulePump(): void {
+    if (this.#disposed || this.#pumpQueued) return;
+    this.#pumpQueued = true;
+    queueMicrotask(() => {
+      if (!this.#pumpQueued) return;
+      this.#pump();
+    });
+  }
+
+  #nextExtra(): ExtraJob | undefined {
+    const focus = this.#input?.focus ?? 0;
+    let best: ExtraJob | undefined;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (const extra of this.#extras) {
+      if (extra.task || extra.cancelled) continue;
+      const distance = Math.abs(extra.pageIndex - focus);
+      if (distance < bestDistance) {
+        best = extra;
+        bestDistance = distance;
+      }
+    }
+    return best;
+  }
+
+  #pump(knownContext?: PlanContext): void {
+    this.#pumpQueued = false;
     if (this.#disposed) return;
-    const context = this.#context();
+    const context = knownContext ?? this.#context();
     if (context) {
       this.#trim(context);
       const free = this.#maxConcurrent - this.#running;
@@ -639,14 +692,22 @@ export class Renderer {
         }
       }
     }
-    // Extra drawings leave a slot free for the page that scrolls in next.
+    // Extra drawings wait until visible pages have their first pixels and leave
+    // a slot free for the page that scrolls in next.
     const extraSlots = Math.max(1, this.#maxConcurrent - 1);
     while (
+      !this.#waitingForPixels() &&
       this.#running < this.#maxConcurrent &&
-      this.#extras.filter((extra) => extra.task).length < extraSlots
+      this.#runningExtras < extraSlots
     ) {
-      const job = this.#extras.find((extra) => !extra.task);
+      const job = this.#nextExtra();
       if (!job) break;
+      if (job.skip?.()) {
+        const at = this.#extras.indexOf(job);
+        if (at >= 0) this.#extras.splice(at, 1);
+        if (!job.cancelled) job.done(null);
+        continue;
+      }
       this.#startExtra(job);
     }
     // The drawings just started may need the room kept canvases take.
@@ -657,8 +718,10 @@ export class Renderer {
 
   #startExtra(job: ExtraJob): void {
     const task = drawPage(this.#session.pdfjs, this.#session.page(job.pageIndex), job.request);
+    this.#session.holdPage(job.pageIndex);
     job.task = task;
     this.#running++;
+    this.#runningExtras++;
     task.promise
       .then(
         () => {
@@ -675,6 +738,8 @@ export class Renderer {
       )
       .finally(() => {
         this.#running--;
+        this.#runningExtras--;
+        this.#session.releasePage(job.pageIndex);
         const at = this.#extras.indexOf(job);
         if (at >= 0) this.#extras.splice(at, 1);
         this.#pump();
@@ -716,7 +781,7 @@ export class Renderer {
         ? { editing: elements.annotations }
         : {}),
       ...(pageColors ? { colors: pageColors } : {}),
-      ...(layers ? { layers: layers.config } : {}),
+      ...(layers ? { layers: layers.configPromise } : {}),
     });
     const version = this.#version;
     const job: Job = { layer, scale, region, intoSpare, task, canvas, cancelled: false };

@@ -314,6 +314,7 @@ const lifetime = (["above", "transition", "activity"] as const).find(
 
 export interface OverlayTestConfig {
   dynamicBadge?: string | null;
+  editableNote?: boolean;
   selectionPopover?: boolean;
   citations?: readonly { pageIndex: number; rects: readonly PdfRect[] }[] | null;
 }
@@ -405,7 +406,14 @@ function DocumentShell() {
     (pageIndex: number) => {
       window.__overlayEvaluations?.push(pageIndex);
       return dynamicBadge ? (
-        <PdfPageRect x={24} y={24} width={80} height={18} className="test-dynamic-overlay">
+        <PdfPageRect
+          x={24}
+          y={24}
+          width={80}
+          height={18}
+          className="test-dynamic-overlay"
+          style={{ pointerEvents: "auto" }}
+        >
           {dynamicBadge}-{pageIndex + 1}
         </PdfPageRect>
       ) : null;
@@ -446,7 +454,11 @@ function DocumentShell() {
               width={220}
               height={30}
               style={{ background: "rgb(255 213 0 / 0.3)", outline: "2px solid rgb(255 170 0)" }}
-            />
+            >
+              {overlayTest.editableNote ? (
+                <input aria-label="Overlay note" style={{ pointerEvents: "auto" }} />
+              ) : null}
+            </PdfPageRect>
           </PdfPageOverlay>
           {dynamicBadge ? <PdfPageOverlays>{renderDynamicOverlays}</PdfPageOverlays> : null}
           {overlayTest.citations?.map((entry) => (

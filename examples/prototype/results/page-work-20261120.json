@@ -1,0 +1,4778 @@
+{
+  "date": "2026-11-20",
+  "machine": "Apple M2 Pro, macOS 27.2, AC",
+  "pdfjs": "6.5.438",
+  "method": "Fresh browser contexts, paired builds in alternating order. Times in milliseconds unless marked otherwise. Search position memory counts unique backing buffers. Thumbnail retained operators count pdf.js display-list entries after a sidebar-only tour. Canvas bytes are RGBA pixel estimates.",
+  "browsers": {
+    "chromium": {
+      "browser": "Chromium 159.0.8154.6",
+      "searchIndex": {
+        "synthetic-text-1000": {
+          "normalizedUnits": 3982283,
+          "matches": 98466,
+          "sha256": "1c70e11be684efb6776652e505616817e7ecc6d2d5861073e17296c31ad1b3b6",
+          "runs": [
+            {
+              "run": 1,
+              "variant": "before",
+              "retained": 47787396,
+              "indexMs": 156.9800000190735,
+              "searchMs": 16.790000021457672
+            },
+            {
+              "run": 1,
+              "variant": "after",
+              "retained": 11946849,
+              "indexMs": 144.76499998569489,
+              "searchMs": 13.944999992847443
+            },
+            {
+              "run": 2,
+              "variant": "after",
+              "retained": 11946849,
+              "indexMs": 147.14999997615814,
+              "searchMs": 13.850000023841858
+            },
+            {
+              "run": 2,
+              "variant": "before",
+              "retained": 47787396,
+              "indexMs": 155.11000001430511,
+              "searchMs": 16.680000007152557
+            },
+            {
+              "run": 3,
+              "variant": "before",
+              "retained": 47787396,
+              "indexMs": 147.85999995470047,
+              "searchMs": 14.939999997615814
+            },
+            {
+              "run": 3,
+              "variant": "after",
+              "retained": 11946849,
+              "indexMs": 141.19499999284744,
+              "searchMs": 13.714999973773956
+            },
+            {
+              "run": 4,
+              "variant": "after",
+              "retained": 11946849,
+              "indexMs": 146.50999999046326,
+              "searchMs": 13.075000047683716
+            },
+            {
+              "run": 4,
+              "variant": "before",
+              "retained": 47787396,
+              "indexMs": 151.13999998569489,
+              "searchMs": 16.810000002384186
+            },
+            {
+              "run": 5,
+              "variant": "before",
+              "retained": 47787396,
+              "indexMs": 146.99500000476837,
+              "searchMs": 16
+            },
+            {
+              "run": 5,
+              "variant": "after",
+              "retained": 11946849,
+              "indexMs": 142.4099999666214,
+              "searchMs": 13.405000030994415
+            }
+          ]
+        },
+        "bill-hr815": {
+          "normalizedUnits": 299221,
+          "matches": 4333,
+          "sha256": "d46b14b49857bb5d278e60947bdfefcab544794fdec12dc72e0fd46ecec96670",
+          "runs": [
+            {
+              "run": 1,
+              "variant": "before",
+              "retained": 3590652,
+              "indexMs": 18.285000026226044,
+              "searchMs": 1.324999988079071
+            },
+            {
+              "run": 1,
+              "variant": "after",
+              "retained": 945597,
+              "indexMs": 17.75,
+              "searchMs": 1.3199999928474426
+            },
+            {
+              "run": 2,
+              "variant": "after",
+              "retained": 945597,
+              "indexMs": 17.024999976158142,
+              "searchMs": 1.3300000429153442
+            },
+            {
+              "run": 2,
+              "variant": "before",
+              "retained": 3590652,
+              "indexMs": 18.57499998807907,
+              "searchMs": 1.4199999570846558
+            },
+            {
+              "run": 3,
+              "variant": "before",
+              "retained": 3590652,
+              "indexMs": 16.115000009536743,
+              "searchMs": 1.284999966621399
+            },
+            {
+              "run": 3,
+              "variant": "after",
+              "retained": 945597,
+              "indexMs": 17.610000014305115,
+              "searchMs": 1.3649999499320984
+            },
+            {
+              "run": 4,
+              "variant": "after",
+              "retained": 945597,
+              "indexMs": 17.399999976158142,
+              "searchMs": 1.75
+            },
+            {
+              "run": 4,
+              "variant": "before",
+              "retained": 3590652,
+              "indexMs": 17.664999961853027,
+              "searchMs": 1.3300000429153442
+            },
+            {
+              "run": 5,
+              "variant": "before",
+              "retained": 3590652,
+              "indexMs": 16.99500000476837,
+              "searchMs": 1.3399999737739563
+            },
+            {
+              "run": 5,
+              "variant": "after",
+              "retained": 945597,
+              "indexMs": 16.355000019073486,
+              "searchMs": 1.3199999928474426
+            }
+          ]
+        }
+      },
+      "print": {
+        "sheets": [
+          {
+            "width": 306,
+            "height": 396,
+            "hash": "48d04ed5065ceefc4d35c9b0c31750aff93cd2e64b6933c88a0623cbed3519ce"
+          },
+          {
+            "width": 306,
+            "height": 396,
+            "hash": "02874648d96d391e001e3a27c8a6112439e90188394dfe831e3ace5b407b5e81"
+          },
+          {
+            "width": 306,
+            "height": 396,
+            "hash": "9dc795dc06d118a83b1e9fde2549f509a30b3f91c5e008709a80c5e32aa2c079"
+          },
+          {
+            "width": 306,
+            "height": 396,
+            "hash": "d6a33ddfb69c589d5bdad9bc3c00d604a0759473b72c6174c6d0122055169325"
+          },
+          {
+            "width": 306,
+            "height": 396,
+            "hash": "dd6ec50138d7c7f59edd9016017f35a93fa985eab823ac0066f7b1b0686bf092"
+          },
+          {
+            "width": 306,
+            "height": 396,
+            "hash": "5fcdc77a5876c42c54f65b1371e640f266f096fdf14dd4a6cb0b507ea1c1ea79"
+          }
+        ],
+        "runs": [
+          {
+            "run": 1,
+            "variant": "before",
+            "copies": 6,
+            "copyMs": 7.410000026226044,
+            "totalMs": 35.37000000476837
+          },
+          {
+            "run": 1,
+            "variant": "after",
+            "copies": 1,
+            "copyMs": 1.5899999737739563,
+            "totalMs": 25.540000021457672
+          },
+          {
+            "run": 2,
+            "variant": "after",
+            "copies": 1,
+            "copyMs": 1.6150000095367432,
+            "totalMs": 25.355000019073486
+          },
+          {
+            "run": 2,
+            "variant": "before",
+            "copies": 6,
+            "copyMs": 7.139999985694885,
+            "totalMs": 29.560000002384186
+          },
+          {
+            "run": 3,
+            "variant": "before",
+            "copies": 6,
+            "copyMs": 7.48499995470047,
+            "totalMs": 31.355000019073486
+          },
+          {
+            "run": 3,
+            "variant": "after",
+            "copies": 1,
+            "copyMs": 1.600000023841858,
+            "totalMs": 23.57499998807907
+          }
+        ]
+      },
+      "thumbnailTour": [
+        {
+          "run": 1,
+          "variant": "before",
+          "pages": 68,
+          "cleanedPages": 0,
+          "retained": 68,
+          "retainedOperators": 36108,
+          "firstMs": 317.35000002384186,
+          "keptReturnMs": 33.70999997854233,
+          "redrawMs": 316.95500004291534,
+          "first": {
+            "hash": 1934216973,
+            "ink": 14139,
+            "width": 240,
+            "height": 310
+          }
+        },
+        {
+          "run": 1,
+          "variant": "after",
+          "pages": 68,
+          "cleanedPages": 68,
+          "retained": 0,
+          "retainedOperators": 0,
+          "firstMs": 316.5450000166893,
+          "keptReturnMs": 32.264999985694885,
+          "redrawMs": 316.6700000166893,
+          "first": {
+            "hash": 1934216973,
+            "ink": 14139,
+            "width": 240,
+            "height": 310
+          }
+        },
+        {
+          "run": 2,
+          "variant": "after",
+          "pages": 68,
+          "cleanedPages": 68,
+          "retained": 0,
+          "retainedOperators": 0,
+          "firstMs": 316.585000038147,
+          "keptReturnMs": 33.535000026226044,
+          "redrawMs": 315.96499997377396,
+          "first": {
+            "hash": 1934216973,
+            "ink": 14139,
+            "width": 240,
+            "height": 310
+          }
+        },
+        {
+          "run": 2,
+          "variant": "before",
+          "pages": 68,
+          "cleanedPages": 0,
+          "retained": 68,
+          "retainedOperators": 36108,
+          "firstMs": 317.4399999976158,
+          "keptReturnMs": 33.29000002145767,
+          "redrawMs": 316.95500004291534,
+          "first": {
+            "hash": 1934216973,
+            "ink": 14139,
+            "width": 240,
+            "height": 310
+          }
+        },
+        {
+          "run": 3,
+          "variant": "before",
+          "pages": 68,
+          "cleanedPages": 0,
+          "retained": 68,
+          "retainedOperators": 36108,
+          "firstMs": 316.54499995708466,
+          "keptReturnMs": 33.23499995470047,
+          "redrawMs": 317.2450000047684,
+          "first": {
+            "hash": 1934216973,
+            "ink": 14139,
+            "width": 240,
+            "height": 310
+          }
+        },
+        {
+          "run": 3,
+          "variant": "after",
+          "pages": 68,
+          "cleanedPages": 68,
+          "retained": 0,
+          "retainedOperators": 0,
+          "firstMs": 316.58999997377396,
+          "keptReturnMs": 33.360000014305115,
+          "redrawMs": 316.6100000143051,
+          "first": {
+            "hash": 1934216973,
+            "ink": 14139,
+            "width": 240,
+            "height": 310
+          }
+        }
+      ],
+      "viewportResize": [
+        {
+          "run": 1,
+          "variant": "before",
+          "pixelsBefore": 19388160,
+          "pixelsAfter": 19388160,
+          "budgetBefore": 33868800,
+          "budgetAfter": 6912000,
+          "sharpness": 1,
+          "blank": 0
+        },
+        {
+          "run": 1,
+          "variant": "after",
+          "pixelsBefore": 19388160,
+          "pixelsAfter": 5816448,
+          "budgetBefore": 33868800,
+          "budgetAfter": 6912000,
+          "sharpness": 1,
+          "blank": 0
+        },
+        {
+          "run": 2,
+          "variant": "after",
+          "pixelsBefore": 19388160,
+          "pixelsAfter": 5816448,
+          "budgetBefore": 33868800,
+          "budgetAfter": 6912000,
+          "sharpness": 1,
+          "blank": 0
+        },
+        {
+          "run": 2,
+          "variant": "before",
+          "pixelsBefore": 19388160,
+          "pixelsAfter": 19388160,
+          "budgetBefore": 33868800,
+          "budgetAfter": 6912000,
+          "sharpness": 1,
+          "blank": 0
+        },
+        {
+          "run": 3,
+          "variant": "before",
+          "pixelsBefore": 19388160,
+          "pixelsAfter": 19388160,
+          "budgetBefore": 33868800,
+          "budgetAfter": 6912000,
+          "sharpness": 1,
+          "blank": 0
+        },
+        {
+          "run": 3,
+          "variant": "after",
+          "pixelsBefore": 19388160,
+          "pixelsAfter": 5816448,
+          "budgetBefore": 33868800,
+          "budgetAfter": 6912000,
+          "sharpness": 1,
+          "blank": 0
+        }
+      ],
+      "hotPaths": [
+        {
+          "variant": "before",
+          "run": 1,
+          "preview": {
+            "cycles": 400,
+            "hits": 0,
+            "checksum": 439278.4188034188,
+            "ms": 8.800000011920929
+          },
+          "planner": {
+            "normal": {
+              "cycles": 16000,
+              "readsPerPlan": 18,
+              "usPerPlan": 1.0981249995529652
+            },
+            "overscan": {
+              "cycles": 700,
+              "readsPerPlan": 510,
+              "usPerPlan": 15.157142877578735
+            },
+            "budget": {
+              "cycles": 200,
+              "readsPerPlan": 144,
+              "usPerPlan": 58.65000009536743
+            }
+          },
+          "hosts": {
+            "lookups": 14707,
+            "meanMountCount": 171,
+            "jumpMs": 4.438125006854534,
+            "times": [
+              4.1700000166893005, 4.375, 4.210000038146973, 4.560000002384186, 4.900000035762787,
+              4.620000004768372, 4.459999978542328, 4.209999978542328
+            ]
+          },
+          "search": {
+            "cycles": 200,
+            "ms": 1.3700000047683716,
+            "matches": 27312,
+            "highlighted": 700,
+            "positions": [
+              {
+                "page": 0,
+                "current": 0,
+                "start": {
+                  "item": 2,
+                  "offset": 2
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 3
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              },
+              {
+                "page": 0,
+                "current": 1,
+                "start": {
+                  "item": 2,
+                  "offset": 9
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 10
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              }
+            ],
+            "wrap": {
+              "page": 109,
+              "current": 27311,
+              "start": {
+                "item": 102,
+                "offset": 22
+              },
+              "end": {
+                "item": 102,
+                "offset": 23
+              },
+              "text": "e",
+              "count": 27312,
+              "highlighted": 123
+            }
+          }
+        },
+        {
+          "variant": "after",
+          "run": 1,
+          "preview": {
+            "cycles": 400,
+            "hits": 400,
+            "checksum": 439278.4188034188,
+            "ms": 0.19499999284744263
+          },
+          "planner": {
+            "normal": {
+              "cycles": 16000,
+              "readsPerPlan": 0,
+              "usPerPlan": 0.2762500010430813
+            },
+            "overscan": {
+              "cycles": 700,
+              "readsPerPlan": 0,
+              "usPerPlan": 5.014285700661795
+            },
+            "budget": {
+              "cycles": 200,
+              "readsPerPlan": 144,
+              "usPerPlan": 14.57500010728836
+            }
+          },
+          "hosts": {
+            "lookups": 342,
+            "meanMountCount": 171,
+            "jumpMs": 4.123750001192093,
+            "times": [
+              4.094999969005585, 4.064999997615814, 4.550000011920929, 4.100000023841858,
+              4.134999990463257, 4.009999990463257, 3.9300000071525574, 4.105000019073486
+            ]
+          },
+          "search": {
+            "cycles": 200,
+            "ms": 0.4300000071525574,
+            "matches": 27312,
+            "highlighted": 700,
+            "positions": [
+              {
+                "page": 0,
+                "current": 0,
+                "start": {
+                  "item": 2,
+                  "offset": 2
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 3
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              },
+              {
+                "page": 0,
+                "current": 1,
+                "start": {
+                  "item": 2,
+                  "offset": 9
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 10
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              }
+            ],
+            "wrap": {
+              "page": 109,
+              "current": 27311,
+              "start": {
+                "item": 102,
+                "offset": 22
+              },
+              "end": {
+                "item": 102,
+                "offset": 23
+              },
+              "text": "e",
+              "count": 27312,
+              "highlighted": 123
+            }
+          }
+        },
+        {
+          "variant": "after",
+          "run": 2,
+          "preview": {
+            "cycles": 400,
+            "hits": 400,
+            "checksum": 439278.4188034188,
+            "ms": 0.20000004768371582
+          },
+          "planner": {
+            "normal": {
+              "cycles": 16000,
+              "readsPerPlan": 0,
+              "usPerPlan": 0.25062499940395355
+            },
+            "overscan": {
+              "cycles": 700,
+              "readsPerPlan": 0,
+              "usPerPlan": 5.007142850330898
+            },
+            "budget": {
+              "cycles": 200,
+              "readsPerPlan": 144,
+              "usPerPlan": 14.825000166893005
+            }
+          },
+          "hosts": {
+            "lookups": 342,
+            "meanMountCount": 171,
+            "jumpMs": 4.263125002384186,
+            "times": [
+              4.035000026226044, 4.194999992847443, 4.949999988079071, 4.014999985694885,
+              4.194999992847443, 4.610000014305115, 4.1700000166893005, 3.935000002384186
+            ]
+          },
+          "search": {
+            "cycles": 200,
+            "ms": 0.4049999713897705,
+            "matches": 27312,
+            "highlighted": 700,
+            "positions": [
+              {
+                "page": 0,
+                "current": 0,
+                "start": {
+                  "item": 2,
+                  "offset": 2
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 3
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              },
+              {
+                "page": 0,
+                "current": 1,
+                "start": {
+                  "item": 2,
+                  "offset": 9
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 10
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              }
+            ],
+            "wrap": {
+              "page": 109,
+              "current": 27311,
+              "start": {
+                "item": 102,
+                "offset": 22
+              },
+              "end": {
+                "item": 102,
+                "offset": 23
+              },
+              "text": "e",
+              "count": 27312,
+              "highlighted": 123
+            }
+          }
+        },
+        {
+          "variant": "before",
+          "run": 2,
+          "preview": {
+            "cycles": 400,
+            "hits": 0,
+            "checksum": 439278.4188034188,
+            "ms": 6.2049999833106995
+          },
+          "planner": {
+            "normal": {
+              "cycles": 16000,
+              "readsPerPlan": 18,
+              "usPerPlan": 0.5837499983608723
+            },
+            "overscan": {
+              "cycles": 700,
+              "readsPerPlan": 510,
+              "usPerPlan": 14.378571425165449
+            },
+            "budget": {
+              "cycles": 200,
+              "readsPerPlan": 144,
+              "usPerPlan": 59.82499986886978
+            }
+          },
+          "hosts": {
+            "lookups": 14707,
+            "meanMountCount": 171,
+            "jumpMs": 4.2256249859929085,
+            "times": [
+              4.419999957084656, 4.789999961853027, 3.9049999713897705, 3.9950000047683716,
+              3.715000033378601, 3.774999976158142, 4.469999969005585, 4.735000014305115
+            ]
+          },
+          "search": {
+            "cycles": 200,
+            "ms": 1.3349999785423279,
+            "matches": 27312,
+            "highlighted": 700,
+            "positions": [
+              {
+                "page": 0,
+                "current": 0,
+                "start": {
+                  "item": 2,
+                  "offset": 2
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 3
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              },
+              {
+                "page": 0,
+                "current": 1,
+                "start": {
+                  "item": 2,
+                  "offset": 9
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 10
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              }
+            ],
+            "wrap": {
+              "page": 109,
+              "current": 27311,
+              "start": {
+                "item": 102,
+                "offset": 22
+              },
+              "end": {
+                "item": 102,
+                "offset": 23
+              },
+              "text": "e",
+              "count": 27312,
+              "highlighted": 123
+            }
+          }
+        },
+        {
+          "variant": "before",
+          "run": 3,
+          "preview": {
+            "cycles": 400,
+            "hits": 0,
+            "checksum": 439278.4188034188,
+            "ms": 5.814999997615814
+          },
+          "planner": {
+            "normal": {
+              "cycles": 16000,
+              "readsPerPlan": 18,
+              "usPerPlan": 0.5737499967217445
+            },
+            "overscan": {
+              "cycles": 700,
+              "readsPerPlan": 510,
+              "usPerPlan": 14.742857132639203
+            },
+            "budget": {
+              "cycles": 200,
+              "readsPerPlan": 144,
+              "usPerPlan": 59.09999996423721
+            }
+          },
+          "hosts": {
+            "lookups": 14707,
+            "meanMountCount": 171,
+            "jumpMs": 4.365000002086163,
+            "times": [
+              4.175000011920929, 4.735000014305115, 3.824999988079071, 4.365000009536743,
+              4.189999997615814, 4.550000011920929, 4.4049999713897705, 4.675000011920929
+            ]
+          },
+          "search": {
+            "cycles": 200,
+            "ms": 1.300000011920929,
+            "matches": 27312,
+            "highlighted": 700,
+            "positions": [
+              {
+                "page": 0,
+                "current": 0,
+                "start": {
+                  "item": 2,
+                  "offset": 2
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 3
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              },
+              {
+                "page": 0,
+                "current": 1,
+                "start": {
+                  "item": 2,
+                  "offset": 9
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 10
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              }
+            ],
+            "wrap": {
+              "page": 109,
+              "current": 27311,
+              "start": {
+                "item": 102,
+                "offset": 22
+              },
+              "end": {
+                "item": 102,
+                "offset": 23
+              },
+              "text": "e",
+              "count": 27312,
+              "highlighted": 123
+            }
+          }
+        },
+        {
+          "variant": "after",
+          "run": 3,
+          "preview": {
+            "cycles": 400,
+            "hits": 400,
+            "checksum": 439278.4188034188,
+            "ms": 0.21500003337860107
+          },
+          "planner": {
+            "normal": {
+              "cycles": 16000,
+              "readsPerPlan": 0,
+              "usPerPlan": 0.2618749998509884
+            },
+            "overscan": {
+              "cycles": 700,
+              "readsPerPlan": 0,
+              "usPerPlan": 5
+            },
+            "budget": {
+              "cycles": 200,
+              "readsPerPlan": 144,
+              "usPerPlan": 14.300000071525574
+            }
+          },
+          "hosts": {
+            "lookups": 342,
+            "meanMountCount": 171,
+            "jumpMs": 4.1868750005960464,
+            "times": [
+              4.165000021457672, 4.444999992847443, 4.245000004768372, 4.019999980926514,
+              3.884999990463257, 3.8799999952316284, 4.6700000166893005, 4.185000002384186
+            ]
+          },
+          "search": {
+            "cycles": 200,
+            "ms": 0.48500001430511475,
+            "matches": 27312,
+            "highlighted": 700,
+            "positions": [
+              {
+                "page": 0,
+                "current": 0,
+                "start": {
+                  "item": 2,
+                  "offset": 2
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 3
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              },
+              {
+                "page": 0,
+                "current": 1,
+                "start": {
+                  "item": 2,
+                  "offset": 9
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 10
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              }
+            ],
+            "wrap": {
+              "page": 109,
+              "current": 27311,
+              "start": {
+                "item": 102,
+                "offset": 22
+              },
+              "end": {
+                "item": 102,
+                "offset": 23
+              },
+              "text": "e",
+              "count": 27312,
+              "highlighted": 123
+            }
+          }
+        },
+        {
+          "variant": "after",
+          "run": 4,
+          "preview": {
+            "cycles": 400,
+            "hits": 400,
+            "checksum": 439278.4188034188,
+            "ms": 0.20999997854232788
+          },
+          "planner": {
+            "normal": {
+              "cycles": 16000,
+              "readsPerPlan": 0,
+              "usPerPlan": 0.25343750044703484
+            },
+            "overscan": {
+              "cycles": 700,
+              "readsPerPlan": 0,
+              "usPerPlan": 4.942857112203326
+            },
+            "budget": {
+              "cycles": 200,
+              "readsPerPlan": 144,
+              "usPerPlan": 15.550000071525574
+            }
+          },
+          "hosts": {
+            "lookups": 342,
+            "meanMountCount": 171,
+            "jumpMs": 4.650624990463257,
+            "times": [
+              4.574999988079071, 4.409999966621399, 4.6700000166893005, 5.185000002384186,
+              4.414999961853027, 5.225000023841858, 4.4049999713897705, 4.319999992847443
+            ]
+          },
+          "search": {
+            "cycles": 200,
+            "ms": 0.4699999690055847,
+            "matches": 27312,
+            "highlighted": 700,
+            "positions": [
+              {
+                "page": 0,
+                "current": 0,
+                "start": {
+                  "item": 2,
+                  "offset": 2
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 3
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              },
+              {
+                "page": 0,
+                "current": 1,
+                "start": {
+                  "item": 2,
+                  "offset": 9
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 10
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              }
+            ],
+            "wrap": {
+              "page": 109,
+              "current": 27311,
+              "start": {
+                "item": 102,
+                "offset": 22
+              },
+              "end": {
+                "item": 102,
+                "offset": 23
+              },
+              "text": "e",
+              "count": 27312,
+              "highlighted": 123
+            }
+          }
+        },
+        {
+          "variant": "before",
+          "run": 4,
+          "preview": {
+            "cycles": 400,
+            "hits": 0,
+            "checksum": 439278.4188034188,
+            "ms": 6.254999995231628
+          },
+          "planner": {
+            "normal": {
+              "cycles": 16000,
+              "readsPerPlan": 18,
+              "usPerPlan": 0.6209375001490116
+            },
+            "overscan": {
+              "cycles": 700,
+              "readsPerPlan": 510,
+              "usPerPlan": 14.364285724503654
+            },
+            "budget": {
+              "cycles": 200,
+              "readsPerPlan": 144,
+              "usPerPlan": 62.1000000834465
+            }
+          },
+          "hosts": {
+            "lookups": 14707,
+            "meanMountCount": 171,
+            "jumpMs": 4.505624979734421,
+            "times": [
+              4.569999992847443, 4.544999957084656, 4.214999973773956, 4.120000004768372,
+              5.389999985694885, 4.439999997615814, 4.239999949932098, 4.524999976158142
+            ]
+          },
+          "search": {
+            "cycles": 200,
+            "ms": 1.2799999713897705,
+            "matches": 27312,
+            "highlighted": 700,
+            "positions": [
+              {
+                "page": 0,
+                "current": 0,
+                "start": {
+                  "item": 2,
+                  "offset": 2
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 3
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              },
+              {
+                "page": 0,
+                "current": 1,
+                "start": {
+                  "item": 2,
+                  "offset": 9
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 10
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              }
+            ],
+            "wrap": {
+              "page": 109,
+              "current": 27311,
+              "start": {
+                "item": 102,
+                "offset": 22
+              },
+              "end": {
+                "item": 102,
+                "offset": 23
+              },
+              "text": "e",
+              "count": 27312,
+              "highlighted": 123
+            }
+          }
+        },
+        {
+          "variant": "before",
+          "run": 5,
+          "preview": {
+            "cycles": 400,
+            "hits": 0,
+            "checksum": 439278.4188034188,
+            "ms": 5.769999980926514
+          },
+          "planner": {
+            "normal": {
+              "cycles": 16000,
+              "readsPerPlan": 18,
+              "usPerPlan": 0.595625001937151
+            },
+            "overscan": {
+              "cycles": 700,
+              "readsPerPlan": 510,
+              "usPerPlan": 14.021428568022591
+            },
+            "budget": {
+              "cycles": 200,
+              "readsPerPlan": 144,
+              "usPerPlan": 60.2250000834465
+            }
+          },
+          "hosts": {
+            "lookups": 14707,
+            "meanMountCount": 171,
+            "jumpMs": 4.286874994635582,
+            "times": [
+              4.7049999833106995, 4.435000002384186, 4.48499995470047, 4.509999990463257,
+              4.089999973773956, 4.215000033378601, 4.040000021457672, 3.814999997615814
+            ]
+          },
+          "search": {
+            "cycles": 200,
+            "ms": 1.2900000214576721,
+            "matches": 27312,
+            "highlighted": 700,
+            "positions": [
+              {
+                "page": 0,
+                "current": 0,
+                "start": {
+                  "item": 2,
+                  "offset": 2
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 3
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              },
+              {
+                "page": 0,
+                "current": 1,
+                "start": {
+                  "item": 2,
+                  "offset": 9
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 10
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              }
+            ],
+            "wrap": {
+              "page": 109,
+              "current": 27311,
+              "start": {
+                "item": 102,
+                "offset": 22
+              },
+              "end": {
+                "item": 102,
+                "offset": 23
+              },
+              "text": "e",
+              "count": 27312,
+              "highlighted": 123
+            }
+          }
+        },
+        {
+          "variant": "after",
+          "run": 5,
+          "preview": {
+            "cycles": 400,
+            "hits": 400,
+            "checksum": 439278.4188034188,
+            "ms": 0.20499998331069946
+          },
+          "planner": {
+            "normal": {
+              "cycles": 16000,
+              "readsPerPlan": 0,
+              "usPerPlan": 0.2709375023841858
+            },
+            "overscan": {
+              "cycles": 700,
+              "readsPerPlan": 0,
+              "usPerPlan": 5.221428530556815
+            },
+            "budget": {
+              "cycles": 200,
+              "readsPerPlan": 144,
+              "usPerPlan": 15.149999856948853
+            }
+          },
+          "hosts": {
+            "lookups": 342,
+            "meanMountCount": 171,
+            "jumpMs": 4.230625003576279,
+            "times": [
+              5.120000004768372, 4.064999997615814, 4.089999973773956, 4.014999985694885,
+              3.5300000309944153, 4.259999990463257, 4.665000021457672, 4.100000023841858
+            ]
+          },
+          "search": {
+            "cycles": 200,
+            "ms": 0.4350000023841858,
+            "matches": 27312,
+            "highlighted": 700,
+            "positions": [
+              {
+                "page": 0,
+                "current": 0,
+                "start": {
+                  "item": 2,
+                  "offset": 2
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 3
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              },
+              {
+                "page": 0,
+                "current": 1,
+                "start": {
+                  "item": 2,
+                  "offset": 9
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 10
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              }
+            ],
+            "wrap": {
+              "page": 109,
+              "current": 27311,
+              "start": {
+                "item": 102,
+                "offset": 22
+              },
+              "end": {
+                "item": 102,
+                "offset": 23
+              },
+              "text": "e",
+              "count": 27312,
+              "highlighted": 123
+            }
+          }
+        }
+      ],
+      "turnTaking": {
+        "searchIndex": {
+          "waits": 1,
+          "waitedMs": 262841,
+          "repeatedJobs": 0
+        },
+        "print": {
+          "waits": 0,
+          "waitedMs": 0,
+          "repeatedJobs": 0
+        },
+        "thumbnailAndResize": {
+          "waits": 0,
+          "waitedMs": 0,
+          "repeatedJobs": 0
+        },
+        "hotPaths": "waited 0 times (0 min in all) for other Playwright browsers and repeated 0 jobs that another browser overlapped",
+        "searchHeap": {
+          "waits": 0,
+          "waitedMs": 0,
+          "repeatedJobs": 0
+        }
+      },
+      "zoomCache": {
+        "baseline": "build with shrink-on-resize using the transformed view, before distinguishing scroller bounds",
+        "purpose": "Cache ownership and pixel fidelity checks, independent of timing. Other browser checks could run concurrently.",
+        "runs": [
+          {
+            "which": "before",
+            "run": 1,
+            "scenario": "preview",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsDuring": 1938816,
+              "pixelsRestored": 1938816,
+              "scaleBefore": 1,
+              "scaleDuring": 4,
+              "scaleRestored": 1,
+              "widthBefore": 980,
+              "widthDuring": 980,
+              "heightBefore": 720,
+              "heightDuring": 720,
+              "returnPageOne": {
+                "immediate": false,
+                "restoredLayers": 0,
+                "detailDraws": 3,
+                "blank": 0,
+                "sharpness": 1
+              }
+            }
+          },
+          {
+            "which": "after",
+            "run": 1,
+            "scenario": "preview",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsDuring": 19388160,
+              "pixelsRestored": 19388160,
+              "scaleBefore": 1,
+              "scaleDuring": 4,
+              "scaleRestored": 1,
+              "widthBefore": 980,
+              "widthDuring": 980,
+              "heightBefore": 720,
+              "heightDuring": 720,
+              "returnPageOne": {
+                "immediate": true,
+                "restoredLayers": 3,
+                "detailDraws": 0,
+                "blank": 0,
+                "sharpness": 1
+              }
+            }
+          },
+          {
+            "which": "before",
+            "run": 1,
+            "scenario": "resize",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsAfter": 5816448,
+              "budgetBefore": 33868800,
+              "budgetAfter": 6912000,
+              "sharpness": 1,
+              "blank": 0
+            }
+          },
+          {
+            "which": "after",
+            "run": 1,
+            "scenario": "resize",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsAfter": 5816448,
+              "budgetBefore": 33868800,
+              "budgetAfter": 6912000,
+              "sharpness": 1,
+              "blank": 0
+            }
+          },
+          {
+            "which": "after",
+            "run": 2,
+            "scenario": "preview",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsDuring": 19388160,
+              "pixelsRestored": 19388160,
+              "scaleBefore": 1,
+              "scaleDuring": 4,
+              "scaleRestored": 1,
+              "widthBefore": 980,
+              "widthDuring": 980,
+              "heightBefore": 720,
+              "heightDuring": 720,
+              "returnPageOne": {
+                "immediate": true,
+                "restoredLayers": 3,
+                "detailDraws": 0,
+                "blank": 0,
+                "sharpness": 1
+              }
+            }
+          },
+          {
+            "which": "before",
+            "run": 2,
+            "scenario": "preview",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsDuring": 1938816,
+              "pixelsRestored": 1938816,
+              "scaleBefore": 1,
+              "scaleDuring": 4,
+              "scaleRestored": 1,
+              "widthBefore": 980,
+              "widthDuring": 980,
+              "heightBefore": 720,
+              "heightDuring": 720,
+              "returnPageOne": {
+                "immediate": false,
+                "restoredLayers": 0,
+                "detailDraws": 3,
+                "blank": 0,
+                "sharpness": 1
+              }
+            }
+          },
+          {
+            "which": "after",
+            "run": 2,
+            "scenario": "resize",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsAfter": 5816448,
+              "budgetBefore": 33868800,
+              "budgetAfter": 6912000,
+              "sharpness": 1,
+              "blank": 0
+            }
+          },
+          {
+            "which": "before",
+            "run": 2,
+            "scenario": "resize",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsAfter": 5816448,
+              "budgetBefore": 33868800,
+              "budgetAfter": 6912000,
+              "sharpness": 1,
+              "blank": 0
+            }
+          },
+          {
+            "which": "before",
+            "run": 3,
+            "scenario": "preview",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsDuring": 1938816,
+              "pixelsRestored": 1938816,
+              "scaleBefore": 1,
+              "scaleDuring": 4,
+              "scaleRestored": 1,
+              "widthBefore": 980,
+              "widthDuring": 980,
+              "heightBefore": 720,
+              "heightDuring": 720,
+              "returnPageOne": {
+                "immediate": false,
+                "restoredLayers": 0,
+                "detailDraws": 3,
+                "blank": 0,
+                "sharpness": 1
+              }
+            }
+          },
+          {
+            "which": "after",
+            "run": 3,
+            "scenario": "preview",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsDuring": 19388160,
+              "pixelsRestored": 19388160,
+              "scaleBefore": 1,
+              "scaleDuring": 4,
+              "scaleRestored": 1,
+              "widthBefore": 980,
+              "widthDuring": 980,
+              "heightBefore": 720,
+              "heightDuring": 720,
+              "returnPageOne": {
+                "immediate": true,
+                "restoredLayers": 3,
+                "detailDraws": 0,
+                "blank": 0,
+                "sharpness": 1
+              }
+            }
+          },
+          {
+            "which": "before",
+            "run": 3,
+            "scenario": "resize",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsAfter": 5816448,
+              "budgetBefore": 33868800,
+              "budgetAfter": 6912000,
+              "sharpness": 1,
+              "blank": 0
+            }
+          },
+          {
+            "which": "after",
+            "run": 3,
+            "scenario": "resize",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsAfter": 5816448,
+              "budgetBefore": 33868800,
+              "budgetAfter": 6912000,
+              "sharpness": 1,
+              "blank": 0
+            }
+          }
+        ]
+      },
+      "searchHeap": {
+        "description": "Main V8 isolate CDP byte counts after two collections at each stage. ready = idle at page one with all page sizes measured, text = getText completed, indexed = no-hit findText completed.",
+        "textCheck": {
+          "pages": 1000,
+          "chars": 3984281,
+          "digest": "839057bc066f0db7686a569922cb2580167407afaccb9a833b9431c72382e313"
+        },
+        "runs": [
+          {
+            "run": 1,
+            "variant": "before",
+            "ready": {
+              "usedSize": 4828556,
+              "backingStorageSize": 1016264,
+              "embedderHeapUsedSize": 3026168,
+              "totalSize": 5324800
+            },
+            "text": {
+              "usedSize": 10416680,
+              "backingStorageSize": 1880282,
+              "embedderHeapUsedSize": 3046064,
+              "totalSize": 11091968
+            },
+            "indexed": {
+              "usedSize": 14889380,
+              "backingStorageSize": 49667678,
+              "embedderHeapUsedSize": 3046064,
+              "totalSize": 15548416
+            }
+          },
+          {
+            "run": 1,
+            "variant": "final",
+            "ready": {
+              "usedSize": 4842724,
+              "backingStorageSize": 1016833,
+              "embedderHeapUsedSize": 3021712,
+              "totalSize": 5324800
+            },
+            "text": {
+              "usedSize": 10426756,
+              "backingStorageSize": 1880851,
+              "embedderHeapUsedSize": 3046088,
+              "totalSize": 10829824
+            },
+            "indexed": {
+              "usedSize": 14902256,
+              "backingStorageSize": 13827700,
+              "embedderHeapUsedSize": 3046088,
+              "totalSize": 15286272
+            }
+          },
+          {
+            "run": 2,
+            "variant": "final",
+            "ready": {
+              "usedSize": 4826168,
+              "backingStorageSize": 1016832,
+              "embedderHeapUsedSize": 3025648,
+              "totalSize": 5324800
+            },
+            "text": {
+              "usedSize": 10414720,
+              "backingStorageSize": 1880850,
+              "embedderHeapUsedSize": 3044784,
+              "totalSize": 11091968
+            },
+            "indexed": {
+              "usedSize": 14890220,
+              "backingStorageSize": 13827699,
+              "embedderHeapUsedSize": 3044784,
+              "totalSize": 15810560
+            }
+          },
+          {
+            "run": 2,
+            "variant": "before",
+            "ready": {
+              "usedSize": 4847448,
+              "backingStorageSize": 1016263,
+              "embedderHeapUsedSize": 3021760,
+              "totalSize": 5324800
+            },
+            "text": {
+              "usedSize": 10433624,
+              "backingStorageSize": 1880281,
+              "embedderHeapUsedSize": 3045080,
+              "totalSize": 11091968
+            },
+            "indexed": {
+              "usedSize": 14906252,
+              "backingStorageSize": 49667677,
+              "embedderHeapUsedSize": 3045080,
+              "totalSize": 15548416
+            }
+          },
+          {
+            "run": 3,
+            "variant": "before",
+            "ready": {
+              "usedSize": 4828520,
+              "backingStorageSize": 1016264,
+              "embedderHeapUsedSize": 3064584,
+              "totalSize": 5324800
+            },
+            "text": {
+              "usedSize": 10416780,
+              "backingStorageSize": 1880282,
+              "embedderHeapUsedSize": 3087904,
+              "totalSize": 11091968
+            },
+            "indexed": {
+              "usedSize": 14889408,
+              "backingStorageSize": 49667678,
+              "embedderHeapUsedSize": 3087904,
+              "totalSize": 15286272
+            }
+          },
+          {
+            "run": 3,
+            "variant": "final",
+            "ready": {
+              "usedSize": 4824512,
+              "backingStorageSize": 1016832,
+              "embedderHeapUsedSize": 3021600,
+              "totalSize": 5324800
+            },
+            "text": {
+              "usedSize": 10415248,
+              "backingStorageSize": 1880850,
+              "embedderHeapUsedSize": 3044536,
+              "totalSize": 11354112
+            },
+            "indexed": {
+              "usedSize": 14890756,
+              "backingStorageSize": 13827699,
+              "embedderHeapUsedSize": 3044536,
+              "totalSize": 15810560
+            }
+          }
+        ]
+      }
+    },
+    "webkit": {
+      "browser": "WebKit 27.2",
+      "searchIndex": {
+        "synthetic-text-1000": {
+          "normalizedUnits": 3982283,
+          "matches": 98466,
+          "sha256": "1c70e11be684efb6776652e505616817e7ecc6d2d5861073e17296c31ad1b3b6",
+          "runs": [
+            {
+              "run": 1,
+              "variant": "before",
+              "retained": 47787396,
+              "indexMs": 115,
+              "searchMs": 11.920000000000016
+            },
+            {
+              "run": 1,
+              "variant": "after",
+              "retained": 11946849,
+              "indexMs": 100.06,
+              "searchMs": 6.819999999999993
+            },
+            {
+              "run": 2,
+              "variant": "after",
+              "retained": 11946849,
+              "indexMs": 99.49999999999997,
+              "searchMs": 7.340000000000032
+            },
+            {
+              "run": 2,
+              "variant": "before",
+              "retained": 47787396,
+              "indexMs": 103.93999999999997,
+              "searchMs": 10.160000000000025
+            },
+            {
+              "run": 3,
+              "variant": "before",
+              "retained": 47787396,
+              "indexMs": 102.85999999999999,
+              "searchMs": 9.340000000000032
+            },
+            {
+              "run": 3,
+              "variant": "after",
+              "retained": 11946849,
+              "indexMs": 99.64000000000001,
+              "searchMs": 6.779999999999973
+            },
+            {
+              "run": 4,
+              "variant": "after",
+              "retained": 11946849,
+              "indexMs": 104.46000000000001,
+              "searchMs": 7.279999999999973
+            },
+            {
+              "run": 4,
+              "variant": "before",
+              "retained": 47787396,
+              "indexMs": 106.14000000000001,
+              "searchMs": 11.879999999999995
+            },
+            {
+              "run": 5,
+              "variant": "before",
+              "retained": 47787396,
+              "indexMs": 102.85999999999999,
+              "searchMs": 9.400000000000034
+            },
+            {
+              "run": 5,
+              "variant": "after",
+              "retained": 11946849,
+              "indexMs": 103.85999999999999,
+              "searchMs": 7.819999999999993
+            }
+          ]
+        },
+        "bill-hr815": {
+          "normalizedUnits": 299221,
+          "matches": 4333,
+          "sha256": "d46b14b49857bb5d278e60947bdfefcab544794fdec12dc72e0fd46ecec96670",
+          "runs": [
+            {
+              "run": 1,
+              "variant": "before",
+              "retained": 3590652,
+              "indexMs": 12.5,
+              "searchMs": 1.1799999999999784
+            },
+            {
+              "run": 1,
+              "variant": "after",
+              "retained": 945597,
+              "indexMs": 11.740000000000009,
+              "searchMs": 0.9399999999999977
+            },
+            {
+              "run": 2,
+              "variant": "after",
+              "retained": 945597,
+              "indexMs": 11.080000000000013,
+              "searchMs": 0.8799999999999955
+            },
+            {
+              "run": 2,
+              "variant": "before",
+              "retained": 3590652,
+              "indexMs": 11.47999999999999,
+              "searchMs": 0.960000000000008
+            },
+            {
+              "run": 3,
+              "variant": "before",
+              "retained": 3590652,
+              "indexMs": 11.599999999999994,
+              "searchMs": 1.259999999999991
+            },
+            {
+              "run": 3,
+              "variant": "after",
+              "retained": 945597,
+              "indexMs": 11.559999999999974,
+              "searchMs": 0.960000000000008
+            },
+            {
+              "run": 4,
+              "variant": "after",
+              "retained": 945597,
+              "indexMs": 11.699999999999989,
+              "searchMs": 0.9000000000000057
+            },
+            {
+              "run": 4,
+              "variant": "before",
+              "retained": 3590652,
+              "indexMs": 13.219999999999999,
+              "searchMs": 1.2199999999999989
+            },
+            {
+              "run": 5,
+              "variant": "before",
+              "retained": 3590652,
+              "indexMs": 11.879999999999995,
+              "searchMs": 1.3400000000000034
+            },
+            {
+              "run": 5,
+              "variant": "after",
+              "retained": 945597,
+              "indexMs": 11.099999999999994,
+              "searchMs": 0.9000000000000057
+            }
+          ]
+        }
+      },
+      "print": {
+        "sheets": [
+          {
+            "width": 306,
+            "height": 396,
+            "hash": "6b5804b1e3749bc848abe84c84325b163dac4bcd71dfafe55cd70f0a5de95908"
+          },
+          {
+            "width": 306,
+            "height": 396,
+            "hash": "53e1d07c72eb0e8c61b4830b428de82d2166b5d21c7ba23859ca70326a6d226e"
+          },
+          {
+            "width": 306,
+            "height": 396,
+            "hash": "6f33786b69edb7bbff30ef4996c80ce9e44e5fc7dc43cebc3941eb29ef5d92f0"
+          },
+          {
+            "width": 306,
+            "height": 396,
+            "hash": "68fd23a273e884f15672da9772fea9cd62fb1eb8d14acecefb4f95f5b88f7bdc"
+          },
+          {
+            "width": 306,
+            "height": 396,
+            "hash": "664cc89f98ea1f1f30ab8e38453c5a359ec4283fe6b19c4445d81f36d826e9d9"
+          },
+          {
+            "width": 306,
+            "height": 396,
+            "hash": "3d28376a5430ee1caf3da9d9b4faf5af487e14c34e98f2f4796ebfb65ff0a765"
+          }
+        ],
+        "runs": [
+          {
+            "run": 1,
+            "variant": "before",
+            "copies": 6,
+            "copyMs": 8.379999999999939,
+            "totalMs": 56.420000000000016
+          },
+          {
+            "run": 1,
+            "variant": "after",
+            "copies": 1,
+            "copyMs": 2.3999999999999773,
+            "totalMs": 34.25999999999999
+          },
+          {
+            "run": 2,
+            "variant": "after",
+            "copies": 1,
+            "copyMs": 2.5200000000000387,
+            "totalMs": 35.339999999999975
+          },
+          {
+            "run": 2,
+            "variant": "before",
+            "copies": 6,
+            "copyMs": 9.279999999999973,
+            "totalMs": 79.21999999999997
+          },
+          {
+            "run": 3,
+            "variant": "before",
+            "copies": 6,
+            "copyMs": 9.39999999999992,
+            "totalMs": 50.18000000000001
+          },
+          {
+            "run": 3,
+            "variant": "after",
+            "copies": 1,
+            "copyMs": 2.3999999999999773,
+            "totalMs": 31.95999999999998
+          }
+        ]
+      },
+      "thumbnailTour": [
+        {
+          "run": 1,
+          "variant": "before",
+          "pages": 68,
+          "cleanedPages": 0,
+          "retained": 68,
+          "retainedOperators": 36108,
+          "firstMs": 264.19999999999993,
+          "keptReturnMs": 27.37999999999988,
+          "redrawMs": 263.8600000000001,
+          "first": {
+            "hash": 1224380239,
+            "ink": 16145,
+            "width": 240,
+            "height": 310
+          }
+        },
+        {
+          "run": 1,
+          "variant": "after",
+          "pages": 68,
+          "cleanedPages": 68,
+          "retained": 0,
+          "retainedOperators": 0,
+          "firstMs": 263.74,
+          "keptReturnMs": 27.38000000000011,
+          "redrawMs": 263.8599999999999,
+          "first": {
+            "hash": 1224380239,
+            "ink": 16145,
+            "width": 240,
+            "height": 310
+          }
+        },
+        {
+          "run": 2,
+          "variant": "after",
+          "pages": 68,
+          "cleanedPages": 68,
+          "retained": 0,
+          "retainedOperators": 0,
+          "firstMs": 263.79999999999995,
+          "keptReturnMs": 27.480000000000018,
+          "redrawMs": 263.82000000000016,
+          "first": {
+            "hash": 1224380239,
+            "ink": 16145,
+            "width": 240,
+            "height": 310
+          }
+        },
+        {
+          "run": 2,
+          "variant": "before",
+          "pages": 68,
+          "cleanedPages": 0,
+          "retained": 68,
+          "retainedOperators": 36108,
+          "firstMs": 263.53999999999996,
+          "keptReturnMs": 27.40000000000009,
+          "redrawMs": 263.8399999999999,
+          "first": {
+            "hash": 1224380239,
+            "ink": 16145,
+            "width": 240,
+            "height": 310
+          }
+        },
+        {
+          "run": 3,
+          "variant": "before",
+          "pages": 68,
+          "cleanedPages": 0,
+          "retained": 68,
+          "retainedOperators": 36108,
+          "firstMs": 263.64,
+          "keptReturnMs": 27.399999999999864,
+          "redrawMs": 263.8399999999999,
+          "first": {
+            "hash": 1224380239,
+            "ink": 16145,
+            "width": 240,
+            "height": 310
+          }
+        },
+        {
+          "run": 3,
+          "variant": "after",
+          "pages": 68,
+          "cleanedPages": 68,
+          "retained": 0,
+          "retainedOperators": 0,
+          "firstMs": 263.7600000000001,
+          "keptReturnMs": 27.37999999999988,
+          "redrawMs": 263.8399999999997,
+          "first": {
+            "hash": 1224380239,
+            "ink": 16145,
+            "width": 240,
+            "height": 310
+          }
+        }
+      ],
+      "viewportResize": [
+        {
+          "run": 1,
+          "variant": "before",
+          "pixelsBefore": 19388160,
+          "pixelsAfter": 19388160,
+          "budgetBefore": 33868800,
+          "budgetAfter": 6912000,
+          "sharpness": 1,
+          "blank": 0
+        },
+        {
+          "run": 1,
+          "variant": "after",
+          "pixelsBefore": 19388160,
+          "pixelsAfter": 5816448,
+          "budgetBefore": 33868800,
+          "budgetAfter": 6912000,
+          "sharpness": 1,
+          "blank": 0
+        },
+        {
+          "run": 2,
+          "variant": "after",
+          "pixelsBefore": 19388160,
+          "pixelsAfter": 5816448,
+          "budgetBefore": 33868800,
+          "budgetAfter": 6912000,
+          "sharpness": 1,
+          "blank": 0
+        },
+        {
+          "run": 2,
+          "variant": "before",
+          "pixelsBefore": 19388160,
+          "pixelsAfter": 19388160,
+          "budgetBefore": 33868800,
+          "budgetAfter": 6912000,
+          "sharpness": 1,
+          "blank": 0
+        },
+        {
+          "run": 3,
+          "variant": "before",
+          "pixelsBefore": 19388160,
+          "pixelsAfter": 19388160,
+          "budgetBefore": 33868800,
+          "budgetAfter": 6912000,
+          "sharpness": 1,
+          "blank": 0
+        },
+        {
+          "run": 3,
+          "variant": "after",
+          "pixelsBefore": 19388160,
+          "pixelsAfter": 5816448,
+          "budgetBefore": 33868800,
+          "budgetAfter": 6912000,
+          "sharpness": 1,
+          "blank": 0
+        }
+      ],
+      "hotPaths": [
+        {
+          "variant": "before",
+          "run": 1,
+          "preview": {
+            "cycles": 400,
+            "hits": 0,
+            "checksum": 439278.4188034188,
+            "ms": 9.579999999999984
+          },
+          "planner": {
+            "normal": {
+              "cycles": 16000,
+              "readsPerPlan": 18,
+              "usPerPlan": 0.6925000000000024
+            },
+            "overscan": {
+              "cycles": 700,
+              "readsPerPlan": 510,
+              "usPerPlan": 12.828571428571374
+            },
+            "budget": {
+              "cycles": 200,
+              "readsPerPlan": 144,
+              "usPerPlan": 71.29999999999995
+            }
+          },
+          "hosts": {
+            "lookups": 14707,
+            "meanMountCount": 171,
+            "jumpMs": 10.439999999999984,
+            "times": [
+              10.299999999999955, 10.319999999999993, 11.699999999999989, 9.800000000000011,
+              10.259999999999991, 10.979999999999961, 10.240000000000009, 9.919999999999959
+            ]
+          },
+          "search": {
+            "cycles": 200,
+            "ms": 74.67999999999995,
+            "matches": 27312,
+            "highlighted": 700,
+            "positions": [
+              {
+                "page": 0,
+                "current": 0,
+                "start": {
+                  "item": 2,
+                  "offset": 2
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 3
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              },
+              {
+                "page": 0,
+                "current": 1,
+                "start": {
+                  "item": 2,
+                  "offset": 9
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 10
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              }
+            ],
+            "wrap": {
+              "page": 109,
+              "current": 27311,
+              "start": {
+                "item": 102,
+                "offset": 22
+              },
+              "end": {
+                "item": 102,
+                "offset": 23
+              },
+              "text": "e",
+              "count": 27312,
+              "highlighted": 123
+            }
+          }
+        },
+        {
+          "variant": "after",
+          "run": 1,
+          "preview": {
+            "cycles": 400,
+            "hits": 400,
+            "checksum": 439278.4188034188,
+            "ms": 0.2600000000000193
+          },
+          "planner": {
+            "normal": {
+              "cycles": 16000,
+              "readsPerPlan": 0,
+              "usPerPlan": 0.3399999999999999
+            },
+            "overscan": {
+              "cycles": 700,
+              "readsPerPlan": 0,
+              "usPerPlan": 3.9142857142857275
+            },
+            "budget": {
+              "cycles": 200,
+              "readsPerPlan": 144,
+              "usPerPlan": 10
+            }
+          },
+          "hosts": {
+            "lookups": 342,
+            "meanMountCount": 171,
+            "jumpMs": 10.062499999999986,
+            "times": [
+              9.979999999999961, 10.199999999999989, 9.420000000000016, 9.319999999999993,
+              10.079999999999984, 11.060000000000002, 10.279999999999973, 10.159999999999968
+            ]
+          },
+          "search": {
+            "cycles": 200,
+            "ms": 73.83999999999997,
+            "matches": 27312,
+            "highlighted": 700,
+            "positions": [
+              {
+                "page": 0,
+                "current": 0,
+                "start": {
+                  "item": 2,
+                  "offset": 2
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 3
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              },
+              {
+                "page": 0,
+                "current": 1,
+                "start": {
+                  "item": 2,
+                  "offset": 9
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 10
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              }
+            ],
+            "wrap": {
+              "page": 109,
+              "current": 27311,
+              "start": {
+                "item": 102,
+                "offset": 22
+              },
+              "end": {
+                "item": 102,
+                "offset": 23
+              },
+              "text": "e",
+              "count": 27312,
+              "highlighted": 123
+            }
+          }
+        },
+        {
+          "variant": "after",
+          "run": 2,
+          "preview": {
+            "cycles": 400,
+            "hits": 400,
+            "checksum": 439278.4188034188,
+            "ms": 0.3599999999999852
+          },
+          "planner": {
+            "normal": {
+              "cycles": 16000,
+              "readsPerPlan": 0,
+              "usPerPlan": 0.34500000000000064
+            },
+            "overscan": {
+              "cycles": 700,
+              "readsPerPlan": 0,
+              "usPerPlan": 4.314285714285728
+            },
+            "budget": {
+              "cycles": 200,
+              "readsPerPlan": 144,
+              "usPerPlan": 10.900000000000034
+            }
+          },
+          "hosts": {
+            "lookups": 342,
+            "meanMountCount": 171,
+            "jumpMs": 10.012499999999989,
+            "times": [
+              10.54000000000002, 9.840000000000032, 9.939999999999998, 9.359999999999957,
+              9.71999999999997, 11.019999999999982, 9.879999999999995, 9.799999999999955
+            ]
+          },
+          "search": {
+            "cycles": 200,
+            "ms": 74.92000000000002,
+            "matches": 27312,
+            "highlighted": 700,
+            "positions": [
+              {
+                "page": 0,
+                "current": 0,
+                "start": {
+                  "item": 2,
+                  "offset": 2
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 3
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              },
+              {
+                "page": 0,
+                "current": 1,
+                "start": {
+                  "item": 2,
+                  "offset": 9
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 10
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              }
+            ],
+            "wrap": {
+              "page": 109,
+              "current": 27311,
+              "start": {
+                "item": 102,
+                "offset": 22
+              },
+              "end": {
+                "item": 102,
+                "offset": 23
+              },
+              "text": "e",
+              "count": 27312,
+              "highlighted": 123
+            }
+          }
+        },
+        {
+          "variant": "before",
+          "run": 2,
+          "preview": {
+            "cycles": 400,
+            "hits": 0,
+            "checksum": 439278.4188034188,
+            "ms": 6.259999999999991
+          },
+          "planner": {
+            "normal": {
+              "cycles": 16000,
+              "readsPerPlan": 18,
+              "usPerPlan": 0.6037499999999998
+            },
+            "overscan": {
+              "cycles": 700,
+              "readsPerPlan": 510,
+              "usPerPlan": 12.485714285714257
+            },
+            "budget": {
+              "cycles": 200,
+              "readsPerPlan": 144,
+              "usPerPlan": 65.50000000000011
+            }
+          },
+          "hosts": {
+            "lookups": 14707,
+            "meanMountCount": 171,
+            "jumpMs": 10.052499999999995,
+            "times": [
+              10.199999999999989, 9.680000000000007, 10.680000000000007, 9.939999999999998,
+              10.259999999999991, 10.039999999999964, 9.720000000000027, 9.899999999999977
+            ]
+          },
+          "search": {
+            "cycles": 200,
+            "ms": 78.5,
+            "matches": 27312,
+            "highlighted": 700,
+            "positions": [
+              {
+                "page": 0,
+                "current": 0,
+                "start": {
+                  "item": 2,
+                  "offset": 2
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 3
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              },
+              {
+                "page": 0,
+                "current": 1,
+                "start": {
+                  "item": 2,
+                  "offset": 9
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 10
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              }
+            ],
+            "wrap": {
+              "page": 109,
+              "current": 27311,
+              "start": {
+                "item": 102,
+                "offset": 22
+              },
+              "end": {
+                "item": 102,
+                "offset": 23
+              },
+              "text": "e",
+              "count": 27312,
+              "highlighted": 123
+            }
+          }
+        },
+        {
+          "variant": "before",
+          "run": 3,
+          "preview": {
+            "cycles": 400,
+            "hits": 0,
+            "checksum": 439278.4188034188,
+            "ms": 6.280000000000001
+          },
+          "planner": {
+            "normal": {
+              "cycles": 16000,
+              "readsPerPlan": 18,
+              "usPerPlan": 0.6124999999999989
+            },
+            "overscan": {
+              "cycles": 700,
+              "readsPerPlan": 510,
+              "usPerPlan": 12.11428571428574
+            },
+            "budget": {
+              "cycles": 200,
+              "readsPerPlan": 144,
+              "usPerPlan": 61.799999999999926
+            }
+          },
+          "hosts": {
+            "lookups": 14707,
+            "meanMountCount": 171,
+            "jumpMs": 10.692500000000017,
+            "times": [
+              13.220000000000027, 12.04000000000002, 10.560000000000002, 10.160000000000025,
+              9.580000000000041, 9.900000000000034, 10.319999999999993, 9.759999999999991
+            ]
+          },
+          "search": {
+            "cycles": 200,
+            "ms": 78.39999999999998,
+            "matches": 27312,
+            "highlighted": 700,
+            "positions": [
+              {
+                "page": 0,
+                "current": 0,
+                "start": {
+                  "item": 2,
+                  "offset": 2
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 3
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              },
+              {
+                "page": 0,
+                "current": 1,
+                "start": {
+                  "item": 2,
+                  "offset": 9
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 10
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              }
+            ],
+            "wrap": {
+              "page": 109,
+              "current": 27311,
+              "start": {
+                "item": 102,
+                "offset": 22
+              },
+              "end": {
+                "item": 102,
+                "offset": 23
+              },
+              "text": "e",
+              "count": 27312,
+              "highlighted": 123
+            }
+          }
+        },
+        {
+          "variant": "after",
+          "run": 3,
+          "preview": {
+            "cycles": 400,
+            "hits": 400,
+            "checksum": 439278.4188034188,
+            "ms": 0.29999999999998295
+          },
+          "planner": {
+            "normal": {
+              "cycles": 16000,
+              "readsPerPlan": 0,
+              "usPerPlan": 0.3412500000000005
+            },
+            "overscan": {
+              "cycles": 700,
+              "readsPerPlan": 0,
+              "usPerPlan": 4.057142857142862
+            },
+            "budget": {
+              "cycles": 200,
+              "readsPerPlan": 144,
+              "usPerPlan": 10
+            }
+          },
+          "hosts": {
+            "lookups": 342,
+            "meanMountCount": 171,
+            "jumpMs": 9.629999999999981,
+            "times": [
+              9.659999999999968, 9.560000000000002, 10, 9.479999999999961, 9.95999999999998,
+              9.739999999999952, 9.259999999999991, 9.379999999999995
+            ]
+          },
+          "search": {
+            "cycles": 200,
+            "ms": 76.23999999999995,
+            "matches": 27312,
+            "highlighted": 700,
+            "positions": [
+              {
+                "page": 0,
+                "current": 0,
+                "start": {
+                  "item": 2,
+                  "offset": 2
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 3
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              },
+              {
+                "page": 0,
+                "current": 1,
+                "start": {
+                  "item": 2,
+                  "offset": 9
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 10
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              }
+            ],
+            "wrap": {
+              "page": 109,
+              "current": 27311,
+              "start": {
+                "item": 102,
+                "offset": 22
+              },
+              "end": {
+                "item": 102,
+                "offset": 23
+              },
+              "text": "e",
+              "count": 27312,
+              "highlighted": 123
+            }
+          }
+        },
+        {
+          "variant": "after",
+          "run": 4,
+          "preview": {
+            "cycles": 400,
+            "hits": 400,
+            "checksum": 439278.4188034188,
+            "ms": 0.28000000000000114
+          },
+          "planner": {
+            "normal": {
+              "cycles": 16000,
+              "readsPerPlan": 0,
+              "usPerPlan": 0.3475000000000001
+            },
+            "overscan": {
+              "cycles": 700,
+              "readsPerPlan": 0,
+              "usPerPlan": 4.085714285714305
+            },
+            "budget": {
+              "cycles": 200,
+              "readsPerPlan": 144,
+              "usPerPlan": 10.500000000000114
+            }
+          },
+          "hosts": {
+            "lookups": 342,
+            "meanMountCount": 171,
+            "jumpMs": 9.772499999999994,
+            "times": [
+              9.95999999999998, 10.139999999999986, 10.139999999999986, 9.299999999999955,
+              9.620000000000005, 9.5, 9.920000000000016, 9.600000000000023
+            ]
+          },
+          "search": {
+            "cycles": 200,
+            "ms": 77.67999999999995,
+            "matches": 27312,
+            "highlighted": 700,
+            "positions": [
+              {
+                "page": 0,
+                "current": 0,
+                "start": {
+                  "item": 2,
+                  "offset": 2
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 3
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              },
+              {
+                "page": 0,
+                "current": 1,
+                "start": {
+                  "item": 2,
+                  "offset": 9
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 10
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              }
+            ],
+            "wrap": {
+              "page": 109,
+              "current": 27311,
+              "start": {
+                "item": 102,
+                "offset": 22
+              },
+              "end": {
+                "item": 102,
+                "offset": 23
+              },
+              "text": "e",
+              "count": 27312,
+              "highlighted": 123
+            }
+          }
+        },
+        {
+          "variant": "before",
+          "run": 4,
+          "preview": {
+            "cycles": 400,
+            "hits": 0,
+            "checksum": 439278.4188034188,
+            "ms": 6.0800000000000125
+          },
+          "planner": {
+            "normal": {
+              "cycles": 16000,
+              "readsPerPlan": 18,
+              "usPerPlan": 0.5950000000000006
+            },
+            "overscan": {
+              "cycles": 700,
+              "readsPerPlan": 510,
+              "usPerPlan": 12.000000000000007
+            },
+            "budget": {
+              "cycles": 200,
+              "readsPerPlan": 144,
+              "usPerPlan": 59.099999999999966
+            }
+          },
+          "hosts": {
+            "lookups": 14707,
+            "meanMountCount": 171,
+            "jumpMs": 10.140000000000004,
+            "times": [
+              9.300000000000011, 10.159999999999997, 11.199999999999989, 10.560000000000002,
+              9.579999999999984, 9.539999999999964, 10.760000000000048, 10.020000000000039
+            ]
+          },
+          "search": {
+            "cycles": 200,
+            "ms": 76.44,
+            "matches": 27312,
+            "highlighted": 700,
+            "positions": [
+              {
+                "page": 0,
+                "current": 0,
+                "start": {
+                  "item": 2,
+                  "offset": 2
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 3
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              },
+              {
+                "page": 0,
+                "current": 1,
+                "start": {
+                  "item": 2,
+                  "offset": 9
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 10
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              }
+            ],
+            "wrap": {
+              "page": 109,
+              "current": 27311,
+              "start": {
+                "item": 102,
+                "offset": 22
+              },
+              "end": {
+                "item": 102,
+                "offset": 23
+              },
+              "text": "e",
+              "count": 27312,
+              "highlighted": 123
+            }
+          }
+        },
+        {
+          "variant": "before",
+          "run": 5,
+          "preview": {
+            "cycles": 400,
+            "hits": 0,
+            "checksum": 439278.4188034188,
+            "ms": 6.280000000000001
+          },
+          "planner": {
+            "normal": {
+              "cycles": 16000,
+              "readsPerPlan": 18,
+              "usPerPlan": 0.625
+            },
+            "overscan": {
+              "cycles": 700,
+              "readsPerPlan": 510,
+              "usPerPlan": 12.114285714285698
+            },
+            "budget": {
+              "cycles": 200,
+              "readsPerPlan": 144,
+              "usPerPlan": 62.19999999999999
+            }
+          },
+          "hosts": {
+            "lookups": 14707,
+            "meanMountCount": 171,
+            "jumpMs": 9.844999999999999,
+            "times": [
+              9.939999999999998, 9.860000000000014, 10.299999999999955, 10.160000000000025,
+              9.520000000000039, 10.17999999999995, 9.539999999999964, 9.260000000000048
+            ]
+          },
+          "search": {
+            "cycles": 200,
+            "ms": 77.12,
+            "matches": 27312,
+            "highlighted": 700,
+            "positions": [
+              {
+                "page": 0,
+                "current": 0,
+                "start": {
+                  "item": 2,
+                  "offset": 2
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 3
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              },
+              {
+                "page": 0,
+                "current": 1,
+                "start": {
+                  "item": 2,
+                  "offset": 9
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 10
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              }
+            ],
+            "wrap": {
+              "page": 109,
+              "current": 27311,
+              "start": {
+                "item": 102,
+                "offset": 22
+              },
+              "end": {
+                "item": 102,
+                "offset": 23
+              },
+              "text": "e",
+              "count": 27312,
+              "highlighted": 123
+            }
+          }
+        },
+        {
+          "variant": "after",
+          "run": 5,
+          "preview": {
+            "cycles": 400,
+            "hits": 400,
+            "checksum": 439278.4188034188,
+            "ms": 0.30000000000001137
+          },
+          "planner": {
+            "normal": {
+              "cycles": 16000,
+              "readsPerPlan": 0,
+              "usPerPlan": 0.37000000000000105
+            },
+            "overscan": {
+              "cycles": 700,
+              "readsPerPlan": 0,
+              "usPerPlan": 4.114285714285708
+            },
+            "budget": {
+              "cycles": 200,
+              "readsPerPlan": 144,
+              "usPerPlan": 10.400000000000064
+            }
+          },
+          "hosts": {
+            "lookups": 342,
+            "meanMountCount": 171,
+            "jumpMs": 10.187500000000014,
+            "times": [
+              9.840000000000032, 10.560000000000002, 9.920000000000016, 10.699999999999989,
+              11.200000000000045, 10.439999999999998, 9.180000000000007, 9.660000000000025
+            ]
+          },
+          "search": {
+            "cycles": 200,
+            "ms": 76.89999999999998,
+            "matches": 27312,
+            "highlighted": 700,
+            "positions": [
+              {
+                "page": 0,
+                "current": 0,
+                "start": {
+                  "item": 2,
+                  "offset": 2
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 3
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              },
+              {
+                "page": 0,
+                "current": 1,
+                "start": {
+                  "item": 2,
+                  "offset": 9
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 10
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              }
+            ],
+            "wrap": {
+              "page": 109,
+              "current": 27311,
+              "start": {
+                "item": 102,
+                "offset": 22
+              },
+              "end": {
+                "item": 102,
+                "offset": 23
+              },
+              "text": "e",
+              "count": 27312,
+              "highlighted": 123
+            }
+          }
+        }
+      ],
+      "turnTaking": {
+        "searchIndex": {
+          "waits": 1,
+          "waitedMs": 262841,
+          "repeatedJobs": 0
+        },
+        "print": {
+          "waits": 0,
+          "waitedMs": 0,
+          "repeatedJobs": 0
+        },
+        "thumbnailAndResize": {
+          "waits": 0,
+          "waitedMs": 0,
+          "repeatedJobs": 0
+        },
+        "hotPaths": "waited 0 times (0 min in all) for other Playwright browsers and repeated 0 jobs that another browser overlapped"
+      },
+      "zoomCache": {
+        "baseline": "build with shrink-on-resize using the transformed view, before distinguishing scroller bounds",
+        "purpose": "Cache ownership and pixel fidelity checks, independent of timing. Other browser checks could run concurrently.",
+        "runs": [
+          {
+            "which": "before",
+            "run": 1,
+            "scenario": "preview",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsDuring": 1938816,
+              "pixelsRestored": 1938816,
+              "scaleBefore": 1,
+              "scaleDuring": 4,
+              "scaleRestored": 1,
+              "widthBefore": 980,
+              "widthDuring": 980,
+              "heightBefore": 720,
+              "heightDuring": 720,
+              "returnPageOne": {
+                "immediate": false,
+                "restoredLayers": 0,
+                "detailDraws": 3,
+                "blank": 0,
+                "sharpness": 1
+              }
+            }
+          },
+          {
+            "which": "after",
+            "run": 1,
+            "scenario": "preview",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsDuring": 19388160,
+              "pixelsRestored": 19388160,
+              "scaleBefore": 1,
+              "scaleDuring": 4,
+              "scaleRestored": 1,
+              "widthBefore": 980,
+              "widthDuring": 980,
+              "heightBefore": 720,
+              "heightDuring": 720,
+              "returnPageOne": {
+                "immediate": true,
+                "restoredLayers": 3,
+                "detailDraws": 0,
+                "blank": 0,
+                "sharpness": 1
+              }
+            }
+          },
+          {
+            "which": "before",
+            "run": 1,
+            "scenario": "resize",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsAfter": 5816448,
+              "budgetBefore": 33868800,
+              "budgetAfter": 6912000,
+              "sharpness": 1,
+              "blank": 0
+            }
+          },
+          {
+            "which": "after",
+            "run": 1,
+            "scenario": "resize",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsAfter": 5816448,
+              "budgetBefore": 33868800,
+              "budgetAfter": 6912000,
+              "sharpness": 1,
+              "blank": 0
+            }
+          },
+          {
+            "which": "after",
+            "run": 2,
+            "scenario": "preview",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsDuring": 19388160,
+              "pixelsRestored": 19388160,
+              "scaleBefore": 1,
+              "scaleDuring": 4,
+              "scaleRestored": 1,
+              "widthBefore": 980,
+              "widthDuring": 980,
+              "heightBefore": 720,
+              "heightDuring": 720,
+              "returnPageOne": {
+                "immediate": true,
+                "restoredLayers": 3,
+                "detailDraws": 0,
+                "blank": 0,
+                "sharpness": 1
+              }
+            }
+          },
+          {
+            "which": "before",
+            "run": 2,
+            "scenario": "preview",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsDuring": 1938816,
+              "pixelsRestored": 1938816,
+              "scaleBefore": 1,
+              "scaleDuring": 4,
+              "scaleRestored": 1,
+              "widthBefore": 980,
+              "widthDuring": 980,
+              "heightBefore": 720,
+              "heightDuring": 720,
+              "returnPageOne": {
+                "immediate": false,
+                "restoredLayers": 0,
+                "detailDraws": 3,
+                "blank": 0,
+                "sharpness": 1
+              }
+            }
+          },
+          {
+            "which": "after",
+            "run": 2,
+            "scenario": "resize",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsAfter": 5816448,
+              "budgetBefore": 33868800,
+              "budgetAfter": 6912000,
+              "sharpness": 1,
+              "blank": 0
+            }
+          },
+          {
+            "which": "before",
+            "run": 2,
+            "scenario": "resize",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsAfter": 5816448,
+              "budgetBefore": 33868800,
+              "budgetAfter": 6912000,
+              "sharpness": 1,
+              "blank": 0
+            }
+          },
+          {
+            "which": "before",
+            "run": 3,
+            "scenario": "preview",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsDuring": 1938816,
+              "pixelsRestored": 1938816,
+              "scaleBefore": 1,
+              "scaleDuring": 4,
+              "scaleRestored": 1,
+              "widthBefore": 980,
+              "widthDuring": 980,
+              "heightBefore": 720,
+              "heightDuring": 720,
+              "returnPageOne": {
+                "immediate": false,
+                "restoredLayers": 0,
+                "detailDraws": 3,
+                "blank": 0,
+                "sharpness": 1
+              }
+            }
+          },
+          {
+            "which": "after",
+            "run": 3,
+            "scenario": "preview",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsDuring": 19388160,
+              "pixelsRestored": 19388160,
+              "scaleBefore": 1,
+              "scaleDuring": 4,
+              "scaleRestored": 1,
+              "widthBefore": 980,
+              "widthDuring": 980,
+              "heightBefore": 720,
+              "heightDuring": 720,
+              "returnPageOne": {
+                "immediate": true,
+                "restoredLayers": 3,
+                "detailDraws": 0,
+                "blank": 0,
+                "sharpness": 1
+              }
+            }
+          },
+          {
+            "which": "before",
+            "run": 3,
+            "scenario": "resize",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsAfter": 5816448,
+              "budgetBefore": 33868800,
+              "budgetAfter": 6912000,
+              "sharpness": 1,
+              "blank": 0
+            }
+          },
+          {
+            "which": "after",
+            "run": 3,
+            "scenario": "resize",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsAfter": 5816448,
+              "budgetBefore": 33868800,
+              "budgetAfter": 6912000,
+              "sharpness": 1,
+              "blank": 0
+            }
+          }
+        ]
+      }
+    },
+    "firefox": {
+      "browser": "Firefox 159.0",
+      "searchIndex": {
+        "synthetic-text-1000": {
+          "normalizedUnits": 3982283,
+          "matches": 98466,
+          "sha256": "1c70e11be684efb6776652e505616817e7ecc6d2d5861073e17296c31ad1b3b6",
+          "runs": [
+            {
+              "run": 1,
+              "variant": "before",
+              "retained": 47787396,
+              "indexMs": 224.57999999999998,
+              "searchMs": 17.08000000000004
+            },
+            {
+              "run": 1,
+              "variant": "after",
+              "retained": 11946849,
+              "indexMs": 197.28,
+              "searchMs": 10.340000000000003
+            },
+            {
+              "run": 2,
+              "variant": "after",
+              "retained": 11946849,
+              "indexMs": 203.01999999999998,
+              "searchMs": 11.379999999999995
+            },
+            {
+              "run": 2,
+              "variant": "before",
+              "retained": 47787396,
+              "indexMs": 196.56,
+              "searchMs": 12.920000000000016
+            },
+            {
+              "run": 3,
+              "variant": "before",
+              "retained": 47787396,
+              "indexMs": 200.26,
+              "searchMs": 13.560000000000002
+            },
+            {
+              "run": 3,
+              "variant": "after",
+              "retained": 11946849,
+              "indexMs": 197.92,
+              "searchMs": 11.300000000000011
+            },
+            {
+              "run": 4,
+              "variant": "after",
+              "retained": 11946849,
+              "indexMs": 195.54,
+              "searchMs": 10.620000000000005
+            },
+            {
+              "run": 4,
+              "variant": "before",
+              "retained": 47787396,
+              "indexMs": 206.16,
+              "searchMs": 14
+            },
+            {
+              "run": 5,
+              "variant": "before",
+              "retained": 47787396,
+              "indexMs": 200.96,
+              "searchMs": 13.23999999999998
+            },
+            {
+              "run": 5,
+              "variant": "after",
+              "retained": 11946849,
+              "indexMs": 212.66,
+              "searchMs": 12.440000000000026
+            }
+          ]
+        },
+        "bill-hr815": {
+          "normalizedUnits": 299221,
+          "matches": 4333,
+          "sha256": "d46b14b49857bb5d278e60947bdfefcab544794fdec12dc72e0fd46ecec96670",
+          "runs": [
+            {
+              "run": 1,
+              "variant": "before",
+              "retained": 3590652,
+              "indexMs": 19.520000000000003,
+              "searchMs": 1.9600000000000009
+            },
+            {
+              "run": 1,
+              "variant": "after",
+              "retained": 945597,
+              "indexMs": 18.139999999999997,
+              "searchMs": 1.4400000000000048
+            },
+            {
+              "run": 2,
+              "variant": "after",
+              "retained": 945597,
+              "indexMs": 18.299999999999997,
+              "searchMs": 1.0799999999999983
+            },
+            {
+              "run": 2,
+              "variant": "before",
+              "retained": 3590652,
+              "indexMs": 19.919999999999998,
+              "searchMs": 1.2000000000000028
+            },
+            {
+              "run": 3,
+              "variant": "before",
+              "retained": 3590652,
+              "indexMs": 19.24,
+              "searchMs": 1.8200000000000003
+            },
+            {
+              "run": 3,
+              "variant": "after",
+              "retained": 945597,
+              "indexMs": 18.62,
+              "searchMs": 1.2199999999999989
+            },
+            {
+              "run": 4,
+              "variant": "after",
+              "retained": 945597,
+              "indexMs": 17.999999999999996,
+              "searchMs": 1.6600000000000037
+            },
+            {
+              "run": 4,
+              "variant": "before",
+              "retained": 3590652,
+              "indexMs": 19.160000000000004,
+              "searchMs": 1.4599999999999937
+            },
+            {
+              "run": 5,
+              "variant": "before",
+              "retained": 3590652,
+              "indexMs": 27.400000000000002,
+              "searchMs": 1.1799999999999997
+            },
+            {
+              "run": 5,
+              "variant": "after",
+              "retained": 945597,
+              "indexMs": 18.89999999999999,
+              "searchMs": 1.0200000000000102
+            }
+          ]
+        }
+      },
+      "print": {
+        "sheets": [
+          {
+            "width": 306,
+            "height": 396,
+            "hash": "d8dee7e29e5a9d622978ed5753bf0a108c694a0653f5cab972ac32f3c3a93f73"
+          },
+          {
+            "width": 306,
+            "height": 396,
+            "hash": "b5460014a7b514fed18be9c24ad1b2efc9c20b912cd3ae6a17e6d712f576600f"
+          },
+          {
+            "width": 306,
+            "height": 396,
+            "hash": "9dc795dc06d118a83b1e9fde2549f509a30b3f91c5e008709a80c5e32aa2c079"
+          },
+          {
+            "width": 306,
+            "height": 396,
+            "hash": "d6a33ddfb69c589d5bdad9bc3c00d604a0759473b72c6174c6d0122055169325"
+          },
+          {
+            "width": 306,
+            "height": 396,
+            "hash": "dd6ec50138d7c7f59edd9016017f35a93fa985eab823ac0066f7b1b0686bf092"
+          },
+          {
+            "width": 306,
+            "height": 396,
+            "hash": "5fcdc77a5876c42c54f65b1371e640f266f096fdf14dd4a6cb0b507ea1c1ea79"
+          }
+        ],
+        "runs": [
+          {
+            "run": 1,
+            "variant": "before",
+            "copies": 6,
+            "copyMs": 9.54000000000002,
+            "totalMs": 35.400000000000034
+          },
+          {
+            "run": 1,
+            "variant": "after",
+            "copies": 1,
+            "copyMs": 1.8999999999999773,
+            "totalMs": 19.439999999999998
+          },
+          {
+            "run": 2,
+            "variant": "after",
+            "copies": 1,
+            "copyMs": 1.9799999999999898,
+            "totalMs": 22.54000000000002
+          },
+          {
+            "run": 2,
+            "variant": "before",
+            "copies": 6,
+            "copyMs": 9.43999999999997,
+            "totalMs": 26.340000000000003
+          },
+          {
+            "run": 3,
+            "variant": "before",
+            "copies": 6,
+            "copyMs": 8.899999999999977,
+            "totalMs": 37.68000000000001
+          },
+          {
+            "run": 3,
+            "variant": "after",
+            "copies": 1,
+            "copyMs": 1.9199999999999875,
+            "totalMs": 20.120000000000005
+          }
+        ]
+      },
+      "thumbnailTour": [
+        {
+          "run": 1,
+          "variant": "before",
+          "pages": 68,
+          "cleanedPages": 0,
+          "retained": 68,
+          "retainedOperators": 36108,
+          "firstMs": 321.29999999999995,
+          "keptReturnMs": 35.940000000000055,
+          "redrawMs": 316.6400000000003,
+          "first": {
+            "hash": 349837294,
+            "ink": 14142,
+            "width": 240,
+            "height": 310
+          }
+        },
+        {
+          "run": 1,
+          "variant": "after",
+          "pages": 68,
+          "cleanedPages": 68,
+          "retained": 0,
+          "retainedOperators": 0,
+          "firstMs": 367.4,
+          "keptReturnMs": 32.059999999999945,
+          "redrawMs": 316.3199999999997,
+          "first": {
+            "hash": 349837294,
+            "ink": 14142,
+            "width": 240,
+            "height": 310
+          }
+        },
+        {
+          "run": 2,
+          "variant": "after",
+          "pages": 68,
+          "cleanedPages": 68,
+          "retained": 0,
+          "retainedOperators": 0,
+          "firstMs": 318.1,
+          "keptReturnMs": 34.98000000000002,
+          "redrawMs": 313.2800000000002,
+          "first": {
+            "hash": 349837294,
+            "ink": 14142,
+            "width": 240,
+            "height": 310
+          }
+        },
+        {
+          "run": 2,
+          "variant": "before",
+          "pages": 68,
+          "cleanedPages": 0,
+          "retained": 68,
+          "retainedOperators": 36108,
+          "firstMs": 315.9200000000001,
+          "keptReturnMs": 33.13999999999987,
+          "redrawMs": 316.3800000000001,
+          "first": {
+            "hash": 349837294,
+            "ink": 14142,
+            "width": 240,
+            "height": 310
+          }
+        },
+        {
+          "run": 3,
+          "variant": "before",
+          "pages": 68,
+          "cleanedPages": 0,
+          "retained": 68,
+          "retainedOperators": 36108,
+          "firstMs": 317.02,
+          "keptReturnMs": 33.25999999999999,
+          "redrawMs": 317.24000000000024,
+          "first": {
+            "hash": 349837294,
+            "ink": 14142,
+            "width": 240,
+            "height": 310
+          }
+        },
+        {
+          "run": 3,
+          "variant": "after",
+          "pages": 68,
+          "cleanedPages": 68,
+          "retained": 0,
+          "retainedOperators": 0,
+          "firstMs": 318.9200000000001,
+          "keptReturnMs": 30.74000000000001,
+          "redrawMs": 317.46000000000004,
+          "first": {
+            "hash": 349837294,
+            "ink": 14142,
+            "width": 240,
+            "height": 310
+          }
+        }
+      ],
+      "viewportResize": [
+        {
+          "run": 1,
+          "variant": "before",
+          "pixelsBefore": 19388160,
+          "pixelsAfter": 19388160,
+          "budgetBefore": 33868800,
+          "budgetAfter": 6912000,
+          "sharpness": 1,
+          "blank": 0
+        },
+        {
+          "run": 1,
+          "variant": "after",
+          "pixelsBefore": 19388160,
+          "pixelsAfter": 5816448,
+          "budgetBefore": 33868800,
+          "budgetAfter": 6912000,
+          "sharpness": 1,
+          "blank": 0
+        },
+        {
+          "run": 2,
+          "variant": "after",
+          "pixelsBefore": 19388160,
+          "pixelsAfter": 5816448,
+          "budgetBefore": 33868800,
+          "budgetAfter": 6912000,
+          "sharpness": 1,
+          "blank": 0
+        },
+        {
+          "run": 2,
+          "variant": "before",
+          "pixelsBefore": 19388160,
+          "pixelsAfter": 19388160,
+          "budgetBefore": 33868800,
+          "budgetAfter": 6912000,
+          "sharpness": 1,
+          "blank": 0
+        },
+        {
+          "run": 3,
+          "variant": "before",
+          "pixelsBefore": 19388160,
+          "pixelsAfter": 19388160,
+          "budgetBefore": 33868800,
+          "budgetAfter": 6912000,
+          "sharpness": 1,
+          "blank": 0
+        },
+        {
+          "run": 3,
+          "variant": "after",
+          "pixelsBefore": 19388160,
+          "pixelsAfter": 5816448,
+          "budgetBefore": 33868800,
+          "budgetAfter": 6912000,
+          "sharpness": 1,
+          "blank": 0
+        }
+      ],
+      "hotPaths": [
+        {
+          "variant": "before",
+          "run": 1,
+          "preview": {
+            "cycles": 400,
+            "hits": 0,
+            "checksum": 439278.4188034188,
+            "ms": 4.700000000000003
+          },
+          "planner": {
+            "normal": {
+              "cycles": 16000,
+              "readsPerPlan": 18,
+              "usPerPlan": 0.7374999999999998
+            },
+            "overscan": {
+              "cycles": 700,
+              "readsPerPlan": 510,
+              "usPerPlan": 14.657142857142855
+            },
+            "budget": {
+              "cycles": 200,
+              "readsPerPlan": 144,
+              "usPerPlan": 77.5
+            }
+          },
+          "hosts": {
+            "lookups": 14879,
+            "meanMountCount": 171.5,
+            "jumpMs": 7.447499999999998,
+            "times": [
+              7.579999999999984, 7.600000000000023, 8.439999999999998, 7.360000000000014,
+              7.079999999999984, 7.180000000000007, 7.599999999999966, 6.740000000000009
+            ]
+          },
+          "search": {
+            "cycles": 200,
+            "ms": 17.340000000000032,
+            "matches": 27312,
+            "highlighted": 700,
+            "positions": [
+              {
+                "page": 0,
+                "current": 0,
+                "start": {
+                  "item": 2,
+                  "offset": 2
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 3
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              },
+              {
+                "page": 0,
+                "current": 1,
+                "start": {
+                  "item": 2,
+                  "offset": 9
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 10
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              }
+            ],
+            "wrap": {
+              "page": 109,
+              "current": 27311,
+              "start": {
+                "item": 102,
+                "offset": 22
+              },
+              "end": {
+                "item": 102,
+                "offset": 23
+              },
+              "text": "e",
+              "count": 27312,
+              "highlighted": 123
+            }
+          }
+        },
+        {
+          "variant": "after",
+          "run": 1,
+          "preview": {
+            "cycles": 400,
+            "hits": 400,
+            "checksum": 439278.4188034188,
+            "ms": 0.3200000000000003
+          },
+          "planner": {
+            "normal": {
+              "cycles": 16000,
+              "readsPerPlan": 0,
+              "usPerPlan": 0.49124999999999996
+            },
+            "overscan": {
+              "cycles": 700,
+              "readsPerPlan": 0,
+              "usPerPlan": 4.542857142857142
+            },
+            "budget": {
+              "cycles": 200,
+              "readsPerPlan": 144,
+              "usPerPlan": 8.900000000000006
+            }
+          },
+          "hosts": {
+            "lookups": 344,
+            "meanMountCount": 171.5,
+            "jumpMs": 7.539999999999992,
+            "times": [
+              8.379999999999995, 8.879999999999995, 7.699999999999989, 6.639999999999986,
+              7.860000000000014, 6.8799999999999955, 7.519999999999982, 6.4599999999999795
+            ]
+          },
+          "search": {
+            "cycles": 200,
+            "ms": 17.539999999999964,
+            "matches": 27312,
+            "highlighted": 700,
+            "positions": [
+              {
+                "page": 0,
+                "current": 0,
+                "start": {
+                  "item": 2,
+                  "offset": 2
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 3
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              },
+              {
+                "page": 0,
+                "current": 1,
+                "start": {
+                  "item": 2,
+                  "offset": 9
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 10
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              }
+            ],
+            "wrap": {
+              "page": 109,
+              "current": 27311,
+              "start": {
+                "item": 102,
+                "offset": 22
+              },
+              "end": {
+                "item": 102,
+                "offset": 23
+              },
+              "text": "e",
+              "count": 27312,
+              "highlighted": 123
+            }
+          }
+        },
+        {
+          "variant": "after",
+          "run": 2,
+          "preview": {
+            "cycles": 400,
+            "hits": 400,
+            "checksum": 439278.4188034188,
+            "ms": 0.31999999999999673
+          },
+          "planner": {
+            "normal": {
+              "cycles": 16000,
+              "readsPerPlan": 0,
+              "usPerPlan": 0.44500000000000006
+            },
+            "overscan": {
+              "cycles": 700,
+              "readsPerPlan": 0,
+              "usPerPlan": 4.8857142857142835
+            },
+            "budget": {
+              "cycles": 200,
+              "readsPerPlan": 144,
+              "usPerPlan": 10.400000000000027
+            }
+          },
+          "hosts": {
+            "lookups": 344,
+            "meanMountCount": 171.5,
+            "jumpMs": 7.464999999999996,
+            "times": [
+              6.660000000000025, 7.840000000000032, 7.659999999999968, 7.939999999999998,
+              7.099999999999966, 7.259999999999991, 7.720000000000027, 7.539999999999964
+            ]
+          },
+          "search": {
+            "cycles": 200,
+            "ms": 16.399999999999977,
+            "matches": 27312,
+            "highlighted": 700,
+            "positions": [
+              {
+                "page": 0,
+                "current": 0,
+                "start": {
+                  "item": 2,
+                  "offset": 2
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 3
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              },
+              {
+                "page": 0,
+                "current": 1,
+                "start": {
+                  "item": 2,
+                  "offset": 9
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 10
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              }
+            ],
+            "wrap": {
+              "page": 109,
+              "current": 27311,
+              "start": {
+                "item": 102,
+                "offset": 22
+              },
+              "end": {
+                "item": 102,
+                "offset": 23
+              },
+              "text": "e",
+              "count": 27312,
+              "highlighted": 123
+            }
+          }
+        },
+        {
+          "variant": "before",
+          "run": 2,
+          "preview": {
+            "cycles": 400,
+            "hits": 0,
+            "checksum": 439278.4188034188,
+            "ms": 4.9399999999999995
+          },
+          "planner": {
+            "normal": {
+              "cycles": 16000,
+              "readsPerPlan": 18,
+              "usPerPlan": 0.7175
+            },
+            "overscan": {
+              "cycles": 700,
+              "readsPerPlan": 510,
+              "usPerPlan": 13.999999999999995
+            },
+            "budget": {
+              "cycles": 200,
+              "readsPerPlan": 144,
+              "usPerPlan": 76.39999999999998
+            }
+          },
+          "hosts": {
+            "lookups": 14879,
+            "meanMountCount": 171.5,
+            "jumpMs": 7.420000000000009,
+            "times": [
+              7.460000000000036, 6.819999999999993, 8.660000000000025, 7.259999999999991,
+              8.079999999999984, 7.339999999999975, 6.860000000000014, 6.880000000000052
+            ]
+          },
+          "search": {
+            "cycles": 200,
+            "ms": 17.360000000000014,
+            "matches": 27312,
+            "highlighted": 700,
+            "positions": [
+              {
+                "page": 0,
+                "current": 0,
+                "start": {
+                  "item": 2,
+                  "offset": 2
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 3
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              },
+              {
+                "page": 0,
+                "current": 1,
+                "start": {
+                  "item": 2,
+                  "offset": 9
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 10
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              }
+            ],
+            "wrap": {
+              "page": 109,
+              "current": 27311,
+              "start": {
+                "item": 102,
+                "offset": 22
+              },
+              "end": {
+                "item": 102,
+                "offset": 23
+              },
+              "text": "e",
+              "count": 27312,
+              "highlighted": 123
+            }
+          }
+        },
+        {
+          "variant": "before",
+          "run": 3,
+          "preview": {
+            "cycles": 400,
+            "hits": 0,
+            "checksum": 439278.4188034188,
+            "ms": 5.16
+          },
+          "planner": {
+            "normal": {
+              "cycles": 16000,
+              "readsPerPlan": 18,
+              "usPerPlan": 0.7362500000000001
+            },
+            "overscan": {
+              "cycles": 700,
+              "readsPerPlan": 510,
+              "usPerPlan": 14.914285714285722
+            },
+            "budget": {
+              "cycles": 200,
+              "readsPerPlan": 144,
+              "usPerPlan": 76.4
+            }
+          },
+          "hosts": {
+            "lookups": 14879,
+            "meanMountCount": 171.5,
+            "jumpMs": 7.302499999999995,
+            "times": [
+              7.21999999999997, 7.319999999999993, 7.660000000000025, 7.060000000000002,
+              7.319999999999993, 7.800000000000011, 7.039999999999964, 7
+            ]
+          },
+          "search": {
+            "cycles": 200,
+            "ms": 16.58000000000004,
+            "matches": 27312,
+            "highlighted": 700,
+            "positions": [
+              {
+                "page": 0,
+                "current": 0,
+                "start": {
+                  "item": 2,
+                  "offset": 2
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 3
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              },
+              {
+                "page": 0,
+                "current": 1,
+                "start": {
+                  "item": 2,
+                  "offset": 9
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 10
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              }
+            ],
+            "wrap": {
+              "page": 109,
+              "current": 27311,
+              "start": {
+                "item": 102,
+                "offset": 22
+              },
+              "end": {
+                "item": 102,
+                "offset": 23
+              },
+              "text": "e",
+              "count": 27312,
+              "highlighted": 123
+            }
+          }
+        },
+        {
+          "variant": "after",
+          "run": 3,
+          "preview": {
+            "cycles": 400,
+            "hits": 400,
+            "checksum": 439278.4188034188,
+            "ms": 0.3200000000000003
+          },
+          "planner": {
+            "normal": {
+              "cycles": 16000,
+              "readsPerPlan": 0,
+              "usPerPlan": 0.38875000000000015
+            },
+            "overscan": {
+              "cycles": 700,
+              "readsPerPlan": 0,
+              "usPerPlan": 4.857142857142855
+            },
+            "budget": {
+              "cycles": 200,
+              "readsPerPlan": 144,
+              "usPerPlan": 9.100000000000001
+            }
+          },
+          "hosts": {
+            "lookups": 344,
+            "meanMountCount": 171.5,
+            "jumpMs": 6.780000000000001,
+            "times": [
+              7.300000000000011, 6.9599999999999795, 7.340000000000032, 6.560000000000002,
+              6.6200000000000045, 6.439999999999998, 6.680000000000007, 6.339999999999975
+            ]
+          },
+          "search": {
+            "cycles": 200,
+            "ms": 15.839999999999918,
+            "matches": 27312,
+            "highlighted": 700,
+            "positions": [
+              {
+                "page": 0,
+                "current": 0,
+                "start": {
+                  "item": 2,
+                  "offset": 2
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 3
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              },
+              {
+                "page": 0,
+                "current": 1,
+                "start": {
+                  "item": 2,
+                  "offset": 9
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 10
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              }
+            ],
+            "wrap": {
+              "page": 109,
+              "current": 27311,
+              "start": {
+                "item": 102,
+                "offset": 22
+              },
+              "end": {
+                "item": 102,
+                "offset": 23
+              },
+              "text": "e",
+              "count": 27312,
+              "highlighted": 123
+            }
+          }
+        },
+        {
+          "variant": "after",
+          "run": 4,
+          "preview": {
+            "cycles": 400,
+            "hits": 400,
+            "checksum": 439278.4188034188,
+            "ms": 0.3200000000000003
+          },
+          "planner": {
+            "normal": {
+              "cycles": 16000,
+              "readsPerPlan": 0,
+              "usPerPlan": 0.395
+            },
+            "overscan": {
+              "cycles": 700,
+              "readsPerPlan": 0,
+              "usPerPlan": 4.657142857142859
+            },
+            "budget": {
+              "cycles": 200,
+              "readsPerPlan": 144,
+              "usPerPlan": 8.900000000000006
+            }
+          },
+          "hosts": {
+            "lookups": 344,
+            "meanMountCount": 171.5,
+            "jumpMs": 6.964999999999996,
+            "times": [
+              7.479999999999961, 7.199999999999989, 7.28000000000003, 6.71999999999997,
+              7.240000000000009, 6.240000000000009, 7.019999999999982, 6.5400000000000205
+            ]
+          },
+          "search": {
+            "cycles": 200,
+            "ms": 15.639999999999986,
+            "matches": 27312,
+            "highlighted": 700,
+            "positions": [
+              {
+                "page": 0,
+                "current": 0,
+                "start": {
+                  "item": 2,
+                  "offset": 2
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 3
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              },
+              {
+                "page": 0,
+                "current": 1,
+                "start": {
+                  "item": 2,
+                  "offset": 9
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 10
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              }
+            ],
+            "wrap": {
+              "page": 109,
+              "current": 27311,
+              "start": {
+                "item": 102,
+                "offset": 22
+              },
+              "end": {
+                "item": 102,
+                "offset": 23
+              },
+              "text": "e",
+              "count": 27312,
+              "highlighted": 123
+            }
+          }
+        },
+        {
+          "variant": "before",
+          "run": 4,
+          "preview": {
+            "cycles": 400,
+            "hits": 0,
+            "checksum": 439278.4188034188,
+            "ms": 4.580000000000002
+          },
+          "planner": {
+            "normal": {
+              "cycles": 16000,
+              "readsPerPlan": 18,
+              "usPerPlan": 0.7275
+            },
+            "overscan": {
+              "cycles": 700,
+              "readsPerPlan": 510,
+              "usPerPlan": 14.542857142857143
+            },
+            "budget": {
+              "cycles": 200,
+              "readsPerPlan": 144,
+              "usPerPlan": 76.2
+            }
+          },
+          "hosts": {
+            "lookups": 14879,
+            "meanMountCount": 171.5,
+            "jumpMs": 6.93,
+            "times": [
+              7.6200000000000045, 6.6200000000000045, 6.840000000000032, 6.860000000000014,
+              7.319999999999993, 6.239999999999952, 6.979999999999961, 6.960000000000036
+            ]
+          },
+          "search": {
+            "cycles": 200,
+            "ms": 16.340000000000032,
+            "matches": 27312,
+            "highlighted": 700,
+            "positions": [
+              {
+                "page": 0,
+                "current": 0,
+                "start": {
+                  "item": 2,
+                  "offset": 2
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 3
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              },
+              {
+                "page": 0,
+                "current": 1,
+                "start": {
+                  "item": 2,
+                  "offset": 9
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 10
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              }
+            ],
+            "wrap": {
+              "page": 109,
+              "current": 27311,
+              "start": {
+                "item": 102,
+                "offset": 22
+              },
+              "end": {
+                "item": 102,
+                "offset": 23
+              },
+              "text": "e",
+              "count": 27312,
+              "highlighted": 123
+            }
+          }
+        },
+        {
+          "variant": "before",
+          "run": 5,
+          "preview": {
+            "cycles": 400,
+            "hits": 0,
+            "checksum": 439278.4188034188,
+            "ms": 4.379999999999999
+          },
+          "planner": {
+            "normal": {
+              "cycles": 16000,
+              "readsPerPlan": 18,
+              "usPerPlan": 0.71
+            },
+            "overscan": {
+              "cycles": 700,
+              "readsPerPlan": 510,
+              "usPerPlan": 14.599999999999998
+            },
+            "budget": {
+              "cycles": 200,
+              "readsPerPlan": 144,
+              "usPerPlan": 74.69999999999999
+            }
+          },
+          "hosts": {
+            "lookups": 14879,
+            "meanMountCount": 171.5,
+            "jumpMs": 7.079999999999998,
+            "times": [
+              7.1200000000000045, 7.139999999999986, 7.319999999999993, 6.680000000000007, 6.5, 7,
+              7.740000000000009, 7.139999999999986
+            ]
+          },
+          "search": {
+            "cycles": 200,
+            "ms": 17.860000000000014,
+            "matches": 27312,
+            "highlighted": 700,
+            "positions": [
+              {
+                "page": 0,
+                "current": 0,
+                "start": {
+                  "item": 2,
+                  "offset": 2
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 3
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              },
+              {
+                "page": 0,
+                "current": 1,
+                "start": {
+                  "item": 2,
+                  "offset": 9
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 10
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              }
+            ],
+            "wrap": {
+              "page": 109,
+              "current": 27311,
+              "start": {
+                "item": 102,
+                "offset": 22
+              },
+              "end": {
+                "item": 102,
+                "offset": 23
+              },
+              "text": "e",
+              "count": 27312,
+              "highlighted": 123
+            }
+          }
+        },
+        {
+          "variant": "after",
+          "run": 5,
+          "preview": {
+            "cycles": 400,
+            "hits": 400,
+            "checksum": 439278.4188034188,
+            "ms": 0.36000000000001364
+          },
+          "planner": {
+            "normal": {
+              "cycles": 16000,
+              "readsPerPlan": 0,
+              "usPerPlan": 0.5637499999999989
+            },
+            "overscan": {
+              "cycles": 700,
+              "readsPerPlan": 0,
+              "usPerPlan": 9.542857142857153
+            },
+            "budget": {
+              "cycles": 200,
+              "readsPerPlan": 144,
+              "usPerPlan": 9.599999999999937
+            }
+          },
+          "hosts": {
+            "lookups": 344,
+            "meanMountCount": 171.5,
+            "jumpMs": 11.39749999999998,
+            "times": [
+              9.759999999999991, 10.100000000000023, 10.139999999999986, 8.319999999999936,
+              13.919999999999959, 9.5, 11.340000000000032, 18.09999999999991
+            ]
+          },
+          "search": {
+            "cycles": 200,
+            "ms": 17.799999999999955,
+            "matches": 27312,
+            "highlighted": 700,
+            "positions": [
+              {
+                "page": 0,
+                "current": 0,
+                "start": {
+                  "item": 2,
+                  "offset": 2
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 3
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              },
+              {
+                "page": 0,
+                "current": 1,
+                "start": {
+                  "item": 2,
+                  "offset": 9
+                },
+                "end": {
+                  "item": 2,
+                  "offset": 10
+                },
+                "text": "e",
+                "count": 27312,
+                "highlighted": 700
+              }
+            ],
+            "wrap": {
+              "page": 109,
+              "current": 27311,
+              "start": {
+                "item": 102,
+                "offset": 22
+              },
+              "end": {
+                "item": 102,
+                "offset": 23
+              },
+              "text": "e",
+              "count": 27312,
+              "highlighted": 123
+            }
+          }
+        }
+      ],
+      "turnTaking": {
+        "searchIndex": {
+          "waits": 1,
+          "waitedMs": 262841,
+          "repeatedJobs": 0
+        },
+        "print": {
+          "waits": 0,
+          "waitedMs": 0,
+          "repeatedJobs": 0
+        },
+        "thumbnailAndResize": {
+          "waits": 1,
+          "waitedMs": 22780,
+          "repeatedJobs": 0
+        },
+        "hotPaths": "waited once (1 min in all) for other Playwright browsers and repeated 1 job that another browser overlapped"
+      },
+      "zoomCache": {
+        "baseline": "build with shrink-on-resize using the transformed view, before distinguishing scroller bounds",
+        "purpose": "Cache ownership and pixel fidelity checks, independent of timing. Other browser checks could run concurrently.",
+        "runs": [
+          {
+            "which": "before",
+            "run": 1,
+            "scenario": "preview",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsDuring": 1938816,
+              "pixelsRestored": 1938816,
+              "scaleBefore": 1,
+              "scaleDuring": 4,
+              "scaleRestored": 1,
+              "widthBefore": 980,
+              "widthDuring": 980,
+              "heightBefore": 720,
+              "heightDuring": 720,
+              "returnPageOne": {
+                "immediate": false,
+                "restoredLayers": 0,
+                "detailDraws": 3,
+                "blank": 0,
+                "sharpness": 1
+              }
+            }
+          },
+          {
+            "which": "after",
+            "run": 1,
+            "scenario": "preview",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsDuring": 19388160,
+              "pixelsRestored": 19388160,
+              "scaleBefore": 1,
+              "scaleDuring": 4,
+              "scaleRestored": 1,
+              "widthBefore": 980,
+              "widthDuring": 980,
+              "heightBefore": 720,
+              "heightDuring": 720,
+              "returnPageOne": {
+                "immediate": true,
+                "restoredLayers": 3,
+                "detailDraws": 0,
+                "blank": 0,
+                "sharpness": 1
+              }
+            }
+          },
+          {
+            "which": "before",
+            "run": 1,
+            "scenario": "resize",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsAfter": 5816448,
+              "budgetBefore": 33868800,
+              "budgetAfter": 6912000,
+              "sharpness": 1,
+              "blank": 0
+            }
+          },
+          {
+            "which": "after",
+            "run": 1,
+            "scenario": "resize",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsAfter": 5816448,
+              "budgetBefore": 33868800,
+              "budgetAfter": 6912000,
+              "sharpness": 1,
+              "blank": 0
+            }
+          },
+          {
+            "which": "after",
+            "run": 2,
+            "scenario": "preview",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsDuring": 19388160,
+              "pixelsRestored": 19388160,
+              "scaleBefore": 1,
+              "scaleDuring": 4,
+              "scaleRestored": 1,
+              "widthBefore": 980,
+              "widthDuring": 980,
+              "heightBefore": 720,
+              "heightDuring": 720,
+              "returnPageOne": {
+                "immediate": true,
+                "restoredLayers": 3,
+                "detailDraws": 0,
+                "blank": 0,
+                "sharpness": 1
+              }
+            }
+          },
+          {
+            "which": "before",
+            "run": 2,
+            "scenario": "preview",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsDuring": 1938816,
+              "pixelsRestored": 1938816,
+              "scaleBefore": 1,
+              "scaleDuring": 4,
+              "scaleRestored": 1,
+              "widthBefore": 980,
+              "widthDuring": 980,
+              "heightBefore": 720,
+              "heightDuring": 720,
+              "returnPageOne": {
+                "immediate": false,
+                "restoredLayers": 0,
+                "detailDraws": 3,
+                "blank": 0,
+                "sharpness": 1
+              }
+            }
+          },
+          {
+            "which": "after",
+            "run": 2,
+            "scenario": "resize",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsAfter": 5816448,
+              "budgetBefore": 33868800,
+              "budgetAfter": 6912000,
+              "sharpness": 1,
+              "blank": 0
+            }
+          },
+          {
+            "which": "before",
+            "run": 2,
+            "scenario": "resize",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsAfter": 5816448,
+              "budgetBefore": 33868800,
+              "budgetAfter": 6912000,
+              "sharpness": 1,
+              "blank": 0
+            }
+          },
+          {
+            "which": "before",
+            "run": 3,
+            "scenario": "preview",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsDuring": 1938816,
+              "pixelsRestored": 1938816,
+              "scaleBefore": 1,
+              "scaleDuring": 4,
+              "scaleRestored": 1,
+              "widthBefore": 980,
+              "widthDuring": 980,
+              "heightBefore": 720,
+              "heightDuring": 720,
+              "returnPageOne": {
+                "immediate": false,
+                "restoredLayers": 0,
+                "detailDraws": 3,
+                "blank": 0,
+                "sharpness": 1
+              }
+            }
+          },
+          {
+            "which": "after",
+            "run": 3,
+            "scenario": "preview",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsDuring": 19388160,
+              "pixelsRestored": 19388160,
+              "scaleBefore": 1,
+              "scaleDuring": 4,
+              "scaleRestored": 1,
+              "widthBefore": 980,
+              "widthDuring": 980,
+              "heightBefore": 720,
+              "heightDuring": 720,
+              "returnPageOne": {
+                "immediate": true,
+                "restoredLayers": 3,
+                "detailDraws": 0,
+                "blank": 0,
+                "sharpness": 1
+              }
+            }
+          },
+          {
+            "which": "before",
+            "run": 3,
+            "scenario": "resize",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsAfter": 5816448,
+              "budgetBefore": 33868800,
+              "budgetAfter": 6912000,
+              "sharpness": 1,
+              "blank": 0
+            }
+          },
+          {
+            "which": "after",
+            "run": 3,
+            "scenario": "resize",
+            "result": {
+              "pixelsBefore": 19388160,
+              "pixelsAfter": 5816448,
+              "budgetBefore": 33868800,
+              "budgetAfter": 6912000,
+              "sharpness": 1,
+              "blank": 0
+            }
+          }
+        ]
+      }
+    }
+  }
+}

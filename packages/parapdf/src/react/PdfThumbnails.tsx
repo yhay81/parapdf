@@ -202,6 +202,8 @@ export function PdfThumbnails({
     [listLayout, pageCount],
   );
   const [bounds, setBounds] = useState<{ first: number; last: number } | null>(null);
+  const boundsRef = useRef<{ first: number; last: number } | null>(bounds);
+  boundsRef.current = bounds;
 
   const activeFirst =
     pageCount <= 0
@@ -238,11 +240,12 @@ export function PdfThumbnails({
   };
 
   const applyBounds = useCallback((next: { first: number; last: number }) => {
-    setBounds((prev) => {
-      const curFirst = prev ? prev.first : latestRef.current.initialFirst;
-      const curLast = prev ? prev.last : latestRef.current.initialLast;
-      return curFirst === next.first && curLast === next.last ? prev : next;
-    });
+    const prev = boundsRef.current;
+    const curFirst = prev ? prev.first : latestRef.current.initialFirst;
+    const curLast = prev ? prev.last : latestRef.current.initialLast;
+    if (curFirst === next.first && curLast === next.last) return;
+    boundsRef.current = next;
+    setBounds(next);
   }, []);
 
   const syncWindowFromScroll = useCallback(() => {

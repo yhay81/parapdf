@@ -102,6 +102,30 @@ describe("print orientation", () => {
   });
 });
 
+describe("print annotations", () => {
+  it("takes one snapshot for every sheet in the job", async (t) => {
+    environment(t);
+    const { session, drawings } = await openSession({ pages: [LETTER, LETTER] });
+    const storage = session.proxy.annotationStorage;
+    const snapshot = storage.print;
+    let reads = 0;
+    Object.defineProperty(storage, "print", {
+      get() {
+        reads++;
+        return snapshot;
+      },
+    });
+    const printing = printDocument(session);
+    for (let i = 0; i < 2; i++) {
+      await settle();
+      assert.equal(drawings[i]?.request.intent, "print");
+      drawings[i]?.resolve();
+    }
+    await printing;
+    assert.equal(reads, 1);
+  });
+});
+
 describe("print job replacement", () => {
   it("waits for pending edits before WillPrint and sends DidPrint when the dialog closes", async (t) => {
     const env = environment(t);

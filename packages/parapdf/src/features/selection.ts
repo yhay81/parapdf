@@ -158,9 +158,10 @@ function selectedRects(
   const turned = turnedSize(size, rotation);
   const back = ((360 - rotation) % 360) as Rotation;
   const walker = document.createTreeWalker(layer, NodeFilter.SHOW_TEXT);
+  let part: Range | null = null;
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     if (!range.intersectsNode(node) || !(node instanceof Text)) continue;
-    const part = document.createRange();
+    part ??= document.createRange();
     part.selectNodeContents(node);
     if (node === range.startContainer) part.setStart(node, range.startOffset);
     if (node === range.endContainer) part.setEnd(node, range.endOffset);
@@ -224,11 +225,12 @@ function textPointOf(
   // Between runs, in the layer or a marked-content span that holds them.
   const point = document.createRange();
   point.setStart(node, offset);
+  let run: Range | null = null;
   for (let item = 0; item < elements.length; item++) {
     const element = elements[item];
     // pdf.js leaves the runs of empty items out of the layer.
     if (!element?.parentNode) continue;
-    const run = document.createRange();
+    run ??= document.createRange();
     run.selectNode(element);
     if (point.compareBoundaryPoints(Range.START_TO_START, run) <= 0) {
       return { pageIndex, item, offset: 0 };

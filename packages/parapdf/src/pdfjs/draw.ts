@@ -178,7 +178,12 @@ export function drawPage(
       canvas,
       viewport,
       ...(colors ? { pageColors: colors } : {}),
-      ...(layers ? { optionalContentConfigPromise: Promise.resolve(layers) } : {}),
+      ...(layers
+        ? {
+            optionalContentConfigPromise:
+              layers instanceof Promise ? layers : Promise.resolve(layers),
+          }
+        : {}),
       ...(print
         ? {
             intent: "print",

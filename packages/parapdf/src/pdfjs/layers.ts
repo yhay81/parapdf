@@ -50,6 +50,8 @@ function layersOf(config: OptionalContentConfig): PdfLayer[] {
 export class LayerState {
   /** What the screen shows. */
   readonly config: OptionalContentConfig;
+  /** Pre-resolved promise of `config`, reused across `drawPage()` calls without allocating wrappers. */
+  readonly configPromise: Promise<OptionalContentConfig>;
   readonly #doc: Pdfjs.PDFDocumentProxy;
   /** Every change, in order, to replay on a configuration for printing. */
   readonly #changes: ((config: OptionalContentConfig) => void)[] = [];
@@ -59,6 +61,7 @@ export class LayerState {
   private constructor(doc: Pdfjs.PDFDocumentProxy, config: OptionalContentConfig) {
     this.#doc = doc;
     this.config = config;
+    this.configPromise = Promise.resolve(config);
   }
 
   static async load(doc: Pdfjs.PDFDocumentProxy): Promise<LayerState> {

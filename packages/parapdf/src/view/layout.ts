@@ -67,6 +67,8 @@ export interface Layout {
   /** The size of the content: in "page" mode, of the row shown. */
   readonly totalHeight: number;
   readonly totalWidth: number;
+  /** True when every page has the same unturned PDF box as page 0. */
+  readonly uniform?: boolean;
 }
 
 export interface LayoutOptions {
@@ -113,6 +115,65 @@ export function computeLayout(
     page = 0,
   } = options;
   const count = sizes.length;
+  const quarterTurn = rotation % 180 !== 0;
+  const firstSize = sizes[0];
+  let uniform = count > 0;
+
+  // Single-page rows ("vertical" or "page" with spread "none") share row and
+  // page arrays directly: rowTops === tops, rowWidths === widths,
+  // rowHeights === heights, rowFirst === rowLast, and offsets are all zero.
+  if (spread === "none" && (scrollMode === "vertical" || scrollMode === "page")) {
+    const tops = new Float64Array(count);
+    const widths = new Float64Array(count);
+    const heights = new Float64Array(count);
+    const offsets = new Float64Array(count);
+    const rowFirst = new Int32Array(count);
+    const stacked = scrollMode === "vertical";
+    let y = gap;
+    let maxWidth = 0;
+    let maxHeight = 0;
+    for (let index = 0; index < count; index++) {
+      const size = sizes[index];
+      const rawW = size ? size.width : 0;
+      const rawH = size ? size.height : 0;
+      if (uniform && (!firstSize || rawW !== firstSize.width || rawH !== firstSize.height)) {
+        uniform = false;
+      }
+      const w = Math.round((quarterTurn ? rawH : rawW) * scale);
+      const h = Math.round((quarterTurn ? rawW : rawH) * scale);
+      widths[index] = w;
+      heights[index] = h;
+      tops[index] = stacked ? y : gap;
+      rowFirst[index] = index;
+      y += h + gap;
+      if (w > maxWidth) maxWidth = w;
+      if (h > maxHeight) maxHeight = h;
+    }
+    const layout: Layout = {
+      scale,
+      rotation,
+      gap,
+      spread,
+      scrollMode,
+      direction,
+      sizes,
+      tops,
+      widths,
+      heights,
+      offsets,
+      rowTops: tops,
+      rowWidths: widths,
+      rowHeights: heights,
+      rowFirst,
+      rowLast: rowFirst,
+      shown: null,
+      totalHeight: stacked ? y : maxHeight + 2 * gap,
+      totalWidth: maxWidth + 2 * gap,
+      uniform,
+    };
+    return scrollMode === "page" && count > 0 ? withShownRow(layout, page) : layout;
+  }
+
   const tops = new Float64Array(count);
   const widths = new Float64Array(count);
   const heights = new Float64Array(count);
@@ -123,9 +184,14 @@ export function computeLayout(
   const rowFirst = new Int32Array(count);
   const rowLast = new Int32Array(count);
   for (let index = 0; index < count; index++) {
-    const size = turnedSize(sizes[index] ?? { width: 0, height: 0 }, rotation);
-    widths[index] = Math.round(size.width * scale);
-    heights[index] = Math.round(size.height * scale);
+    const size = sizes[index];
+    const rawW = size ? size.width : 0;
+    const rawH = size ? size.height : 0;
+    if (uniform && (!firstSize || rawW !== firstSize.width || rawH !== firstSize.height)) {
+      uniform = false;
+    }
+    widths[index] = Math.round((quarterTurn ? rawH : rawW) * scale);
+    heights[index] = Math.round((quarterTurn ? rawW : rawH) * scale);
   }
   /** The width of pages `first` to `end` (exclusive) side by side. */
   const span = (first: number, end: number) => {
@@ -201,6 +267,7 @@ export function computeLayout(
     shown: null,
     totalHeight: stacked ? y : maxHeight + 2 * gap,
     totalWidth: maxWidth + 2 * gap,
+    uniform,
   };
   return scrollMode === "page" && count > 0 ? withShownRow(layout, page) : layout;
 }
@@ -402,6 +469,69 @@ export function zoomTarget(
   return {
     left: pageLeft(next, page, width) + withinX * (next.widths[page] ?? 0) - anchor.x,
     top: pageTop(next, page, height) + withinY * (next.heights[page] ?? 0) - anchor.y,
+  };
+}
+
+/**
+ * Zoom-preview target and content dimensions for one shown page or uniform
+ * single-page rows outside "wrapped" mode. Returns null when full row
+ * layout is needed. Matches `computeLayout(sizes, nextScale, ...)` +
+ * `zoomTarget(...)` without allocating per-page arrays during high-rate wheel
+ * or pinch gestures.
+ */
+export function previewZoomMetrics(
+  layout: Layout,
+  nextScale: number,
+  scroller: ScrollerSize,
+  anchor: { x: number; y: number },
+  point: { x: number; y: number },
+): { left: number; top: number; totalWidth: number; totalHeight: number } | null {
+  const { sizes, gap, rotation, spread, scrollMode, direction } = layout;
+  const count = sizes.length;
+  const size = sizes[layout.shown?.first ?? 0];
+  if (
+    !size ||
+    spread !== "none" ||
+    scrollMode === "wrapped" ||
+    (scrollMode !== "page" && (!layout.uniform || !Number.isInteger(gap)))
+  ) {
+    return null;
+  }
+  const quarterTurn = rotation % 180 !== 0;
+  const nextW = Math.round((quarterTurn ? size.height : size.width) * nextScale);
+  const nextH = Math.round((quarterTurn ? size.width : size.height) * nextScale);
+  const { width, height } = scroller;
+  const page = pageAtPoint(layout, point.x, point.y, width);
+  const withinX = (point.x - pageLeft(layout, page, width)) / (layout.widths[page] || 1);
+  const withinY = (point.y - pageTop(layout, page, height)) / (layout.heights[page] || 1);
+
+  let totalWidth: number;
+  let totalHeight: number;
+  let nextLeft: number;
+  let nextTop: number;
+  if (scrollMode === "horizontal") {
+    const rowWidth = count * nextW + (count - 1) * gap;
+    const offset = direction === "rtl" ? (count - 1 - page) * (nextW + gap) : page * (nextW + gap);
+    totalWidth = rowWidth + 2 * gap;
+    totalHeight = nextH + 2 * gap;
+    nextLeft = Math.max(gap, (width - rowWidth) / 2) + offset;
+    nextTop = gap + Math.max(0, (height - nextH) / 2 - gap);
+  } else if (scrollMode === "page") {
+    totalWidth = nextW + 2 * gap;
+    totalHeight = nextH + 2 * gap;
+    nextLeft = Math.max(gap, (width - nextW) / 2);
+    nextTop = gap + Math.max(0, (height - nextH) / 2 - gap);
+  } else {
+    totalWidth = nextW + 2 * gap;
+    totalHeight = gap + count * (nextH + gap);
+    nextLeft = Math.max(gap, (width - nextW) / 2);
+    nextTop = gap + page * (nextH + gap);
+  }
+  return {
+    left: nextLeft + withinX * nextW - anchor.x,
+    top: nextTop + withinY * nextH - anchor.y,
+    totalWidth,
+    totalHeight,
   };
 }
 

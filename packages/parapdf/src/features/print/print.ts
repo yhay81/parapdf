@@ -119,6 +119,8 @@ export async function printDocument(
       layers ? layers.forPrint() : Promise.resolve(undefined),
     ]);
     if (cleaned) return;
+    signal?.throwIfAborted();
+    const print = session.proxy.annotationStorage.print;
     style.textContent = printCss(first);
     for (let pageIndex = 0; pageIndex < session.pageCount; pageIndex++) {
       if (cleaned) return;
@@ -138,7 +140,7 @@ export async function printDocument(
         canvas,
         // What was typed into form fields, and the layers as the viewer
         // shows them, on pdf.js's configuration for printing.
-        print: session.proxy.annotationStorage.print,
+        print,
         ...(printLayers ? { layers: printLayers } : {}),
       });
       const abort = () => task.cancel();

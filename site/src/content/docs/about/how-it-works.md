@@ -14,8 +14,6 @@ around React rather than an `<iframe>` ([Why React, not an iframe](/why-react/))
 
 ## Layers of the runtime
 
-Dependencies point down only:
-
 - **pdf.js**: loading pdf.js, its worker, and its files, and what is
   specific to how ParaPDF drives it: drawing a page or a region into a
   canvas, the text layer, links, the structure tree, forms, and the
@@ -23,8 +21,8 @@ Dependencies point down only:
 - **Documents**: a session per open document, shared by its viewers.
 - **Views**: a `Viewer` per viewport, with its layout, scrolling, zoom,
   gestures, keyboard, mounted window, current page, and navigation.
-- **Rendering**: a pure planner that decides what each page draws, and a
-  renderer that carries the plans out and owns the pages' DOM.
+- **Rendering**: a planner chooses drawings. The renderer manages canvases
+  and PDF layers inside each page.
 - **Features**: search, history, forms, annotation editing, printing,
   thumbnails, and the rest, each attaching to a viewer or a session. The
   core imports none of them.
@@ -72,28 +70,22 @@ other viewers of the document carry on. It keeps its position and its
 annotations, and returns to them when a viewport shows it again.
 
 Layouts are immutable per zoom level, held in typed arrays. A zoom sizes
-the content element imperatively and restores the anchored scroll position
-before React renders the mounted pages again. A pinch previews with a CSS
-transform where its commit will put the content, and the pages it brings
-into view mount and draw before the fingers lift.
+the content element and restores the anchored scroll position. A pinch
+previews that position with a CSS transform. Pages brought into view
+mount and draw before the fingers lift.
 
 ## React stays out of the hot path
 
-Each viewer publishes its view state in a single key-filtered store: every
-update reports the exact fields that changed (layout, mounted window, current
-page, scale, zoom mode, page count, rotation, spread, scroll mode, direction,
-tool, and unrotated page sizes), so readers subscribe only to the fields they
-read. While the reader scrolls or pinches,
-the viewer computes every frame but publishes only changes, and `PdfViewer`
-selects only the mounted window and the layout: a scroll across several pages
-commits React a few times, not once a frame. `PdfViewer`'s change callbacks
-are called from the viewer's own store subscription, so they cost React
-nothing unless the application sets state in them.
+React places the scroll container and an empty element for the pages.
+As the reader scrolls, the viewer adds or removes a `<section>` for each
+page entering or leaving the mounted window. The renderer can start drawing
+in a new section in the same frame. React places application overlays inside
+those sections through portals.
 
-Pixels never go through React. React renders each mounted page's host, a
-`<section>`, and any active overlay layer (`PdfPageOverlays` inline inside
-`PdfPage`, `PdfPageOverlay` portaled into that layer); everything else in it is
-the renderer's.
+Each viewer tells subscribers which fields changed. A page
+counter can subscribe to the current page and update once when the reader
+crosses a page boundary. A `PdfPageOverlay` on a single page follows that
+page's host as it mounts and unmounts.
 
 ## Rendering: a planner and a renderer
 
@@ -122,7 +114,7 @@ white or only its base.
 The renderer compares the plan with what pages show and draw, and starts,
 cancels, and releases drawings. It builds each page's canvases and the
 containers of its text, structure, annotation, and editor layers at the
-start of the host React places.
+start of that page's section.
 
 ## Pages you come back to show at once
 
