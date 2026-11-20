@@ -142,9 +142,10 @@ that matters for performance or direction gets a decision record.
 - `docs/` — `architecture.md` and `decisions/`.
 - `bench/upstream/` — investigations of pdf.js and WebKit bugs, with their
   reproduction pages and the reports drafted or filed from them.
-- `.github/` — CI, the script it installs Playwright's browsers with
-  (`scripts/install-browser.sh`), issue forms, the pull request template,
-  and Dependabot.
+- `.github/` — CI, release publishing and GitHub releases
+  (`workflows/release.yml`, `scripts/release-notes.mjs`), the script CI
+  installs Playwright's browsers with (`scripts/install-browser.sh`), issue
+  forms, the pull request template, and Dependabot.
 
 ## Commands
 
@@ -295,14 +296,14 @@ that development ports stay outside the functional checks' range.
    Firefox with `ENGINE=pdfjs`, and `pnpm --filter @parapdf/site build`,
    `check:demo`, and `check:showcases`; commit, push `main`, and wait for CI
    to pass.
-3. Tag that commit on `main` `vX.Y.Z` and push the tag, which deploys
-   the documentation site (`.github/workflows/site.yml`).
-4. Run `pnpm --filter parapdf publish` from that commit, in a checkout with
-   no uncommitted or untracked files (pnpm refuses otherwise). pnpm applies
-   `publishConfig` and runs `prepack`, which builds and copies the license
-   and notices in. npm asks the maintainer to approve the login and the
-   publish in the browser.
-5. Create the GitHub release for the tag from its `CHANGELOG.md` entry.
+3. Tag that commit on `main` `vX.Y.Z` and push the tag. Pushing `vX.Y.Z`
+   deploys the documentation site (`.github/workflows/site.yml`), packs the
+   package (`pnpm pack` applies `publishConfig` and runs `prepack`, which
+   builds and copies the license and notices in), publishes it to npm
+   through OIDC Trusted Publishing with provenance, and creates the GitHub
+   release from its `CHANGELOG.md` entry (`.github/workflows/release.yml`,
+   `.github/scripts/release-notes.mjs`; `workflow_dispatch` reruns a tag if
+   needed).
 
 When pdfjs-dist publishes a security fix, release on it soon, and say so in
 the release's entry: `SECURITY.md` promises it, because the package ships
