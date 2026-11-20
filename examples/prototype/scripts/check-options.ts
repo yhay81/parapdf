@@ -1028,45 +1028,40 @@ try {
     "toggling dynamic overlays preserves a fixed overlay's focused input and draft",
     keptOnAdd && (await noteStayed()),
   );
-  const dynamicOverlays = await live.evaluate(async () => {
-    const win = window as unknown as {
-      __overlayEvaluations?: number[];
-      __setOverlayTest?: (patch: { dynamicBadge?: string | null }) => void;
-      __viewer: ViewerController;
-    };
-    win.__viewer.goToPage(4);
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    win.__overlayEvaluations = [];
-    win.__setOverlayTest?.({ dynamicBadge: "tag" });
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    const initialText =
-      document.querySelector('section[data-page="5"] .test-dynamic-overlay')?.textContent ?? null;
-    const beforeRange = {
-      first: win.__viewer.store.get().first,
-      last: win.__viewer.store.get().last,
-    };
-    win.__overlayEvaluations = [];
+  await live.evaluate(() => {
+    (window as unknown as Demo).__viewer.goToPage(4);
+    window.__setOverlayTest?.({ dynamicBadge: "tag" });
+  });
+  const initialBadge = live.locator('section[data-page="5"] .test-dynamic-overlay');
+  await initialBadge.waitFor({ state: "visible" });
+  const initialText = await initialBadge.textContent();
+  const beforeRange = await live.evaluate(() => {
+    const viewer = (window as unknown as Demo).__viewer;
+    const { first, last } = viewer.store.get();
+    window.__overlayEvaluations = [];
     // Shift the mounted window down by one page while page 5 remains mounted.
-    win.__viewer.goToPage(5);
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    const afterRange = {
-      first: win.__viewer.store.get().first,
-      last: win.__viewer.store.get().last,
-    };
-    return {
-      initialText,
-      beforeRange,
-      afterRange,
-      reevaluated: [...(win.__overlayEvaluations ?? [])],
-    };
+    viewer.goToPage(5);
+    return { first, last };
+  });
+  // React can commit a portal later than the frame that moved its page host.
+  await live.waitForFunction((previousLast) => {
+    const { last } = (window as unknown as Demo).__viewer.store.get();
+    return (
+      last > previousLast &&
+      !!document.querySelector(`section[data-page="${last + 1}"] .test-dynamic-overlay`)
+    );
+  }, beforeRange.last);
+  const shifted = await live.evaluate(() => {
+    const { first, last } = (window as unknown as Demo).__viewer.store.get();
+    return { first, last, reevaluated: window.__overlayEvaluations ?? [] };
   });
   check(
     "PdfPageOverlays renders per-page overlays and keeps mounted pages memoized as the window shifts",
-    dynamicOverlays.initialText === "tag-5" &&
-      dynamicOverlays.afterRange.last > dynamicOverlays.beforeRange.last &&
-      !dynamicOverlays.reevaluated.includes(4) &&
-      dynamicOverlays.reevaluated.includes(dynamicOverlays.afterRange.last),
-    JSON.stringify(dynamicOverlays),
+    initialText === "tag-5" &&
+      shifted.last > beforeRange.last &&
+      !shifted.reevaluated.includes(4) &&
+      shifted.reevaluated.includes(shifted.last),
+    JSON.stringify({ initialText, beforeRange, shifted }),
   );
   await live.context().close();
 
