@@ -8,7 +8,7 @@ and its layers, through its core display API (`getDocument`, page
 rendering, `TextLayer`, `AnnotationLayer`, and the annotation editor), with
 no engine boundary between them and the rest. It does not use the viewer
 components in `pdfjs-dist/web/`, and it neither forks nor patches pdf.js.
-pdf.js won the [engine benchmark](/about/performance/#the-engine) on size
+pdf.js won the [engine benchmark](https://github.com/yhay81/parapdf/blob/main/docs/decisions/0001-pdfjs-only.md#evidence) on size
 and vector drawing; the rest is ParaPDF's own runtime, designed
 around React rather than an `<iframe>` ([Why React, not an iframe](/why-react/)).
 
