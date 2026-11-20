@@ -1391,37 +1391,45 @@ try {
   // --- Declarative <PdfAnnotationEditor>: controlled tool and live unmount ---
   {
     const { page, errors } = await open(launched.browser, demo("file=usrguide.pdf"));
-    await editorLayer(page, 1);
-    const controlled = await page.evaluate(async () => {
-      const demo = window as unknown as Demo & { __toolChanges?: string[] };
+    type ControlledDemo = Demo & { __toolChanges: string[] };
+    await page.evaluate(() => {
+      const demo = window as unknown as ControlledDemo;
       demo.__toolChanges = [];
       demo.__setFeatures?.({
         annotationTool: "highlight",
-        onAnnotationToolChange: (next: string) => demo.__toolChanges?.push(next),
+        onAnnotationToolChange: (next: string) => demo.__toolChanges.push(next),
       });
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      const applied = demo.__annotations?.store.get().tool;
-      await demo.__annotations?.setTool("ink");
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      const reverted = demo.__annotations?.store.get().tool;
-      const changes = [...(demo.__toolChanges ?? [])];
-      demo.__setFeatures?.({ annotations: false });
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      const detached = demo.__annotations === null;
-      const layersLeft = document.querySelectorAll(".parapdf-annotation-editor-layer").length;
-      return { applied, reverted, changes, detached, layersLeft };
+    });
+    await page.waitForFunction(() => window.__annotations?.store.get().tool === "highlight");
+    const applied = (await viewerState(page)).annotationTool;
+    await page.evaluate(() => window.__annotations?.setTool("ink"));
+    await page.waitForFunction(() => {
+      const demo = window as unknown as ControlledDemo;
+      return (
+        demo.__toolChanges.includes("ink") && demo.__annotations?.store.get().tool === "highlight"
+      );
+    });
+    const controlled = await page.evaluate(() => {
+      const demo = window as unknown as ControlledDemo;
+      return { reverted: demo.__annotations?.store.get().tool, changes: demo.__toolChanges };
     });
     check(
       "<PdfAnnotationEditor> controls tool, reports internal changes through onToolChange, and reverts uncontrolled changes",
-      controlled.applied === "highlight" &&
+      applied === "highlight" &&
         controlled.reverted === "highlight" &&
         controlled.changes.join(",") === "ink",
-      JSON.stringify(controlled),
+      JSON.stringify({ applied, ...controlled }),
     );
+    await editorLayer(page, 1);
+    await page.evaluate(() => window.__setFeatures?.({ annotations: false }));
+    await page.waitForFunction(
+      () => window.__annotations === null && !document.querySelector(".parapdf-editor-layer"),
+    );
+    const layersLeft = await page.locator(".parapdf-editor-layer").count();
     check(
       "unmounting <PdfAnnotationEditor> from a live viewer detaches editing and removes editor layers",
-      controlled.detached && controlled.layersLeft === 0,
-      JSON.stringify(controlled),
+      layersLeft === 0,
+      `${layersLeft} editor layers remain`,
     );
     check("no errors controlling or unmounting <PdfAnnotationEditor>", errors.length === 0);
     await page.context().close();

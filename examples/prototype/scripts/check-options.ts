@@ -840,7 +840,7 @@ try {
   type Demo = {
     __viewer: ViewerController;
     __setViewerProps(props: Record<string, unknown>): void;
-    __lifecycle: { stats: { opens: number }; unmount(): void };
+    __lifecycle: { stats: { opens: number }; unmountSync(): void };
     __reported?: { pages: number[]; rotations: number[] };
     __pageClicks?: number[];
     __viewStates?: ViewState[];
@@ -1086,29 +1086,12 @@ try {
   const viewStateEvents = await persisted.evaluate(async (settleDelay) => {
     const win = window as unknown as Demo;
     const scroller = document.querySelector(".parapdf-viewport") as HTMLElement;
-    const nextFrame = () =>
-      new Promise<void>((resolve) =>
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-      );
     const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
     const afterOpen = [...(win.__viewStates ?? [])];
 
     win.__viewer.goToPage(6);
     const afterJump = [...(win.__viewStates ?? [])];
 
-    const scrollBy = (pixels: number) =>
-      new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error("No scroll event")), 5_000);
-        scroller.addEventListener(
-          "scroll",
-          () => {
-            clearTimeout(timer);
-            resolve();
-          },
-          { once: true },
-        );
-        scroller.scrollTop += pixels;
-      });
     // Frame intervals on a busy browser can exceed the entire quiet period.
     let scrollAt = 0;
     scroller.addEventListener(
@@ -1129,23 +1112,22 @@ try {
         resolve();
       });
     });
-    await scrollBy(60);
+    scroller.scrollTop += 60;
     await Promise.race([firstNotice, wait(5_000)]);
     await wait(settleDelay);
     unsubscribe();
     const afterSettle = [...(win.__viewStates ?? [])];
 
-    await scrollBy(45);
     const beforePagehide = win.__viewStates?.length ?? 0;
+    scroller.scrollTop += 45;
     window.dispatchEvent(new PageTransitionEvent("pagehide"));
     const afterPagehide = (win.__viewStates?.length ?? 0) - beforePagehide;
 
-    await scrollBy(45);
     const beforeUnmount = win.__viewStates?.length ?? 0;
-    win.__lifecycle.unmount();
-    await nextFrame();
-    const afterUnmount = (win.__viewStates?.length ?? 0) - beforeUnmount;
-    const finalState = win.__viewStates?.at(-1) ?? null;
+    scroller.scrollTop += 45;
+    const expectedFinal = win.__viewer.viewState();
+    // Commit the unmount in this task, while the last scroll is still pending.
+    win.__lifecycle.unmountSync();
 
     return {
       afterOpen,
@@ -1153,10 +1135,15 @@ try {
       delays,
       settledCount: afterSettle.length - afterJump.length,
       afterPagehide,
-      afterUnmount,
-      finalState,
+      beforeUnmount,
+      expectedFinal,
     };
   }, SETTLE_DELAY);
+  await persisted.locator(".parapdf-viewport").waitFor({ state: "detached" });
+  const final = await persisted.evaluate(() => {
+    const states = (window as unknown as Demo).__viewStates ?? [];
+    return { count: states.length, state: states.at(-1) ?? null };
+  });
   check(
     "onViewStateChange skips initial open, coalesces scrolls until settled, and flushes on pagehide and unmount",
     viewStateEvents.afterOpen.length === 0 &&
@@ -1166,11 +1153,11 @@ try {
       (viewStateEvents.delays[0] ?? -1) >= SETTLE_DELAY &&
       viewStateEvents.settledCount === 1 &&
       viewStateEvents.afterPagehide === 1 &&
-      viewStateEvents.afterUnmount === 1 &&
-      viewStateEvents.finalState !== null &&
-      viewStateEvents.finalState.page === 6 &&
-      viewStateEvents.finalState.y > 60,
-    JSON.stringify(viewStateEvents),
+      final.count === viewStateEvents.beforeUnmount + 1 &&
+      final.state?.page === 6 &&
+      final.state.y > 60 &&
+      final.state.y === viewStateEvents.expectedFinal?.y,
+    JSON.stringify({ ...viewStateEvents, final }),
   );
   await persisted.context().close();
 

@@ -50,6 +50,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import { flushSync } from "react-dom";
 import { AnnotationToolbar } from "./AnnotationToolbar.tsx";
 import { BenchDriver } from "./BenchDriver.tsx";
 import { configureEngine, type Pdfjs } from "./engines.ts";
@@ -190,6 +191,7 @@ declare global {
     __lifecycle?: {
       remount(): void;
       unmount(): void;
+      unmountSync(): void;
       mount(): void;
       /** Renders the viewer again, which passes it a new but equal source object. */
       rerender(): void;
@@ -334,6 +336,7 @@ export function App() {
     window.__lifecycle = {
       remount: () => setGeneration((value) => value + 1),
       unmount: () => setMounted(false),
+      unmountSync: () => flushSync(() => setMounted(false)),
       mount: () => setMounted(true),
       rerender: () => setRenders((value) => value + 1),
       sourceBytes: () => bytes?.byteLength ?? null,
