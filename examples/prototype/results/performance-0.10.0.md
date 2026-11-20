@@ -74,6 +74,10 @@ Both viewers opened at 1280 × 900 with selectable text and links enabled. ParaP
 | WebKit | 110-page bill | 900 | react-pdf | 2 | 10 | 7.7 | 216.8 | 0/5 |
 | WebKit | 110-page bill | 3,600 | ParaPDF | 7 | 9 | 6.1 | 126.5 | 0/5 |
 | WebKit | 110-page bill | 3,600 | react-pdf | 7 | 46 | 92.5 | 289.0 | 0/5 |
+| Firefox | 1,000-page text | 900 | ParaPDF | 2 | 2 | 22.4 | 155.9 | 0/5 |
+| Firefox | 1,000-page text | 900 | react-pdf | 2 | 10 | 15.5 | 187.0 | 0/5 |
+| Firefox | 1,000-page text | 3,600 | ParaPDF | 9 | 11 | 31.1 | 111.1 | 0/5 |
+| Firefox | 1,000-page text | 3,600 | react-pdf | 9 | 43 | 133.6 | 249.3 | 0/5 |
 
 <details>
 <summary>Individual scrolling trials</summary>
@@ -96,6 +100,10 @@ Both viewers opened at 1280 × 900 with selectable text and links enabled. ParaP
 | WebKit | 110-page bill | 900 | react-pdf | 226.6, 243.0, 227.8, 236.5, 255.3 | 10, 10, 10, 10, 10 | 7.7, 7.2, 10.3, 6.5, 14.6 | 216.8, 216.8, 216.8, 216.8, 216.8 |
 | WebKit | 110-page bill | 3,600 | ParaPDF | 157.9, 156.9, 157.7, 157.0, 170.8 | 9, 9, 9, 9, 9 | 17.1, 17.5, 6.1, 5.3, 1.7 | 126.5, 126.5, 126.5, 126.5, 126.5 |
 | WebKit | 110-page bill | 3,600 | react-pdf | 237.3, 229.4, 234.7, 251.8, 257.1 | 46, 46, 46, 46, 46 | 113.6, 97.4, 92.5, 79.0, 71.4 | 289.0, 289.0, 289.0, 289.0, 289.0 |
+| Firefox | 1,000-page text | 900 | ParaPDF | 263.1, 272.8, 279.1, 260.3, 263.2 | 2, 2, 2, 2, 2 | 181.4, 11.0, 76.4, 20.0, 22.4 | 155.9, 155.9, 155.9, 155.9, 155.9 |
+| Firefox | 1,000-page text | 900 | react-pdf | 274.6, 300.0, 279.9, 292.4, 292.4 | 10, 10, 10, 10, 10 | 29.9, 15.5, 15.4, 15.5, 12.4 | 187.0, 187.0, 187.0, 187.0, 187.0 |
+| Firefox | 1,000-page text | 3,600 | ParaPDF | 278.6, 279.6, 274.8, 318.5, 264.0 | 11, 11, 11, 11, 11 | 31.1, 16.7, 29.3, 31.2, 37.0 | 111.1, 111.1, 111.1, 111.1, 111.1 |
+| Firefox | 1,000-page text | 3,600 | react-pdf | 312.3, 281.7, 530.3, 311.3, 312.0 | 43, 43, 43, 44, 44 | 133.6, 71.9, 65.0, 167.3, 195.9 | 249.3, 249.3, 249.3, 249.3, 249.3 |
 
 </details>
 
@@ -118,7 +126,7 @@ mkdir -p "$bench_dir/before/features/search"
 git show v0.9.1:packages/parapdf/src/features/search/text-search.ts > "$bench_dir/before/features/search/text-search.ts"
 ```
 
-Run the browser commands below with `BROWSER` set to each of `chromium`, `webkit` and `firefox` in turn. The scroll tables cover the completed Chromium and WebKit series.
+Run the browser commands below with `BROWSER` set to each of `chromium`, `webkit` and `firefox` in turn. All three browsers ran the 1,000-page scroll comparison. The bill provides an additional scrolling workload in Chromium and WebKit.
 
 ```sh
 export BROWSER=chromium MAX_LOAD=20
@@ -151,12 +159,13 @@ A separate five-round repeat of the bill cold open at load 18.6–19.6 also matc
 | ParaPDF | 143.1 | 143.3 | 142.7, 143.7, 143.3, 143.7, 142.9 |
 | Direct pdf.js | 115.6 | 115.7 | 115.7, 115.7, 115.7, 115.3, 116.6 |
 
-The complete WebKit scroll series used a load ceiling of 20. Every reported scroll condition uses all five paired rounds from a complete series. The next table shows the medians of the per-job idle calibrations for the Chromium and WebKit scroll series.
+WebKit and Firefox scrolling used a load ceiling of 20. Every reported scroll condition includes all five paired rounds. The Firefox samples cover the 1,000-page PDF. Its results were saved between documents, before the launcher finished the separate bill workload. The table shows the medians of the idle calibrations for the jobs reported above.
 
 | Browser | Idle timer p95 (ms) | Idle frame interval (ms) |
 | --- | ---: | ---: |
 | Chromium 159.0.8154.6 | 1.2 | 16.7 |
 | WebKit 27.2 | 4.9 | 13.9 |
+| Firefox 159.0 | 0.1 | 16.7 |
 
 | Browser | Experiment | Load at start | Load at end | Waits | Overlap retries |
 | --- | --- | ---: | ---: | ---: | ---: |

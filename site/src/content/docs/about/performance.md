@@ -27,20 +27,20 @@ Time to a full-resolution first page across nine cold opens at 820 × 900. ParaP
 
 Four seconds of scrolling covered two pages at 900 px/s or nine at 3,600 px/s. react-pdf 11.1.0 used react-window 2.5.3. Both viewers enabled text and links.
 
-| Main thread blocked | Chromium | WebKit |
-| --- | ---: | ---: |
-| ParaPDF at 900 px/s | 10.4 ms | 1.5 ms |
-| react-pdf at 900 px/s | 8.6 ms | 3.2 ms |
-| ParaPDF at 3,600 px/s | 6.9 ms | 18.6 ms |
-| react-pdf at 3,600 px/s | 18.8 ms | 18.0 ms |
+| Main thread blocked | Chromium | WebKit | Firefox |
+| --- | ---: | ---: | ---: |
+| ParaPDF at 900 px/s | 10.4 ms | 1.5 ms | 22.4 ms |
+| react-pdf at 900 px/s | 8.6 ms | 3.2 ms | 15.5 ms |
+| ParaPDF at 3,600 px/s | 6.9 ms | 18.6 ms | 31.1 ms |
+| react-pdf at 3,600 px/s | 18.8 ms | 18.0 ms | 133.6 ms |
 
-| Fast scroll | Chromium | WebKit |
-| --- | ---: | ---: |
-| ParaPDF · React commits | 11 | 11 |
-| react-pdf · React commits | 44 | 43 |
-| ParaPDF · canvas storage | 111.1 MiB | 111.1 MiB |
-| react-pdf · canvas storage | 249.3 MiB | 249.3 MiB |
-| Runs with a blank frame (both viewers) | 0/10 | 0/10 |
+| Fast scroll | Chromium | WebKit | Firefox |
+| --- | ---: | ---: | ---: |
+| ParaPDF · React commits | 11 | 11 | 11 |
+| react-pdf · React commits | 44 | 43 | 43 |
+| ParaPDF · canvas storage | 111.1 MiB | 111.1 MiB | 111.1 MiB |
+| react-pdf · canvas storage | 249.3 MiB | 249.3 MiB | 249.3 MiB |
+| Runs with a blank frame (both viewers) | 0/10 | 0/10 | 0/10 |
 
 Blocked time sums main-thread delays during the scroll. A frame counts as blank if over 1% of the viewport lacks a drawing when sampled. Canvas storage includes cached pages after visible gaps fill. [Both scroll speeds and PDFs](https://github.com/yhay81/parapdf/blob/main/examples/prototype/results/performance-0.10.0.md#scrolling)
 
