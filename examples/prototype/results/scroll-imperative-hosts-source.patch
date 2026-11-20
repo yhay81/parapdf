@@ -1,0 +1,352 @@
+diff --git a/packages/parapdf/src/document/session.ts b/packages/parapdf/src/document/session.ts
+index da55f8f..8cbc5e7 100644
+--- a/packages/parapdf/src/document/session.ts
++++ b/packages/parapdf/src/document/session.ts
+@@ -311 +311,3 @@ export class DocumentSession {
+-  /** Page-size estimates, replaced by the measured sizes when the background pass finishes. */
++  /** Initial uniform page-size array once page 1's size is known, before `measurePages()` finishes. */
++  #firstSizes: readonly PageSize[] | null = null;
++  /** Every page's size, once the background pass has learned them. */
+@@ -472 +474 @@ export class DocumentSession {
+-    if (this.#sizes) return this.#sizes;
++    if (this.knownPageSizes) return this.knownPageSizes;
+@@ -474,2 +476,3 @@ export class DocumentSession {
+-    this.#sizes ??= Array<PageSize>(this.pageCount).fill(first);
+-    return this.#sizes;
++    if (this.#sizes) return this.#sizes;
++    this.#firstSizes ??= Array.from({ length: this.pageCount }, () => first);
++    return this.#firstSizes;
+@@ -480 +483 @@ export class DocumentSession {
+-    return this.#sizes;
++    return this.#sizes ?? this.#firstSizes;
+diff --git a/packages/parapdf/src/features/print/print.ts b/packages/parapdf/src/features/print/print.ts
+index cb7aff8..2d71bee 100644
+--- a/packages/parapdf/src/features/print/print.ts
++++ b/packages/parapdf/src/features/print/print.ts
+@@ -122,2 +121,0 @@ export async function printDocument(
+-    signal?.throwIfAborted();
+-    const print = session.proxy.annotationStorage.print;
+@@ -143 +141 @@ export async function printDocument(
+-        print,
++        print: session.proxy.annotationStorage.print,
+diff --git a/packages/parapdf/src/features/search/highlights.ts b/packages/parapdf/src/features/search/highlights.ts
+index ec0b470..5b22828 100644
+--- a/packages/parapdf/src/features/search/highlights.ts
++++ b/packages/parapdf/src/features/search/highlights.ts
+@@ -40,3 +40 @@ interface PageHighlightEntry {
+-  firstMatch: SearchMatch;
+-  /** Position in the published results, which can move when search wraps around. */
+-  first: number;
++  matches: readonly SearchMatch[];
+@@ -46,0 +45,8 @@ interface PageHighlightEntry {
++function sameMatches(a: readonly SearchMatch[], b: readonly SearchMatch[]): boolean {
++  if (a.length !== b.length) return false;
++  for (let i = 0; i < a.length; i++) {
++    if (a[i] !== b[i]) return false;
++  }
++  return true;
++}
++
+@@ -56,2 +62 @@ export class SearchHighlights {
+-    first: number,
+-    current: number,
++    current: SearchMatch | null,
+@@ -59,2 +64 @@ export class SearchHighlights {
+-    const firstMatch = matches[first];
+-    if (!firstMatch || firstMatch.pageIndex !== pageIndex) {
++    if (matches.length === 0) {
+@@ -64,29 +67,0 @@ export class SearchHighlights {
+-
+-    const existing = this.#pages.get(pageIndex);
+-    // A search publishes each page's complete result group once. Later
+-    // progress can shift its index in the document-order results.
+-    if (existing && existing.elements === elements && existing.firstMatch === firstMatch) {
+-      existing.first = first;
+-    } else {
+-      this.clearPage(pageIndex);
+-      const all = highlight(SEARCH_HIGHLIGHT, 0);
+-      if (!all) return;
+-      const ranges: (Range | null)[] = [];
+-      for (let i = first; i < matches.length; i++) {
+-        const match = matches[i];
+-        if (match?.pageIndex !== pageIndex) break;
+-        const range = rangeForMatch(elements, match);
+-        ranges.push(range);
+-        if (range) all.add(range);
+-      }
+-      this.#pages.set(pageIndex, { elements, firstMatch, first, ranges, current: null });
+-    }
+-    this.select(pageIndex, current);
+-  }
+-
+-  /** Move the active range on one mounted page, including off that page. */
+-  select(pageIndex: number, index: number): void {
+-    const entry = this.#pages.get(pageIndex);
+-    if (!entry) return;
+-    const range = entry.ranges[index - entry.first] ?? null;
+-    if (entry.current === range) return;
+@@ -95,3 +70,17 @@ export class SearchHighlights {
+-    if (entry.current) {
+-      selected?.delete(entry.current);
+-      all?.add(entry.current);
++    if (!all || !selected) return;
++
++    const existing = this.#pages.get(pageIndex);
++    if (existing && existing.elements === elements && sameMatches(existing.matches, matches)) {
++      const selectedIndex = current ? matches.indexOf(current) : -1;
++      const nextCurrent = selectedIndex >= 0 ? (existing.ranges[selectedIndex] ?? null) : null;
++      if (nextCurrent === existing.current) return;
++      if (existing.current) {
++        selected.delete(existing.current);
++        all.add(existing.current);
++      }
++      if (nextCurrent) {
++        all.delete(nextCurrent);
++        selected.add(nextCurrent);
++      }
++      existing.current = nextCurrent;
++      return;
+@@ -99,3 +88,15 @@ export class SearchHighlights {
+-    if (range) {
+-      all?.delete(range);
+-      selected?.add(range);
++
++    this.clearPage(pageIndex);
++    const ranges: (Range | null)[] = new Array(matches.length);
++    let currentRange: Range | null = null;
++    for (let i = 0; i < matches.length; i++) {
++      const match = matches[i];
++      const range = match ? rangeForMatch(elements, match) : null;
++      ranges[i] = range;
++      if (!range) continue;
++      if (match === current) {
++        selected.add(range);
++        currentRange = range;
++      } else {
++        all.add(range);
++      }
+@@ -103 +104 @@ export class SearchHighlights {
+-    entry.current = range;
++    this.#pages.set(pageIndex, { elements, matches, ranges, current: currentRange });
+diff --git a/packages/parapdf/src/features/search/index.ts b/packages/parapdf/src/features/search/index.ts
+index 1ab1801..7991f71 100644
+--- a/packages/parapdf/src/features/search/index.ts
++++ b/packages/parapdf/src/features/search/index.ts
+@@ -63 +63 @@ const SEARCH_SLOT = createSlotKey<ReadableStore<SearchControls>>("parapdf.search
+-function firstMatchOnPage(matches: readonly SearchMatch[], pageIndex: number): number {
++function matchesOnPage(matches: readonly SearchMatch[], pageIndex: number): SearchMatch[] | null {
+@@ -71 +71,4 @@ function firstMatchOnPage(matches: readonly SearchMatch[], pageIndex: number): n
+-  return low;
++  if (matches[low]?.pageIndex !== pageIndex) return null;
++  let end = low + 1;
++  while (end < matches.length && matches[end]?.pageIndex === pageIndex) end++;
++  return matches.slice(low, end);
+@@ -157,7 +160,6 @@ function createSearchStore(viewer: ViewerController): ReadableStore<SearchContro
+-    highlights.setPage(
+-      pageIndex,
+-      handle.elements,
+-      matches,
+-      firstMatchOnPage(matches, pageIndex),
+-      current,
+-    );
++    const pageMatches = matchesOnPage(matches, pageIndex);
++    if (!pageMatches) {
++      highlights.clearPage(pageIndex);
++      return;
++    }
++    highlights.setPage(pageIndex, handle.elements, pageMatches, matches[current] ?? null);
+@@ -185,4 +186,0 @@ function createSearchStore(viewer: ViewerController): ReadableStore<SearchContro
+-    const previous = search.matches[search.current];
+-    if (previous && previous.pageIndex !== match.pageIndex)
+-      highlights.select(previous.pageIndex, -1);
+-    highlights.select(match.pageIndex, index);
+@@ -189,0 +188 @@ function createSearchStore(viewer: ViewerController): ReadableStore<SearchContro
++    refreshHighlights();
+diff --git a/packages/parapdf/src/features/search/text-search.ts b/packages/parapdf/src/features/search/text-search.ts
+index bbdc06d..d9f64ca 100644
+--- a/packages/parapdf/src/features/search/text-search.ts
++++ b/packages/parapdf/src/features/search/text-search.ts
+@@ -36,3 +36,3 @@ export interface PageIndex {
+-  readonly itemOf: PositionArray;
+-  readonly startOf: PositionArray;
+-  readonly endOf: PositionArray;
++  readonly itemOf: Uint32Array;
++  readonly startOf: Uint32Array;
++  readonly endOf: Uint32Array;
+@@ -261,5 +261,4 @@ function growUint16(array: Uint16Array<ArrayBuffer>, minLength: number) {
+-type PositionArray = Uint8Array | Uint16Array | Uint32Array;
+-
+-function positionArrayType(max: number) {
+-  if (max <= 0xff) return Uint8Array;
+-  return max <= 0xffff ? Uint16Array : Uint32Array;
++function growUint32(array: Uint32Array<ArrayBuffer>, minLength: number) {
++  const next = new Uint32Array(Math.max(minLength, array.length * 2, 64));
++  next.set(array);
++  return next;
+@@ -294 +292,0 @@ export function buildPageIndex(
+-  let longestItem = 0;
+@@ -296,3 +294 @@ export function buildPageIndex(
+-    const length = items[i]?.length ?? 0;
+-    estimated += length + (endsLine[i] ? 1 : 0);
+-    longestItem = Math.max(longestItem, length);
++    estimated += (items[i]?.length ?? 0) + (endsLine[i] ? 1 : 0);
+@@ -306,5 +302,3 @@ export function buildPageIndex(
+-  const ItemArray = positionArrayType(items.length - 1);
+-  const OffsetArray = positionArrayType(longestItem);
+-  let itemOf = new ItemArray(estimated);
+-  let startOf = new OffsetArray(estimated);
+-  let endOf = new OffsetArray(estimated);
++  let itemOf = new Uint32Array(estimated);
++  let startOf = new Uint32Array(estimated);
++  let endOf = new Uint32Array(estimated);
+@@ -318,9 +312,3 @@ export function buildPageIndex(
+-    const nextItems = new ItemArray(codes.length);
+-    const nextStarts = new OffsetArray(codes.length);
+-    const nextEnds = new OffsetArray(codes.length);
+-    nextItems.set(itemOf);
+-    nextStarts.set(startOf);
+-    nextEnds.set(endOf);
+-    itemOf = nextItems;
+-    startOf = nextStarts;
+-    endOf = nextEnds;
++    itemOf = growUint32(itemOf, needed);
++    startOf = growUint32(startOf, needed);
++    endOf = growUint32(endOf, needed);
+diff --git a/packages/parapdf/src/render/kept-canvases.ts b/packages/parapdf/src/render/kept-canvases.ts
+index 7eaf6fa..455519a 100644
+--- a/packages/parapdf/src/render/kept-canvases.ts
++++ b/packages/parapdf/src/render/kept-canvases.ts
+@@ -70,2 +70,2 @@ export class KeptCanvases {
+-    const { scrollerWidth, scrollerHeight } = input.viewport;
+-    return KEPT_VIEWPORTS * scrollerWidth * scrollerHeight * input.devicePixelRatio ** 2;
++    const { width, height } = input.viewport;
++    return KEPT_VIEWPORTS * width * height * input.devicePixelRatio ** 2;
+@@ -108 +108 @@ export class KeptCanvases {
+-        this.trim();
++        this.trim(this.#budget());
+@@ -136 +136 @@ export class KeptCanvases {
+-  trim(limit = this.#budget()): void {
++  trim(limit: number): void {
+diff --git a/packages/parapdf/src/render/planner.ts b/packages/parapdf/src/render/planner.ts
+index bd19a07..1042c17 100644
+--- a/packages/parapdf/src/render/planner.ts
++++ b/packages/parapdf/src/render/planner.ts
+@@ -84,2 +83,0 @@ export interface PlanContext {
+-  /** Finite canvas budget shares for this viewport, starting at input.first. */
+-  readonly visibleShares?: Float64Array;
+@@ -269,14 +267 @@ export function detailBudget(context: PlanContext, index: number): number {
+-  if (input.first === input.last) {
+-    const base = visibleArea(input.layout, index, viewport)
+-      ? pagePixels(input, index, baseScale(context, index), null)
+-      : 0;
+-    return Math.min(budget, Math.max(0, budgets.maxCanvasPixels - base));
+-  }
+-  const shares = context.visibleShares ?? visibleShares(context);
+-  return Math.min(budget, shares[index - input.first] ?? 0);
+-}
+-
+-function visibleShares(context: PlanContext): Float64Array {
+-  const { input, budgets } = context;
+-  const scale = input.layout.scale * input.devicePixelRatio;
+-  const shares = new Float64Array(input.last - input.first + 1);
++  const scale = input.layout.scale * devicePixelRatio;
+@@ -284,0 +270 @@ function visibleShares(context: PlanContext): Float64Array {
++  let own = 0;
+@@ -286 +272 @@ function visibleShares(context: PlanContext): Float64Array {
+-    const area = visibleArea(input.layout, page, input.viewport);
++    const area = visibleArea(input.layout, page, viewport);
+@@ -288,2 +274 @@ function visibleShares(context: PlanContext): Float64Array {
+-    const pixels = areaSize(area) * pagePixels(input, page, scale, null);
+-    shares[page - input.first] = pixels;
++    const visiblePixels = areaSize(area) * pagePixels(input, page, scale, null);
+@@ -291 +276,2 @@ function visibleShares(context: PlanContext): Float64Array {
+-    visibleTotal += pixels;
++    visibleTotal += visiblePixels;
++    if (page === index) own = visiblePixels;
+@@ -294,15 +280 @@ function visibleShares(context: PlanContext): Float64Array {
+-  for (let i = 0; i < shares.length; i++) {
+-    shares[i] = visibleTotal > 0 ? (left * (shares[i] ?? 0)) / visibleTotal : left;
+-  }
+-  return shares;
+-}
+-
+-/** Share one area calculation across every drawing considered for the same view. */
+-export function preparePlan(context: PlanContext): PlanContext {
+-  if (
+-    context.visibleShares ||
+-    !Number.isFinite(context.budgets.maxCanvasPixels) ||
+-    context.input.last <= context.input.first
+-  )
+-    return context;
+-  return { ...context, visibleShares: visibleShares(context) };
++  return Math.min(budget, visibleTotal > 0 ? (left * own) / visibleTotal : left);
+@@ -503 +475 @@ function createPlanLookup(context: PlanContext): PlanLookup {
+-    if (plan === undefined) {
++    if (plan === undefined && !cache.has(index)) {
+@@ -647,3 +619,4 @@ function nextDrawingFromOrdered(
+-  const total = Number.isFinite(context.budgets.maxCanvasPixels)
+-    ? canvasPixels(context, ordered)
+-    : 0;
++  let total = 0;
++  for (const page of ordered) {
++    total += layerPixels(context, page, "base") + layerPixels(context, page, "detail");
++  }
+@@ -743 +715,0 @@ export function plan(
+-  context = preparePlan(context);
+@@ -750 +721,0 @@ export function plan(
+-    if (drawings.length === limit) break;
+diff --git a/packages/parapdf/src/render/renderer.ts b/packages/parapdf/src/render/renderer.ts
+index 249ecde..8ef21be 100644
+--- a/packages/parapdf/src/render/renderer.ts
++++ b/packages/parapdf/src/render/renderer.ts
+@@ -48 +47,0 @@ import {
+-  preparePlan,
+@@ -258,3 +257 @@ export class Renderer {
+-    return input
+-      ? preparePlan({ input, budgets: this.#budgets, version: this.#version })
+-      : undefined;
++    return input ? { input, budgets: this.#budgets, version: this.#version } : undefined;
+@@ -520 +516,0 @@ export class Renderer {
+-    const previous = this.#input;
+@@ -522,9 +517,0 @@ export class Renderer {
+-    if (
+-      this.#kept.pixels > 0 &&
+-      previous &&
+-      (previous.viewport.scrollerWidth !== input.viewport.scrollerWidth ||
+-        previous.viewport.scrollerHeight !== input.viewport.scrollerHeight ||
+-        previous.devicePixelRatio !== input.devicePixelRatio)
+-    ) {
+-      this.#kept.trim();
+-    }
+@@ -605 +592 @@ export class Renderer {
+-    if (!this.#kept.pixels || this.#budgets.maxCanvasPixels === Number.POSITIVE_INFINITY) return;
++    if (this.#budgets.maxCanvasPixels === Number.POSITIVE_INFINITY) return;
+@@ -721 +707,0 @@ export class Renderer {
+-    this.#session.holdPage(job.pageIndex);
+@@ -742 +727,0 @@ export class Renderer {
+-        this.#session.releasePage(job.pageIndex);
+diff --git a/packages/parapdf/src/view/layout.ts b/packages/parapdf/src/view/layout.ts
+index 1135c63..81da339 100644
+--- a/packages/parapdf/src/view/layout.ts
++++ b/packages/parapdf/src/view/layout.ts
+@@ -476,2 +476,2 @@ export function zoomTarget(
+- * Zoom-preview target and content dimensions for one shown page or uniform
+- * single-page rows outside "wrapped" mode. Returns null when full row
++ * O(1) zoom-preview target and content dimensions at `nextScale` for uniform
++ * single-page-spread documents outside "wrapped" mode; null when full row
+@@ -491 +491 @@ export function previewZoomMetrics(
+-  const size = sizes[layout.shown?.first ?? 0];
++  const firstSize = sizes[0];
+@@ -493 +493,3 @@ export function previewZoomMetrics(
+-    !size ||
++    !layout.uniform ||
++    count === 0 ||
++    !firstSize ||
+@@ -496 +498 @@ export function previewZoomMetrics(
+-    (scrollMode !== "page" && (!layout.uniform || !Number.isInteger(gap)))
++    !Number.isInteger(gap)
+@@ -501,2 +503,2 @@ export function previewZoomMetrics(
+-  const nextW = Math.round((quarterTurn ? size.height : size.width) * nextScale);
+-  const nextH = Math.round((quarterTurn ? size.width : size.height) * nextScale);
++  const nextW = Math.round((quarterTurn ? firstSize.height : firstSize.width) * nextScale);
++  const nextH = Math.round((quarterTurn ? firstSize.width : firstSize.height) * nextScale);

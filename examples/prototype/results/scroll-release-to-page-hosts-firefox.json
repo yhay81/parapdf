@@ -1,0 +1,105 @@
+{
+  "environment": {
+    "runAt": "2026-11-20T03:54:15.895Z",
+    "os": "darwin 27.2.0 arm64",
+    "cpu": "Apple M2 Pro (12 logical cores)",
+    "browserName": "firefox",
+    "browser": "Firefox 159.0",
+    "headless": true,
+    "power": {
+      "source": "ac",
+      "lowPowerMode": false
+    },
+    "loadAverage": {
+      "start": 10.7,
+      "end": 14.5
+    },
+    "turnTaking": {
+      "waits": 0,
+      "waitedMs": 0,
+      "repeatedJobs": 0
+    },
+    "before": "61725aa",
+    "versions": {
+      "pdfjs": "6.5.438"
+    },
+    "idle": {
+      "timerLagP50Ms": 0,
+      "timerLagP95Ms": 0.1,
+      "frameIntervalMs": 16.7
+    },
+    "settings": {
+      "runs": 5,
+      "durationMs": 4000,
+      "latencyMs": 0,
+      "bandwidthMbps": 0,
+      "scrollModes": ["vertical"],
+      "scales": ["fit-width"],
+      "viewport": "1280x900",
+      "devicePixelRatio": 2,
+      "focusViewport": false
+    }
+  },
+  "summaries": [
+    {
+      "file": "synthetic-text-1000.pdf",
+      "speed": 3600,
+      "variant": "pdfjs-hwa",
+      "runs": 5,
+      "scrollMode": "vertical",
+      "scale": "fit-width",
+      "firstPaintMs": 403.7,
+      "firstPaintRunsMs": [435.8, 470.2, 403.7, 326.1, 266.2],
+      "pagesCrossed": 9,
+      "commitsDuringScroll": 11,
+      "commitsPerSecond": 2.7,
+      "storeUpdates": 24,
+      "windowChanges": 15,
+      "currentPageChanges": 9,
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "blockedMs": 76,
+      "lagP95Ms": 0.4,
+      "lagMaxMs": 12.9,
+      "droppedFrames": 0,
+      "frames": 241,
+      "baseRenders": 9,
+      "detailRenders": 0,
+      "textLayers": 0,
+      "annotationLayers": 0,
+      "cancelledRenders": 0,
+      "settleMs": 0,
+      "canvasMiB": 111.1
+    },
+    {
+      "file": "synthetic-text-1000.pdf",
+      "speed": 3600,
+      "variant": "pdfjs-hwa, before",
+      "runs": 5,
+      "scrollMode": "vertical",
+      "scale": "fit-width",
+      "firstPaintMs": 310.5,
+      "firstPaintRunsMs": [678.3, 310.5, 282.2, 379, 277.3],
+      "pagesCrossed": 9,
+      "commitsDuringScroll": 25,
+      "commitsPerSecond": 6.2,
+      "storeUpdates": 24,
+      "windowChanges": 15,
+      "currentPageChanges": 9,
+      "blankMeanPct": 0,
+      "blankFramesPct": 0,
+      "blockedMs": 39.7,
+      "lagP95Ms": 0.2,
+      "lagMaxMs": 12,
+      "droppedFrames": 1,
+      "frames": 240,
+      "baseRenders": 9,
+      "detailRenders": 0,
+      "textLayers": 0,
+      "annotationLayers": 0,
+      "cancelledRenders": 0,
+      "settleMs": 0,
+      "canvasMiB": 111.1
+    }
+  ]
+}

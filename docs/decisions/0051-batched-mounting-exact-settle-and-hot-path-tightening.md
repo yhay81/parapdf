@@ -95,8 +95,8 @@ Following a theoretical-limit audit of ParaPDF's runtime across `pdfjs/`,
 ## Evidence from the intermediate build
 
 The measurements in this section cover changes 1–6 with React placing page
-hosts. The [integrated scroll comparison](0052-search-memory-and-page-work.md#integrated-scroll)
-includes the controller-owned hosts and the overlay and popover fixes.
+hosts. The [final build comparison](#final-build-with-controller-owned-page-hosts)
+below covers all seven changes and the overlay and popover fixes.
 
 Unit tests in [`renderer.test.ts`](../../packages/parapdf/test/renderer.test.ts),
 [`layout.test.ts`](../../packages/parapdf/test/layout.test.ts),
@@ -185,6 +185,104 @@ checks that its center stays anchored. [`check:scroll`](../../examples/prototype
 jumps back from the mounted window `[6, 7, 8]` to `[3, 4, 5, 6, 7]` and checks
 the DOM reading order and the identity of the two surviving hosts. All three
 checks passed with released pdf.js in Chromium, WebKit, and Firefox.
+
+We built the release baseline (`61725aa`) and the reviewed runtime in separate
+directories. The reviewed build contains changes 1–7 above, including the
+forward insertion cursor and both overlay and popover fixes. Its
+`packages/parapdf/src` Git tree was `2e792c730b589db7e222a639f164956316c21ea6`.
+The fixes landed in `be14a63` alongside the separate search and canvas work
+from [decision 0052](0052-search-memory-and-page-work.md). A second comparison
+uses the full commit `1569bdc`, which also includes the
+[page-host extraction](0053-page-hosts-and-display-preloading.md).
+
+Both comparisons used the released pdf.js 6.5.438 with hardware acceleration,
+the same PDFs in each build, and an AC-powered Apple M2 Pro. Each workload
+alternated five runs of each build in fresh browser contexts, at 1280×900,
+device pixel ratio 2, fit-width zoom, over four seconds of vertical scrolling.
+The reports list every first paint and the idle timing and system load for
+each browser. A blank frame has more than 1% of the viewport missing pixels.
+
+### Reviewed runtime
+
+Each cell gives the release median → reviewed median. The 1,000-page document
+is `synthetic-text-1000.pdf` and the 110-page document is `bill-hr815.pdf`.
+The browser reports include individual first paints, render counts, and canvas
+memory. [Chromium](../../examples/prototype/results/scroll-imperative-hosts-chromium.md),
+[WebKit](../../examples/prototype/results/scroll-imperative-hosts-webkit.md),
+[Firefox](../../examples/prototype/results/scroll-imperative-hosts-firefox.md).
+
+| Browser | Pages | Speed (CSS px/s) | React commits | Blocked (ms) | First paint (ms) | Max timer lag (ms) | Dropped frames |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Chromium | 1,000 | 900 | 4 → 2 | 6.3 → 3.8 | 193 → 230.2 | 6.1 → 5 | 0 → 0 |
+| Chromium | 1,000 | 3,600 | 25 → 11 | 8.1 → 6.2 | 176.1 → 178.3 | 4.2 → 4.6 | 0 → 0 |
+| Chromium | 110 | 900 | 4 → 2 | 8.2 → 8.9 | 151.6 → 140.1 | 7.1 → 7.9 | 0 → 0 |
+| Chromium | 110 | 3,600 | 21 → 9 | 7.8 → 3.9 | 156 → 151.2 | 4.8 → 4.5 | 0 → 0 |
+| WebKit | 1,000 | 900 | 4 → 2 | 9 → 5.1 | 207.7 → 203 | 6 → 6.7 | 0 → 0 |
+| WebKit | 1,000 | 3,600 | 25 → 11 | 30.3 → 16.4 | 194.8 → 205.9 | 9.9 → 7.5 | 0 → 0 |
+| WebKit | 110 | 900 | 4 → 2 | 14.9 → 25.1 | 178.2 → 174 | 11.9 → 12.9 | 0 → 1 |
+| WebKit | 110 | 3,600 | 21 → 9 | 15.3 → 34.1 | 177.6 → 180.2 | 8.3 → 10.3 | 0 → 1 |
+| Firefox | 1,000 | 900 | 4 → 2 | 41.5 → 29 | 290.6 → 289.5 | 12.6 → 9.1 | 0 → 0 |
+| Firefox | 1,000 | 3,600 | 25 → 11 | 25 → 23.9 | 262.6 → 277.5 | 7.5 → 7.2 | 0 → 0 |
+| Firefox | 110 | 900 | 4 → 2 | 27.5 → 27.1 | 235.2 → 231.5 | 9.1 → 10.7 | 0 → 0 |
+| Firefox | 110 | 3,600 | 21 → 9 | 36.9 → 52 | 230.9 → 232.5 | 13.8 → 12.2 | 0 → 0 |
+
+All 12 workloads had fewer React commits for the same scroll distance. No
+sample had a blank frame or a failed render across the 120 runs. Median
+settled canvas memory matched in every pair (111.1–183 MiB). Blocked time
+fell in eight workloads and rose in four. Both speeds in the WebKit bill
+workload added one median dropped frame, and Firefox spent 15.1 ms more
+blocked on the high-speed bill scroll.
+
+First paint varied across runs. The largest median increase was 37.2 ms in
+Chromium on the 1,000-page document at 900 px/s. The five times, rounded to
+milliseconds, were 195, 344, 177, 166, 193 before and 177, 230, 262, 250, 162
+after. The reduction in commits held throughout this comparison. First paint
+and blocked time moved in both directions.
+
+### Integrated commit
+
+The second run compared the release commit with `1569bdc` on the 1,000-page
+document at 3,600 CSS px/s. This comparison includes decisions 0052 and 0053.
+[Chromium](../../examples/prototype/results/scroll-release-to-page-hosts-chromium.md),
+[WebKit](../../examples/prototype/results/scroll-release-to-page-hosts-webkit.md),
+[Firefox](../../examples/prototype/results/scroll-release-to-page-hosts-firefox.md).
+
+| Browser | React commits | Blocked (ms) | First paint (ms) | Max timer lag (ms) | Dropped frames |
+|---|---:|---:|---:|---:|---:|
+| Chromium | 25 → 11 | 17.3 → 12.1 | 179 → 178.4 | 5.6 → 5.4 | 0 → 0 |
+| WebKit | 25 → 11 | 3.2 → 6 | 227.7 → 214.3 | 6.4 → 7.6 | 0 → 1 |
+| Firefox | 25 → 11 | 39.7 → 76 | 310.5 → 403.7 | 12 → 12.9 | 1 → 0 |
+
+All three browsers crossed nine pages, with median commits falling from 25 to
+11. Settled canvas memory stayed at 111.1 MiB, and no run had a blank frame or
+failed render. Firefox recorded the largest timing regression in this run.
+The one-minute system load rose from 10.7 to 14.5 on 12 logical cores. Its
+five first paints ranged from 277 to 678 ms before and 266 to 470 ms after.
+
+The runner waited 47 minutes and repeated three overlapping Chromium samples
+in the reviewed comparison. We discarded an interrupted WebKit run and
+restarted all 40 samples. We used the runner's `IGNORE_PIDS` for unrelated
+idle browser processes. During the completed reviewed WebKit and Firefox runs,
+the excluded browser and its children used 1.2 and 2.1 CPU seconds in 261 and
+257 seconds, respectively. The turn-taking guard remained active for other
+browsers. Changes in system load limit comparisons of timing between runs.
+
+### Reproduction
+
+Build the prototype in separate checkouts of `61725aa` (baseline), `be14a63`
+(reviewed), and `1569bdc` (integrated). In the `be14a63` checkout, run
+`git apply --unidiff-zero "$PATCH"` with the absolute path to the
+[reviewed source patch](../../examples/prototype/results/scroll-imperative-hosts-source.patch).
+This restores the measured runtime from the public commit. We verified that
+the resulting source directory matches the one used to build the reviewed
+prototype byte for byte.
+
+Use `pnpm install --frozen-lockfile` in each checkout. Generate the synthetic
+PDF once with `pnpm --filter @parapdf/bench corpus` and copy the same corpus
+into each checkout before running `pnpm --filter @parapdf/prototype build`.
+Set `BASELINE_DIST`, `REVIEWED_DIST`, and `INTEGRATED_DIST` to the absolute
+paths of their respective `examples/prototype/dist` directories. Each
+browser report gives its benchmark command with both build paths.
 
 ## Reopen if
 
