@@ -32,7 +32,10 @@ change the API.
   and bounded Unicode normalization cache, binary-search per-page search
   matches, and swap active `SearchHighlights` `Range`s in O(1) across progress
   updates and `next()` / `previous()` navigation.
-- Manage mounted `<section>` page hosts directly in `ViewerController` so newly
+- Share the document session's layout and display-layer preload rules across
+  entry points. The first layout can complete while display layers load.
+- Manage mounted `<section>` page hosts and their overlay notifications
+  in the viewer's `PageHosts` so newly
   entering pages attach and start rendering synchronously in the same animation
   frame. Insert new page hosts in one pass and keep each fixed overlay's
   input state and focus when dynamic overlays toggle. Page clicks bubble from

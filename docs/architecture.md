@@ -31,15 +31,16 @@ direction, with their evidence. The site's reference
 
 ## Layers
 
-**From source to first paint**
+### From source to first paint
 
 1. `PdfDocument` asks the registry for a session. Viewers of the same source
    share its pdf.js document, pages, and cached reads. [React bindings](../packages/parapdf/src/react/) · [Document sessions](../packages/parapdf/src/document/)
-2. `PdfViewer` attaches a viewport. Its `ViewerController` lays out the pages
-   and tells the renderer which are visible. [View and layout](../packages/parapdf/src/view/)
+2. `PdfViewer` attaches a viewport. Its `ViewerController` computes the
+   layout and mounted page range. `PageHosts` creates the page sections
+   the renderer draws into. [View and layout](../packages/parapdf/src/view/)
 3. The renderer asks the planner what to draw next, then calls pdf.js to draw
-   the chosen pages or regions into canvases. It also builds each page's text
-   and annotation layers. [Rendering](../packages/parapdf/src/render/) · [pdf.js integration](../packages/parapdf/src/pdfjs/)
+   the chosen pages or regions into canvases. Text and annotation layers
+   follow when the visible pages have pixels and scrolling settles. [Rendering](../packages/parapdf/src/render/) · [pdf.js integration](../packages/parapdf/src/pdfjs/)
 
 Only the bindings import React. Optional features depend on the core,
 attaching search, forms, and other capabilities to a session or viewer.
@@ -88,10 +89,15 @@ view, page labels, optional-content layers, resolved named destinations, and
 loaded pages are also exposed synchronously (`knownPageSizes`,
 `knownPermissions`, `knownDirection`, `knownInitialView`, `knownPageLabels`,
 `loadedLayers`, `knownDestination()`, `knownPage()`) so a viewer or thumbnail
-list joining a warm session renders without awaiting microtasks, `/OpenAction`
-string named destinations resolve through `resolveDestination()`, and the
-registry eagerly kicks off `pageSizes()` and `direction()` alongside
-`permissions()` when a document opens (decisions 0041, 0042, and 0044).
+list joining a warm session can lay out immediately. Named destinations in
+`/OpenAction` resolve through `resolveDestination()` (decisions 0041, 0042,
+and 0044).
+
+The registry asks the session to `preloadLayout()` when a document opens.
+This starts the first page's size and the reading direction while the registry
+waits for permissions. Cold viewer startup and `preloadDocument()` also call
+`preloadDisplayLayers()` to start the optional-content read. The viewer can
+lay out the pages while that read is pending (decision 0053).
 
 - A source is a URL (with request headers and credentials), bytes, or a
   `PDFDataRangeTransport`. A URL is identified without its fragment, which
@@ -191,16 +197,14 @@ and `#start()` lays out warm sessions synchronously before `open()` returns
   previewed with a CSS transform (notifying listeners through
   `viewer.onPreviewChange()`) and committed where it showed, touch,
   wheel, Safari's gesture events, swipes in "page" mode, the keys, and the
-  hand tool. `ViewerController` creates, styles, orders, and removes each
-  mounted page's `<section>` host directly inside `.parapdf-pages` synchronously
-  during `#update()` before `renderer.update()` pumps. Consecutive new pages
-  share an insertion anchor, so keeping the hosts in document order takes one
-  pass over the mounted window. The controller updates `aria-label` via
-  `setPageLabel()` and notifies per-page listeners via `onPageHostChange()`.
-  `viewer.pageHost(index)`, `viewer.selectionDragging`, and
-  `viewer.onSelectionDragChange()` expose mounted page hosts and primary-button
-  text-drag transitions to internal `features/` and `react/` callers without
-  DOM queries.
+  hand tool. Selection drag transitions reach features and React through
+  `viewer.selectionDragging` and `viewer.onSelectionDragChange()`.
+- `page-hosts.ts` owns the mounted pages' sections. On each window or layout
+  change, `ViewerController` passes the desired range to `PageHosts.sync()`
+  before updating the renderer. New sections are inserted in document order
+  using a shared insertion anchor. Sections receive accessible page labels,
+  and overlays follow an individual section via `viewer.pageHost(index)`
+  and `viewer.onPageHostChange(index)` (decisions 0051 and 0053).
 - `state.ts`: the viewer's single key-filtered store (`ViewerStore`), view state
   only. Every `set()` reports the exact changed keys (`ViewerState` fields,
   unrotated page `"sizes"` when `layout?.sizes` changes, and `"externalLinks"`

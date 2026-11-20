@@ -475,6 +475,17 @@ export class DocumentSession {
     return this.#sizes;
   }
 
+  /** Start the shared layout reads as soon as the document opens or a preload requests it again. */
+  preloadLayout(): void {
+    if (this.pageCount > 0 && !this.#sizes) void this.pageSizes().catch(() => {});
+    if (this.#knownDirection === undefined) void this.direction().catch(() => {});
+  }
+
+  /** A viewer or explicit preload can start this read without delaying the first layout. */
+  preloadDisplayLayers(): void {
+    if (!this.#loadedLayers) void this.layers().catch(() => {});
+  }
+
   /** Synchronously known page sizes (`pageSizes()` or `measurePages()`), or null before page 1 is read. */
   get knownPageSizes(): readonly PageSize[] | null {
     return this.#sizes;

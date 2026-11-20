@@ -52,20 +52,10 @@ function fakeScrollerAndContent(width = 800, height = 600, left = 20, top = 40) 
     focus() {},
   } as unknown as HTMLElement;
 
-  const sections = new Map<number, HTMLElement>();
-  const content = {
-    style: { setProperty() {}, removeProperty() {} } as unknown as CSSStyleDeclaration,
-    classList: { add() {}, remove() {}, toggle() {} },
-    ownerDocument: { activeElement: null },
-    querySelector(selector: string) {
-      const match = /^section\[data-page="(\d+)"\]$/.exec(selector);
-      return match ? (sections.get(Number(match[1]) - 1) ?? null) : null;
-    },
-    addEventListener() {},
-    removeEventListener() {},
-  } as unknown as HTMLElement;
+  const content = new FakeDocument().createElement("div") as unknown as HTMLElement;
+  Object.defineProperty(content, "classList", { value: scroller.classList });
 
-  return { scroller, content, sections };
+  return { scroller, content };
 }
 
 function withBrowserGlobals<T>(run: () => Promise<T> | T): Promise<T> {
@@ -162,8 +152,11 @@ describe("viewer.pointAt and viewer.pointerClaimed", () => {
         viewportWidth: 900,
         page: 0,
       });
+      detachViewport();
       viewer.store.set({ layout: layout0, scale: 1, rotation: 90, first: 0, last: 0 });
-      const host = document.createElement("section");
+      const detachPreview = viewer.attachViewport(scroller, content);
+      const host = viewer.pageHost(0);
+      assert.ok(host);
       // Turned LETTER (792 x 612) rendered at 1.1x preview scale at client (30, 50):
       host.getBoundingClientRect = () =>
         ({
@@ -174,7 +167,6 @@ describe("viewer.pointAt and viewer.pointerClaimed", () => {
           width: 792 * 1.1,
           height: 612 * 1.1,
         }) as DOMRect;
-      const detachPage = viewer.attachPage(0, host);
 
       const turnedTarget = turnBox({ x: 100, y: 200, width: 0, height: 0 }, LETTER, 90);
       const previewHit = viewer.pointAt({
@@ -188,7 +180,7 @@ describe("viewer.pointAt and viewer.pointerClaimed", () => {
       // Between/outside mounted page boxes returns null rather than falling back to stale unzoomed layout.
       assert.equal(viewer.pointAt({ clientX: 25, clientY: 70 }), null);
 
-      detachPage();
+      detachPreview();
 
       // In "page" mode, hidden overscan rows are ignored.
       const pageModeLayout = computeLayout([LETTER, LETTER], 1, {
@@ -201,16 +193,18 @@ describe("viewer.pointAt and viewer.pointerClaimed", () => {
         page: 0,
       });
       viewer.store.set({ layout: pageModeLayout, scrollMode: "page", first: 0, last: 1 });
-      const hiddenHost = document.createElement("section");
+      const detachPageMode = viewer.attachViewport(scroller, content);
+      const visibleHost = viewer.pageHost(0);
+      const hiddenHost = viewer.pageHost(1);
+      assert.ok(visibleHost && hiddenHost);
+      visibleHost.getBoundingClientRect = () => ({ width: 0, height: 0 }) as DOMRect;
       hiddenHost.getBoundingClientRect = () =>
         ({ left: 50, top: 60, right: 662, bottom: 852, width: 612, height: 792 }) as DOMRect;
-      const detachHidden = viewer.attachPage(1, hiddenHost);
       // Page 1 is hidden in "page" mode when page 0 is shown, so it never steals hits.
       const pageModeHit = viewer.pointAt({ clientX: 200, clientY: 200 });
       assert.equal(pageModeHit?.pageIndex, 0);
 
-      detachHidden();
-      detachViewport();
+      detachPageMode();
     }));
 
   it("exposes pointer claim state accurately via viewer.pointerClaimed", () => {
@@ -486,14 +480,13 @@ describe("SelectionAnchor, sameSelection, and computePopoverPosition", () => {
         viewportWidth: 800,
         page: 0,
       });
-      viewer.store.set({ layout: layout90, scale: 1, rotation: 90 });
-      const detachPage = viewer.attachPage(0, {
-        ownerDocument: { activeElement: null },
-        contains: () => false,
-        style: { visibility: "" },
-        getBoundingClientRect: () =>
-          ({ left: 30, top: 50, width: 792, height: 612, right: 822, bottom: 662 }) as DOMRect,
-      } as unknown as HTMLElement);
+      detach();
+      viewer.store.set({ layout: layout90, scale: 1, rotation: 90, first: 0, last: 0 });
+      const detachRotated = viewer.attachViewport(scroller, content);
+      const host = viewer.pageHost(0);
+      assert.ok(host);
+      host.getBoundingClientRect = () =>
+        ({ left: 30, top: 50, width: 792, height: 612, right: 822, bottom: 662 }) as DOMRect;
       const box90 = anchor.getBoundingClientRect();
       const expected90 = turnBox({ x: 72, y: 100, width: 200, height: 20 }, LETTER, 90);
       assert.ok(Math.abs(box90.left - (30 + expected90.x)) < 1e-6);
@@ -501,8 +494,7 @@ describe("SelectionAnchor, sameSelection, and computePopoverPosition", () => {
       assert.ok(Math.abs(box90.width - expected90.width) < 1e-6);
       assert.ok(Math.abs(box90.height - expected90.height) < 1e-6);
 
-      detachPage();
-      detach();
+      detachRotated();
     }));
 
   it("compares selections structurally without JSON serialization", () => {
@@ -713,6 +705,7 @@ describe("preloadDocument", () => {
       assert.equal(session.state.pageCount, 4);
       const disconnect = session.connect();
       assert.equal(opened, 1);
+      assert.ok(session.openDocument()?.loadedLayers);
 
       disconnect();
       t.mock.timers.tick(1000);

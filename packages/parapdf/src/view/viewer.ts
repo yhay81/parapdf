@@ -65,6 +65,7 @@ import {
   type ShownView,
   type ViewerOptions,
 } from "./options.ts";
+import { PageHosts } from "./page-hosts.ts";
 import {
   type Motion,
   move,
@@ -89,9 +90,6 @@ import { destinationScale, fitScale, refits, requestedZoom } from "./zoom.ts";
 /** Whether a visible area is all of its page. */
 const whole = (area: PageArea | null): boolean =>
   area !== null && area.minX === 0 && area.minY === 0 && area.maxX === 1 && area.maxY === 1;
-
-const defaultPageLabel = (pageNumber: number, pageCount: number) =>
-  `Page ${pageNumber} of ${pageCount}`;
 
 /**
  * What a viewer holds of the session it shows, from `viewer.open()` until
@@ -331,14 +329,14 @@ export class ViewerController implements Viewer {
   #userMoved = false;
   #preDiverge: PreDivergeSnapshot | null = null;
   #sizes: readonly PageSize[] = [];
-  /** The hosts of the mounted pages, by page. */
-  #pageHosts = new Map<number, HTMLElement>();
-  /** `<section>` hosts created and owned directly by this controller. */
-  #ownedHosts = new Set<HTMLElement>();
-  /** Layout last applied to `#ownedHosts` styles. */
-  #hostedLayout: Layout | null = null;
-  #pageLabel: (pageNumber: number, pageCount: number) => string = defaultPageLabel;
-  readonly #pageHostListeners = new Map<number, Set<() => void>>();
+  readonly #pageHosts = new PageHosts({
+    attach: (index, host) => {
+      this.#shown?.renderer?.attach(index, host);
+      if (index === this.#pendingFocus?.index) this.#focusPage(index, this.#pendingFocus.source);
+    },
+    detach: (index) => this.#shown?.renderer?.detach(index),
+    recoverFocus: (host) => this.#recoverFocusFromHost(host),
+  });
   /** The page that takes the focus next, and the element it moves from. */
   #pendingFocus: { index: number; source: Element } | null = null;
   #focusFrame = 0;
@@ -831,52 +829,17 @@ export class ViewerController implements Viewer {
 
   /** The mounted `<section>` host of page `index`, if attached. */
   pageHost(index: number): HTMLElement | undefined {
-    return this.#pageHosts.get(index);
+    return this.#pageHosts.mounted.get(index);
   }
 
   /** Set the accessible `aria-label` formatter for mounted `<section>` page hosts. */
   setPageLabel(label: ((pageNumber: number, pageCount: number) => string) | undefined): void {
-    const next = label ?? defaultPageLabel;
-    if (this.#pageLabel === next) return;
-    this.#pageLabel = next;
-    const pageCount = this.store.get().layout?.sizes.length ?? 0;
-    if (pageCount <= 0) return;
-    for (const [index, host] of this.#pageHosts) {
-      if (this.#ownedHosts.has(host)) {
-        host.setAttribute("aria-label", next(index + 1, pageCount));
-      }
-    }
+    this.#pageHosts.setLabel(label, this.store.get().layout?.sizes.length ?? 0);
   }
 
   /** Subscribe to mount/unmount transitions of page `index`'s `<section>` host. */
   onPageHostChange(index: number, listener: () => void): () => void {
-    let set = this.#pageHostListeners.get(index);
-    if (!set) {
-      set = new Set();
-      this.#pageHostListeners.set(index, set);
-    }
-    set.add(listener);
-    return () => {
-      const current = this.#pageHostListeners.get(index);
-      if (!current) return;
-      current.delete(listener);
-      if (current.size === 0) this.#pageHostListeners.delete(index);
-    };
-  }
-
-  #notifyPageHost(index: number): void {
-    const set = this.#pageHostListeners.get(index);
-    if (!set || set.size === 0) return;
-    if (set.size === 1) {
-      for (const listener of set) {
-        listener();
-        break;
-      }
-      return;
-    }
-    for (const listener of [...set]) {
-      if (set.has(listener)) listener();
-    }
+    return this.#pageHosts.subscribe(index, listener);
   }
 
   /** The text layers of the mounted pages that have one, by page. */
@@ -1104,7 +1067,7 @@ export class ViewerController implements Viewer {
     this.#sizes = [];
     this.#textPages.clear();
     this.#annotationPages.clear();
-    this.#clearOwnedHosts();
+    this.#pageHosts.clear();
     this.store.set({ layout: null, first: 0, last: -1 });
   }
 
@@ -1194,10 +1157,7 @@ export class ViewerController implements Viewer {
     signal.throwIfAborted();
     this.#prepareFingerprints(shown, session);
     const opening = shown.savedPosition ? undefined : this.#options.opening;
-    // Pipeline optional-content layer lookup beside page 1's box, permissions,
-    // and direction so the worker resolves all four in one round-trip burst and
-    // the first page render already has `loadedLayers` warm.
-    if (!session.loadedLayers) void session.layers().catch(() => null);
+    session.preloadDisplayLayers();
     // Fetched beside the first page's size: features read the permissions
     // before the pages are drawn, and the first layout follows the opening.
     const [sizes, permissions, direction, view] = await Promise.all([
@@ -1297,7 +1257,7 @@ export class ViewerController implements Viewer {
     session.onContentChange(() => renderer.invalidateContent(), signal);
     // Pages unmounting while no viewport shows them keep nothing.
     if (!this.#scroller) renderer.setKeeping(false);
-    for (const [index, host] of this.#pageHosts) renderer.attach(index, host);
+    for (const [index, host] of this.#pageHosts.mounted) renderer.attach(index, host);
     this.batchView(() => {
       this.store.set({
         ...(view?.spread ? { spread: view.spread } : {}),
@@ -1403,7 +1363,7 @@ export class ViewerController implements Viewer {
     const { layout, first, last } = this.store.get();
     if (layout) {
       this.#sizeContent(layout);
-      if (last >= first) this.#syncPageHosts(layout, first, last);
+      this.#pageHosts.sync(content, layout, first, last);
       this.#lastViewState ??= this.viewState();
     }
     scroller.addEventListener("scroll", this.#onScroll, { passive: true });
@@ -1435,12 +1395,7 @@ export class ViewerController implements Viewer {
       this.#extensions.detaching();
       control.abort();
       if (shown) shown.renderer = null;
-      this.#clearOwnedHosts();
-      if (this.#pageHosts.size > 0) {
-        const remaining = [...this.#pageHosts.keys()];
-        this.#pageHosts.clear();
-        for (const index of remaining) this.#notifyPageHost(index);
-      }
+      this.#pageHosts.clear();
       clearTimeout(this.#settleTimer);
       this.#settleTimer = 0;
       scroller.removeEventListener("scroll", this.#onScroll);
@@ -1464,28 +1419,6 @@ export class ViewerController implements Viewer {
     };
   }
 
-  #stylePageHost(host: HTMLElement, layout: Layout, index: number, centered: boolean): void {
-    const top = layout.tops[index] ?? 0;
-    const gap = layout.gap;
-    const rowWidth = layout.rowWidths[index] ?? 0;
-    const rowHeight = centered ? (layout.rowHeights[index] ?? 0) : null;
-    const hidden =
-      layout.shown !== null && (index < layout.shown.first || index > layout.shown.last);
-    const offset = layout.offsets[index] ?? 0;
-    const width = layout.widths[index] ?? 0;
-    const height = layout.heights[index] ?? 0;
-    const { style } = host;
-    style.top =
-      rowHeight === null
-        ? `${top}px`
-        : `calc(${top}px + max(0px, (100cqh - ${rowHeight}px) / 2 - ${gap}px))`;
-    style.left = `calc(max(${gap}px, (100cqw - ${rowWidth}px) / 2) + ${offset}px)`;
-    style.visibility = hidden ? "hidden" : "";
-    style.width = `${width}px`;
-    style.height = `${height}px`;
-    style.setProperty("--scale-factor", String(layout.scale));
-  }
-
   #recoverFocusFromHost(host: HTMLElement): void {
     const document = host.ownerDocument;
     const source = document.activeElement;
@@ -1500,115 +1433,6 @@ export class ViewerController implements Viewer {
         }
       });
     }
-  }
-
-  #clearOwnedHosts(): void {
-    if (this.#ownedHosts.size === 0) {
-      this.#hostedLayout = null;
-      return;
-    }
-    for (const [index, host] of [...this.#pageHosts]) {
-      if (!this.#ownedHosts.has(host)) continue;
-      this.#pageHosts.delete(index);
-      this.#ownedHosts.delete(host);
-      this.#shown?.renderer?.detach(index);
-      host.remove();
-      this.#notifyPageHost(index);
-    }
-    this.#hostedLayout = null;
-  }
-
-  /**
-   * Synchronize controller-owned `<section>` page hosts inside `#content` for
-   * `[first..last]` so new pages mount and attach to `Renderer` synchronously
-   * in the same frame before `renderer.update()` pumps, without requiring a
-   * React commit on scroll window shifts.
-   */
-  #syncPageHosts(layout: Layout, first: number, last: number): void {
-    const content = this.#content;
-    if (!content) return;
-    const doc = content.ownerDocument;
-    if (!doc || typeof doc.createElement !== "function" || typeof content.append !== "function") {
-      return;
-    }
-    if (last < first) {
-      this.#clearOwnedHosts();
-      return;
-    }
-    const layoutChanged = this.#hostedLayout !== layout;
-    const pageCount = layout.sizes.length;
-    const pageCountChanged = (this.#hostedLayout?.sizes.length ?? -1) !== pageCount;
-    const centered = layout.scrollMode === "horizontal" || layout.shown !== null;
-
-    for (const [index, host] of [...this.#pageHosts]) {
-      if (!this.#ownedHosts.has(host)) continue;
-      if (index < first || index > last) {
-        this.#recoverFocusFromHost(host);
-        this.#pageHosts.delete(index);
-        this.#ownedHosts.delete(host);
-        this.#shown?.renderer?.detach(index);
-        host.remove();
-        this.#notifyPageHost(index);
-      }
-    }
-
-    let nextHost = first;
-    let anchor: HTMLElement | null = null;
-    for (let index = first; index <= last; index++) {
-      const existing = this.#pageHosts.get(index);
-      if (existing) {
-        if (layoutChanged && this.#ownedHosts.has(existing)) {
-          this.#stylePageHost(existing, layout, index, centered);
-          if (pageCountChanged) {
-            existing.setAttribute("aria-label", this.#pageLabel(index + 1, pageCount));
-          }
-        }
-        continue;
-      }
-      const host = doc.createElement("section");
-      host.setAttribute("data-page", String(index + 1));
-      host.setAttribute("aria-label", this.#pageLabel(index + 1, pageCount));
-      host.tabIndex = -1;
-      this.#stylePageHost(host, layout, index, centered);
-      // A run of missing pages all goes before the same surviving host.
-      if (nextHost <= index || (anchor && anchor.parentNode !== content)) {
-        anchor = null;
-        for (nextHost = index + 1; nextHost <= last; nextHost++) {
-          const candidate = this.#pageHosts.get(nextHost);
-          if (candidate?.parentNode === content) {
-            anchor = candidate;
-            break;
-          }
-        }
-      }
-      if (anchor) content.insertBefore(host, anchor);
-      else content.append(host);
-      this.#ownedHosts.add(host);
-      this.#pageHosts.set(index, host);
-      this.#shown?.renderer?.attach(index, host);
-      if (index === this.#pendingFocus?.index) this.#focusPage(index, this.#pendingFocus.source);
-      this.#notifyPageHost(index);
-    }
-    this.#hostedLayout = layout;
-  }
-
-  /**
-   * Register an external page host for page `index`; returns the function that
-   * releases it. Used by unit tests; mounted viewports manage `<section>` hosts
-   * directly in `#syncPageHosts()`.
-   */
-  attachPage(index: number, host: HTMLElement): () => void {
-    this.#shown?.renderer?.attach(index, host);
-    this.#pageHosts.set(index, host);
-    if (index === this.#pendingFocus?.index) this.#focusPage(index, this.#pendingFocus.source);
-    this.#notifyPageHost(index);
-    return () => {
-      if (this.#pageHosts.get(index) !== host) return;
-      this.#recoverFocusFromHost(host);
-      this.#pageHosts.delete(index);
-      this.#shown?.renderer?.detach(index);
-      this.#notifyPageHost(index);
-    };
   }
 
   /**
@@ -1648,7 +1472,7 @@ export class ViewerController implements Viewer {
       this.#focusFrame = 0;
       const pending = this.#pendingFocus;
       if (!pending) return;
-      const host = this.#pageHosts.get(pending.index);
+      const host = this.#pageHosts.mounted.get(pending.index);
       if (!host) return;
       this.#pendingFocus = null;
       // Moving the focus would end a drag selecting text.
@@ -1970,7 +1794,7 @@ export class ViewerController implements Viewer {
     // Prefer the live screen boxes of mounted pages so CSS zoom previews and
     // container-query centering are reflected directly.
     let measured = false;
-    for (const [index, host] of this.#pageHosts) {
+    for (const [index, host] of this.#pageHosts.mounted) {
       if (isHidden(index)) continue;
       const box = host.getBoundingClientRect();
       if (box.width <= 0 || box.height <= 0) continue;
@@ -2594,18 +2418,11 @@ export class ViewerController implements Viewer {
         currentPage <= last &&
         whole(visibleArea(layout, currentPage, viewport)));
     const nextCurrent = kept ? currentPage : focus;
-    if (
-      this.#hostedLayout !== layout ||
-      state.first !== mountedFirst ||
-      state.last !== mountedLast
-    ) {
-      this.#syncPageHosts(layout, mountedFirst, mountedLast);
+    const windowChanged = state.first !== mountedFirst || state.last !== mountedLast;
+    if (windowChanged || this.#pageHosts.layout !== layout) {
+      this.#pageHosts.sync(this.#content, layout, mountedFirst, mountedLast);
     }
-    if (
-      state.first !== mountedFirst ||
-      state.last !== mountedLast ||
-      state.currentPage !== nextCurrent
-    ) {
+    if (windowChanged || state.currentPage !== nextCurrent) {
       this.store.set({
         first: mountedFirst,
         last: mountedLast,

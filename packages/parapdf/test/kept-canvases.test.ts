@@ -92,7 +92,7 @@ describe("Renderer kept canvases", () => {
     assert.equal(renders.length, 1, "nothing is drawn again");
   });
 
-  it("takes the canvases back when React mounts the page in the same host again", async (t) => {
+  it("takes the canvases back when the renderer reattaches the same host", async (t) => {
     const { doc, renders } = await controlledDocument();
     const renderer = new Renderer(doc, { maxKeptPixels: 4_000_000 });
     t.after(() => renderer.dispose());

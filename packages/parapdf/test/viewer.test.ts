@@ -90,6 +90,30 @@ describe("closing and extending a viewer's document", () => {
     assert.equal(published, 0, "a closed viewer publishes nothing when the pass ends");
   });
 
+  it("lays out a cold viewer while its display layers are still loading", async () => {
+    const document = fakeDocument();
+    let finishLayers!: () => void;
+    const layersReady = new Promise<void>((resolve) => {
+      finishLayers = resolve;
+    });
+    const getLayers = document.proxy.getOptionalContentConfig.bind(document.proxy);
+    const read = mock.method(document.proxy, "getOptionalContentConfig", async () => {
+      await layersReady;
+      return getLayers({ intent: "display" });
+    });
+    const { loader } = fakePdfjs(async () => document.proxy);
+    const viewer = new ViewerController();
+    close.push(show(viewer, { url: "/layers.pdf" }, loader).close);
+    await settle();
+    assert.ok(viewer.state.layout);
+    assert.equal(viewer.layers, null);
+    assert.equal(read.mock.callCount(), 1);
+    finishLayers();
+    await settle();
+    assert.ok(viewer.layers);
+    assert.equal(read.mock.callCount(), 1);
+  });
+
   it("leaves the work and shared session of another viewer of the same document running", async () => {
     let read = () => {};
     const textsReady = new Promise<void>((resolve) => (read = resolve));

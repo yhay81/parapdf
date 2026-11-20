@@ -146,7 +146,7 @@ describe("DocumentSession", () => {
   it("keeps a page parsed when a viewer shows it again before its cleanup", async () => {
     const { session, cleaned } = await openSession();
     await session.page(0);
-    // React mounts a page again in the same commit, as StrictMode does.
+    // A viewport reattachment can reclaim the page before its deferred cleanup.
     session.holdPage(0);
     session.releasePage(0);
     session.holdPage(0);

@@ -39,9 +39,10 @@ that matters for performance or direction gets a decision record.
 - Performance is measured. A change that may affect speed or memory is
   compared with the build before it, in the same run, in the browsers it
   concerns; wins and losses both go into a decision record.
-- React stays out of the hot path. Scrolling and zooming never commit React
-  state per frame; React commits when the mounted page window or the current
-  page changes. Pixels never go through React state.
+- React stays out of the hot path. The viewer updates page sections directly.
+  Changes to the mounted window or current page wake their subscribers.
+  Scrolling and zooming never commit React state per frame. Pixels never go
+  through React state.
 - Drawing leaves the main thread wherever pdf.js allows it.
 - React-first: modules that touch the DOM declare `"use client"`, the viewer
   renders an empty viewport on the server, and nothing suspends before the
@@ -65,47 +66,21 @@ that matters for performance or direction gets a decision record.
 
 ## Repository layout
 
-`docs/architecture.md` describes what each part of the runtime owns.
+The runtime lives in `packages/parapdf/` and ships as `parapdf`. Follow the
+[first-paint walkthrough](docs/architecture.md#from-source-to-first-paint) to trace a document
+through these directories.
 
-- `packages/parapdf/` — the runtime, published as `parapdf`: the loader
-  that starts pdf.js with the package's worker and files, and how ParaPDF
-  draws pages and builds layers with it (`src/pdfjs/`); document sessions,
-  one per open document, shared by its viewers through a registry that
-  publishes each session's document state and keeps what renders read of
-  it, typed feature slots (`SlotKey<T>` in `store.ts`), and the
-  `PdfSessionController` a `PdfDocument` starts as it renders and
-  holds of it behind the narrow public `PdfSession` interface, which
-  applications see (`src/document/`); one
-  `ViewerController` per viewport behind the narrow public `Viewer` interface,
-  its options (`options.ts`), controlled view binding (`viewer.bindControls()`),
-  layout, scrolling, gestures, keys and the hand
-  tool (`input.ts`), key-filtered view state (`state.ts`), serializable view snapshots
-  (`view-state.ts`, `viewer.viewState()`, `viewer.setViewState()`, and
-  `<PdfViewer onViewStateChange>`), the pure rules of its zoom (`zoom.ts`) and
-  navigation (`navigation.ts`), which the viewer asks outside the frame and
-  gesture paths, the measures the checks and benchmarks read (`metrics.ts`),
-  the hooks features extend `ViewerController` with (`viewer.extend()`,
-  `extensions.ts`), and handing bytes to the browser as a download
-  (`files.ts`) (`src/view/`); rendering: the planner, a pure
-  function that decides what each page draws (`planner.ts`), and the
-  renderer, which builds each page's canvases and layer containers inside
-  the page host placed by `ViewerController`, carries out the plans, keeps the canvases of pages
-  that unmount (`kept-canvases.ts`), and builds the DOM layers; with them,
-  the text selection tracker the viewer keeps drags in text layers with
-  (`src/render/`); the features, each attaching to a
-  viewer or a session and imported by nothing in the core (`src/features/`);
-  React bindings: `PdfDocument`, `preloadDocument()`, `PdfView`, `PdfViewer`
-  (which sets its viewer's live options, `onPageClick`, and
-  `onViewStateChange`), declarative
-  feature components (`PdfForms`, `PdfAnnotationEditor`, `PdfAutoLinks`,
-  `PdfPermissions`), declarative page overlays (`PdfPageOverlay`,
-  `PdfPageOverlays`, `PdfPageRect`), `PdfSelectionPopover`,
-  `PdfThumbnails`, `PdfOutline`, `useViewer()`, `useCreateViewer()`,
-  `useSave()`, `usePrint()`, `usePermits()`, `getText()`, `findText()`, and
-  the hooks (`src/react/`, `"use client"`); unit tests in Node, which stand in for pdf.js with
-  `test/fake-pdfjs.ts` and for the elements of a page the renderer builds
-  with `test/fake-dom.ts` (`test/`).
-  `scripts/pdfjs-files.ts`, run by `pnpm install` and `build`, copies
+| Directory | Responsibility |
+| --- | --- |
+| `src/document/` | Share one open document, its cached reads, and its lifetime across viewers. |
+| `src/view/` | Keep one viewport's layout, input, navigation, and view state. `page-hosts.ts` manages the mounted page sections. |
+| `src/render/` | `planner.ts` chooses what to draw. `renderer.ts` manages canvases and PDF layers inside the sections. |
+| `src/pdfjs/` | Load pdf.js and its worker, draw pages, and build text and annotation layers. |
+| `src/features/` | Add search, forms, editing, and other capabilities to a session or viewer. |
+| `src/react/` | Bind sessions and viewers to React components, hooks, controls, and overlays. |
+| `test/` | Exercise the runtime in Node using `fake-pdfjs.ts` and `fake-dom.ts`. |
+
+- **Package assets.** `scripts/pdfjs-files.ts`, run by `pnpm install` and `build`, copies
   pdf.js's worker behind ParaPDF's prelude (`scripts/worker-prelude.js`) and
   the files it loads on demand into `pdfjs/` (not committed), and writes
   `src/pdfjs/files.ts` (committed). The workspace consumes the TypeScript

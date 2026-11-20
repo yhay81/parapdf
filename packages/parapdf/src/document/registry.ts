@@ -382,8 +382,7 @@ function openEntry(
       if (entry.signal.aborted) return;
       entry.document = session;
       entry.proxy = session.proxy;
-      if (session.pageCount > 0) void session.pageSizes().catch(() => null);
-      void session.direction().catch(() => null);
+      session.preloadLayout();
       const permissions = await session.permissions().catch((error: unknown) => {
         if (!entry.signal.aborted) console.error("reading permissions failed", error);
         return null;

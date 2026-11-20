@@ -327,6 +327,7 @@ describe("acquireSession", () => {
     assert.equal(lease.state.get().status, "ready");
     assert.equal(lease.shared.document?.knownPageSizes?.length, 2);
     assert.equal(lease.shared.document?.knownDirection, "rtl");
+    assert.equal(lease.shared.document?.loadedLayers, null);
   });
 });
 

@@ -99,7 +99,7 @@ export class FakeDocument {
   }
 }
 
-/** A page's host as React places it, holding `children` it rendered, such as an overlay. */
+/** A page section with existing children, such as an application overlay. */
 export function fakeHost(...children: string[]): HTMLElement {
   const document = new FakeDocument();
   const host = document.createElement("section");

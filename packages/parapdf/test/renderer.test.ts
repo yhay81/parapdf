@@ -610,7 +610,7 @@ describe("Renderer drawings for others", () => {
       settled: true,
     });
 
-    // React mounts [first - overscan .. last + overscan] in ascending order.
+    // The viewer mounts [first - overscan .. last + overscan] in ascending order.
     for (const index of [48, 49, 50, 51, 52]) mount(renderer, index);
     assert.equal(renderer.busy, true, "busy while the batched pump microtask is queued");
     await settle();
