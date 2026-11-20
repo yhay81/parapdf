@@ -6,55 +6,53 @@ change the API.
 
 ## Unreleased
 
+## 0.10.0 — 2026-11-20
+
+Opening a document now prioritizes visible pages and prepares at most one
+neighboring preview. On the 110-page HR 815 PDF at 820 × 900 and DPR 2, the
+first sharp page and its neighbor used 15.41 MiB of attached canvas storage.
+Drawing just page 1 directly with pdf.js used 14.50 MiB. An immediate page turn
+could show the preview while page 2 sharpened.
+[Startup measurements](https://github.com/yhay81/parapdf/blob/v0.10.0/docs/decisions/0054-first-visible-drawing.md)
+
 ### Breaking changes
 
-- `Layout.offsets`, `rowFirst`, and `rowLast` are null in vertical and
-  single-page scroll modes without spreads. For page `i`, read its horizontal
-  offset with `layout.offsets?.[i] ?? 0` and its row bounds with
-  `layout.rowFirst?.[i] ?? i` and `layout.rowLast?.[i] ?? i`.
+- In vertical and single-page scroll modes without spreads, each page is its
+  own row. `Layout.offsets`, `rowFirst`, and `rowLast` are now null in these
+  modes. If you read them directly, use `layout.offsets?.[i] ?? 0` for the
+  horizontal offset and `layout.rowFirst?.[i] ?? i` and
+  `layout.rowLast?.[i] ?? i` for the row bounds of page `i`.
+- `PdfViewer` calls `pageLabel` when a page mounts, the page count changes,
+  or the formatter changes. If your labels depend on the locale, pass a new
+  formatter when the locale changes so mounted pages receive their new names.
 
 ### Features and improvements
 
-- On open, draw the visible pages and at most one low-resolution neighboring
-  page. This reduces canvas memory while keeping the next page readable on
-  an immediate flip. Vertical and single-page layouts without spreads use one
-  third less memory for their geometry arrays. Concurrent viewers share the
-  first page's size read, annotation icon URLs resolve on demand, and a
-  same-origin static copy of the packaged worker loads alongside pdf.js.
-- Store search item IDs and offsets at the width each page needs. Moving to
-  the next or previous match updates only the affected highlight ranges.
-- Release parsed pages after thumbnail-only draws and enforce the default
-  kept-canvas budget when the viewport shrinks. A print job takes one
-  snapshot of committed annotations and form values for all sheets.
-- Share the visible-area calculation across pages with a finite canvas budget,
-  skip total pixel counting when unlimited, and preview zoom on a single shown
-  page in constant space even when other pages have different dimensions.
-- Batch synchronous `Renderer.attach()` and `Renderer.enqueue()` calls onto a
-  microtask pump so visible focus pages claim render slots ahead of lower-index
-  overscan pages and sibling `PdfThumbnails`, hold extra renders until visible
-  pages paint their first pixels, and copy finished page canvases into queued
-  thumbnails without duplicate pdf.js renders.
-- Arm the post-scroll settle timer for the exact remaining `SETTLE_DELAY`
-  without an extra animation-frame hop, pipeline optional-content layer loading
-  during viewer open and `preloadDocument()`, skip untagged `StructTree` waits
-  and empty annotation-layer DOM walks, share single-page `Layout` typed arrays,
-  compute uniform wheel and pinch zoom previews in O(log N) without per-event
-  full relayouts, and tighten planner, selection, thumbnail-scroll, and
-  `PdfSelectionPopover` hot paths.
-- Stream `buildPageIndex()` directly into typed arrays with an ASCII fast path
-  and bounded Unicode normalization cache, binary-search per-page search
-  matches, and swap active `SearchHighlights` `Range`s in O(1) across progress
-  updates and `next()` / `previous()` navigation.
-- Share the document session's layout and display-layer preload rules across
-  entry points. The first layout can complete while display layers load.
-- Manage mounted `<section>` page hosts and their overlay notifications
-  in the viewer's `PageHosts` so newly
-  entering pages attach and start rendering synchronously in the same animation
-  frame. Insert new page hosts in one pass and keep each fixed overlay's
-  input state and focus when dynamic overlays toggle. Page clicks bubble from
-  dynamic overlays to the viewport. Dispatch `ViewerStore.subscribeKeys()` via a
-  14-bit mask, and isolate `onPageChange` from controlled-prop inspection in
-  `ViewerController.bindControls()`.
+- Viewers and preloads share the first page's size read. The initial layout can
+  finish while optional-content layers load. When using a same-origin
+  `assetBase`, the packaged worker starts loading alongside pdf.js.
+  Annotation icon URLs resolve on demand.
+- Visible pages get drawing slots ahead of offscreen pages and thumbnails.
+  Queued thumbnails can reuse finished page canvases, and thumbnail-only draws
+  release their parsed pages. The default cache for offscreen canvases shrinks
+  when the viewport does.
+- Pages entering the mounted window can start drawing in the same animation
+  frame. Fixed overlays keep their state and focus when dynamic overlays are
+  toggled, and page clicks from dynamic overlays reach `onPageClick`.
+- Vertical and single-page layouts without spreads use 24 bytes per page for
+  their geometry arrays. Wheel and pinch previews avoid rebuilding the layout
+  on every event for uniform single-page rows or a single shown page. Visible
+  pages can refine as soon as scrolling settles.
+- Search builds a compact index and updates the affected highlight ranges
+  when you move between matches. On the 1,000-page text fixture, the three
+  position buffers for one search option combination used 11.4 MiB.
+  [Search measurements](https://github.com/yhay81/parapdf/blob/v0.10.0/docs/decisions/0052-search-memory-and-page-work.md)
+- Selections, popover positioning, thumbnail scrolling, and page-change
+  notifications do less repeated work. Annotation layers skip DOM walks when
+  empty and skip waiting for a structure tree on untagged pages.
+- Printing takes one snapshot of annotations and form values for all sheets,
+  including changes made by `WillPrint`. Edits made while the sheets are
+  rendering appear in the next print job.
 
 ## 0.9.1 — 2026-11-20
 
@@ -101,7 +99,7 @@ change the API.
 
 This release makes the public API React-first, improves document lifetimes and
 large-document navigation, and ships pdf.js 6.5.438. See the
-[migration guide](https://parapdf.yhay81.com/guides/migrating-to-0-9/) when
+[migration guide](https://github.com/yhay81/parapdf/blob/v0.9.0/site/src/content/docs/guides/migrating-to-0-9.md) when
 upgrading from 0.8.
 
 ### Breaking changes
