@@ -48,9 +48,30 @@ The minimal viewer opened at 820 × 900. The test clicked Next when the first dr
 | Firefox | Scanned patent | 0 | 15.6, 15.7, 16.3, 15.8, 15.8 | 29.0, 28.5, 29.3, 28.8, 29.2 | 0/5 | 0/5 | 0/5 |
 | Firefox | Scanned patent | 100 | 0.9, 0.8, 0.9, 0.9, 0.8 | 0.9, 0.8, 0.9, 0.9, 0.8 | 5/5 | 0/5 | 0/5 |
 
+## Returning to page 1 and zooming
+
+The full viewer opened the bill at 820 × 1000. For each return, the test waited for page 13 to settle and then jumped back to page 1. The default cache and `maxKeptPixels: 0` ran consecutively in each of five rounds. A sharp viewport had at least 99% of the target resolution, weighted by visible area, from that sample onward. [Return benchmark](../scripts/return-bench.ts)
+
+| Browser | Canvas cache | Jump to sharp (ms) | Blank frames | Cached layers restored |
+| --- | --- | ---: | ---: | ---: |
+| Chromium | Disabled | 21.5, 20.3, 19.8, 20.8, 19.0 | 1, 1, 1, 1, 1 | 0, 0, 0, 0, 0 |
+| Chromium | Default | 2.9, 3.0, 3.1, 2.8, 2.6 | 0, 0, 0, 0, 0 | 3, 3, 3, 3, 3 |
+| WebKit | Disabled | 37.0, 37.0, 36.9, 21.0, 37.4 | 1, 1, 1, 1, 1 | 0, 0, 0, 0, 0 |
+| WebKit | Default | 6.8, 7.1, 7.2, 7.1, 7.0 | 0, 0, 0, 0, 0 | 3, 3, 3, 3, 3 |
+| Firefox | Disabled | 151.4, 152.7, 149.1, 151.5, 148.4 | 2, 2, 2, 2, 2 | 0, 0, 0, 0, 0 |
+| Firefox | Default | 10.6, 10.1, 10.7, 9.4, 9.8 | 0, 0, 0, 0, 0 | 3, 3, 3, 3, 3 |
+
+The zoom test enlarged page 3 to 1.75 times its fit-width scale. Each trial first checked the visible pixels for blank frames and loss of detail. A second pass timed the zoom commit until the view stayed sharp, with pixel readback disabled. [Zoom commit benchmark](../scripts/commit-bench.ts)
+
+| Browser | Commit to sharp (ms) | Blank frames across all runs | Frames that fell back to the base drawing |
+| --- | ---: | ---: | ---: |
+| Chromium | 6.3, 6.8, 9.0, 10.1, 6.4 | 0 | 0 |
+| WebKit | 8.7, 6.2, 6.5, 10.7, 6.3 | 0 | 0 |
+| Firefox | 51.3, 55.6, 52.3, 49.5, 50.4 | 0 | 0 |
+
 ## Scrolling
 
-Both viewers opened at 1280 × 900 with selectable text and links enabled. ParaPDF used its default GPU-backed canvases. react-pdf used react-window's default overscan and sized its rows from the first page. The driver waited 600 ms after first pixels, then scrolled for four seconds from the beginning of the PDF. Each of five rounds ran ParaPDF followed by react-pdf for the same document and speed. [Scroll benchmark](../scripts/scroll-bench.ts) · [ParaPDF driver](../src/BenchDriver.tsx) · [react-pdf driver](../src/compare.tsx)
+Both viewers opened at 1280 × 900 with selectable text and links enabled. ParaPDF used its default GPU-backed canvases. react-pdf used react-window's default overscan and sized its rows from the first page. The driver waited 600 ms after first pixels, then scrolled for four seconds from the beginning of the PDF. Each of five rounds ran ParaPDF followed by react-pdf for the same document and speed. All three browsers ran the 1,000-page comparison. Chromium and WebKit also ran the bill. [Scroll benchmark](../scripts/scroll-bench.ts) · [ParaPDF driver](../src/BenchDriver.tsx) · [react-pdf driver](../src/compare.tsx)
 
 - **Blocked time** sums the lateness of a 4 ms main-thread timer beyond the larger of 2 ms and the idle page's 95th percentile. The interval ends when scrolling stops.
 - **Canvas storage** counts attached and cached canvas pixels at four bytes each, sampled after visible gaps fill. Detail rendering and text layers can still be pending.
@@ -107,9 +128,20 @@ Both viewers opened at 1280 × 900 with selectable text and links enabled. ParaP
 
 </details>
 
-## Search position storage
+## Searching extracted text
 
-A Node pass extracted the text of both PDFs with the release’s pdf.js and ran ParaPDF’s default page indexer. It summed each distinct backing buffer of the item, start and end position arrays once per page. The totals were 945,597 bytes for the bill and 11,946,849 bytes for the 1,000-page text PDF. [Index implementation](../../../packages/parapdf/src/features/search/text-search.ts) · [Search benchmark](../scripts/search-index-bench.ts)
+pdf.js first extracted all pages. The index build and the two queries were then timed separately. The queries were “lorem” and “dolor” on the 1,000-page text PDF, and “the” and “section” on the bill. Each trial checked the normalized text, source positions and match ranges against v0.9.1 using SHA-256. The table gives the 0.10.0 samples. An independent Node run confirmed the digests, match counts and position-buffer sizes on both PDFs. Position buffers are the three arrays mapping normalized characters back to the source. Extracted text and results occupy additional memory. [Search benchmark](../scripts/search-index-bench.ts)
+
+| Browser | PDF | Index build (ms) | Two indexed queries (ms) | Position buffers (bytes) | Matches across both queries |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Chromium | 110-page bill | 16.2, 16.0, 16.0, 16.1, 16.6 | 1.2, 1.3, 1.3, 1.3, 1.2 | 945,597 | 4,333 |
+| Chromium | 1,000-page text | 138.1, 139.1, 139.5, 140.8, 140.5 | 12.3, 12.7, 13.0, 12.6, 12.5 | 11,946,849 | 98,466 |
+| WebKit | 110-page bill | 11.4, 10.6, 10.9, 11.4, 12.2 | 0.9, 0.8, 0.8, 1.0, 1.0 | 945,597 | 4,333 |
+| WebKit | 1,000-page text | 96.8, 98.1, 97.4, 97.9, 97.1 | 6.5, 6.1, 6.6, 6.5, 6.2 | 11,946,849 | 98,466 |
+| Firefox | 110-page bill | 17.8, 17.8, 17.9, 18.3, 18.3 | 1.3, 1.2, 0.9, 1.3, 1.4 | 945,597 | 4,333 |
+| Firefox | 1,000-page text | 196.2, 217.2, 598.8, 195.1, 195.6 | 11.3, 15.4, 27.9, 11.0, 10.8 | 11,946,849 | 98,466 |
+
+Firefox’s five index builds on the 1,000-page PDF spanned 195.1–598.8 ms, with a median of 196.2 ms.
 
 ## Reproduce
 
@@ -126,7 +158,7 @@ mkdir -p "$bench_dir/before/features/search"
 git show v0.9.1:packages/parapdf/src/features/search/text-search.ts > "$bench_dir/before/features/search/text-search.ts"
 ```
 
-Run the browser commands below with `BROWSER` set to each of `chromium`, `webkit` and `firefox` in turn. All three browsers ran the 1,000-page scroll comparison. The bill provides an additional scrolling workload in Chromium and WebKit.
+Run the commands below with `BROWSER` set to each of `chromium`, `webkit` and `firefox` in turn. To reproduce the separate Firefox scrolling series, pass one PDF at a time in `FILES`.
 
 ```sh
 export BROWSER=chromium MAX_LOAD=20
@@ -142,6 +174,10 @@ MAX_LOAD=8 FILES=bill-hr815.pdf,patent-us223898.pdf RUNS=5 \
 MAX_LOAD="$scroll_limit" VARIANTS=pdfjs-hwa,react-pdf-window TEXT=1 LINKS=1 SCROLL=vertical SCALE=fit-width \
   FILES=synthetic-text-1000.pdf,bill-hr815.pdf SPEEDS=900,3600 DURATION=4000 RUNS=5 \
   OUTPUT="repro-scroll-$BROWSER" node "$scripts/scroll-bench.ts"
+ENGINE=pdfjs SCENARIOS=scale-up RUNS=5 LABEL=v0.10.0 \
+  OUTPUT="repro-zoom-$BROWSER" node "$scripts/commit-bench.ts"
+ENGINE=pdfjs FILES=bill-hr815.pdf SCENARIOS=jump-back VARIANTS=none,kept RUNS=5 \
+  OUTPUT="repro-return-$BROWSER" node "$scripts/return-bench.ts"
 BEFORE_SRC="$bench_dir/before" RUNS=5 node "$scripts/search-index-bench.ts"
 ```
 
@@ -159,7 +195,7 @@ A separate five-round repeat of the bill cold open at load 18.6–19.6 also matc
 | ParaPDF | 143.1 | 143.3 | 142.7, 143.7, 143.3, 143.7, 142.9 |
 | Direct pdf.js | 115.6 | 115.7 | 115.7, 115.7, 115.7, 115.3, 116.6 |
 
-WebKit and Firefox scrolling used a load ceiling of 20. Every reported scroll condition includes all five paired rounds. The Firefox samples cover the 1,000-page PDF. Its results were saved between documents, before the launcher finished the separate bill workload. The table shows the medians of the idle calibrations for the jobs reported above.
+The remaining scroll, zoom, return and search series used a load ceiling of 20. Every reported scrolling condition includes all five paired rounds. Firefox completed all 20 jobs on the 1,000-page PDF. Those results were saved while the launcher was waiting for the machine between trials on the separate bill workload. The incomplete Firefox bill trials were excluded. The first table shows medians of idle calibrations for the reported jobs. The second table uses the environment summaries written by completed benchmark processes.
 
 | Browser | Idle timer p95 (ms) | Idle frame interval (ms) |
 | --- | ---: | ---: |
@@ -172,10 +208,16 @@ WebKit and Firefox scrolling used a load ceiling of 20. Every reported scroll co
 | Chromium | Cold open | 3.2 | 6.4 | 0 | 0 |
 | Chromium | Next | 4.9 | 4.4 | 0 | 0 |
 | Chromium | Scroll | 5.4 | 5.9 | 0 | 0 |
+| Chromium | Zoom | 25.7 | 16.3 | 1 | 0 |
+| Chromium | Return | 11.7 | 10.6 | 0 | 0 |
 | WebKit | Cold open | 6.4 | 3.9 | 0 | 0 |
 | WebKit | Next | 4.4 | 5.9 | 1 | 0 |
 | WebKit | Scroll | 19.0 | 20.1 | 3 | 1 |
+| WebKit | Zoom | 16.3 | 13.4 | 0 | 0 |
+| WebKit | Return | 11.0 | 10.6 | 0 | 0 |
 | Firefox | Cold open | 3.9 | 3.9 | 0 | 0 |
 | Firefox | Next | 5.9 | 4.6 | 0 | 0 |
+| Firefox | Zoom | 13.4 | 11.7 | 0 | 0 |
+| Firefox | Return | 14.7 | 13.8 | 0 | 0 |
 
 </details>
