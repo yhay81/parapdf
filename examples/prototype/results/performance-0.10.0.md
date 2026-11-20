@@ -71,7 +71,7 @@ The zoom test enlarged page 3 to 1.75 times its fit-width scale. Each trial firs
 
 ## Scrolling
 
-Both viewers opened at 1280 × 900 with selectable text and links enabled. ParaPDF used its default GPU-backed canvases. react-pdf used react-window's default overscan and sized its rows from the first page. The driver waited 600 ms after first pixels, then scrolled for four seconds from the beginning of the PDF. Each of five rounds ran ParaPDF followed by react-pdf for the same document and speed. All three browsers ran the 1,000-page comparison. Chromium and WebKit also ran the bill. [Scroll benchmark](../scripts/scroll-bench.ts) · [ParaPDF driver](../src/BenchDriver.tsx) · [react-pdf driver](../src/compare.tsx)
+Both viewers opened at 1280 × 900 with selectable text and links enabled. ParaPDF used its default GPU-backed canvases. react-pdf used react-window's default overscan and sized its rows from the first page. The driver waited 600 ms after first pixels, then scrolled for four seconds from the beginning of the PDF. Each of five rounds ran ParaPDF followed by react-pdf for the same document and speed. Both PDFs ran in all three browsers. [Scroll benchmark](../scripts/scroll-bench.ts) · [ParaPDF driver](../src/BenchDriver.tsx) · [react-pdf driver](../src/compare.tsx)
 
 - **Blocked time** sums the lateness of a 4 ms main-thread timer beyond the larger of 2 ms and the idle page's 95th percentile. The interval ends when scrolling stops.
 - **Canvas storage** counts attached and cached canvas pixels at four bytes each, sampled after visible gaps fill. Detail rendering and text layers can still be pending.
@@ -99,6 +99,10 @@ Both viewers opened at 1280 × 900 with selectable text and links enabled. ParaP
 | Firefox | 1,000-page text | 900 | react-pdf | 2 | 10 | 15.5 | 187.0 | 0/5 |
 | Firefox | 1,000-page text | 3,600 | ParaPDF | 9 | 11 | 31.1 | 111.1 | 0/5 |
 | Firefox | 1,000-page text | 3,600 | react-pdf | 9 | 43 | 133.6 | 249.3 | 0/5 |
+| Firefox | 110-page bill | 900 | ParaPDF | 2 | 2 | 38.4 | 183.0 | 0/5 |
+| Firefox | 110-page bill | 900 | react-pdf | 2 | 10 | 77.6 | 216.8 | 0/5 |
+| Firefox | 110-page bill | 3,600 | ParaPDF | 7 | 9 | 11.0 | 126.5 | 0/5 |
+| Firefox | 110-page bill | 3,600 | react-pdf | 7 | 42 | 75.1 | 252.9 | 0/5 |
 
 <details>
 <summary>Individual scrolling trials</summary>
@@ -125,6 +129,10 @@ Both viewers opened at 1280 × 900 with selectable text and links enabled. ParaP
 | Firefox | 1,000-page text | 900 | react-pdf | 274.6, 300.0, 279.9, 292.4, 292.4 | 10, 10, 10, 10, 10 | 29.9, 15.5, 15.4, 15.5, 12.4 | 187.0, 187.0, 187.0, 187.0, 187.0 |
 | Firefox | 1,000-page text | 3,600 | ParaPDF | 278.6, 279.6, 274.8, 318.5, 264.0 | 11, 11, 11, 11, 11 | 31.1, 16.7, 29.3, 31.2, 37.0 | 111.1, 111.1, 111.1, 111.1, 111.1 |
 | Firefox | 1,000-page text | 3,600 | react-pdf | 312.3, 281.7, 530.3, 311.3, 312.0 | 43, 43, 43, 44, 44 | 133.6, 71.9, 65.0, 167.3, 195.9 | 249.3, 249.3, 249.3, 249.3, 249.3 |
+| Firefox | 110-page bill | 900 | ParaPDF | 204.6, 235.8, 344.7, 212.1, 227.6 | 2, 2, 2, 2, 2 | 8.0, 38.4, 263.0, 230.4, 11.6 | 183.0, 183.0, 183.0, 183.0, 183.0 |
+| Firefox | 110-page bill | 900 | react-pdf | 371.5, 299.6, 699.6, 780.6, 343.2 | 10, 10, 10, 10, 10 | 22.5, 209.5, 77.6, 115.6, 15.1 | 216.8, 216.8, 216.8, 216.8, 216.8 |
+| Firefox | 110-page bill | 3,600 | ParaPDF | 234.1, 230.8, 225.0, 209.4, 227.5 | 9, 9, 9, 9, 9 | 11.9, 6.0, 11.2, 9.7, 11.0 | 126.5, 126.5, 126.5, 126.5, 126.5 |
+| Firefox | 110-page bill | 3,600 | react-pdf | 268.5, 273.8, 305.8, 233.8, 324.7 | 42, 42, 46, 46, 42 | 78.4, 67.3, 49.9, 75.1, 78.1 | 252.9, 252.9, 289.0, 289.0, 252.9 |
 
 </details>
 
@@ -195,13 +203,14 @@ A separate five-round repeat of the bill cold open at load 18.6–19.6 also matc
 | ParaPDF | 143.1 | 143.3 | 142.7, 143.7, 143.3, 143.7, 142.9 |
 | Direct pdf.js | 115.6 | 115.7 | 115.7, 115.7, 115.7, 115.3, 116.6 |
 
-The remaining scroll, zoom, return and search series used a load ceiling of 20. Every reported scrolling condition includes all five paired rounds. Firefox completed all 20 jobs on the 1,000-page PDF. Those results were saved while the launcher was waiting for the machine between trials on the separate bill workload. The incomplete Firefox bill trials were excluded. The first table shows medians of idle calibrations for the reported jobs. The second table uses the environment summaries written by completed benchmark processes.
+The remaining scroll, zoom, return and search series used a load ceiling of 20. Every reported scrolling condition includes all five paired rounds. Firefox completed all 20 jobs on the 1,000-page PDF. Those results were saved while the launcher was waiting for the machine between trials on the separate bill workload. The bill then ran in a separate five-round Firefox series. The two pairs from the interrupted bill series were excluded. The first table shows medians of idle calibrations for the reported jobs. The second table uses the environment summaries written by completed benchmark processes.
 
 | Browser | Idle timer p95 (ms) | Idle frame interval (ms) |
 | --- | ---: | ---: |
 | Chromium 159.0.8154.6 | 1.2 | 16.7 |
 | WebKit 27.2 | 4.9 | 13.9 |
-| Firefox 159.0 | 0.1 | 16.7 |
+| Firefox 159.0 (1,000-page text) | 0.1 | 16.7 |
+| Firefox 159.0 (bill) | 0.1 | 16.7 |
 
 | Browser | Experiment | Load at start | Load at end | Waits | Overlap retries |
 | --- | --- | ---: | ---: | ---: | ---: |
@@ -217,6 +226,7 @@ The remaining scroll, zoom, return and search series used a load ceiling of 20. 
 | WebKit | Return | 11.0 | 10.6 | 0 | 0 |
 | Firefox | Cold open | 3.9 | 3.9 | 0 | 0 |
 | Firefox | Next | 5.9 | 4.6 | 0 | 0 |
+| Firefox | Scroll (bill) | 15.0 | 13.4 | 2 | 0 |
 | Firefox | Zoom | 13.4 | 11.7 | 0 | 0 |
 | Firefox | Return | 14.7 | 13.8 | 0 | 0 |
 
