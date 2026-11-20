@@ -44,9 +44,9 @@ export function App() {
 }
 ```
 
-That is all the setup: ParaPDF ships pdf.js, its worker, and the files it
-loads on demand, and your bundler serves them from your application's origin—no
-`public/pdfjs/` folder, no `viewer.html`, and no `postMessage` bridge.
+ParaPDF ships pdf.js, its worker, and the files a document can load on demand.
+Vite, webpack, Rsbuild, and Next.js emit those files with your application.
+For other bundlers, serve a static copy. [Bundler setup](/setup/bundlers/)
 
 <CardGrid>
   <Card title="Your React UI, right on the page" icon="puzzle">
@@ -56,19 +56,18 @@ loads on demand, and your bundler serves them from your application's origin—n
     behind `postMessage`.
   </Card>
   <Card title="React stays out of the hot path" icon="rocket">
-    Scrolling and zooming commit no React state per frame. React renders only
-    when the window of mounted pages or the current page changes, pixels stay in
-    imperative canvases, and pages you come back to show the canvases they kept.
+    The viewer mounts pages and draws their canvases directly. A page counter
+    updates when the current page changes. Scrolling within that page needs no
+    React update from the counter.
   </Card>
   <Card title="One document, many views & lifetimes" icon="open-book">
-    A `PdfDocument` opens one worker and session for any number of `PdfViewer`s
-    and `PdfThumbnails`, and `useViewer()` keeps scroll position, zoom, search,
-    and edits across React unmounts, tabs, and `<Activity>`.
+    Several panes can read different pages of one open document. Keep
+    `PdfDocument` mounted while toggling its default `PdfViewer` to restore
+    position, zoom, search, and edits when the viewport returns.
   </Card>
-  <Card title="Typed hooks, zero viewer bloat" icon="pencil">
-    Selectable tagged text, whole-document search, outline and link history,
-    two-way AcroForm state, annotation editing, layers, attachments, printing,
-    auth headers, and SSR—each loaded only when your app uses it.
+  <Card title="Choose your reading tools" icon="pencil">
+    Text selection and PDF links work by default. Add whole-document search,
+    form filling, annotation editing, or printing when your application needs them.
   </Card>
 </CardGrid>
 

@@ -8,14 +8,15 @@ A fast PDF viewer for React, built on [pdf.js](https://github.com/mozilla/pdf.js
 
 - **React stays out of the hot path.** Scrolling and zooming commit no React
   state per frame, and pixels never pass through React.
-- **Only what is near the viewport exists.** Pages outside a small window
-  unmount. Each page draws a quick base first and full resolution once
-  scrolling settles, and at high zoom only its visible part sharp, within
+- **Visible pages draw first.** Pages outside a small window unmount. A
+  visible page can open at full resolution. Larger pages can show a preview
+  while detail renders. At high zoom, the visible region sharpens within
   pixel budgets you can set.
-- **Pages you come back to show at once.** A page that leaves the window
-  keeps its canvases, within a budget.
-- **Several viewers, one document.** Each viewer has its own position, zoom,
-  rotation, and layout; the document is opened, parsed, and searched once.
+- **Cached pages reappear at once.** A page that leaves the window keeps
+  its canvases until the cache needs that space.
+- **Several viewers, one document.** Viewers share the open PDF, extracted
+  text, and search indexes. Each keeps its own position, zoom, rotation,
+  layout, and active search.
 - **A document viewer.** Selectable, accessible text; search that matches as
   pdf.js's viewer does, CJK text included; links, the outline, and history;
   forms, annotations, printing, saving, layers, attachments, thumbnails,

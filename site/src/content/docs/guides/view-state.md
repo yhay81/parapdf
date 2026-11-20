@@ -22,25 +22,32 @@ size, so the view moves between a phone and a desktop.
 `viewer.setViewState(view)` shows such a view again, `PdfViewer`'s
 `initialViewState` opens the document with it before anything is drawn
 elsewhere, and `PdfViewer`'s `onViewStateChange` hears settled `ViewState`
-snapshots as the reader moves through the document. `initialViewState` wins
-over `defaultPage`, the zoom, the spread, the scroll mode, and `initialView`,
-and the fields it leaves out still follow them.
+snapshots as the reader moves through the document. Fields in
+`initialViewState` override viewer defaults, the URL fragment, and the PDF's
+opening view. Controlled `zoom`, `rotation`, `spread`, and `scrollMode`
+props still apply when restoring a view.
 For example, `defaultPage={2}` with `initialViewState={{ scale: 1.5 }}`
 opens the third page at that scale.
-Neither adds a back entry, and values out of range are clamped or ignored,
-so a view read from a URL needs no checking:
+Restoring a view adds no back entry. The viewer clamps or ignores values
+outside its range.
 
 ```tsx
+"use client";
+
 import { PdfDocument, PdfViewer } from "parapdf";
-import { useState } from "react";
+import { useMemo } from "react";
 
 function Reader({ url }: { url: string }) {
-  // Read once: the opening view applies only as the document opens.
-  const [saved] = useState(() => localStorage.getItem(`view:${url}`));
+  const saved = useMemo(() => {
+    if (typeof window === "undefined") return undefined;
+    const stored = localStorage.getItem(`view:${url}`);
+    return stored ? JSON.parse(stored) : undefined;
+  }, [url]);
   return (
     <PdfDocument source={url}>
       <PdfViewer
-        initialViewState={saved ? JSON.parse(saved) : undefined}
+        style={{ height: "80vh" }}
+        initialViewState={saved}
         onViewStateChange={(view) => {
           localStorage.setItem(`view:${url}`, JSON.stringify(view));
         }}

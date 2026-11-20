@@ -25,7 +25,6 @@ import {
   type ReactNode,
   useEffect,
   useId,
-  useReducer,
   useRef,
   useState,
 } from "react";
@@ -971,25 +970,20 @@ const STRESS_FILES = [
   "synthetic-mixed-sizes.pdf",
 ];
 
-function RuntimeTelemetry({ viewer, file }: { viewer: Viewer; file: string }) {
-  const first = useViewState((state) => state.first, viewer);
-  const last = useViewState((state) => state.last, viewer);
-  const page = useViewState((state) => state.currentPage, viewer);
-  const scale = useViewState((state) => state.scale, viewer);
-  const laidOut = useViewState((state) => state.layout !== null, viewer);
+function RuntimeTelemetry({ viewer }: { viewer: Viewer }) {
+  const view = useViewState(
+    (state) =>
+      state.layout
+        ? { first: state.first, last: state.last, page: state.currentPage, scale: state.scale }
+        : null,
+    viewer,
+  );
   const pageCount = useDocumentState((state) => state.pageCount);
-  const [, refresh] = useReducer((count: number) => count + 1, 0);
-  const tracker = useRef({ file, key: "", commits: 0 });
-
-  if (tracker.current.file !== file) {
-    tracker.current = { file, key: "", commits: 0 };
+  const [observed, setObserved] = useState({ view, updates: 0 });
+  if (view !== observed.view) {
+    setObserved({ view, updates: observed.updates + (view ? 1 : 0) });
   }
-  const key = laidOut ? `${first}:${last}:${page}:${Math.round(scale * 1000)}` : "";
-  if (key && key !== tracker.current.key) {
-    tracker.current.key = key;
-    tracker.current.commits += 1;
-  }
-  const mountedPages = laidOut && last >= first ? last - first + 1 : 0;
+  const mountedPages = view ? Math.max(0, view.last - view.first + 1) : 0;
 
   return (
     // biome-ignore lint/a11y/useSemanticElements: WAI-ARIA toolbar groups use role="group" rather than <fieldset>.
@@ -998,16 +992,10 @@ function RuntimeTelemetry({ viewer, file }: { viewer: Viewer; file: string }) {
         DOM pages: <strong>{mountedPages}</strong>
         {pageCount > 0 ? ` / ${pageCount.toLocaleString("en")}` : ""}
       </output>
-      <output aria-label="React view commits">
-        React commits: <strong>{tracker.current.commits}</strong>
+      <output aria-label="View updates">
+        View updates: <strong>{observed.updates}</strong>
       </output>
-      <button
-        type="button"
-        onClick={() => {
-          tracker.current.commits = 0;
-          refresh();
-        }}
-      >
+      <button type="button" onClick={() => setObserved({ view, updates: 0 })}>
         Reset count
       </button>
     </div>
@@ -1015,8 +1003,7 @@ function RuntimeTelemetry({ viewer, file }: { viewer: Viewer; file: string }) {
 }
 
 /**
- * Demonstrates 1,000-page virtualization and zero per-frame React commits with
- * live telemetry from `useViewState` and `viewer`.
+ * Shows the mounted page range and changes to selected viewer state.
  */
 export function StressShowcase() {
   const [file, setFile] = useState("synthetic-text-1000.pdf");
@@ -1056,14 +1043,14 @@ export function StressShowcase() {
           ) : null}
           <ZoomControls fit={false} />
           <span className="spacer" />
-          <RuntimeTelemetry viewer={viewer} file={file} />
+          <RuntimeTelemetry key={file} viewer={viewer} />
           <DocumentStatus className="example-status" />
         </div>
         <PdfViewer viewer={viewer} className="example-viewport" label={sample?.title} />
       </PdfDocument>
       <SampleNote
         file={file}
-        lead="Drag the scrollbar across hundreds of pages: React commits only when the mounted window or current page moves, never once per animation frame."
+        lead="Drag the scrollbar and compare the number of mounted pages with the document length. View updates counts changes to the mounted page range, current page, or zoom."
       />
     </div>
   );
@@ -1114,7 +1101,7 @@ const HERO_TABS: readonly {
     caption: (
       <>
         <strong>React stays out of the frame loop.</strong> Scroll a 1,000-page document or zoom a
-        200,000-segment drawing and watch mounted DOM pages and React commits in real time.
+        200,000-segment drawing and watch the mounted page count and view updates.
       </>
     ),
   },
@@ -1252,8 +1239,7 @@ const COMPARISON_ROWS: readonly {
   {
     topic: "Split views & thumbnails of one PDF",
     browserIframe: "Each frame loads its own copy.",
-    pdfjsIframe:
-      "Each iframe loads pdf.js, starts a worker, and downloads and parses the PDF again.",
+    pdfjsIframe: "Each viewer instance starts its own worker and parses the PDF separately.",
     parapdf:
       "One PdfDocument session and one worker shared by any number of PdfViewers and PdfThumbnails.",
   },
@@ -1263,21 +1249,20 @@ const COMPARISON_ROWS: readonly {
     pdfjsIframe:
       "Unmounting destroys the window and loses scroll position, zoom, search, and edits.",
     parapdf:
-      "useCreateViewer() stops work while unmounted and restores position, zoom, search, and edits on remount.",
+      "A viewer retained above its viewport restores position, zoom, search, and edits on remount.",
   },
   {
     topic: "Auth headers, byte buffers & SSR",
     browserIframe: "Cookie URLs only; no custom request headers.",
     pdfjsIframe:
-      "Needs same-origin viewer.html, Blob URL handoffs, or patching viewer.mjs for headers.",
+      "Your integration must fetch authenticated data or pass it to the separate viewer.",
     parapdf:
       "Takes { url, httpHeaders, withCredentials }, { data: Uint8Array }, or { range }; renders cleanly in RSC.",
   },
   {
     topic: "Assets & bundle payload",
     browserIframe: "0 KB shipped, zero control.",
-    pdfjsIframe:
-      "Copy and update pdfjs-dist/web/ in public/; ship the full viewer UI even for read-only previews.",
+    pdfjsIframe: "Host and update Mozilla's prebuilt viewer, including its UI and assets.",
     parapdf:
       "npm install parapdf; bundlers emit the worker and files, and forms, scripts, search, and annotations load only when used.",
   },

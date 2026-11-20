@@ -10,15 +10,15 @@ description: Everything the parapdf package exports.
 Opens `source` as it renders, or joins the session another `PdfDocument`
 opened of it, and renders its children at once, giving them its
 `PdfSession` ([`useSession()`](/reference/state/#the-session)) and its
-default `Viewer` ([`useViewer()`](/reference/viewer/)). Nothing
-suspends before the first page draws. Every `PdfViewer` and `PdfThumbnails`
+default `Viewer` ([`useViewer()`](/reference/viewer/)). The provider and
+viewport can render without suspending. Every `PdfViewer` and `PdfThumbnails`
 inside it shows its document. It holds the document while it is mounted and
 shown: the document closes a second after no `PdfDocument` holds it any
 more, and one React hides (`<Activity>`) and shows again opens it again.
 
 | Prop | |
 |---|---|
-| `source` | The document: its URL, `{ url }`, `{ data }` with its bytes, or `{ range }` with a pdf.js transport (see [Sources](/reference/sources/)). It reopens when its URL, request headers, credentials mode, or password change or, for data and transports, when they are another object or the password changes; a new object for the same URL keeps the open document. A URL's fragment, such as `#page=3`, opens it where it points, and a new fragment moves its viewers there (see [Sources](/reference/sources/#sessions)). |
+| `source` | A URL, `{ url }`, `{ data }` with PDF bytes, or `{ range }` with a pdf.js transport. A new URL, request headers, credentials mode, bytes object, or transport object opens another document. A new password retries the same source. Changing only the URL fragment, such as `#page=3`, moves its viewers there. [Sources and sessions](/reference/sources/#sessions) |
 | `viewer` | A `Viewer` from `useCreateViewer()` to provide instead of creating one of its own. |
 | `passwordPrompt` | `true` by default: an encrypted document waits for a password (status `"password"`), which `useSession().submitPassword()` gives. `false` fails it at once (status `"error"`) when the source has no password or a wrong one, for this `PdfDocument` only: others of the same document may still answer. Changing it does not open the document again. |
 | `onOpenAttachment` | `({ filename, content }) => void`, called when the reader opens a file attachment annotation, a link to an embedded file, or `openAttachment(session, attachment)`. By default the browser downloads the file (see [Layers and attachments](/guides/layers-attachments/#attachments)). |
@@ -58,7 +58,7 @@ remount (see [Options](/reference/options/)).
 | Live options | The layers, links, layout, zoom limits, and budgets (see [Options](/reference/options/)). |
 | `className`, `style` | For the scroll container. |
 | `label` | Its accessible name, "PDF document" by default. |
-| `pageLabel` | Each page's accessible name, `(pageNumber, pageCount) => string`, "Page 3 of 12" by default. |
+| `pageLabel` | Each page's accessible name, `(pageNumber, pageCount) => string`, "Page 3 of 12" by default. Mounted labels update when the page count or the callback changes. Pass a new callback when switching languages. |
 | `onPageClick` | `(point: PdfPagePoint, event) => void`, called when the reader clicks a shown page (ignoring drags, non-collapsed text selections, interactive controls, and claimed pointers) with `{ pageIndex, x, y }` in unturned PDF points (see [Text, selections, and overlays](/guides/text/)). |
 | `children` | Feature components (`PdfForms`, `PdfAnnotationEditor`, `PdfAutoLinks`, `PdfPermissions`), overlays (`PdfPageOverlay`, `PdfPageOverlays`), and selection popovers (`PdfSelectionPopover`) mounted for this viewer. |
 
@@ -113,9 +113,9 @@ The pages of a viewer's document as a window-virtualized navigation list of
 buttons, each with a thumbnail and the page's label (from the PDF's `pageLabels`
 once read, without suspending, or its one-based number), its current page marked
 with `aria-current="page"` and scrolled into view. Only items near the visible
-part of the list's scroll container mount in the DOM and hold pixels, drawing at
-a lower priority than the viewer's pages and following the viewer's rotation
-(see [Thumbnails](/guides/thumbnails/)).
+part of the list's scroll container mount in the DOM. Thumbnails follow the
+viewer's rotation and draw at a lower priority than its pages. A bounded
+cache keeps recently unmounted thumbnails. [Thumbnails](/guides/thumbnails/)
 
 | Prop | |
 |---|---|
@@ -277,7 +277,7 @@ functions are tree-shaken out of your bundle.
 | Export | |
 |---|---|
 | `configurePdfjs(config)` | Changes how pdf.js loads, before the first `PdfDocument` renders (see [Configuring pdf.js](/setup/pdfjs/)). |
-| `preloadDocument(source, options?)` | Starts loading pdf.js, preloading `source`'s URL (outside WebKit and header-carrying requests), and warming `source` (including URL fragment destinations and any `options.destinations`) in the shared document registry ahead of `PdfDocument` mounting (for example on route hover) so `PdfViewer` lays out synchronously before the first paint. |
+| `preloadDocument(source, options?)` | Warms an upcoming document, including its initial layout and any URL fragment or `options.destinations`. A viewer opening the same source can lay out synchronously once those reads finish. [Loading early](/setup/pdfjs/#loading-early) |
 | `preloadPdfjs()` | Starts loading pdf.js and its worker early without opening a document. |
 | `pdfjsVersion` | The version of pdf.js the package ships. |
 | `legacyBuild` | From `parapdf/legacy`: pdf.js's legacy build, for `configurePdfjs({ build })`. |

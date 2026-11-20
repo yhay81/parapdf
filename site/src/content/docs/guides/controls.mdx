@@ -132,14 +132,18 @@ import { PdfDocument, PdfView, PdfViewer } from "parapdf";
 function SplitView() {
   return (
     <PdfDocument source="/manual.pdf">
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", height: "100vh" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}>
         <PdfView>
-          <Toolbar />
-          <PdfViewer />
+          <section>
+            <Toolbar />
+            <PdfViewer style={{ height: "80vh" }} />
+          </section>
         </PdfView>
         <PdfView>
-          <Toolbar />
-          <PdfViewer defaultPage={10} />
+          <section>
+            <Toolbar />
+            <PdfViewer defaultPage={10} style={{ height: "80vh" }} />
+          </section>
         </PdfView>
       </div>
     </PdfDocument>

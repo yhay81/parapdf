@@ -23,7 +23,7 @@ configurePdfjs({ documentOptions: { withCredentials: true } });
 | `workerSrc` | URL of pdf.js's worker script, when it is not `${assetBase}pdf.worker.js`. |
 | `build` | `legacyBuild` from `parapdf/legacy`: pdf.js's legacy build for older browsers, with its worker and files from the package like the modern build's. |
 | `pdfjs` | Loads another build of the same pdf.js version, with its worker as `workerSrc` and its files as `assetBase`. |
-| `enableHWA` | GPU-backed canvases, `true` by default; `false` asks pdf.js for CPU-backed ones, which in the [engine benchmark](/about/performance/#the-engine) blocked Chromium's main thread for 21 ms instead of 4 while drawing ten pages. |
+| `enableHWA` | `true` by default. Requests GPU-backed canvases from the browser. Set to `false` to ask pdf.js for CPU-backed canvases. |
 | `documentOptions` | More pdf.js `getDocument` parameters for every document, such as `withCredentials`, `httpHeaders`, `disableAutoFetch`, or `maxImageSize`; they override ParaPDF's own. ParaPDF sets the source and the worker. |
 | `rendererSrc` | Set to `true` to draw pages in the bundled renderer worker, or supply a worker URL. The worker matches the modern or legacy build and is loaded only when enabled. By default pdf.js draws on the main thread. |
 
@@ -39,16 +39,17 @@ configurePdfjs({ documentOptions: { enableWebGPU: true } });
 
 ## Loading early
 
-`preloadDocument(source, options?)` starts loading pdf.js, preloading `source`'s
-URL (outside WebKit and header-carrying requests), and opening `source` in the
-shared document registry — warming its initial page dimensions, permissions,
-direction, initial view, page labels, any URL fragment destination (such as
-`#nameddest=` or `#page=&zoom=`), and any explicit `options.destinations` —
-before `PdfDocument` renders, for example when the pointer hovers over a link to
-a document. When `<PdfDocument source={source}>` mounts within the registry's
-ten-second grace window, it joins the warm session and lays out `<PdfViewer>`
-synchronously before the first paint; if nothing mounts, the registry closes it
-automatically.
+Call `preloadDocument(source, options?)` when you know which PDF the reader
+may open next, for example when they hover over a document link. It starts
+loading pdf.js and opening the document, including its first page size,
+permissions, reading direction, optional-content layers, initial view, and page
+labels. It also resolves destinations in the URL fragment or
+`options.destinations`. Eligible URL sources can download alongside pdf.js.
+[URL preload behavior](/setup/server-rendering/)
+
+A `PdfDocument` for the same source reuses this work. When the required data
+is ready, the viewer can lay out its opening view synchronously. Pages still
+need to draw. An unused preload closes after ten seconds of inactivity.
 
 When you do not know which document will open yet, `preloadPdfjs()` starts
 loading pdf.js and its worker alone. The first `PdfDocument` also starts

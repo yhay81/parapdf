@@ -85,13 +85,13 @@ try {
   const domText = (await domPagesOut.textContent()) ?? "";
   const mountedMatch = /DOM pages:\s*(\d+)\s*\/\s*1,000/.exec(domText);
   const mountedCount = mountedMatch ? Number(mountedMatch[1]) : 999;
-  const commitsText = (await workbench.getByLabel("React view commits").textContent()) ?? "";
-  const commitsMatch = /React commits:\s*(\d+)/.exec(commitsText);
-  const commitCount = commitsMatch ? Number(commitsMatch[1]) : 999;
+  const updatesText = (await workbench.getByLabel("View updates").textContent()) ?? "";
+  const updatesMatch = /View updates:\s*(\d+)/.exec(updatesText);
+  const updateCount = updatesMatch ? Number(updatesMatch[1]) : 999;
   check(
-    "1,000-page tab keeps mounted DOM pages bounded and React commits minimal",
-    mountedCount > 0 && mountedCount <= 12 && commitCount >= 1 && commitCount <= 6,
-    `${domText} | ${commitsText}`,
+    "1,000-page tab keeps the mounted range bounded and reports view updates after a jump",
+    mountedCount > 0 && mountedCount <= 12 && updateCount >= 1 && updateCount <= 6,
+    `${domText} | ${updatesText}`,
   );
 
   // 2. `/why-react/` comparison table + all interactive showcases

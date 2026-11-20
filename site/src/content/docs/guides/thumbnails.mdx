@@ -17,8 +17,10 @@ import { PdfDocument, PdfThumbnails, PdfViewer } from "parapdf";
 function Reader() {
   return (
     <PdfDocument source="/manual.pdf">
-      <PdfThumbnails width={120} style={{ overflow: "auto" }} />
-      <PdfViewer />
+      <div style={{ display: "grid", gridTemplateColumns: "10rem 1fr", height: "80vh" }}>
+        <PdfThumbnails width={120} style={{ overflow: "auto" }} />
+        <PdfViewer />
+      </div>
     </PdfDocument>
   );
 }
@@ -37,17 +39,15 @@ nearest `PdfView` or `PdfDocument`'s viewer, or take an explicit `viewer` prop.
 
 ## What it costs
 
-- Only items near the visible part of their scroll container mount in the DOM
-  and hold pixels, so a 1,000-page document mounts ~20 `<li>` elements instead
-  of 1,000 while keeping exact scroll height and `aria-setsize` /
-  `aria-posinset` semantics.
-- Thumbnails draw at a lower priority than the pages in view, and always
-  leave a render slot for the next page that scrolls in.
-- A thumbnail copies the page's drawing when the viewer already has one at
-  least as large, instead of drawing the page again, and virtualized thumbnails
-  that scroll out of view keep their detached `<canvas>` elements in a bounded
-  LRU pool so scrolling back moves them back into place without re-rendering in
-  pdf.js or copying pixels.
+- Only items near the visible part of the list mount in the DOM. The list
+  represents the full document through its scroll height, `aria-setsize`,
+  and `aria-posinset`.
+- On open, thumbnails wait for the visible pages to show pixels. With the
+  default two drawing slots, thumbnail work can occupy at most one.
+- A thumbnail can copy a large enough page drawing from the viewer. When
+  pdf.js draws a page for a thumbnail alone, its parsed drawing resources
+  can be released afterwards. A bounded cache keeps recently visited
+  thumbnail canvases so returning to them can reuse the same pixels.
 
 Thumbnails show pages without the annotations the reader created, as
 pdf.js's do, and pages drawn with fillable forms are drawn again for them.

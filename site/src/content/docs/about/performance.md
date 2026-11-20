@@ -1,173 +1,109 @@
 ---
 title: Performance
-description: What was measured, where ParaPDF wins, and where it loses.
+description: How soon a PDF becomes readable, how much canvas memory it uses, and what happens as you turn pages, scroll, and zoom.
 ---
-
-Every number here comes from a decision record in the repository's
-[`docs/decisions/`](https://github.com/yhay81/parapdf/tree/main/docs/decisions),
-which cites the benchmark results it rests on. Wins and losses are published
-together, and so are the ideas measured and rejected.
-
-:::note[Where these numbers come from]
-One machine (Apple M2 Pro), on AC power, in Playwright's headless builds of
-Chromium 156, WebKit 27.2, and Firefox 157. **Playwright's WebKit is not
-Safari**: Safari itself and mobile browsers are not measured. Each change
-is measured against the build before it in the same run, job by job. The
-[benchmark methodology](https://github.com/yhay81/parapdf/blob/main/AGENTS.md#benchmark-methodology)
-says how jobs are isolated, how idle baselines are taken, and why runs on
-battery are refused.
-:::
-
-## The engine
-
-pdf.js, pdf.js master with its renderer worker, PDFium compiled to
-WebAssembly, and hayro compiled to WebAssembly, on 14 PDFs, three runs, the
-median across files (2026-10-18;
-[results](https://github.com/yhay81/parapdf/blob/main/bench/results/browsers.md),
-[decision 0001](https://github.com/yhay81/parapdf/blob/main/docs/decisions/0001-pdfjs-only.md)):
-
-- **Payload.** Released pdf.js is 404 KiB with brotli; PDFium is 1,645 KiB
-  and hayro 1,364 KiB.
-- **Vector drawing.** On 200,000 vector segments, pdf.js committed the first
-  page after 71 ms in Chromium, 89 in WebKit, and 96 in Firefox, against
-  375, 379, and 410 for PDFium and 224, 234, and 261 for hayro.
-- **First page.** In Chromium, released pdf.js, PDFium, and hayro
-  committed it within 2 ms of each other (45.6 to 47.5 ms, the median
-  across files). In WebKit and Firefox PDFium and hayro were faster: 49.0
-  and 40.8 ms in WebKit and 39.2 and 32.7 in Firefox, against 56.1 and 56.8
-  for released pdf.js on GPU-backed canvases.
-- **Main thread.** Released pdf.js draws on the main thread: drawing ten
-  pages on GPU-backed canvases blocked it for 4 ms in Chromium, 1 in
-  WebKit, and 27 in Firefox, and for 21, 1, and 28 ms on CPU-backed
-  canvases. pdf.js master's renderer worker on GPU-backed canvases brought
-  that to 0, 0, and 3 ms. The worker was unreleased when these measurements
-  were taken; ParaPDF 0.9 now ships it with pdf.js 6.5.438 as an
-  [opt-in setting](/setup/pdfjs/).
-- **A hybrid** that drew scanned pages with hayro grew its WebAssembly
-  memory by 51 to 103 MiB per scan without giving it back.
-
-No engine beat pdf.js across the corpus, so ParaPDF uses pdf.js alone, and
-directly.
 
 ## Opening a document
 
-While visible pages draw, a spare slot can prepare one neighboring page at
-low resolution. This keeps the first page's canvas allocation close to that
-of drawing a single page with pdf.js and lets an immediate page flip show
-the preview while sharp text or images arrive. Normal prefetch resumes as
-soon as a visible page has pixels. The neighboring page releases its preview
-canvas storage when full-page detail covers it.
+In ParaPDF 0.10, visible pages get the first drawing slots. A spare slot can prepare
+one neighboring page at low resolution. In the test below, page 1 opened sharp and
+preparing page 2 for an immediate turn cost less than 1 MiB of canvas storage.
 
-The cold-open benchmark compares the viewer with a full-page pdf.js draw
-at the same resolution and checks the pixels. The results include time to
-first and sharp drawings, immediate page flips, and settled memory.
-[Decision 0054 and measurements](https://github.com/yhay81/parapdf/blob/main/docs/decisions/0054-first-visible-drawing.md)
+For a 110-page bill, we timed a cold open to a sharp first page and checked that its
+pixels matched a direct pdf.js drawing.
 
-## Scrolling
+| Time to a sharp first page | Chromium 159 | WebKit 27.2 | Firefox 159 |
+| --- | ---: | ---: | ---: |
+| ParaPDF | 151 ms | 158 ms | 216 ms |
+| Direct pdf.js | 126 ms | 130 ms | 171 ms |
 
-A scripted scroll of the demo at 1280×900, devicePixelRatio 2, fit-width,
-on `synthetic-text-1000.pdf` and `bill-hr815.pdf` at 900 and 3,600 CSS
-pixels per second, four seconds per job, three runs
-([decision 0011](https://github.com/yhay81/parapdf/blob/main/docs/decisions/0011-react-api.md)):
+The table shows medians of nine cold opens at fit-width (820 × 900, device pixel ratio
+2), served locally on an Apple M2 Pro on November 20, 2026. Across the bill, a
+1,000-page text PDF, and a scan, the viewer’s medians were 14–69 ms later. The test used
+React’s profiling build and headless Playwright browsers. Safari and mobile devices need
+separate measurements.
+[Cold-open measurements and individual runs](https://github.com/yhay81/parapdf/blob/main/examples/prototype/results/startup-first-display.md)
 
-- **No blank viewport.** Every job, in every browser, had zero blank area.
-- **React commits.** 4, 24, 4, and 20 over four seconds in the four cases,
-  exactly when the mounted pages or the current page changed, in all three
-  browsers.
-- **Frames.** 0 or 1 of 240 to 289 frames dropped.
-- **Main thread.** Blocked for 2.9 to 19.3 ms in Chromium, 5.5 to 61.9 in
-  WebKit, and 39.6 to 85.0 in Firefox over the four cases. Compare blocked
-  time within a browser, not across them.
+- **Opening memory.** At first display, the bill used **15.41 MiB** of attached canvas
+  storage, down from 29.00–43.51 MiB before the preview change. A single
+  full-resolution page needs 14.50 MiB. Once three pages and their text and links were
+  ready, Chromium held 43.68 MiB in canvases in both builds. These estimates count four
+  bytes per canvas pixel and exclude other browser, pdf.js, and GPU allocations.
+  [Memory measurements](https://github.com/yhay81/parapdf/blob/main/docs/decisions/0054-first-visible-drawing.md#memory-after-the-initial-viewport-settles)
+- **Turning to page 2.** Clicking Next as soon as page 1 appeared showed page 2 in 1–16
+  ms across the bill and scan, with sharp detail in 14–73 ms (five-run medians). With a
+  100 ms pause before the click, page 2 was already sharp in every trial on these PDFs.
+  [Page-turn results](https://github.com/yhay81/parapdf/blob/main/examples/prototype/results/startup-first-display.md#next-immediately-after-opening)
+- **Larger screens and slower connections.** At 1280 × 900, the bill first appeared as a
+  preview using 4.51 MiB of canvas pixels. Full resolution took 171–277 ms across the
+  three browsers. At the smaller viewport, adding 60 ms of latency and limiting
+  bandwidth to 20 Mbit/s brought Chromium's sharp first page to 747 ms. If your app
+  knows the next document in advance, `preloadDocument()` can start loading it before
+  the viewer mounts.
+  [Viewport and network measurements](https://github.com/yhay81/parapdf/blob/main/docs/decisions/0054-first-visible-drawing.md#larger-viewport-and-delayed-network) · [Loading early](/setup/pdfjs/#loading-early)
 
-## Against react-pdf
+## Scrolling and zooming
 
-The same scroll, five runs, against react-pdf 11.0.0 with every page
-mounted and with react-window mounting only the rows in view
-([decision 0017](https://github.com/yhay81/parapdf/blob/main/docs/decisions/0017-measured-against-react-pdf.md)). In Chromium, the
-medians on `bill-hr815.pdf` (110 pages)
-([results](https://github.com/yhay81/parapdf/blob/main/examples/prototype/results/compare-react-pdf-110-chromium.md)):
+During a fast scroll, the viewer prioritizes visible pages. Sharp detail, selectable
+text, and links can follow after motion stops. In a four-second scroll across nine pages
+of a 1,000-page PDF, all three browsers recorded zero blank frames. The median React
+commit count fell from 25 to 11 compared with 0.9.1. Main-thread timing varied with the
+browser and machine load.
+[Scroll measurements](https://github.com/yhay81/parapdf/blob/main/docs/decisions/0051-batched-mounting-exact-settle-and-hot-path-tightening.md#final-build-with-controller-owned-page-hosts)
 
-| Speed | Viewer | First paint | Blocked | React commits | Canvas memory |
-|---|---|---:|---:|---:|---:|
-| 900 | ParaPDF | 142 ms | 17 ms | 4 | 183 MiB |
-| 900 | react-pdf, windowed | 187 ms | 5 ms | 10 | 217 MiB |
-| 900 | react-pdf, every page | 278 ms | 488 ms | 3 | 3,972 MiB |
-| 3600 | ParaPDF | 152 ms | 28 ms | 20 | 126 MiB |
-| 3600 | react-pdf, windowed | 210 ms | 34 ms | 42 | 253 MiB |
-
-In Chromium, WebKit, and Firefox, ParaPDF painted first sooner in every job
-but one, committed React less than half as often, and held less canvas
-memory. It blocked the main thread more at reading speed in Chromium and
-Firefox (17 against 5 ms on 110 pages in Chromium), where both build the
-same text and link layers, and less or as much at 3,600 px/s, where it
-postpones them. So the claim is not "faster in every browser".
+When you zoom, the old drawing stays visible until a sharper one is ready. That briefly
+needs room for both drawings. Across 11 zoom scenarios in each of the three browsers, no
+sampled frame showed a blank page or fell back to a low-resolution preview.
+[Zoom measurements](https://github.com/yhay81/parapdf/blob/main/docs/decisions/0051-batched-mounting-exact-settle-and-hot-path-tightening.md#evidence-from-the-intermediate-build)
 
 ## Coming back to pages
 
-Pages keep their canvases when they unmount
-([decision 0004](https://github.com/yhay81/parapdf/blob/main/docs/decisions/0004-kept-canvases.md)).
-At 820×1000, devicePixelRatio 2, fit-width, three runs, medians, against the
-build that drew them again, the time until page 1 was sharp after a jump
-from page 13 and back:
+The viewer keeps recently visited canvases so it can show them again without drawing. In
+a jump from page 13 back to page 1 of the bill, the cached page was sharp in 3 ms in
+Chromium, 11 ms in WebKit, and 38 ms in Firefox. Redrawing took 23, 27, and 176 ms
+respectively.
+[Return-navigation measurements](https://github.com/yhay81/parapdf/blob/main/docs/decisions/0004-kept-canvases.md#evidence)
 
-| File | Chromium | WebKit | Firefox |
-|---|---:|---:|---:|
-| bill-hr815.pdf | 23 → 3 ms | 27 → 11 ms | 176 → 38 ms |
-| synthetic-vector-pages.pdf | 167 → 5 ms | 172 → 3 ms | 168 → 19 ms |
+The default cache holds up to twelve viewports’ worth of device pixels. To spend less
+memory on return visits, lower `maxKeptPixels` or set it to `0`. To budget visible
+and cached page canvases together, set `maxCanvasPixels`. The viewer releases cached
+canvases first. A tight budget can reduce visible detail.
+[Memory and rendering options](/reference/options/#memory-and-rendering)
 
-On the way back nothing was drawn and no frame showed a blank page. Kept
-canvases held 58 to 65 MiB with the default budget. They move into the
-page's new host instead of being copied
-([decision 0010](https://github.com/yhay81/parapdf/blob/main/docs/decisions/0010-renderer-owns-page-dom.md)).
+## Searching a large document
 
-## Zooming
+The first full-document search reads text from every page. ParaPDF keeps the index
+so later searches with the same options can reuse it. On the 1,000-page text PDF,
+the index used 11.4 MiB for match positions, down from 45.6 MiB before the index
+was compacted. This counts the position buffers for one set of options. Extracted
+text, search results, and canvases use additional memory.
+[Search measurements](https://github.com/yhay81/parapdf/blob/main/docs/decisions/0052-search-memory-and-page-work.md#document-search) · [Search guide](/guides/search/)
 
-Over ten kinds of zoom commit (touch pinches, `setScale()`, `zoomBy()`, and
-Ctrl with the wheel) on bill-hr815.pdf, no page in view showed blank or only
-its base in any frame, in all three browsers, and every zoom and pan at 4×
-and 8× finished at full visible resolution
-([decision 0009](https://github.com/yhay81/parapdf/blob/main/docs/decisions/0009-viewer-lifetimes.md)).
+## Against react-pdf
 
-The cost is a spare canvas: a page draws its new detail while the old one
-still shows. On phone-sized viewports (390×844, devicePixelRatio 3), the
-time to sharp in Chromium falls into two groups, one under 100 ms and one
-around 220 to 240 ms, whichever build measures it.
+A November 16, 2026 comparison of **ParaPDF 0.9.0** and **react-pdf 11.0.0 with
+react-window** used two text PDFs, two scroll speeds, and five runs per condition on the
+M2 Pro. Across Chromium 158, WebKit 27.2, and Firefox 159, ParaPDF held 16–56% fewer
+canvas pixels at the post-scroll sample. Both viewers showed zero sampled blank area.
+ParaPDF showed its first pixels sooner in all 12 conditions, though a preview could
+count as its first drawing.
 
-## Measured and rejected
+Main-thread results depended on the workload. In the fast scroll on the 1,000-page
+document, ParaPDF blocked Chromium for 51 ms versus 17 ms with react-pdf. On WebKit the
+same comparison was 5 versus 22 ms, and on Firefox 80 versus 140 ms. These totals cover
+the four seconds of scrolling and exclude work deferred until it stops. Each viewer used
+its own bundled pdf.js version.
+[Full comparison, method, and reproduction steps](https://github.com/yhay81/parapdf/blob/main/examples/prototype/results/compare-react-pdf-20261116.md)
 
-- **Frames** (OffscreenCanvas shown as ImageBitmaps): never faster, and in
-  Chromium pages got sharp 6 to 29 ms later after zoom commits
-  ([decision 0005](https://github.com/yhay81/parapdf/blob/main/docs/decisions/0005-frame-display.md)).
-- **pdf.js's partial rendering** of regions: recording the operations cost
-  every page's first drawing, up to 61 ms of blocked main thread over ten
-  pages in Chromium against 0, and zooming to 4× and 8× was no faster
-  ([decision 0006](https://github.com/yhay81/parapdf/blob/main/docs/decisions/0006-partial-rendering.md)).
-- **Keeping unmounted pages' parsed content**: pages came back sharp within
-  11 ms of the build without it, while holding their memory
-  ([decision 0007](https://github.com/yhay81/parapdf/blob/main/docs/decisions/0007-keep-parsed-pages.md)).
-- **Every whole-page detail scaled down into the base** when zooming past
-  its budget: sharper sooner on phones, but slower in WebKit and more canvas
-  memory on desktops
-  ([decision 0008](https://github.com/yhay81/parapdf/blob/main/docs/decisions/0008-demote-whole-page-detail.md)). Copying only
-  details no larger than a base kept the gains without the losses and was
-  adopted: zooming to 8× on bill-hr815.pdf on a phone-sized viewport got
-  sharp after 72 instead of 223 ms in Chromium, 55 instead of 157 in WebKit,
-  and 84 instead of 257 in Firefox
-  ([decision 0012](https://github.com/yhay81/parapdf/blob/main/docs/decisions/0012-demote-small-whole-page-detail.md)).
-- **Text drawn as paths** by default: faster zoom commits in Chromium, but
-  slower pages in Firefox and WebKit, and standard fonts change
-  ([decision 0013](https://github.com/yhay81/parapdf/blob/main/docs/decisions/0013-path-text.md)).
-- **Dropping the scroller's size query container** and **building text
-  layers outside the document**, two attempts at Firefox's style and
-  `measureText` costs while scrolling: neither lowered blocked time across
-  the browsers
-  ([decision 0018](https://github.com/yhay81/parapdf/blob/main/docs/decisions/0018-keep-the-size-query-container.md),
-  [decision 0020](https://github.com/yhay81/parapdf/blob/main/docs/decisions/0020-text-layers-built-in-the-document.md)).
+## The engine
 
-## Running the benchmarks
+ParaPDF uses pdf.js. In the October 2026 engine comparison across 14 PDFs, its
+compressed payload was the smallest of the three engines tested, and it drew the
+200,000-segment vector page fastest in every tested browser. PDFium and hayro had lower
+median first-page times in WebKit and Firefox.
+[Engine comparison](https://github.com/yhay81/parapdf/blob/main/bench/results/browsers.md)
 
-The repository's
-[AGENTS.md](https://github.com/yhay81/parapdf/blob/main/AGENTS.md#commands)
-lists every benchmark and its parameters: the engine benchmark, scrolling,
-zooming, zoom commits, coming back to pages, main-thread profiles, and
-GPU-backed against CPU-backed canvases.
+By default, pdf.js draws pages on the main thread and requests GPU-backed canvases. The optional
+drawing worker reduced main-thread blocking on the bill in all three browsers, but the
+scanned patent appeared later in Chromium and WebKit.
+[Worker measurements](https://github.com/yhay81/parapdf/blob/main/docs/decisions/0028-released-renderer-worker.md#evidence) · [pdf.js configuration](/setup/pdfjs/)

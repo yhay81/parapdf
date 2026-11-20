@@ -96,7 +96,8 @@ It runs in Node, where unit tests check its invariants over generated
 views: a visible page never stays blank, the budgets hold except for
 visible bases, and no base is drawn under a whole-page detail.
 
-Each mounted page stacks two canvases:
+A mounted page can use two canvas layers. Only the drawings it needs
+receive pixels.
 
 - a **base** at half a device pixel per CSS pixel, at most 2 MP
   (`maxBasePixels`), to show pixels quickly during a scroll or while a large
@@ -137,13 +138,12 @@ has no viewport.
 
 ## Memory
 
-`maxCanvasPixels` bounds all of a viewer's canvases together, visible pages
-and kept canvases included. Kept canvases go first, then pages outside the
-viewport, farthest first and detail before base; past the budget, visible
-pages lose their sharp margin and then resolution, in quarter-octave steps
-that small changes do not cross, but keep their bases, so a visible page
-never goes blank. The budget is one an application can rely on in browsers
-that cap all canvases together, as iOS Safari does.
+`maxCanvasPixels` budgets a viewer's page canvases, including pages kept for
+a return visit. The viewer releases cached pages first, then drawings farthest
+outside the viewport. It reduces visible detail by shrinking the sharp margin
+and then lowering resolution. A visible preview, or an old drawing kept until
+its replacement is ready, can take the viewer over budget. Other allocations,
+such as pdf.js's document data, thumbnails, and GPU memory, are separate.
 
 ## Text, links, and the rest
 
@@ -173,9 +173,10 @@ hooks or standalone functions — absent from builds that import none of them.
 
 ## Off the main thread
 
-pdf.js parses documents in its worker, which ParaPDF starts while React
-renders, beside pdf.js's module. By default pdf.js draws pages into GPU-backed canvases on the main
-thread. With `configurePdfjs({ rendererSrc: true })`, the package also
+pdf.js parses documents in a shared worker. ParaPDF starts its packaged
+same-origin worker alongside the pdf.js module. By default pdf.js draws pages
+on the main thread and requests GPU-backed canvases. With
+`configurePdfjs({ rendererSrc: true })`, the package also
 loads pdf.js's drawing worker. It reduces stalls on some text-heavy PDFs.
 Scanned pages can take longer to present in Chromium and WebKit.
 
@@ -183,9 +184,10 @@ Scanned pages can take longer to present in Chromium and WebKit.
 
 `parapdf` depends on one exact pdfjs-dist and ships its worker and the files
 it loads on demand, each referenced with `new URL(…, import.meta.url)` so
-bundlers emit them. The first `PdfDocument` starts the worker at once and
-preloads its PDF with React's `preload()`, which pdf.js then takes, except
-in WebKit browsers, where pdf.js cannot take a preload still downloading.
+bundlers emit them. `PdfDocument` can start downloading a URL while pdf.js
+loads. The client skips this preload on WebKit, for requests with custom
+headers, and when streaming is disabled. Server-rendered HTML can still
+include a preload for WebKit. [Server rendering](/setup/server-rendering/)
 
 ParaPDF is licensed under Apache-2.0. Some parts are ported from pdf.js's viewer:
 [NOTICE.md](https://github.com/yhay81/parapdf/blob/main/NOTICE.md) lists

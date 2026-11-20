@@ -70,9 +70,9 @@ ParaPDF provides that infrastructure on top of the same pdf.js engine:
 - **React stays out of the hot path.** Scrolling and zooming commit no React
   state per frame, and pixels never pass through React.
 - **Huge documents, bounded rendering.** Pages outside a small window
-  unmount. Visible pages get drawing priority: a quick base first and full
-  resolution once scrolling settles. At high zoom, only the visible region
-  gets full detail within the canvas budget.
+  unmount. Visible pages draw first and can open at full resolution. Larger
+  pages can show a preview while detail renders. At high zoom, only the
+  visible region needs full detail.
 - **Keep work for a return visit.** Unmounted pages retain their canvases
   within a shared budget. Returning to a page whose canvases are still
   cached reuses those pixels without drawing them again.

@@ -51,16 +51,15 @@ export function App() {
 
 <QuickStartExample client:visible />
 
-- `PdfDocument` opens the document and renders its children at once;
-  nothing suspends before the first page draws.
+- `PdfDocument` starts opening the document and renders its children at
+  once. The viewer can show its first page without a Suspense boundary.
 - `PdfViewer` is a viewport onto it, the scroll container. Give it a
   definite height, as above or through a flex or grid layout: it contains
   its own layout and does not grow with the document.
-- The first `PdfDocument` to render loads pdf.js and starts its worker, and
-  each one starts downloading its PDF while it renders, from the page's head
-  when the page is rendered on the server. pdf.js takes the preloaded
-  response, so the PDF downloads once. Safari takes it only once it has
-  finished, so there is no preload there ([limitations](/about/limitations/)).
+- In the browser, the first `PdfDocument` starts loading pdf.js and its
+  worker. A plain PDF URL can download alongside them. WebKit skips this
+  preload on the client. With server rendering, the HTML can start the PDF
+  download before React runs. [Server rendering and preload behavior](/setup/server-rendering/)
 - This works as it is with bundlers that emit files referenced with
   `new URL(…, import.meta.url)`, such as Vite, webpack, Rsbuild, and Next.js:
   see [Bundlers](/setup/bundlers/) for the others.

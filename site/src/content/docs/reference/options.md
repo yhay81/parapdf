@@ -46,7 +46,7 @@ The current page is never controlled: `viewer.goToPage()` sets it.
 | Prop | Default | |
 |---|---|---|
 | `initialView` | `"options"` | `"document"` opens where and as the document asks: at its /OpenAction destination, with its zoom, its pages arranged as its /PageLayout says (see [Keeping the view](/guides/view-state/)). The page, zoom, spread, and scroll mode you set, controlled or by default, win. |
-| `initialViewState` | none | A view kept from `viewer.viewState()` to open with. Its fields win over the page, zoom, spread, and scroll mode you set and over `initialView`; those it leaves out still apply. |
+| `initialViewState` | none | A saved view from `viewer.viewState()`. Its fields override defaults, the URL fragment, and the PDF's opening view. Controlled `zoom`, `rotation`, `spread`, and `scrollMode` props take precedence over their saved values. |
 
 Both apply once per document. A viewport that reattaches returns to where
 it was instead.
@@ -85,10 +85,10 @@ children of `<PdfViewer>` so bundlers exclude unused features statically (see
 
 | Prop | Default | |
 |---|---|---|
-| `maxDetailPixels` | 16,777,216 | Pixels of one page's full-resolution canvas, the canvas area limit of iOS; larger pages are drawn sharp only around the visible area, still at full resolution. |
+| `maxDetailPixels` | 16,777,216 | Maximum pixels for one page's detail canvas. Large pages get sharp detail around the viewport. If the visible area alone exceeds the budget, detail draws at a lower resolution. |
 | `maxDetailViewports` | unlimited | The same limit as a multiple of the viewport's device pixels, so the sharp margin around the visible area follows the viewport's size; `maxDetailPixels` still caps it. At 1 the detail holds just the viewport; below 1 the visible area loses resolution. |
 | `maxBasePixels` | 2,097,152 | Pixels of one page's low-resolution canvas. |
-| `maxCanvasPixels` | unlimited | Pixels of all of this viewer's canvases together. Pages outside the viewport give theirs back first, farthest first and detail before base; past the budget, visible pages lose their sharp margin and then resolution, in quarter-octave steps, but keep their low-resolution canvases, so a visible page never goes blank. |
+| `maxCanvasPixels` | unlimited | Pixel budget for this viewer's page canvases, including cached pages. Under pressure, the viewer releases offscreen canvases and reduces visible detail. Visible previews, or detail kept until a replacement is ready, can exceed the budget. |
 | `maxKeptPixels` | twelve viewports' worth of device pixels | Pixels kept of the canvases of pages that leave the mounted window, so that a page the reader comes back to shows at once; `0` keeps none, and pages whose form fields are shown keep nothing. The default follows viewport size and display density, including after a resize. Kept canvases also count toward `maxCanvasPixels` and are released first. |
 | `maxConcurrentRenders` | `2` | Pages drawn at once. |
 

@@ -55,8 +55,8 @@ and opens again after its document was closed.
   sizes and text, its outline and other data, and which layers show.
 - A new source object with the same URL keeps the open document, so
   `source={{ url }}` inline is fine. A changed URL, headers, credentials
-  mode, or password, or another bytes or transport object, opens another; a new password
-  for the same source tries it on the shared document, as after a wrong one.
+  mode, or bytes or transport object opens another document. Supplying a new
+  password for the same source retries it on the shared document.
 - A URL's fragment is not part of the source: it says where to open, with
   the open parameters of RFC 8118 that pdf.js's viewer reads. `#page=3`
   opens page 3, `#zoom=150,72,700` at 150% with that point of the page
@@ -64,7 +64,8 @@ and opens again after its document was closed.
   corner, `#zoom=FitH,700` (or `Fit`, `FitV`, `FitR`, `page-width`, `page-fit`) fitted, and
   `#nameddest=intro` at a destination the document names. It wins over
   `initialView="document"`, `defaultPage`, and `defaultZoom`, and
-  `initialViewState` wins over it. A new fragment of the same URL moves the `PdfDocument`'s
+  fields in `initialViewState` override it. Controlled viewer props still
+  take precedence. A new fragment of the same URL moves the `PdfDocument`'s
   viewers there, as following a link does, without opening the document
   again. `search` and `pagemode` are left to the application, whose find
   bar and sidebars they address.
@@ -82,8 +83,9 @@ and opens again after its document was closed.
 - Under one `PdfDocument`, any number of `PdfViewer`s and `PdfThumbnails`
   show the document, each viewer with its own view. Viewers that edit
   annotations share the document too: `useSave()` and `usePrint()`
-  include what every one created, while each shows the annotations it
-  created itself.
+  include the edits of every active viewer, while each shows the annotations it
+  created itself. When React hides a viewer with `<Activity>`, its edits
+  leave the shared document until it is shown again.
 
 ## pdf.js's own API
 

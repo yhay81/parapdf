@@ -33,8 +33,8 @@ live.
 
 ## Components on the page
 
-Because each mounted page is part of your React tree, `PdfPageOverlays` renders
-ordinary React components directly inside that page's overlay layer, and `<PdfPageRect>`
+`PdfPageOverlays` renders ordinary React components into each mounted page
+through a portal. `<PdfPageRect>`
 positions them in PDF points from the page's top-left corner. Coordinates
 become CSS percentages of the page box: zooming and rotating resize and move
 your components through browser layout alone, without re-rendering them or
@@ -164,13 +164,12 @@ function TaxFormFields() {
 
 Showing two places in one PDF with `<iframe>`s—a table of contents beside the
 section you are reading, or a thumbnail rail beside the page—loads
-`viewer.html` twice, starts two workers, and downloads and parses the PDF
-twice.
+`viewer.html` twice. Each instance starts a worker and parses its own copy
+of the document, even if the browser caches the download.
 
-`<PdfDocument>` opens a session once. Any number of `<PdfViewer>` viewports
-and `<PdfThumbnails>` lists under it share that one pdf.js worker, parsed
-document, and search index, while keeping independent scroll positions, zoom
-levels, and rotations.
+`<PdfDocument>` opens a session once. Give each pane its own `Viewer` to
+keep independent scroll positions, zoom levels, and rotations. The panes
+and their thumbnail lists share the worker, parsed document, and search index.
 
 <SplitSessionShowcase client:visible />
 
@@ -246,36 +245,30 @@ export function CollapsiblePreview() {
 
 ## Speed without an iframe
 
-Teams sometimes isolate a PDF viewer in an `<iframe>` out of fear that React
-re-renders will stall scrolling. ParaPDF keeps React out of the hot path:
+As you scroll, the viewer mounts page sections and draws their canvases
+directly. React runs your controls and overlays when the values they follow
+change. A toolbar that reads only `currentPage`, for example, can stay idle
+while the reader scrolls within a page. Recently visited pages can reuse
+their canvases, up to the `maxKeptPixels` budget.
 
-- **Zero per-frame React commits**: `PdfViewer` subscribes only to the mounted
-  page window (`first`..`last`) and layout, never the scroll offset. Scrolling
-  through a page commits React zero times; crossing into a new page commits
-  once.
-- **Imperative canvases and kept pixels**: React renders only each mounted
-  page's `<section>` host and your overlays. Canvases are drawn
-  by the renderer, bounded by explicit pixel budgets (`maxCanvasPixels`), and
-  kept across unmounts (`maxKeptPixels`) so pages you scroll back to show at
-  once without redrawing.
-
-Drag the scrollbar across the 1,000-page document below or jump between pages
-1, 500, and 1,000 while watching **DOM pages** and **React commits**.
+Jump to page 500 below. **DOM pages** shows how many of the 1,000 pages are
+mounted. **View updates** counts changes this control sees in the mounted
+page range, current page, or zoom.
 
 <StressShowcase client:visible />
 
-See [How it works](/about/how-it-works/) for the runtime's architecture and
-[Performance](/about/performance/) for the benchmarks against pdf.js's viewer,
-PDFium, hayro, and react-pdf.
+The performance measurements compare opening a document with drawing one page
+directly through pdf.js, and scrolling with react-pdf and react-window.
+[Performance](/about/performance/) · [How it works](/about/how-it-works/)
 
 ## Authenticated sources, server rendering, and bundles
 
 - **Authorization headers and in-memory bytes**: `<PdfDocument>` accepts
   `{ url, httpHeaders: { Authorization: "Bearer …" }, withCredentials: true }`,
   `{ data: Uint8Array }`, or a custom `PDFDataRangeTransport` ([Sources](/reference/sources/)).
-  Browser PDF `<iframe>`s cannot attach custom headers, and `viewer.html?file=…`
-  rejects cross-origin or `blob:` URLs unless you host and patch `viewer.mjs`
-  yourself.
+  An iframe's `src` provides no way to set request headers. With a
+  self-hosted pdf.js viewer, the integration must fetch or pass the data
+  to that separate viewer.
 - **Server Components without wrappers**: Every DOM-touching module declares
   `"use client"`. `<PdfViewer />` renders an empty viewport container on the
   server without `window is not defined` or `next/dynamic({ ssr: false })`,
@@ -295,7 +288,7 @@ An `<iframe>` is still the simpler choice when:
 - **Your page is not a React app**, or the PDF is a standalone link target
   that never shares state, auth headers, or UI with surrounding components.
 - **You want Mozilla's complete built-in chrome out of the box**:
-  `pdfjs-dist/web/viewer.html` ships a ready-made toolbar, sidebar, document
+  Mozilla's prebuilt PDF.js viewer ships a ready-made toolbar, sidebar, document
   properties dialog, and over a hundred UI translations. ParaPDF gives you the
   viewport, thumbnails, and hooks so controls live in your own components and
   design system; if you want a full starting toolbar, copy from the
