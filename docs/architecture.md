@@ -31,21 +31,19 @@ direction, with their evidence. The site's reference
 
 ## Layers
 
-Dependencies point down only. The core (`pdfjs/` to `render/`) imports no
-feature, and React is used only in `react/`.
+**From source to first paint**
 
-```
-react/      PdfDocument, PdfView, PdfViewer, PdfForms, PdfAnnotationEditor,
-            PdfAutoLinks, PdfPermissions, PdfThumbnails, PdfOutline, hooks, overlays
-features/   search, history, initial view, permissions, forms,
-            annotations, autoLinks, print, download, thumbnails, layers,
-            attachments, selection, text
-render/     planner (pure), renderer (page DOM, canvases, kept canvases),
-            DOM layers (text, links and forms, editor, structure), selection tracker
-view/       Viewer: layout, scrolling, zoom, gestures, keys, navigation, state, view snapshots
-document/   DocumentSession, one per open document, shared through a registry
-pdfjs/      loading pdf.js with its worker and files; drawing and layers with it
-```
+1. `PdfDocument` asks the registry for a session. Viewers of the same source
+   share its pdf.js document, pages, and cached reads. [React bindings](../packages/parapdf/src/react/) · [Document sessions](../packages/parapdf/src/document/)
+2. `PdfViewer` attaches a viewport. Its `ViewerController` lays out the pages
+   and tells the renderer which are visible. [View and layout](../packages/parapdf/src/view/)
+3. The renderer asks the planner what to draw next, then calls pdf.js to draw
+   the chosen pages or regions into canvases. It also builds each page's text
+   and annotation layers. [Rendering](../packages/parapdf/src/render/) · [pdf.js integration](../packages/parapdf/src/pdfjs/)
+
+Only the bindings import React. Optional features depend on the core,
+attaching search, forms, and other capabilities to a session or viewer.
+[Features](../packages/parapdf/src/features/)
 
 ### pdfjs/
 
