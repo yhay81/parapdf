@@ -187,6 +187,21 @@ const settle = (page: Page, { quiet = false } = {}) =>
     { timeout: 30_000, polling: 50 },
   );
 
+// The old page can still be sharp before ResizeObserver delivers the new width.
+async function narrowAndRefit(page: Page, previousScale: number): Promise<void> {
+  await page.setViewportSize({ width: 800, height: 900 });
+  await page
+    .waitForFunction(
+      (scale) => (window.__viewer?.store.get().scale ?? Infinity) < scale,
+      previousScale,
+      {
+        timeout: 5_000,
+      },
+    )
+    .catch(() => {}); // Let the geometry assertion report the observed layout on timeout.
+  await settle(page);
+}
+
 const server = await preview({
   root: exampleDir,
   configFile: join(exampleDir, "vite.config.ts"),
@@ -495,9 +510,7 @@ try {
   // fit-width follows the viewport's width and the view's rotation until the user zooms.
   const fit = await newPage("file=bill-hr815.pdf", 1200);
   const before = await probe(fit);
-  await fit.setViewportSize({ width: 800, height: 900 });
-  await fit.waitForTimeout(300);
-  await settle(fit);
+  await narrowAndRefit(fit, before.scale);
   let after = await probe(fit);
   const fitted = (probe: Probe) => {
     const entry = probe.pages.find((item) => item.page === 1) ?? probe.pages[0];
@@ -583,9 +596,7 @@ try {
     autoState.ok && autoState.scale === 5 / 3,
     JSON.stringify(autoState),
   );
-  await auto.setViewportSize({ width: 800, height: 900 });
-  await auto.waitForTimeout(300);
-  await settle(auto);
+  await narrowAndRefit(auto, autoState.scale);
   autoState = await autoFit();
   check(
     '"auto" fits the width again when the viewport narrows',
