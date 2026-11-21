@@ -11,16 +11,7 @@ head:
       }
 ---
 
-**ParaPDF 0.11.0** and **react-pdf 11.1.0** use pdf.js 6.5.438 with selectable text and links. The long-document react-pdf reader adds react-window 2.5.3.
-
-<figure class="performance-highlights">
-  <figcaption>ParaPDF vs react-pdf at 3,600 CSS px/s in Chromium, WebKit and Firefox</figcaption>
-  <ul role="list">
-    <li><strong>86–92%</strong><span>less main-thread delay<small>110-page bill</small></span></li>
-    <li><strong>55%</strong><span>less canvas memory<small>1,000-page text</small></span></li>
-    <li><strong>74–77%</strong><span>fewer React commits<small>1,000-page text</small></span></li>
-  </ul>
-</figure>
+ParaPDF 0.11.0 and react-pdf 11.1.0 use pdf.js 6.5.438 with selectable text and links. The long-document react-pdf reader adds react-window 2.5.3.
 
 ## Reading a 1,000-page PDF
 
@@ -32,7 +23,7 @@ head:
 | Reading speed · frames below full resolution | 0/4,598 | 0/4,616 |
 | Reading speed · frames without selectable text | 0/4,598 | 0/4,616 |
 
-Fast scrolling ran at 3,600 CSS px/s. Canvas storage includes cached drawings. A separate eight-second reading test at 900 CSS px/s checked the visible text layers and canvas resolution every frame.
+At 3,600 CSS px/s, ParaPDF used 55% less canvas memory, including cached drawings, and made 74–77% fewer React commits. The eight-second reading test at 900 CSS px/s checked visible text layers and canvas resolution every frame.
 
 | At rest on page 10 | ParaPDF | react-pdf |
 | --- | ---: | ---: |
@@ -66,7 +57,7 @@ Main-thread delay accumulated during four seconds of scrolling. Each value is th
 | Firefox | 900 | 46.9 | 39.1 |
 | Firefox | 3,600 | **15.4** | 123.8 |
 
-ParaPDF recorded less main-thread delay in 9 of 12 conditions. The Firefox reading-speed rows use a lower-load repeat. [Individual trials and repeats](https://github.com/yhay81/parapdf/blob/v0.11.0/docs/decisions/0058-prepare-neighboring-text.md#scrolling)
+ParaPDF had the lower median in 9 of 12 conditions. On the bill at 3,600 CSS px/s, it spent 86–92% less time blocked. The Firefox reading-speed rows use a lower-load repeat. [Individual trials and repeats](https://github.com/yhay81/parapdf/blob/v0.11.0/docs/decisions/0058-prepare-neighboring-text.md#scrolling)
 
 ## Opening a PDF
 
