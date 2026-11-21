@@ -24,7 +24,7 @@ export interface PageElements {
    * A tagged page's structure, as pdf.js's viewer keeps it: a canvas's
    * fallback content is read by assistive technology but never drawn.
    */
-  readonly structure: HTMLElement | null;
+  structure: HTMLCanvasElement | null;
   readonly text: HTMLElement | null;
   readonly annotations: HTMLElement | null;
   /** Receives the annotations the viewer edits on the page, while it edits them. */
@@ -102,13 +102,6 @@ export function mountPage(
   // Two detail canvases: a new detail is drawn into one while the other shows the old.
   const spare = createCanvas(document);
   drawings.append(base, detail, spare);
-  let structure: HTMLElement | null = null;
-  if (layers.text) {
-    structure = document.createElement("canvas");
-    structure.className = "parapdf-structure";
-    (structure as HTMLCanvasElement).width = 0;
-    (structure as HTMLCanvasElement).height = 0;
-  }
   const text = layers.text ? createLayer(document, "parapdf-text-layer") : null;
   const annotations = layers.annotations ? createLayer(document, "parapdf-annotation-layer") : null;
   const editor = layers.editor ? createLayer(document, "parapdf-editor-layer") : null;
@@ -118,13 +111,26 @@ export function mountPage(
     base,
     detail,
     spare,
-    structure,
+    structure: null,
     text,
     annotations,
     editor,
   };
   host.prepend(...ownNodes(elements));
   return elements;
+}
+
+/** Expose a tagged page's structure as canvas fallback content beside its text. */
+export function setPageStructure(elements: PageElements, tree: Element): void {
+  if (!elements.structure) {
+    const canvas = elements.host.ownerDocument.createElement("canvas");
+    canvas.className = "parapdf-structure";
+    canvas.width = 0;
+    canvas.height = 0;
+    elements.drawings.after(canvas);
+    elements.structure = canvas;
+  }
+  elements.structure.replaceChildren(tree);
 }
 
 function ownNodes(elements: PageElements): HTMLElement[] {

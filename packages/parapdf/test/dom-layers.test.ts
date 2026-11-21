@@ -79,11 +79,12 @@ async function setup(t: TestContext, { editor = true, text = false } = {}) {
     failed: 0,
   };
   const state = { waiting: false };
+  const waiting = t.mock.fn(() => state.waiting);
   const layers = new DomLayers(
     session,
     { annotationSetup: { ...DEFAULT_ANNOTATION_SETUP, editor: editor ? fake.editor : null } },
     stats,
-    () => state.waiting,
+    waiting,
   );
   const attach = (index: number) =>
     layers.attach(index, mountPage(fakeHost(), { text, annotations: false, editor: true }));
@@ -92,10 +93,35 @@ async function setup(t: TestContext, { editor = true, text = false } = {}) {
     t.mock.timers.tick(16);
     await settle();
   };
-  return { layers, stats, state, attach, idle, built: fake.layers };
+  return { layers, stats, state, waiting, attach, idle, built: fake.layers };
 }
 
 describe("DomLayers", () => {
+  it("leaves finished layers idle until the visible pages, scale, or mounted layers change", async (t) => {
+    const { layers, waiting, attach, idle } = await setup(t, { editor: false });
+    const scan = async (input: ViewInput) => {
+      layers.update(input);
+      layers.schedule();
+      await idle();
+      // Waiting for a visible drawing is the first check in every idle scan.
+      return waiting.mock.callCount();
+    };
+    const start = view(0, 0);
+    attach(0);
+    assert.equal(await scan(start), 1);
+    assert.equal(await scan({ ...start, viewport: { ...start.viewport, top: 30 } }), 1);
+    assert.equal(await scan(view(0, 1)), 2);
+    const zoom = {
+      ...view(0, 1),
+      layout: computeLayout([LETTER, LETTER, LETTER], 2.5, { gap: 10 }),
+    };
+    assert.equal(await scan(zoom), 3);
+    attach(1);
+    assert.equal(await scan(zoom), 4);
+    layers.invalidateAnnotations();
+    assert.equal(await scan(zoom), 5);
+  });
+
   it("builds one layer at a time in idle periods once scrolling settles, visible pages first", async (t) => {
     const { layers, attach, idle, built, stats } = await setup(t);
     for (const index of [0, 1, 2]) attach(index);

@@ -297,7 +297,11 @@ the garbage collector takes with it (decision 0032).
 - `dom-layers.ts` builds DOM layers one at a time, after scrolling
   settles, in idle time, never while a visible page waits for its first
   pixels: text, then links and forms, then the annotations being edited.
-  A mounted tagged page gives its text and annotation DOM ids unique to its
+  Once all mounted layers are built and visible layers are current, scrolling
+  over the same pages schedules no idle scan. Mounting a page, invalidating
+  annotations or changing the visible range, scale or rotation wakes it.
+  Only a page with a structure tree creates a zero-pixel canvas for it
+  (decision 0055). A mounted tagged page gives its text and annotation DOM ids unique to its
   structure tree, so its accessibility relationships stay in that viewer.
   Text layers keep the zoom they were laid out at and follow later zooms
   with CSS, while annotation link and popup layers update only on rotation

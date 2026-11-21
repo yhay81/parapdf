@@ -6,6 +6,10 @@ change the API.
 
 ## Unreleased
 
+- Scrolling within a page no longer schedules idle checks once its text and
+  annotations are ready. Untagged pages use one fewer canvas element. Tagged
+  pages still expose the PDF's structure to assistive technology.
+
 ## 0.10.0 — 2026-11-20
 
 Opening a document now prioritizes visible pages and prepares at most one

@@ -7,10 +7,9 @@ description: How ParaPDF exposes documents to assistive technology.
   labelled region. Name them in your application's language with
   `PdfViewer`'s `label` and `pageLabel`; the defaults are "PDF document"
   and "Page 3 of 12".
-- The canvases are hidden from assistive technology, which reads the text
-  layer instead.
-- A tagged PDF's structure gives that text its headings, paragraphs, lists,
-  tables, and figures' alternative text, as in pdf.js's viewer.
+- Screen readers get text from the text layer. Tagged pages also expose
+  the PDF's headings, paragraphs, lists, tables and figure descriptions
+  through the fallback content of a separate, zero-sized canvas.
 - Text layers carry the PDF's language (`/Lang`), or, where the PDF
   declares none, the language the viewer inherits from your page, so screen
   readers announce the text in its language.

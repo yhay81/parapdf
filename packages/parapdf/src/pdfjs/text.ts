@@ -148,12 +148,11 @@ export interface TextLayerRequest {
   cssScale: number;
   rotation?: Rotation;
   /**
-   * Receives a tagged page's structure, after the text: elements with ARIA
-   * roles (headings, lists, tables, figures with their alternative text)
-   * that take the text layer's runs in through `aria-owns`. It should be
-   * accessible but not rendered, as a canvas's fallback content is.
+   * Publishes a tagged page's structure after the text. Its headings, lists,
+   * tables and figures own the text runs through `aria-owns`. The viewer
+   * exposes the tree to assistive technology as a canvas's fallback content.
    */
-  structure?: HTMLElement;
+  onStructure(tree: Element): void;
 }
 
 export interface TextLayerHandle {
@@ -161,7 +160,7 @@ export interface TextLayerHandle {
   readonly layer: HTMLElement;
   /** One element per item of `PageText.items`, in the same order. */
   readonly elements: readonly HTMLElement[];
-  /** The page's structure tree, which labels its annotations; null without `structure`. */
+  /** The page's structure tree, which labels its annotations; null on an untagged page. */
   readonly structTree: StructTreeBuilder | null;
   /** Re-measure the runs for a new zoom level, or turn them with the view. */
   update(cssScale: number, rotation: Rotation): void;
@@ -216,7 +215,7 @@ function inLayerLanguage(source: ReadableStream, container: HTMLElement): Readab
 export function buildTextLayer(
   { pdfjs }: LoadedPdfjs,
   page: Promise<Pdfjs.PDFPageProxy>,
-  { container, cssScale, rotation, structure }: TextLayerRequest,
+  { container, cssScale, rotation, onStructure }: TextLayerRequest,
 ): TextLayerTask {
   let layer: Pdfjs.TextLayer | undefined;
   let cancelled = false;
@@ -224,9 +223,7 @@ export function buildTextLayer(
     if (cancelled) throw new RenderCancelledError("text layer cancelled before it started");
     setLayerUnit(container, page);
     const viewport = pageViewport(page, cssScale, rotation);
-    const tree = structure
-      ? new StructTreeBuilder(page.getStructTree(), viewport.rawDims as RawDims)
-      : null;
+    const tree = new StructTreeBuilder(page.getStructTree(), viewport.rawDims as RawDims);
     const rendered = new pdfjs.TextLayer({
       textContentSource: inLayerLanguage(page.streamTextContent(TEXT_OPTIONS), container),
       container,
@@ -236,24 +233,20 @@ export function buildTextLayer(
     });
     layer = rendered;
     await rendered.render();
-    let hasStructTree = false;
-    if (tree && structure) {
-      // An untagged page has no tree; a broken one leaves the text as it is.
-      const dom = await tree.render().catch((error: unknown) => {
-        console.error(`page ${page.pageNumber}: structure tree failed`, error);
-        return null;
-      });
-      if (cancelled) throw new RenderCancelledError("text layer cancelled");
-      if (dom) {
-        hasStructTree = true;
-        tree.updateTextLayer(container.querySelectorAll<HTMLElement>(".markedContent[id]"));
-        structure.replaceChildren(dom);
-      }
+    // An untagged page has no tree; a broken one leaves the text as it is.
+    const dom = await tree.render().catch((error: unknown) => {
+      console.error(`page ${page.pageNumber}: structure tree failed`, error);
+      return null;
+    });
+    if (cancelled) throw new RenderCancelledError("text layer cancelled");
+    if (dom) {
+      tree.updateTextLayer(container.querySelectorAll<HTMLElement>(".markedContent[id]"));
+      onStructure(dom);
     }
     return {
       layer: container,
       elements: rendered.textDivs,
-      structTree: hasStructTree ? tree : null,
+      structTree: dom ? tree : null,
       update(nextScale, nextRotation) {
         rendered.update({ viewport: pageViewport(page, nextScale, nextRotation) });
       },

@@ -63,7 +63,6 @@ describe("Renderer page DOM", () => {
       children.map((child) => child.className),
       [
         "parapdf-canvas-wrapper",
-        "parapdf-structure",
         "parapdf-text-layer",
         "parapdf-annotation-layer",
         "parapdf-overlay-layer",

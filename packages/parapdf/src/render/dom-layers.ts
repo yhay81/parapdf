@@ -20,7 +20,7 @@ import type {
 } from "../pdfjs/editor-types.ts";
 import type { LayerState } from "../pdfjs/layers.ts";
 import { buildTextLayer, type TextLayerHandle, type TextLayerTask } from "../pdfjs/text.ts";
-import type { PageElements } from "./page.ts";
+import { type PageElements, setPageStructure } from "./page.ts";
 import type { ViewInput } from "./planner.ts";
 import type { TextSelectionTracker } from "./selection.ts";
 
@@ -151,6 +151,8 @@ export class DomLayers {
   #input: ViewInput | undefined;
   #running = false;
   #scheduled = false;
+  /** The last scan found every mounted layer built and every visible layer up to date. */
+  #complete = false;
   /** Callers waiting for a page's annotation editor layer: true once built, false if never. */
   readonly #editorWaiters = new Map<number, Set<(built: boolean) => void>>();
 
@@ -167,6 +169,7 @@ export class DomLayers {
   }
 
   attach(index: number, elements: PageElements): void {
+    this.#complete = false;
     this.#pages.set(index, {
       index,
       elements,
@@ -218,8 +221,19 @@ export class DomLayers {
 
   /** The view moved or zoomed: text layers follow a zoom with CSS. */
   update(input: ViewInput): void {
-    if (input.layout.scale !== this.#input?.layout.scale) {
+    const previous = this.#input;
+    if (input.layout.scale !== previous?.layout.scale) {
       for (const page of this.#pages.values()) followZoom(page, input.layout.scale);
+    }
+    // A zoom or turn can stale a layer. An already mounted page may only
+    // become eligible for layout again when it enters the viewport.
+    if (
+      input.first !== previous?.first ||
+      input.last !== previous.last ||
+      input.layout.scale !== previous.layout.scale ||
+      input.layout.rotation !== previous.layout.rotation
+    ) {
+      this.#complete = false;
     }
     this.#input = input;
   }
@@ -261,6 +275,7 @@ export class DomLayers {
    * annotations from them after them.
    */
   invalidateAnnotations(): void {
+    this.#complete = false;
     const keepCanvases =
       this.#options.annotationSetup.forms ||
       (this.#options.annotationSetup.editor?.layerEditing.editing ?? false);
@@ -291,7 +306,7 @@ export class DomLayers {
 
   /** Build the next layer in an idle period once scrolling settles. */
   schedule(): void {
-    if (this.#scheduled || this.#running || !this.#input?.settled) return;
+    if (this.#complete || this.#scheduled || this.#running || !this.#input?.settled) return;
     this.#scheduled = true;
     whenIdle(() => {
       this.#scheduled = false;
@@ -379,7 +394,7 @@ export class DomLayers {
         stale.annotationRotation = rotation;
       }
       this.schedule();
-    }
+    } else this.#complete = true;
   }
 
   /**
@@ -553,7 +568,7 @@ export class DomLayers {
       container,
       cssScale,
       rotation,
-      ...(structure ? { structure } : {}),
+      onStructure: (tree) => setPageStructure(page.elements, tree),
     });
     page.textTask = task;
     this.#running = true;
