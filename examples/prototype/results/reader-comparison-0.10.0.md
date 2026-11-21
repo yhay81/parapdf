@@ -46,6 +46,10 @@ ParaPDF's own package occupied 8.30 MiB, including 5.55 MiB of workers, fonts, d
 
 ParaPDF supplies the viewport, document search, form controls and automatic worker setup. Its overlays add content in PDF page coordinates. React-pdf supplies individual pages, form fields, text and annotation layers, and lets an application replace the page renderer or customize individual text runs. The measured react-pdf application supplies the virtual list. Full-document search and automatic links in unannotated text require additional application code with react-pdf. [ParaPDF guides](../../../site/src/content/docs/guides) · [react-pdf 11.1.0 API](https://github.com/wojtekmaj/react-pdf/blob/aa36493db1568f1330f974b0acf27621d79d0cca/packages/react-pdf/README.md)
 
+## Follow-up on the slower cases
+
+On main, the 1,000-page test uses 15 canvas elements at page 10, down from 20 in 0.10.0. The follow-up records the results for all twelve scrolling conditions and a second series for the cases with the largest variation. [Implementation and paired measurements](../../../docs/decisions/0055-finished-dom-layers.md)
+
 ## Reproduce
 
 Run the comparison scripts from this checkout against a prototype built from v0.10.0. Generate the synthetic corpus and install the Playwright browsers as in the [performance benchmark instructions](performance-0.10.0.md#reproduce).
