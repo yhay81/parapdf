@@ -191,7 +191,10 @@ through these directories.
   to after they unmounted), `navigation-bench.ts` (`PdfThumbnails` and
   `PdfOutline`), `text-virtualization-bench.ts`, `main-thread-bench.ts`, and
   `hwa-bench.ts`,
-  each documented in its header comment. `startup-bench.ts` compares cold
+  each documented in its header comment. `compare-readers.ts` checks reading behavior,
+  raster fidelity and mounted DOM against react-pdf with react-window.
+  `reader-footprint.ts` measures clean npm installs and the code two minimal Vite readers
+  load for a selectable page. `startup-bench.ts` compares cold
   client opens in `DIST` and `BEFORE` with one page drawn directly by pdf.js.
   It checks full-resolution pixels and records the first and next drawings,
   canvas bytes and worker requests. `startup-flip-bench.ts` clicks Next on the
