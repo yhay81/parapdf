@@ -95,6 +95,13 @@ Two WebKit conditions favored react-pdf in the six-round series. Both were repea
 
 On the slow bill, the final viewer completed one additional text layer during the scroll. Both ParaPDF builds completed one detail drawing, performed two React commits, and had a median of zero dropped frames. The visible-only policy saved main-thread time but had left text unavailable on newly visible pages in the separate reading test. We kept the adjacent text layer for selection.
 
+Firefox's reading-speed results varied widely between rounds. A six-round repeat limited the one-minute load average to 12 before each job on the twelve-core machine. The same reader had the lower median on each document in both series. The performance page uses this repeat for both Firefox reading-speed rows.
+
+| Firefox at 900 CSS px/s, median blocked ms | Visible-only text | Neighboring text | react-pdf |
+| --- | ---: | ---: | ---: |
+| 1,000-page text | 5.7 | 4.6 | 9.1 |
+| 110-page bill | 53.7 | 46.9 | 39.1 |
+
 ## Cold opening
 
 Each fresh context primed the local connection on an idle page, then navigated to the reader at 820 × 900 CSS pixels. The first full-resolution drawing is timed from navigation start. One warmup per renderer was discarded before six rotating rounds. The direct pdf.js reference renders one page. ParaPDF and react-pdf use their normal neighboring-page behavior. Each timed first-page hash had to match the corresponding renderer's warmup. The discarded round also compared every RGBA pixel against direct pdf.js.
@@ -118,6 +125,13 @@ The one-minute system load rose from 10.3 to 35.1 during the Firefox series on t
 | WebKit | 1,000-page text | 0 | 3,279,520 | 0 |
 | Firefox | 110-page bill | 0 | 3,801,696 | 0 |
 | Firefox | 1,000-page text | 0 | 3,279,520 | 0 |
+
+The cold opens were repeated in Firefox with the same load limit used for the slower scrolling tests. Each timed trial used a fresh context. The retained lower-load series on the performance page includes both PDFs. The bill changed order relative to the first series. The full-resolution pixels matched direct pdf.js in every repeat for both readers.
+
+| Firefox, six cold opens | ParaPDF median (ms) | react-pdf median (ms) | Direct median (ms) | ParaPDF lower in pairs |
+| --- | ---: | ---: | ---: | ---: |
+| 110-page bill | 201.6 | 231.3 | 158.9 | 6/6 |
+| 1,000-page text | 323.8 | 331.4 | 350.6 | 5/6 |
 
 On the bill, a Chromium diagnostic isolated the difference in the small graphic at the upper left. Drawing directly through pdf.js with hardware acceleration enabled reproduced ParaPDF's hash. Disabling it and supplying the same opaque 2D context as react-pdf reproduced react-pdf's hash. Changing the PDF annotation mode between its default, enabled annotations and HTML forms did not change either result.
 
@@ -156,4 +170,9 @@ BROWSER=webkit VARIANTS=pdfjs-hwa,react-pdf-window REFERENCE=react-pdf-window \
 BROWSER=webkit VARIANTS=pdfjs-hwa,react-pdf-window REFERENCE=react-pdf-window \
   FILES=bill-hr815.pdf SPEEDS=900 DURATION=4000 RUNS=9 \
   node examples/prototype/scripts/scroll-bench.ts
+BROWSER=firefox MAX_LOAD=12 VARIANTS=pdfjs-hwa,react-pdf-window REFERENCE=react-pdf-window \
+  FILES=synthetic-text-1000.pdf,bill-hr815.pdf SPEEDS=900 DURATION=4000 RUNS=6 \
+  node examples/prototype/scripts/scroll-bench.ts
+BROWSER=firefox MAX_LOAD=12 BEFORE= REACT_PDF=1 FILES=bill-hr815.pdf,synthetic-text-1000.pdf \
+  RUNS=6 OUTPUT=/tmp/opening-firefox-lower-load.json node examples/prototype/scripts/startup-bench.ts
 ```

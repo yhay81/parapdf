@@ -43,7 +43,7 @@ Main-thread delay accumulated during four seconds of scrolling. Smaller values m
 | Chromium | 3,600 | **10.3** | 16.1 |
 | WebKit | 900 | **2.9** | 3.8 |
 | WebKit | 3,600 | 5.4 | **4.6** |
-| Firefox | 900 | **135.2** | 136.8 |
+| Firefox | 900 | **4.6** | 9.1 |
 | Firefox | 3,600 | **40.4** | 94.2 |
 
 ### 110-page bill
@@ -54,10 +54,10 @@ Main-thread delay accumulated during four seconds of scrolling. Smaller values m
 | Chromium | 3,600 | **3.4** | 24.0 |
 | WebKit | 900 | 9.8 | **8.2** |
 | WebKit | 3,600 | **4.0** | 51.2 |
-| Firefox | 900 | 40.5 | **31.7** |
+| Firefox | 900 | 46.9 | **39.1** |
 | Firefox | 3,600 | **15.4** | 123.8 |
 
-ParaPDF recorded less main-thread delay in 9 of 12 conditions. [Individual trials](https://github.com/yhay81/parapdf/blob/main/docs/decisions/0058-prepare-neighboring-text.md#scrolling)
+ParaPDF recorded less main-thread delay in 9 of 12 conditions. The Firefox reading-speed rows use a lower-load repeat. [Individual trials and repeats](https://github.com/yhay81/parapdf/blob/main/docs/decisions/0058-prepare-neighboring-text.md#scrolling)
 
 ## Opening a PDF
 
@@ -67,25 +67,27 @@ Median time from navigation to a full-resolution first page, over six cold opens
 | --- | ---: | ---: |
 | 1,000-page text · Chromium | **160** | 186 |
 | 1,000-page text · WebKit | **181** | 183 |
-| 1,000-page text · Firefox | **433** | 523 |
+| 1,000-page text · Firefox | **324** | 331 |
 | 110-page bill · Chromium | **157** | 187 |
 | 110-page bill · WebKit | **191** | 276 |
-| 110-page bill · Firefox | 324 | **266** |
+| 110-page bill · Firefox | **202** | 231 |
 
-The first page of the text PDF matched pixel for pixel in all three browsers. The bill also matched in Firefox. Its first page differed on 0.03% of pixels in WebKit and 0.04% in Chromium. ParaPDF matched direct pdf.js in every run.
+The Firefox rows use a lower-load repeat. Under heavier system load, the bill opened in 324 ms with ParaPDF and 266 ms with react-pdf. [Both series](https://github.com/yhay81/parapdf/blob/main/docs/decisions/0058-prepare-neighboring-text.md#cold-opening)
+
+The text PDF matched pixel for pixel in all three browsers. The bill also matched in Firefox. Its first page differed on 0.03% of pixels in WebKit and 0.04% in Chromium. ParaPDF matched direct pdf.js in every run.
 
 ## Download and install size
 
 | Reader | First-page code (gzip) | macOS arm64 install |
 | --- | ---: | ---: |
-| ParaPDF | 620.4 KiB | 76.71 MiB |
+| ParaPDF | 620.4 KiB | 76.72 MiB |
 | react-pdf + react-window | 634.5 KiB | 76.87 MiB |
 | Single-page react-pdf | 628.8 KiB | 76.46 MiB |
 
 | npm install target | ParaPDF | react-pdf + react-window |
 | --- | ---: | ---: |
 | Linux x64 (glibc) | 83.02 MiB | 83.17 MiB |
-| Windows x64 | 87.24 MiB | 87.40 MiB |
+| Windows x64 | 87.25 MiB | 87.40 MiB |
 
 Code includes the JavaScript, CSS and worker requested for a selectable Japanese page. Install sizes include production dependencies and the native binary for each npm target. [Package measurements](https://github.com/yhay81/parapdf/blob/main/docs/decisions/0058-prepare-neighboring-text.md#package-size)
 
