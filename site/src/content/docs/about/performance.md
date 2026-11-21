@@ -11,7 +11,7 @@ head:
       }
 ---
 
-ParaPDF 0.11.0 and react-pdf 11.1.0 use pdf.js 6.5.438 with selectable text and links. The long-document react-pdf reader adds react-window 2.5.3.
+ParaPDF 0.11.0 and react-pdf 11.1.0 use pdf.js 6.5.438 with text selection and links. For long PDFs, react-pdf also uses react-window 2.5.3.
 
 ## Reading a 1,000-page PDF
 
@@ -23,7 +23,7 @@ ParaPDF 0.11.0 and react-pdf 11.1.0 use pdf.js 6.5.438 with selectable text and 
 | Reading speed · frames below full resolution | 0/4,598 | 0/4,616 |
 | Reading speed · frames without selectable text | 0/4,598 | 0/4,616 |
 
-At 3,600 CSS px/s, ParaPDF used 55% less canvas memory, including cached drawings, and made 74–77% fewer React commits. The eight-second reading test at 900 CSS px/s checked visible text layers and canvas resolution every frame.
+Fast scrolling ran at 3,600 CSS px/s and reading at 900 CSS px/s. Canvas storage includes cached drawings.
 
 | At rest on page 10 | ParaPDF | react-pdf |
 | --- | ---: | ---: |
@@ -33,7 +33,7 @@ At 3,600 CSS px/s, ParaPDF used 55% less canvas memory, including cached drawing
 
 ## Scrolling
 
-Main-thread delay accumulated during four seconds of scrolling. Each value is the median of six trials on an Apple M2 Pro at 2× pixel density. Bold timings show at least 50% less delay than the other reader.
+Main-thread delay over four seconds of scrolling. Median of six trials on an Apple M2 Pro at 2× pixel density.
 
 ### 1,000-page text
 
@@ -57,11 +57,11 @@ Main-thread delay accumulated during four seconds of scrolling. Each value is th
 | Firefox | 900 | 46.9 | 39.1 |
 | Firefox | 3,600 | **15.4** | 123.8 |
 
-ParaPDF had the lower median in 9 of 12 conditions. On the bill at 3,600 CSS px/s, it spent 86–92% less time blocked. The Firefox reading-speed rows use a lower-load repeat. [Individual trials and repeats](https://github.com/yhay81/parapdf/blob/v0.11.0/docs/decisions/0058-prepare-neighboring-text.md#scrolling)
+Firefox at 900 CSS px/s uses a lower-load repeat. [Individual trials and repeats](https://github.com/yhay81/parapdf/blob/v0.11.0/docs/decisions/0058-prepare-neighboring-text.md#scrolling)
 
 ## Opening a PDF
 
-Median time from navigation to a full-resolution first page, over six cold opens at 820 × 900.
+Time to a full-resolution first page. Median of six cold opens at 820 × 900.
 
 | PDF and browser | ParaPDF (ms) | react-pdf (ms) |
 | --- | ---: | ---: |
@@ -72,9 +72,9 @@ Median time from navigation to a full-resolution first page, over six cold opens
 | 110-page bill · WebKit | 191 | 276 |
 | 110-page bill · Firefox | 202 | 231 |
 
-The Firefox rows use a lower-load repeat. Under heavier system load, the bill opened in 324 ms with ParaPDF and 266 ms with react-pdf. [Both series](https://github.com/yhay81/parapdf/blob/v0.11.0/docs/decisions/0058-prepare-neighboring-text.md#cold-opening)
+Firefox uses a lower-load repeat. Under heavier load, the bill took 324 ms with ParaPDF and 266 ms with react-pdf. [Both series](https://github.com/yhay81/parapdf/blob/v0.11.0/docs/decisions/0058-prepare-neighboring-text.md#cold-opening)
 
-The text PDF matched pixel for pixel in all three browsers. The bill also matched in Firefox. Its first page differed on 0.03% of pixels in WebKit and 0.04% in Chromium. ParaPDF matched direct pdf.js in every run.
+First-page pixels matched across readers except on the bill in WebKit (0.03% differed) and Chromium (0.04%). ParaPDF matched direct pdf.js throughout.
 
 ## Download and install size
 
@@ -89,7 +89,7 @@ The text PDF matched pixel for pixel in all three browsers. The bill also matche
 | Linux x64 (glibc) | 83.02 MiB | 83.17 MiB |
 | Windows x64 | 87.25 MiB | 87.40 MiB |
 
-Code includes the JavaScript, CSS and worker requested for a selectable Japanese page. Install sizes include production dependencies and the native binary for each npm target. [Package measurements](https://github.com/yhay81/parapdf/blob/v0.11.0/docs/decisions/0058-prepare-neighboring-text.md#package-size)
+Code includes JS, CSS and the worker for a selectable Japanese page. Installs include dependencies and native binaries. [Package measurements](https://github.com/yhay81/parapdf/blob/v0.11.0/docs/decisions/0058-prepare-neighboring-text.md#package-size)
 
 ## Reading features
 
