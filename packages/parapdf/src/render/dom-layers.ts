@@ -230,6 +230,7 @@ export class DomLayers {
     if (
       input.first !== previous?.first ||
       input.last !== previous.last ||
+      input.moving !== previous.moving ||
       input.layout.scale !== previous.layout.scale ||
       input.layout.rotation !== previous.layout.rotation
     ) {
@@ -351,7 +352,11 @@ export class DomLayers {
         page.elements.annotations === null ||
         page.annotationHandle !== undefined ||
         page.failed.has("annotations"));
-    for (const inWindow of [visible, (page: PageLayerState) => !visible(page)]) {
+    for (const inWindow of [
+      visible,
+      (page: PageLayerState) =>
+        !visible(page) && (!input.moving || (this.#editorWaiters.get(page.index)?.size ?? 0) > 0),
+    ]) {
       const text = pages.find((page) => inWindow(page) && needsText(page));
       if (text) {
         this.#startText(text, scale, rotation);
@@ -421,9 +426,14 @@ export class DomLayers {
       const done = (built: boolean) => {
         clearTimeout(timer);
         waiters.delete(done);
+        if (waiters.size === 0) this.#editorWaiters.delete(index);
         resolve(built);
       };
       waiters.add(done);
+      if (page && this.#input?.moving) {
+        this.#complete = false;
+        this.schedule();
+      }
     });
   }
 

@@ -1,7 +1,6 @@
 /**
- * Copies pdf.js's worker and the files it loads on demand from pdfjs-dist
- * into this package's `pdfjs/` directory, and writes
- * `src/pdfjs/files.ts`, which references each of them with
+ * Builds the parsing workers, lists the assets provided by pdfjs-dist for
+ * the static copy command, and writes the asset URL manifest with
  * `new URL(…, import.meta.url)`. Bundlers emit files referenced that way with
  * the application's own assets, so the application configures nothing.
  * Runs on `pnpm install` (prepare) and before every build.
@@ -76,31 +75,25 @@ for (const [build, name] of [
   cpSync(join(pdfjsDist, build, "pdf.renderer.min.mjs"), join(out, name));
 }
 
-// The icons of comments without an appearance of their own. A copy of
-// pdfjs/ served with configurePdfjs({ assetBase }) has them where pdf.js's
-// annotation layer looks, under one base URL; with the files bundlers emit,
-// which each get a URL of their own, the annotation layer points the icons
-// at them (src/pdfjs/annotation-layer.ts).
+// The static export preserves the paths pdf.js expects. In a bundle the
+// annotation layer looks up each comment icon by its original file name.
+const shared: string[] = [];
 const icons: string[] = [];
-mkdirSync(join(out, "web/images"), { recursive: true });
 for (const name of readdirSync(join(pdfjsDist, "web/images")).sort()) {
   if (!/^annotation-.*\.svg$/.test(name)) continue;
-  cpSync(join(pdfjsDist, "web/images", name), join(out, "web/images", name));
-  icons.push(urlEntry(name, `web/images/${name}`));
+  shared.push(`web/images/${name}`);
+  icons.push(name);
 }
 
-const entries: string[] = [];
 const names = new Set<string>();
 for (const { dir, files } of directories) {
-  mkdirSync(join(out, dir));
   for (const name of readdirSync(join(pdfjsDist, dir)).sort()) {
     if (!files(name) && !isLicense(name)) continue;
-    cpSync(join(pdfjsDist, dir, name), join(out, dir, name));
+    shared.push(`${dir}/${name}`);
     if (!files(name)) continue;
     // The worker's prelude finds a file by its name alone.
     if (names.has(name)) throw new Error(`Two files named ${name}`);
     names.add(name);
-    entries.push(urlEntry(name, `${dir}/${name}`));
   }
 }
 
@@ -110,8 +103,9 @@ for (const { dir, files } of directories) {
 // builds itself, which the files bundlers emit under names of their own
 // do not match.
 for (const name of ["quickjs-eval.js", "quickjs-eval.wasm"]) {
-  cpSync(join(pdfjsDist, "wasm", name), join(out, "wasm", name));
+  shared.push(`wasm/${name}`);
 }
+writeFileSync(join(out, "shared.json"), JSON.stringify(shared));
 writeFileSync(
   join(out, "quickjs.js"),
   `// ParaPDF's: pdf.js's sandbox imports this module for QuickJS, which it
@@ -124,67 +118,67 @@ export default async () => {
 `,
 );
 
-/** `new URL()` for `path` under pdfjs/, wrapped as Biome formats it after `prefix`. */
-function urlExpression(path: string, indent: string, prefix: string, suffix: string): string {
-  const call = `new URL("../../pdfjs/${path}", import.meta.url)`;
-  return `${indent}${prefix}${call}${suffix}`.length <= 100
-    ? call
-    : `new URL(\n${indent}  "../../pdfjs/${path}",\n${indent}  import.meta.url,\n${indent})`;
-}
+// Build the resource URLs from the exact dependency. A literal new URL for
+// each one lets bundlers name and emit individual files.
+const namesByKind = [
+  ["fileUrls", [...names]],
+  ["iconUrls", icons],
+] as const;
+const onDemand = new Map(shared.map((path) => [path.split("/").at(-1), path]));
+const url = (path: string, query: string) =>
+  `new URL("pdfjs-dist/${path}${query}", import.meta.url)`;
+const body = namesByKind.map(([method, names]) => {
+  const entries = names.map((name) => {
+    const path = onDemand.get(name);
+    if (!path) throw new Error(`Unknown asset: ${name}`);
+    return `  "${name}": ${url(path, NO_INLINE)},`;
+  });
+  return `export const ${method} = () => ({\n${entries.join("\n")}\n});`;
+});
+body.push(`export const scriptingUrls = () => ({
+  module: new URL("./quickjs.js?no-inline", import.meta.url),
+  quickjs: ${url("wasm/quickjs-eval.js", "?no-inline")},
+  wasm: ${url("wasm/quickjs-eval.wasm", NO_INLINE)},
+});`);
+writeFileSync(join(out, "urls.js"), `${body.join("\n")}\n`);
+// Vite's optimizer rebases a dependency's bare resource URLs against its own
+// module. Its dev server resolves the original source module correctly. A
+// development-mode build still needs the bundled module (no HMR context).
+writeFileSync(
+  join(out, "dev-urls.js"),
+  `// Load the manifest as a source module in the development server.
+const url = new URL("./urls.js", import.meta.url);
+export const { fileUrls, iconUrls, scriptingUrls } = import.meta.hot
+  ? await import(/* @vite-ignore */ url.href)
+  : await import("./urls.js");
+`,
+);
+writeFileSync(
+  join(out, "urls.d.ts"),
+  `export function fileUrls(): Record<string, URL>;
+export function iconUrls(): Record<string, URL>;
+export function scriptingUrls(): { module: URL; quickjs: URL; wasm: URL };
+`,
+);
+writeFileSync(
+  join(here, "src/pdfjs/files.ts"),
+  `// Generated by scripts/pdfjs-files.ts from pdfjs-dist ${version}; do not edit.
 
-function urlEntry(name: string, path: string): string {
-  return `  "${name}": ${urlExpression(`${path}${NO_INLINE}`, "  ", `"${name}": `, ",")},`;
-}
-
-const module = `// Generated by scripts/pdfjs-files.ts from pdfjs-dist ${version}; do not edit.
-
-/*
- * pdf.js's worker and the files it loads on demand, copied into this package
- * by scripts/pdfjs-files.ts. Each is referenced with \`new URL(…,
- * import.meta.url)\`, so bundlers emit it with the application's assets and
- * give back its final URL; the query \`${NO_INLINE}\` keeps them from inlining
- * the small ones as data: URLs. The functions keep the URLs from being
- * resolved before they are needed, as on the server.
- */
+export { fileUrls, iconUrls, scriptingUrls } from "#parapdf-asset-urls";
 
 /** The version of pdf.js the package ships. */
 export const pdfjsVersion = "${version}";
 
-/** pdf.js's worker script, after ParaPDF's prelude (scripts/worker-prelude.js). */
-export const pdfjsWorkerUrl = (): URL => ${urlExpression("pdf.worker.js", "", "export const pdfjsWorkerUrl = (): URL => ", ";")};
+/** pdf.js's worker script, after ParaPDF's prelude. */
+export const pdfjsWorkerUrl = (): URL => new URL("../../pdfjs/pdf.worker.js", import.meta.url);
 
 /** The optional drawing worker, from the package or its copy under assetBase. */
 export const pdfjsRendererUrl = (assetBase?: string): URL =>
   assetBase !== undefined
     ? new URL("pdf.renderer.js", assetBase.endsWith("/") ? assetBase : \`\${assetBase}/\`)
     : new URL("../../pdfjs/pdf.renderer.js", import.meta.url);
-
-/**
- * The files pdf.js's worker loads on demand, by name: CMaps, standard fonts,
- * image decoders, and the ICC profile.
- */
-export const fileUrls = (): Record<string, URL> => ({
-${entries.join("\n")}
-});
-
-/**
- * Form scripts' engine, which the page loads: the module pdf.js's sandbox
- * imports QuickJS through, QuickJS's script, and its WebAssembly. The
- * scripts go with \`?no-inline\` alone, since Vite's development server
- * answers a script requested with \`?url\` with a module that exports its URL.
- */
-export const scriptingUrls = (): { module: URL; quickjs: URL; wasm: URL } => ({
-  module: ${urlExpression("quickjs.js?no-inline", "  ", "module: ", ",")},
-  quickjs: ${urlExpression("wasm/quickjs-eval.js?no-inline", "  ", "quickjs: ", ",")},
-  wasm: ${urlExpression(`wasm/quickjs-eval.wasm${NO_INLINE}`, "  ", "wasm: ", ",")},
-});
-
-/** pdf.js's annotation icons, by file name, for comments without an appearance of their own. */
-export const iconUrls = (): Record<string, URL> => ({
-${icons.join("\n")}
-});
-`;
-writeFileSync(join(here, "src/pdfjs/files.ts"), module);
+`,
+);
 
 // The two icons of the annotation editor's toolbar, as data URLs in the
 // viewer's editor styles: small enough that a file of their own, which the

@@ -215,7 +215,7 @@ function startCommitProbe(): void {
     ctx.fillRect(0, 0, probe.width, probe.height);
     return [
       ...section.querySelectorAll<HTMLCanvasElement>(":scope > div[aria-hidden] > canvas"),
-    ].map((canvas) => {
+    ].map((canvas, index) => {
       // A canvas never drawn keeps the default size, 300 by 150, and shows nothing.
       const shown =
         canvas.width * canvas.height > 0 &&
@@ -231,7 +231,10 @@ function startCommitProbe(): void {
           box.height * S,
         );
       }
-      return shown;
+      return (
+        shown &&
+        (canvas.classList.contains("parapdf-detail-canvas") || (!canvas.className && index > 0))
+      );
     });
   };
   /**
@@ -284,7 +287,7 @@ function startCommitProbe(): void {
         page: Number(section.dataset.page),
         region,
         flat: flatIn(region),
-        detail: shown.slice(1).some(Boolean),
+        detail: shown.some(Boolean),
       });
     }
     frames.push({ t: performance.now(), pages });

@@ -15,6 +15,7 @@
  * Environment: BROWSER (chromium, webkit, or firefox).
  */
 import {
+  cpSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
@@ -24,7 +25,7 @@ import {
 } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { gzipSync } from "node:zlib";
 import { build, createServer, preview } from "vite";
 import { launchBrowser } from "../../../bench/scripts/browsers.ts";
@@ -39,6 +40,7 @@ import {
   MAIN_JS,
   packageDir,
   shippedFiles,
+  staticAssets,
   writePublicFiles,
 } from "./bundle-app.ts";
 
@@ -57,7 +59,17 @@ console.log(launched.label);
 
 try {
   const installed = installPackage(app);
-  for (const name of ["react", "react-dom", "pdfjs-dist"]) {
+  // The dev server serves dependency assets from the consumer's installation.
+  // A symlink into this unrelated workspace resolves outside its filesystem root.
+  cpSync(
+    dirname(require.resolve("pdfjs-dist/package.json")),
+    join(app, "node_modules/pdfjs-dist"),
+    {
+      recursive: true,
+      filter: (path) => basename(path) !== "node_modules",
+    },
+  );
+  for (const name of ["react", "react-dom"]) {
     symlinkSync(
       dirname(require.resolve(`${name}/package.json`)),
       join(app, "node_modules", name),
@@ -65,6 +77,7 @@ try {
     );
   }
   writePublicFiles(join(app, "public"));
+  cpSync(staticAssets(installed), join(app, "public/static-pdfjs"), { recursive: true });
   writeFileSync(join(app, "package.json"), JSON.stringify({ type: "module", private: true }));
   writeFileSync(
     join(app, "index.html"),
@@ -92,7 +105,7 @@ try {
     root: app,
     configFile: false,
     logLevel: "warn",
-    server: { port: 4183, host: "127.0.0.1", strictPort: false },
+    server: { port: 4183, host: "127.0.0.1", strictPort: false, hmr: false },
   });
   await dev.listen();
   try {
@@ -109,6 +122,9 @@ try {
     await dev.close();
   }
 
+  // createServer sets NODE_ENV=development in this process. A separate
+  // "vite build" command uses production conditions.
+  process.env.NODE_ENV = "production";
   // An application that does not import parapdf/legacy emits no legacy worker.
   // This build puts the list of the shipped files' URLs, which the bundle
   // every viewer loads holds, in a chunk of its own to weigh it.
@@ -122,7 +138,7 @@ try {
       rolldownOptions: {
         output: {
           codeSplitting: {
-            groups: [{ name: "pdfjs-files", test: /[\\/]pdfjs[\\/]files\.js$/ }],
+            groups: [{ name: "pdfjs-files", test: /[\\/]pdfjs[\\/](?:urls|files)\.js$/ }],
           },
         },
       },
@@ -140,7 +156,7 @@ try {
   const fileListSize = fileListCode ? gzipSync(fileListCode).length : 0;
   check(
     `the list of the shipped files' URLs stays within ${FILE_LIST_LIMIT / 1024} KB with gzip`,
-    fileListCode !== null && fileListSize <= FILE_LIST_LIMIT,
+    fileListCode?.includes("UniJIS-UCS2-H") === true && fileListSize <= FILE_LIST_LIMIT,
     fileListCode
       ? `${fileListCode.length} bytes, ${fileListSize} with gzip`
       : `no chunk of its own: ${emitted.filter((name) => name.endsWith(".js")).join(" ")}`,
@@ -159,7 +175,7 @@ try {
   });
   // Vite inlines files under 4 KB as data: URLs unless told not to, which
   // put most CMaps and the annotation icons into the bundle every viewer loads.
-  const inlined = inlinedFiles(join(app, "dist"), shippedFiles(join(installed, "pdfjs")));
+  const inlined = inlinedFiles(join(app, "dist"), shippedFiles(staticAssets(installed)));
   check(
     "the build's JavaScript holds none of the shipped files as data: URLs",
     inlined.length === 0,
@@ -174,6 +190,7 @@ try {
   try {
     const url = server.resolvedUrls?.local[0] ?? "http://127.0.0.1:4184/";
     await checkFiles(launched.browser, installed, "production build", url);
+    await checkFiles(launched.browser, installed, "static asset export", `${url}?static=1`);
     await checkFiles(
       launched.browser,
       installed,

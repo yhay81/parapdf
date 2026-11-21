@@ -24,7 +24,7 @@ import {
 import { KeptCanvases, type KeptPage } from "./kept-canvases.ts";
 import {
   addEditorLayer,
-  createCanvas,
+  drawingCanvas,
   mountPage,
   type PageElements,
   placeDetail,
@@ -83,17 +83,17 @@ class Slot implements PageState {
 
   get basePixels(): number {
     const { base } = this.elements;
-    return base.width * base.height;
+    return base ? base.width * base.height : 0;
   }
 
   get detailPixels(): number {
     const { detail } = this.elements;
-    return detail.width * detail.height;
+    return detail ? detail.width * detail.height : 0;
   }
 
   get sparePixels(): number {
     const { spare } = this.elements;
-    return spare.width * spare.height;
+    return spare ? spare.width * spare.height : 0;
   }
 }
 
@@ -315,7 +315,7 @@ export class Renderer {
     const kept = this.#keep(slot);
     const { base, detail, spare } = slot.elements;
     for (const canvas of [base, detail, spare]) {
-      if (!kept.has(canvas)) release(canvas);
+      if (canvas && !kept.has(canvas)) release(canvas);
     }
     unmountPage(slot.elements);
     this.#session.releasePage(index);
@@ -334,11 +334,14 @@ export class Renderer {
     if (this.#options.annotationSetup.forms && slot.elements.annotations) return keep;
     const { elements } = slot;
     const detail =
-      slot.detailScale > 0 && slot.detailVersion === this.#version
+      elements.detail && slot.detailScale > 0 && slot.detailVersion === this.#version
         ? { canvas: elements.detail, scale: slot.detailScale, region: slot.detailRegion }
         : null;
     const base =
-      slot.baseScale > 0 && slot.baseVersion === this.#version && detail?.region !== null
+      elements.base &&
+      slot.baseScale > 0 &&
+      slot.baseVersion === this.#version &&
+      detail?.region !== null
         ? { canvas: elements.base, scale: slot.baseScale }
         : null;
     if (!detail && !base) return keep;
@@ -358,14 +361,14 @@ export class Renderer {
    */
   #restore(slot: Slot, kept: KeptPage): void {
     if (kept.base) {
-      slot.elements.base.style.visibility = "";
+      kept.base.canvas.style.visibility = "";
       slot.baseScale = kept.base.scale;
       slot.baseVersion = kept.version;
       this.stats.kept++;
     }
     if (kept.detail) {
-      placeDetail(slot.elements.detail, kept.detail.region);
-      slot.elements.detail.style.visibility = "";
+      placeDetail(kept.detail.canvas, kept.detail.region);
+      kept.detail.canvas.style.visibility = "";
       slot.detailScale = kept.detail.scale;
       slot.detailVersion = kept.version;
       slot.detailRegion = kept.detail.region;
@@ -631,7 +634,8 @@ export class Renderer {
    * canvas no larger than a base, instead of a base drawn from scratch.
    */
   #demote(slot: Slot, context: PlanContext): void {
-    if (!demotes(context, slot)) return;
+    const detail = slot.elements.detail;
+    if (!detail || !demotes(context, slot)) return;
     const { layout } = context.input;
     const unturned = layout.sizes[slot.index];
     if (!unturned) return;
@@ -642,14 +646,13 @@ export class Renderer {
     if (slot.job?.layer === "base") {
       this.#cancelJob(slot.job);
       if (slot.job.canvas === slot.elements.base) {
-        const fresh = createCanvas(slot.elements.base.ownerDocument);
-        slot.elements.base.replaceWith(fresh);
+        slot.elements.base.remove();
         release(slot.elements.base);
-        slot.elements.base = fresh;
+        slot.elements.base = null;
       }
     }
     const size = turnedSize(unturned, layout.rotation);
-    const { base, detail } = slot.elements;
+    const base = drawingCanvas(slot.elements, "base");
     // Whole pixels, as pdf.js sizes a base drawn at this scale.
     copyDrawing(
       this.#session.pdfjs,
@@ -792,7 +795,7 @@ export class Renderer {
   #start(slot: Slot, drawing: PlannedDrawing): void {
     const { layer, scale, region, intoSpare } = drawing;
     const { elements } = slot;
-    const canvas = layer === "base" ? elements.base : intoSpare ? elements.spare : elements.detail;
+    const canvas = drawingCanvas(elements, intoSpare ? "spare" : layer);
     const layout = this.#input?.layout;
     const unturned = layout?.sizes[slot.index];
     // The canvas is resized, which clears it, before the page next paints, so
@@ -882,10 +885,18 @@ export class Renderer {
             slot.detailScale = scale;
             slot.detailVersion = version;
             slot.detailRegion = region;
-            if (this.#openingPreview === slot.index && region === null) {
+            if (
+              region === null &&
+              (this.#openingPreview === slot.index ||
+                this.#budgets.maxCanvasPixels === Number.POSITIVE_INFINITY)
+            ) {
+              // A whole page covers its preview. The planner keeps that detail
+              // visible until a replacement base is ready when zooming into a tile.
               release(elements.base);
+              elements.base?.remove();
+              elements.base = null;
               slot.baseScale = 0;
-              this.#openingPreview = null;
+              if (this.#openingPreview === slot.index) this.#openingPreview = null;
             }
             this.stats.detail++;
           }

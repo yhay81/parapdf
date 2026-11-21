@@ -28,6 +28,6 @@ derived from the PDF.js files beside them and changed for ParaPDF:
 | `view/viewer.ts` | `web/pdf_viewer.js` |
 
 The generated editor icons come from pdfjs-dist 6.5.438. The package also
-redistributes that version's parsing and drawing workers and their on-demand
-files in `pdfjs/`. The parsing worker includes ParaPDF's prelude. These files
-keep their licenses, which are copied alongside them.
+redistributes that version's parsing and drawing workers in `pdfjs/`. The
+parsing workers include ParaPDF's prelude. The on-demand files come from
+pdfjs-dist. The static export copies the applicable licenses alongside them.

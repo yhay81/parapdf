@@ -90,8 +90,8 @@ export function Reader() {
 ParaPDF refers to pdf.js's worker and files with `new URL(…, import.meta.url)`,
 which Vite, webpack, Rsbuild, and Next.js (Turbopack and webpack) copy to the
 build output as they are. With bundlers that do not, such as Parcel, esbuild,
-and Bun, copy `node_modules/parapdf/pdfjs/` to where your application serves
-static files and tell ParaPDF where it is:
+and Bun, export the static files with `npm exec -- parapdf-copy-assets public/pdfjs`
+and set their public URL.
 
 ```tsx
 configurePdfjs({ assetBase: "/pdfjs/" });

@@ -1,11 +1,13 @@
 /**
  * Measures a fresh production npm install and the JS, CSS and worker scripts
  * a minimal Vite reader requests to display one selectable page. On-demand
- * fonts and PDF bytes are outside the code total. OUTPUT saves the evidence.
+ * fonts and PDF bytes are outside the code total. SINGLE_PAGE=1 also measures
+ * react-pdf without a virtual list. OUTPUT saves the evidence.
  */
 import { execFileSync } from "node:child_process";
 import {
   cpSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -54,14 +56,15 @@ import { PdfDocument, PdfViewer } from "parapdf";
 function Reader() {
   return <PdfDocument source="/page.pdf"><PdfViewer style={{height: "100vh"}} /></PdfDocument>;
 }`;
-const reactPdf = `
+const reactSetup = `
 import { Document, Page, pdfjs } from "react-pdf";
-import { List } from "react-window";
 import "react-pdf/dist/Page/TextLayer.css";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).href;
 const options = { cMapUrl: "/pdfjs/cmaps/", cMapPacked: true, standardFontDataUrl: "/pdfjs/standard_fonts/",
-  wasmUrl: "/pdfjs/wasm/", iccUrl: "/pdfjs/iccs/" };
+  wasmUrl: "/pdfjs/wasm/", iccUrl: "/pdfjs/iccs/" };`;
+const reactPdf = `${reactSetup}
+import { List } from "react-window";
 const rowProps = {};
 function Row({ index, style }) {
   return <div style={style}><Page pageNumber={index + 1} width={612}/></div>;
@@ -74,17 +77,34 @@ function Reader() {
   </Document>;
 }`;
 
+const reactSingle = `${reactSetup}
+function Reader() {
+  return <Document file="/page.pdf" options={options}><Page pageNumber={1} width={612}/></Document>;
+}`;
 const launched = await launchBrowser();
 const results = [];
 try {
-  for (const name of ["parapdf", "react-pdf"] as const) {
+  const readers = [
+    { name: "parapdf", component: para, libraries: { parapdf: versions.parapdf } },
+    {
+      name: "react-pdf",
+      component: reactPdf,
+      libraries: { "react-pdf": versions["react-pdf"], "react-window": versions["react-window"] },
+    },
+    ...(process.env.SINGLE_PAGE === "1"
+      ? [
+          {
+            name: "react-pdf-single",
+            component: reactSingle,
+            libraries: { "react-pdf": versions["react-pdf"] },
+          },
+        ]
+      : []),
+  ];
+  for (const { name, component, libraries } of readers) {
     const root = join(temp, name);
     const publicDir = join(root, "public");
     mkdirSync(publicDir, { recursive: true });
-    const libraries =
-      name === "parapdf"
-        ? { parapdf: versions.parapdf }
-        : { "react-pdf": versions["react-pdf"], "react-window": versions["react-window"] };
     writeFileSync(
       join(root, "package.json"),
       JSON.stringify({
@@ -98,7 +118,7 @@ try {
     });
     const modules = join(root, "node_modules");
     const bytes = installedBytes(modules);
-    if (name === "react-pdf") {
+    if (name !== "parapdf") {
       for (const dir of ["cmaps", "standard_fonts", "wasm", "iccs"]) {
         cpSync(join(modules, "pdfjs-dist", dir), join(publicDir, "pdfjs", dir), {
           recursive: true,
@@ -114,7 +134,7 @@ try {
       join(root, "app.jsx"),
       `import React from "react";
 import {createRoot} from "react-dom/client";
-${name === "parapdf" ? para : reactPdf}
+${component}
 createRoot(document.getElementById("root")).render(<Reader/>);`,
     );
     await build({ root, configFile: false, logLevel: "silent" });
@@ -173,8 +193,13 @@ createRoot(document.getElementById("root")).render(<Reader/>);`,
         throw new Error("Missing worker response");
       const result = {
         name,
+        version: manifest(join(modules, name === "parapdf" ? name : "react-pdf", "package.json"))
+          .version,
         installedBytes: bytes,
         pdfjs: manifest(join(modules, "pdfjs-dist/package.json")).version,
+        nativeCanvas: existsSync(join(modules, "@napi-rs/canvas/package.json"))
+          ? manifest(join(modules, "@napi-rs/canvas/package.json")).version
+          : null,
         gzipBytes: code.reduce((sum, file) => sum + file.gzip, 0),
         code,
       };

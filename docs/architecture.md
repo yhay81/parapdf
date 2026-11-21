@@ -69,18 +69,22 @@ leaves to its viewer's localization (`editor*.ts`).
 WebGPU rasterization of mesh shadings is opt-in through
 `documentOptions.enableWebGPU` (decision 0029).
 
-The package ships pdf.js's worker and the files it loads on demand.
-`scripts/pdfjs-files.ts` copies them into `pdfjs/` and writes `files.ts`,
-which references each with `new URL(…, import.meta.url)`, so bundlers emit
-them with the application's assets. Bundlers give each file a URL of its
+The package ships the prelude-wrapped parsing workers, the drawing workers
+and the QuickJS adapter. `scripts/pdfjs-files.ts` generates a manifest with
+literal `new URL(…, import.meta.url)` references to the fonts, character maps,
+decoders, ICC profile and icons in the exact pdfjs-dist installation. Vite's
+dependency optimizer rebases bare resource URLs, so its development adapter
+loads this manifest as a source module. Production readers bundle the manifest. Bundlers give each file a URL of its
 own, but the worker asks for CMaps, fonts, decoders, and ICC profiles as a
 directory plus a name, so the worker's URL carries the files' URLs in its
 fragment and `scripts/worker-prelude.js` routes the worker's requests to
 them (pdf.js gets `parapdf:/` as the directory). The files' URLs end in
 `?no-inline&url`, which keeps Vite and Rsbuild from inlining small files
 into the bundle, and `shippedUrl()` strips it. Vite, webpack, Rsbuild, and
-Next.js emit the files (`check:bundlers`); other bundlers take a copy of
-`pdfjs/` and `configurePdfjs({ assetBase })`.
+Next.js emit the files (`check:bundlers`); other bundlers serve the directory
+written by `parapdf-copy-assets` and use `configurePdfjs({ assetBase })`.
+The published JavaScript keeps its module boundaries, TypeScript sources and
+source maps while compacting its emitted syntax.
 
 ### document/
 
@@ -279,6 +283,8 @@ the garbage collector takes with it (decision 0032).
   visible pages first; no base drawn again under a whole-page detail
   (decision 0025). Under a finite canvas budget the planner computes visible
   area shares once per plan. An unlimited budget skips the total-pixel scan.
+  While scrolling slowly, visible pages and one neighbor on either side
+  may draw. The rest of the mounted window can draw when motion stops.
 - `renderer.ts` carries out the plans: batches synchronous page mounts and
   extra render requests onto a single microtask pump so visible focus pages
   always claim slots ahead of earlier overscan pages or thumbnails, defers
@@ -293,10 +299,14 @@ the garbage collector takes with it (decision 0032).
   to release it triggers pdf.js cleanup (decision 0052).
 - The renderer owns each page's DOM inside the host `ViewerController` places
   (`page.ts`, decision 0010): the canvases and the layer containers. A kept
-  canvas moves into the page's next host without a copy.
+  canvas moves into the page's next host without a copy. The first drawing
+  that needs a base, detail or spare allocates it. With an unlimited total
+  canvas budget, a completed whole-page detail releases the covered base.
+  A finite total budget retains the fallback if the next detail must draw in place.
 - `dom-layers.ts` builds DOM layers one at a time, after scrolling
   settles, in idle time, never while a visible page waits for its first
   pixels: text, then links and forms, then the annotations being edited.
+  While moving slowly, overscan layers wait unless an editor was explicitly requested.
   Once all mounted layers are built and visible layers are current, scrolling
   over the same pages schedules no idle scan. Mounting a page, invalidating
   annotations or changing the visible range, scale or rotation wakes it.

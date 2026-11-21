@@ -15,11 +15,11 @@ export interface PageElements {
    * go here too, over the page's own drawing.
    */
   readonly drawings: HTMLElement;
-  base: HTMLCanvasElement;
+  base: HTMLCanvasElement | null;
   /** The detail canvas the page shows. */
-  detail: HTMLCanvasElement;
+  detail: HTMLCanvasElement | null;
   /** The other detail canvas, which the next detail is drawn into while the page shows one. */
-  spare: HTMLCanvasElement;
+  spare: HTMLCanvasElement | null;
   /**
    * A tagged page's structure, as pdf.js's viewer keeps it: a canvas's
    * fallback content is read by assistive technology but never drawn.
@@ -54,7 +54,8 @@ const LAYER_STYLE = "position:absolute;inset:0;width:100%;height:100%";
  * stacked over the shown one covered the page with black. A drawing shows
  * it again once it completes.
  */
-export function release(canvas: HTMLCanvasElement): void {
+export function release(canvas: HTMLCanvasElement | null): void {
+  if (!canvas) return;
   canvas.width = 0;
   canvas.height = 0;
   canvas.style.visibility = "hidden";
@@ -70,11 +71,23 @@ export function placeDetail(canvas: HTMLCanvasElement, region: PageArea | null):
   style.height = `${(area.maxY - area.minY) * 100}%`;
 }
 
-export function createCanvas(document: Document): HTMLCanvasElement {
-  const canvas = document.createElement("canvas");
+/** Allocate a drawing surface only when a job needs it, below the page editor's overlays. */
+export function drawingCanvas(
+  page: PageElements,
+  layer: "base" | "detail" | "spare",
+): HTMLCanvasElement {
+  const existing = page[layer];
+  if (existing) return existing;
+  const canvas = page.host.ownerDocument.createElement("canvas");
+  canvas.className = layer === "base" ? "parapdf-base-canvas" : "parapdf-detail-canvas";
   canvas.style.cssText = LAYER_STYLE;
   // Canvas pixels are counted by size, and a new canvas is 300 by 150.
   release(canvas);
+  const below =
+    layer === "spare" ? (page.detail ?? page.base) : layer === "detail" ? page.base : null;
+  if (below) below.after(canvas);
+  else page.drawings.prepend(canvas);
+  page[layer] = canvas;
   return canvas;
 }
 
@@ -97,20 +110,17 @@ export function mountPage(
   const drawings = createLayer(document, "parapdf-canvas-wrapper");
   drawings.setAttribute("aria-hidden", "true");
   drawings.style.cssText = LAYER_STYLE;
-  const base = kept.base ?? createCanvas(document);
-  const detail = kept.detail ?? createCanvas(document);
-  // Two detail canvases: a new detail is drawn into one while the other shows the old.
-  const spare = createCanvas(document);
-  drawings.append(base, detail, spare);
+  if (kept.base) drawings.append(kept.base);
+  if (kept.detail) drawings.append(kept.detail);
   const text = layers.text ? createLayer(document, "parapdf-text-layer") : null;
   const annotations = layers.annotations ? createLayer(document, "parapdf-annotation-layer") : null;
   const editor = layers.editor ? createLayer(document, "parapdf-editor-layer") : null;
   const elements: PageElements = {
     host,
     drawings,
-    base,
-    detail,
-    spare,
+    base: kept.base ?? null,
+    detail: kept.detail ?? null,
+    spare: null,
     structure: null,
     text,
     annotations,

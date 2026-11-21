@@ -3,7 +3,7 @@ title: Bundlers
 description: How the files pdf.js needs reach your build, and what to do with bundlers that do not copy them.
 ---
 
-The package holds pdf.js's worker and the files pdf.js loads on demand:
+ParaPDF supplies the workers and takes these files from its pinned pdfjs-dist dependency.
 
 - CMaps for CJK text in fonts without their own encoding,
 - the Symbol and ZapfDingbats fonts,
@@ -39,10 +39,14 @@ modern and legacy builds. They also check that no build holds those files as
 ## Bundlers that need a copy
 
 Parcel 2 bundles the worker again into a script that does not start, and
-esbuild and Bun copy none of the files. With those, copy
-`node_modules/parapdf/pdfjs/` to where your application serves static files,
-such as `public/pdfjs/`, and tell ParaPDF where it is, before the first
-`PdfDocument` renders:
+esbuild and Bun copy none of the files. Export the assets into your application's
+static directory and repeat the command when you update ParaPDF.
+
+```sh
+npm exec -- parapdf-copy-assets public/pdfjs
+```
+
+Set the public URL before the first `PdfDocument` renders.
 
 ```tsx
 "use client";

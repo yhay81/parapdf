@@ -34,6 +34,7 @@ import {
   LEGACY_JS,
   MAIN_JS,
   shippedFiles,
+  staticAssets,
   writePublicFiles,
 } from "./bundle-app.ts";
 
@@ -146,7 +147,7 @@ async function checkPages(
 }
 
 function checkInlined(mode: string, dir: string, installed: string): void {
-  const inlined = inlinedFiles(dir, shippedFiles(join(installed, "pdfjs")));
+  const inlined = inlinedFiles(dir, shippedFiles(staticAssets(installed)));
   check(
     `${mode}: the build's JavaScript holds none of the shipped files as data: URLs`,
     inlined.length === 0,

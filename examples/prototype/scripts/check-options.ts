@@ -116,17 +116,19 @@ const canvasPixels = (page: Page) =>
       const index = Number(section.dataset.page) - 1;
       const pageTop = layout?.tops[index] ?? 0;
       const pageBottom = pageTop + (layout?.heights[index] ?? 0);
-      // The base, then the two detail canvases: the one shown and the one a
-      // new detail is drawn into.
-      const [base, ...details] = section.querySelectorAll<HTMLCanvasElement>(
+      const canvases = section.querySelectorAll<HTMLCanvasElement>(
         ":scope > div[aria-hidden] > canvas",
       );
-      const basePixels = (base?.width ?? 0) * (base?.height ?? 0);
+      let basePixels = 0;
       let detailPixels = 0;
-      for (const detail of details) {
-        const pixels = detail.width * detail.height;
-        detailPixels += pixels;
-        largestDetail = Math.max(largestDetail, pixels);
+      for (const [i, canvas] of canvases.entries()) {
+        const pixels = canvas.width * canvas.height;
+        if (canvas.classList.contains("parapdf-base-canvas") || (!canvas.className && i === 0)) {
+          basePixels += pixels;
+        } else {
+          detailPixels += pixels;
+          largestDetail = Math.max(largestDetail, pixels);
+        }
       }
       largestBase = Math.max(largestBase, basePixels);
       if (pageBottom > top && pageTop < bottom) visible += basePixels + detailPixels;
@@ -479,9 +481,12 @@ try {
     // The detail canvas shown: drawn, and not hidden while a new detail is drawn into it.
     const detail = [
       ...section.querySelectorAll<HTMLCanvasElement>(":scope > div[aria-hidden] > canvas"),
-    ]
-      .slice(1)
-      .find((canvas) => canvas.width > 0 && canvas.style.visibility !== "hidden");
+    ].find(
+      (canvas, i) =>
+        (canvas.classList.contains("parapdf-detail-canvas") || (!canvas.className && i > 0)) &&
+        canvas.width > 0 &&
+        canvas.style.visibility !== "hidden",
+    );
     const box = detail?.getBoundingClientRect();
     // The part of the page the viewport shows must lie inside the detail canvas.
     const left = Math.max(view.left, pageBox.left);
@@ -716,7 +721,10 @@ try {
   await capped.context().close();
 
   const baseLimit = 200_000;
-  const thin = await newPage(`file=bill-hr815.pdf&maxBasePixels=${baseLimit}`);
+  // A regional detail leaves the base visible and measurable.
+  const thin = await newPage(
+    `file=bill-hr815.pdf&maxBasePixels=${baseLimit}&maxDetailPixels=${detailLimit}`,
+  );
   canvases = await canvasPixels(thin);
   check(
     "maxBasePixels caps the base canvases",

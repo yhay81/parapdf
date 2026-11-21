@@ -22,6 +22,7 @@ function view(first: number, last: number, settled = true, rotation: Rotation = 
     focus: first,
     viewport: { left: 0, top: 0, width: 800, height: 900, scrollerWidth: 800, scrollerHeight: 900 },
     devicePixelRatio: 1,
+    moving: false,
     settled,
   };
 }
@@ -151,6 +152,38 @@ describe("DomLayers", () => {
       "then the overscan page nearest the focus",
     );
     assert.equal(stats.editors, 1);
+  });
+
+  it("builds requested editors during a slow scroll and resumes other overscan layers at rest", async (t) => {
+    const { layers, attach, idle, built } = await setup(t);
+    for (const index of [0, 1, 2]) attach(index);
+    const moving = { ...view(0, 0), moving: true };
+    layers.update(moving);
+    layers.schedule();
+    await idle();
+    built[0]?.build();
+    await settle();
+    await idle();
+    assert.deepEqual(
+      built.map((p) => p.pageIndex),
+      [0],
+    );
+    const requested = layers.whenEditable(2);
+    await idle();
+    built[1]?.build();
+    assert.equal(await requested, true);
+    await idle();
+    assert.deepEqual(
+      built.map((p) => p.pageIndex),
+      [0, 2],
+    );
+    layers.update({ ...moving, moving: false });
+    layers.schedule();
+    await idle();
+    assert.deepEqual(
+      built.map((p) => p.pageIndex),
+      [0, 2, 1],
+    );
   });
 
   it("waits while a visible page waits for its first pixels, until scheduled again", async (t) => {

@@ -9,6 +9,7 @@
  */
 import { execFileSync } from "node:child_process";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -43,6 +44,13 @@ try {
   mkdirSync(installed, { recursive: true });
   execFileSync("tar", ["-xzf", join(project, tarball), "-C", installed, "--strip-components=1"]);
 
+  // The peers and the dependency, as the application would install them.
+  for (const name of ["react", "react-dom", "pdfjs-dist", "@types/react", "@types/react-dom"]) {
+    const target = join(project, "node_modules", name);
+    mkdirSync(dirname(target), { recursive: true });
+    symlinkSync(dirname(require.resolve(`${name}/package.json`)), target, "dir");
+  }
+
   // The files the package ships.
   const files = execFileSync("tar", ["-tzf", join(project, tarball)], { encoding: "utf8" })
     .split("\n")
@@ -56,8 +64,8 @@ try {
     "dist/index.d.ts",
     "pdfjs/LICENSE",
     "pdfjs/pdf.worker.js",
-    "pdfjs/standard_fonts/LICENSE_FOXIT",
-    "pdfjs/standard_fonts/LICENSE_LIBERATION",
+    "pdfjs/shared.json",
+    "bin/copy-assets.mjs",
   ];
   const missing = required.filter((name) => !files.includes(name));
   check(
@@ -70,19 +78,56 @@ try {
   );
   check("the tarball holds no tests, scripts, or tarballs", stray.length === 0, stray.join(", "));
 
-  // Every file the code references with new URL(…, import.meta.url) ships.
-  const references = ["files.js", "legacy-files.js"].flatMap((module) =>
-    [
-      ...readFileSync(join(installed, "dist/pdfjs", module), "utf8").matchAll(
-        /new URL\(\s*"\.\.\/\.\.\/(pdfjs\/[^"?]+)/g,
+  // Bundlers resolve literal asset URLs from ParaPDF or its exact dependency.
+  const consumer = createRequire(join(installed, "package.json"));
+  const urlModules = ["dist/pdfjs/files.js", "dist/pdfjs/legacy-files.js", "pdfjs/urls.js"];
+  const references = urlModules.flatMap((module) => {
+    const source = join(installed, module);
+    return [
+      ...readFileSync(source, "utf8").matchAll(
+        /new URL\(\s*"([^"?]+)(?:[^"]*)",\s*import.meta.url/g,
       ),
-    ].map((match) => match[1] ?? ""),
-  );
-  const unshipped = references.filter((name) => !files.includes(name));
+    ].map(([, path]) => {
+      if (!path) throw new Error(`Missing URL in ${module}`);
+      return path.startsWith(".") ? join(dirname(source), path) : consumer.resolve(path);
+    });
+  });
   check(
-    "the tarball holds every pdf.js file the code references",
-    references.length > 150 && unshipped.length === 0,
-    `${references.length} references; ${unshipped.slice(0, 3).join(", ")}`,
+    "all bundled asset URLs resolve in a consumer installation",
+    references.length > 150 && references.every((path) => existsSync(path)),
+    `${references.length} references`,
+  );
+
+  const staticDir = join(project, "public/pdfjs");
+  mkdirSync(staticDir, { recursive: true });
+  writeFileSync(join(staticDir, "application.txt"), "keep");
+  const copyAssets = () =>
+    execFileSync(process.execPath, [join(installed, "bin/copy-assets.mjs"), staticDir]);
+  copyAssets();
+  copyAssets();
+  const upstream = dirname(consumer.resolve("pdfjs-dist/package.json"));
+  const shared = JSON.parse(readFileSync(join(installed, "pdfjs/shared.json"), "utf8")) as string[];
+  check(
+    "the static export copies the shared originals and font licenses",
+    ["standard_fonts/LICENSE_FOXIT", "standard_fonts/LICENSE_LIBERATION"].every((file) =>
+      shared.includes(file),
+    ) &&
+      shared.every((file) =>
+        readFileSync(join(staticDir, file)).equals(readFileSync(join(upstream, file))),
+      ),
+  );
+  check(
+    "repeating the export preserves application files and supplies both worker builds",
+    readFileSync(join(staticDir, "application.txt"), "utf8") === "keep" &&
+      [
+        "pdf.worker.js",
+        "pdf.worker.legacy.js",
+        "pdf.renderer.js",
+        "pdf.renderer.legacy.js",
+        "quickjs.js",
+      ].every((file) =>
+        readFileSync(join(staticDir, file)).equals(readFileSync(join(installed, "pdfjs", file))),
+      ),
   );
 
   const manifest = JSON.parse(readFileSync(join(installed, "package.json"), "utf8"));
@@ -131,6 +176,21 @@ try {
   // Emitted declarations must rewrite every relative .ts and .tsx specifier to
   // .js, and emitted JavaScript must carry no dangling triple-slash references.
   const distEntries = readdirSync(join(installed, "dist"), { recursive: true, encoding: "utf8" });
+  const maps = distEntries.filter((name) => name.endsWith(".map"));
+  check(
+    "the emitted maps lead back to the shipped TypeScript",
+    maps.length > 0 &&
+      maps.every((name) => {
+        const path = join(installed, "dist", name);
+        const map = JSON.parse(readFileSync(path, "utf8")) as {
+          sources: string[];
+          sourceRoot?: string;
+        };
+        return map.sources.every((source) =>
+          existsSync(join(dirname(path), map.sourceRoot ?? "", source)),
+        );
+      }),
+  );
   const unrewrittenDts = distEntries.filter(
     (name) =>
       name.endsWith(".d.ts") &&
@@ -154,12 +214,6 @@ try {
     danglingReference.join(", "),
   );
 
-  // The peers and the dependency, as the application would install them.
-  for (const name of ["react", "react-dom", "pdfjs-dist", "@types/react", "@types/react-dom"]) {
-    const target = join(project, "node_modules", name);
-    mkdirSync(dirname(target), { recursive: true });
-    symlinkSync(dirname(require.resolve(`${name}/package.json`)), target, "dir");
-  }
   writeFileSync(join(project, "package.json"), JSON.stringify({ type: "module", private: true }));
 
   // An application's use of the API, type-checked against the declarations.

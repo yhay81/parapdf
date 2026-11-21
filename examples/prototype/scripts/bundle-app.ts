@@ -7,7 +7,14 @@
  */
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Browser } from "playwright";
@@ -66,6 +73,15 @@ function fingerprint(bytes: Buffer, svg: boolean): string {
 }
 
 const ON_DEMAND_DIRS = ["cmaps", "standard_fonts", "wasm", "iccs", "web/images"];
+
+/** The static files a consumer can export, kept outside the installed package. */
+export function staticAssets(installed: string): string {
+  const out = join(installed, "../..", ".pdfjs-reference");
+  if (!existsSync(out)) {
+    execFileSync(process.execPath, [join(installed, "bin/copy-assets.mjs"), out]);
+  }
+  return out;
+}
 
 /** The files pdf.js loads on demand under the installed package's `pdfjs/`, by fingerprint. */
 export function shippedFiles(pdfjsDir: string): Map<string, string> {
@@ -170,14 +186,15 @@ export function writePublicFiles(publicDir: string): void {
 
 /** Both the standalone and Next.js test apps configure the viewer before mounting it. */
 export const CONFIGURE_BUILD_JS = `function configureBuild(build, params) {
+  const assetBase = params.has("static") ? "/static-pdfjs/" : undefined;
   if (params.has("renderer")) {
     const policy = document.createElement("meta");
     policy.httpEquiv = "Content-Security-Policy";
     policy.content = "worker-src 'self'";
     document.head.append(policy);
-    configurePdfjs({ build, rendererSrc: true });
-  } else if (build) {
-    configurePdfjs({ build });
+    configurePdfjs({ build, rendererSrc: true, assetBase });
+  } else if (build || assetBase) {
+    configurePdfjs({ build, assetBase });
   }
 }`;
 
@@ -374,7 +391,7 @@ export async function checkFiles(
   pageUrl: string,
   legacy = false,
 ): Promise<void> {
-  const served = servedFiles(join(installed, "pdfjs"));
+  const served = servedFiles(staticAssets(installed));
   const open = (file: string) =>
     visit(browser, `${pageUrl}${pageUrl.includes("?") ? "&" : "?"}file=${file}`, served);
 
@@ -388,6 +405,14 @@ export async function checkFiles(
     cjk.responses.map(({ path, file }) => (file ? `${path} (${file})` : path)).join(" "),
   );
   check(`${mode}: the worker loads CMaps`, loaded(cjk, /UniJIS-UCS2-H[^/]*\.bcmap$/));
+  if (new URL(pageUrl).searchParams.has("static")) {
+    for (const path of ["/static-pdfjs/pdf.worker.js", "/static-pdfjs/cmaps/UniJIS-UCS2-H.bcmap"]) {
+      check(
+        `${mode}: loads ${path} from the exported directory`,
+        cjk.responses.some((r) => r.path === path),
+      );
+    }
+  }
   const downloads = cjk.responses.filter(({ path }) =>
     path.endsWith("/synthetic-cjk-nonembedded.pdf"),
   ).length;

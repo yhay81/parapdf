@@ -77,6 +77,7 @@ function view(
       viewport,
       devicePixelRatio: options.devicePixelRatio ?? 1,
       settled: options.settled ?? true,
+      moving: false,
     },
     mounted,
   };
@@ -366,6 +367,19 @@ function checkSettled(
 }
 
 describe("planner", () => {
+  it("keeps a neighbor sharp on both sides during slow scrolling and fills distant overscan at rest", () => {
+    const { input, mounted } = view(Array(8).fill(LETTER), 1, { top: 2406 });
+    const pages = new Map(mounted.map((index) => [index, blank(index)]));
+    const moving = run(context({ ...input, moving: true }), pages);
+    const near = mounted.filter((i) => i >= input.first - 1 && i <= input.last + 1);
+    assert.deepEqual([...new Set(moving.map((draw) => draw.index))].sort(), near);
+    const stopped = run(context(input), pages);
+    assert.deepEqual(
+      [...new Set(stopped.map((draw) => draw.index))].sort(),
+      mounted.filter((i) => !near.includes(i)),
+    );
+  });
+
   it("draws whole-page detail without a base for pages outside the viewport once scrolling settles", () => {
     const { input, mounted } = view(Array(8).fill(LETTER), 1, { devicePixelRatio: 2 });
     const plan = context(input);

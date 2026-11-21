@@ -81,9 +81,10 @@ through these directories.
 | `test/` | Exercise the runtime in Node using `fake-pdfjs.ts` and `fake-dom.ts`. |
 
 - **Package assets.** `scripts/pdfjs-files.ts`, run by `pnpm install` and `build`, copies
-  pdf.js's worker behind ParaPDF's prelude (`scripts/worker-prelude.js`) and
-  the files it loads on demand into `pdfjs/` (not committed), and writes
-  `src/pdfjs/files.ts` (committed). The workspace consumes the TypeScript
+  pdf.js's workers into `pdfjs/` (not committed), adding ParaPDF's prelude
+  to the parsing workers. It generates the asset URL manifest against the
+  installed pdfjs-dist and writes `src/pdfjs/files.ts` (committed).
+  `parapdf-copy-assets` exports the files for static hosting. The workspace consumes the TypeScript
   source; `build` emits `dist/`, and packing (with pnpm, for
   `publishConfig`) ships `dist/`, `src/`, `pdfjs/`, the README, and the
   license and notices.
@@ -193,15 +194,20 @@ through these directories.
   `hwa-bench.ts`,
   each documented in its header comment. `compare-readers.ts` checks reading behavior,
   raster fidelity and mounted DOM against react-pdf with react-window.
+  `SCROLL_QUALITY=1` also checks text readiness and visible drawing resolution during motion.
   `reader-footprint.ts` measures clean npm installs and the code two minimal Vite readers
-  load for a selectable page. `startup-bench.ts` compares cold
+  load for a selectable page. `SINGLE_PAGE=1` also measures react-pdf without react-window.
+  `startup-bench.ts` compares cold
   client opens in `DIST` and `BEFORE` with one page drawn directly by pdf.js.
+  `REACT_PDF=1` includes the react-pdf reader at the same size.
   It checks full-resolution pixels and records the first and next drawings,
   canvas bytes and worker requests. `startup-flip-bench.ts` clicks Next on the
   first drawing and after a short delay to measure page 2's ink, full resolution
   and blank frames. `search-index-bench.ts` compares index
   memory, construction time and exact match positions against the source in
-  `BEFORE_SRC` using the same extracted PDF text. `scroll-bench.ts`,
+  `BEFORE_SRC` using the same extracted PDF text. With `BEFORE` and
+  `REFERENCE=react-pdf-window`, `scroll-bench.ts` runs the comparison reader
+  once per round and rotates the order of the builds. `scroll-bench.ts`,
   `commit-bench.ts`, `zoom-bench.ts`, `return-bench.ts`, and
   `navigation-bench.ts` measure the
   build in `DIST` against the one in `BEFORE` (built from the commit before

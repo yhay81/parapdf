@@ -125,22 +125,26 @@ function installProbe(readPixels: boolean): void {
     lastScale = scale;
   });
   /** Draws what `section` shows into the probe canvas, the hidden canvases left out. */
-  const composite = (section: HTMLElement, rect: DOMRect): boolean[] => {
+  const composite = (section: HTMLElement, rect: DOMRect): boolean => {
     probe.width = Math.max(1, Math.round(rect.width * S));
     probe.height = Math.max(1, Math.round(rect.height * S));
     ctx.imageSmoothingQuality = "high";
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, probe.width, probe.height);
-    const shown: boolean[] = [];
-    for (const canvas of section.querySelectorAll<HTMLCanvasElement>(
-      ":scope > div[aria-hidden] > canvas",
-    )) {
+    let detail = false;
+    for (const [i, canvas] of section
+      .querySelectorAll<HTMLCanvasElement>(":scope > div[aria-hidden] > canvas")
+      .entries()) {
       // A canvas never drawn keeps the default size, 300 by 150, and shows nothing.
       const visible =
         canvas.width * canvas.height > 0 &&
         !(canvas.width === 300 && canvas.height === 150) &&
         getComputedStyle(canvas).visibility !== "hidden";
-      shown.push(visible);
+      if (
+        visible &&
+        (canvas.classList.contains("parapdf-detail-canvas") || (!canvas.className && i > 0))
+      )
+        detail = true;
       if (!visible) continue;
       const box = canvas.getBoundingClientRect();
       ctx.drawImage(
@@ -151,7 +155,7 @@ function installProbe(readPixels: boolean): void {
         box.height * S,
       );
     }
-    return shown;
+    return detail;
   };
   /** The share of pixels darker than 250 in `region`, shares of the page, of the probe canvas. */
   const inkIn = (region: number[]): number => {
@@ -202,7 +206,7 @@ function installProbe(readPixels: boolean): void {
         ];
         const [vl = 0, vt = 0, vr = 0, vb = 0] = visible;
         if (vr - vl < 16 || vb - vt < 16) continue;
-        const shown = composite(section, rect);
+        const detail = composite(section, rect);
         const region = [
           (vl - rect.left) / rect.width,
           (vt - rect.top) / rect.height,
@@ -212,7 +216,7 @@ function installProbe(readPixels: boolean): void {
         frame.pages.push({
           page: Number(section.dataset.page),
           ink: inkIn(region),
-          detail: shown.slice(1).some(Boolean),
+          detail,
         });
         frameRegions.push(region);
       }

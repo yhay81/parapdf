@@ -1,3 +1,5 @@
+import type { Renderer } from "../src/render/renderer.ts";
+
 /**
  * The little of the DOM the renderer uses to build a page inside its host:
  * elements that hold children, styles, and canvases whose size counts
@@ -111,8 +113,32 @@ export function fakeHost(...children: string[]): HTMLElement {
   return host as unknown as HTMLElement;
 }
 
-/** The base, detail, and spare canvases the renderer built in `host`, in that order. */
+/** All drawing canvases allocated in this host. */
 export function canvasesOf(host: HTMLElement): HTMLCanvasElement[] {
   const [drawings] = (host as unknown as FakeElement).all("parapdf-canvas-wrapper");
   return (drawings?.children ?? []) as unknown as HTMLCanvasElement[];
+}
+
+/** A page's drawing surfaces in DOM order, as the renderer first allocates each of them. */
+export function mountDrawingPage(renderer: Renderer, index: number, host = fakeHost()) {
+  renderer.attach(index, host);
+  const [wrapper] = (host as unknown as FakeElement).all("parapdf-canvas-wrapper");
+  if (!wrapper) throw new Error("Page did not mount");
+  const surface = (className: string, index = 0) => {
+    const canvas = wrapper.all(className)[index];
+    if (!canvas) throw new Error(`Drawing canvas not allocated: ${className} ${index}`);
+    return canvas as unknown as HTMLCanvasElement;
+  };
+  return {
+    host,
+    get base() {
+      return surface("parapdf-base-canvas");
+    },
+    get detail() {
+      return surface("parapdf-detail-canvas");
+    },
+    get spare() {
+      return surface("parapdf-detail-canvas", 1);
+    },
+  };
 }

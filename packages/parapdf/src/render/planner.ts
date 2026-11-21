@@ -41,6 +41,8 @@ export interface ViewInput {
   devicePixelRatio: number;
   /** Scrolling is slow or stopped, so full-resolution work is worth starting. */
   settled: boolean;
+  /** A scroll or zoom is still in progress. */
+  moving: boolean;
 }
 
 export interface Budgets {
@@ -655,6 +657,13 @@ function nextDrawingFromOrdered(
       const page = ordered[i];
       if (!page || page.job !== undefined) continue;
       const visible = isVisible(input, page.index);
+      // During a reading-speed scroll, keep the next page ready in either direction.
+      if (
+        input.settled &&
+        input.moving &&
+        (page.index < input.first - 1 || page.index > input.last + 1)
+      )
+        continue;
       let matches = false;
       if (phase === 0) {
         matches =

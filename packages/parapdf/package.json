@@ -49,10 +49,11 @@
     "src",
     "pdfjs",
     "LICENSE",
-    "NOTICE.md"
+    "NOTICE.md",
+    "bin"
   ],
   "scripts": {
-    "build": "node scripts/pdfjs-files.ts && node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json && node scripts/declaration-imports.ts",
+    "build": "node scripts/pdfjs-files.ts && node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json && node scripts/declaration-imports.ts && node scripts/compact-js.ts",
     "check:package": "node scripts/check-package.ts",
     "prepack": "pnpm run build && node scripts/legal-files.ts copy",
     "postpack": "node scripts/legal-files.ts remove",
@@ -72,6 +73,26 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "react": "19.3.1",
-    "react-dom": "19.3.1"
+    "react-dom": "19.3.1",
+    "terser": "5.51.2"
+  },
+  "bin": {
+    "parapdf-copy-assets": "./bin/copy-assets.mjs"
+  },
+  "imports": {
+    "#parapdf-asset-urls": {
+      "types": "./pdfjs/urls.d.ts",
+      "node": "./pdfjs/urls.js",
+      "webpack": "./pdfjs/urls.js",
+      "rspack": "./pdfjs/urls.js",
+      "turbopack": "./pdfjs/urls.js",
+      "bun": "./pdfjs/urls.js",
+      "parcel": "./pdfjs/urls.js",
+      "module": {
+        "development": "./pdfjs/dev-urls.js",
+        "default": "./pdfjs/urls.js"
+      },
+      "default": "./pdfjs/urls.js"
+    }
   }
 }

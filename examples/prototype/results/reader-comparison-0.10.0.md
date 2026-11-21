@@ -48,7 +48,7 @@ ParaPDF supplies the viewport, document search, form controls and automatic work
 
 ## Follow-up on the slower cases
 
-On main, the 1,000-page test uses 15 canvas elements at page 10, down from 20 in 0.10.0. The follow-up records the results for all twelve scrolling conditions and a second series for the cases with the largest variation. [Implementation and paired measurements](../../../docs/decisions/0055-finished-dom-layers.md)
+The first follow-up removed idle work on completed layers. The next measured five canvas elements on page 10, checked reading quality during motion, and repeated the twelve scrolling conditions. A separate packaging change reduced the installed size. [Completed layers](../../../docs/decisions/0055-finished-dom-layers.md) · [Scroll and reading results](../../../docs/decisions/0057-reading-speed-scrolls.md) · [Install and download sizes](../../../docs/decisions/0056-share-installed-pdfjs-assets.md)
 
 ## Reproduce
 

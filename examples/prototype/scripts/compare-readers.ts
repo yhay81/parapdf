@@ -4,6 +4,7 @@
  * the first sharp page, and counts the page DOM retained after a jump.
  * BROWSER selects the browser, DIST the prototype build, RUNS the number of
  * fresh contexts per viewer, and OUTPUT an optional JSON result file.
+ * SCROLL_QUALITY=1 also samples full-resolution coverage and text during an eight-second scroll.
  */
 import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
@@ -113,6 +114,80 @@ async function reading(page: Page, base: string, reader: Reader) {
   return { selected, embedded, addresses, raster };
 }
 
+/** Sample reading readiness during a scroll long enough to leave the initially mounted pages. */
+async function scrollQuality(page: Page, base: string, reader: Reader, file: string) {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(url(base, reader, file));
+  const host = pageHost(reader);
+  await page.locator(host).first().locator(".endOfContent").waitFor({ state: "attached" });
+  return page.evaluate(async (host) => {
+    const viewport = document.querySelector(host)?.closest<HTMLElement>(".viewport");
+    if (!viewport) throw new Error("Missing scroll container");
+    const scroller = viewport;
+    const frame = () => new Promise<number>((resolve) => requestAnimationFrame(resolve));
+    function readiness() {
+      const rect = scroller.getBoundingClientRect();
+      const visible = [...document.querySelectorAll(host)].filter((p) => {
+        const box = p.getBoundingClientRect();
+        return Math.min(rect.bottom, box.bottom) - Math.max(rect.top, box.top) >= 4;
+      });
+      const sharp =
+        visible.length > 0 &&
+        visible.every((p) => {
+          const box = p.getBoundingClientRect();
+          return [...p.querySelectorAll("canvas")].some((canvas) => {
+            const c = canvas.getBoundingClientRect();
+            return (
+              canvas.width > 0 &&
+              canvas.height > 0 &&
+              getComputedStyle(canvas).visibility === "visible" &&
+              c.left <= Math.max(rect.left, box.left) + 1 &&
+              c.right >= Math.min(rect.right, box.right) - 1 &&
+              c.top <= Math.max(rect.top, box.top) + 1 &&
+              c.bottom >= Math.min(rect.bottom, box.bottom) - 1 &&
+              canvas.width + 1 >= c.width * devicePixelRatio &&
+              canvas.height + 1 >= c.height * devicePixelRatio
+            );
+          });
+        });
+      const text = visible.length > 0 && visible.every((p) => p.querySelector(".endOfContent"));
+      return { sharp, text };
+    }
+    await new Promise((r) => setTimeout(r, 600));
+    const start = await frame();
+    let frames = 0,
+      missingText = 0,
+      belowResolution = 0;
+    for (let now = start; now - start < 8000; now = await frame()) {
+      viewport.scrollTop = (900 * (now - start)) / 1000;
+      const state = readiness();
+      frames++;
+      if (!state.text) missingText++;
+      if (!state.sharp) belowResolution++;
+    }
+    if (viewport.scrollTop < 7000)
+      throw new Error(`Scroll reached only ${viewport.scrollTop} CSS pixels`);
+    const stop = performance.now();
+    let state = readiness();
+    const atStop = state;
+    let ready = stop;
+    while (!(state.text && state.sharp) && ready - stop < 5000) {
+      ready = await frame();
+      state = readiness();
+    }
+    if (!(state.text && state.sharp))
+      throw new Error("Visible pages did not become sharp and selectable");
+    return {
+      frames,
+      missingText,
+      belowResolution,
+      atStop,
+      readyMs: ready - stop,
+      scrollTop: viewport.scrollTop,
+    };
+  }, host);
+}
+
 async function mountedPages(page: Page, base: string, reader: Reader) {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(url(base, reader, "synthetic-text-1000.pdf"));
@@ -153,12 +228,15 @@ async function mountedPages(page: Page, base: string, reader: Reader) {
   }));
 }
 
+const port = Number(process.env.READER_PORT ?? 4187);
+if (!Number.isInteger(port) || port < 4179 || port > 4189)
+  throw new Error("READER_PORT must be 4179–4189");
 const server = await preview({
   root: project,
   configFile: join(project, "vite.config.ts"),
   logLevel: "warn",
   ...(process.env.DIST ? { build: { outDir: process.env.DIST } } : {}),
-  preview: { port: 4187, host: "127.0.0.1", strictPort: true, open: false },
+  preview: { port, host: "127.0.0.1", strictPort: true, open: false },
 });
 const base = server.resolvedUrls?.local[0];
 assert.ok(base);
@@ -178,7 +256,11 @@ try {
           await restoreScaleFactor(page, new URL("calibrate.html", base).href);
           const content = await reading(page, base, reader);
           const dom = await mountedPages(page, base, reader);
-          return { reader, round: round + 1, ...content, ...dom };
+          const scroll =
+            process.env.SCROLL_QUALITY === "1"
+              ? await scrollQuality(page, base, reader, "synthetic-text-1000.pdf")
+              : undefined;
+          return { reader, round: round + 1, ...content, ...dom, scroll };
         } finally {
           await context.close();
         }

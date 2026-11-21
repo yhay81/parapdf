@@ -5,24 +5,18 @@ import { KeptCanvases, type KeptPage } from "../src/render/kept-canvases.ts";
 import type { ViewInput } from "../src/render/planner.ts";
 import { Renderer } from "../src/render/renderer.ts";
 import { computeLayout } from "../src/view/layout.ts";
-import { canvasesOf, FakeDocument, type FakeElement, fakeHost } from "./fake-dom.ts";
+import {
+  canvasesOf,
+  FakeDocument,
+  type FakeElement,
+  mountDrawingPage as mount,
+} from "./fake-dom.ts";
 import { LETTER, openSession, settle } from "./fake-pdfjs.ts";
 
 /** A session of two pages, whose drawings stay pending until the test settles them. */
 async function controlledDocument() {
   const { session, drawings } = await openSession({ pages: [LETTER, LETTER] });
   return { doc: session, renders: drawings };
-}
-
-/** Mounts page `index` in `host`; returns its canvases as built. */
-function mount(renderer: Renderer, index: number, host = fakeHost()) {
-  renderer.attach(index, host);
-  const [base, detail, spare] = canvasesOf(host) as [
-    HTMLCanvasElement,
-    HTMLCanvasElement,
-    HTMLCanvasElement,
-  ];
-  return { host, base, detail, spare };
 }
 
 /** Whether anything was copied into `canvases`. */
@@ -53,6 +47,7 @@ function input(scale: number, page = 0): ViewInput {
       scrollerHeight: 900,
     },
     devicePixelRatio: 1,
+    moving: false,
     settled: true,
   };
 }
@@ -64,7 +59,7 @@ describe("Renderer kept canvases", () => {
     const { doc, renders } = await controlledDocument();
     const renderer = new Renderer(doc, { maxKeptPixels: 4_000_000 });
     t.after(() => renderer.dispose());
-    const { detail } = mount(renderer, 0);
+    const mounted = mount(renderer, 0);
     renderer.update(input(1));
     await settle();
     assert.equal(renders.length, 1);
@@ -72,6 +67,7 @@ describe("Renderer kept canvases", () => {
     await settle();
 
     renderer.detach(0);
+    const detail = mounted.detail;
     assert.equal(detail.width * detail.height, 612 * 792, "a kept canvas keeps its pixels");
     assert.equal(
       renderer.keptPixels,
@@ -83,7 +79,7 @@ describe("Renderer kept canvases", () => {
     assert.equal(again.detail, detail, "the same canvas, moved");
     assert.equal(detail.width * detail.height, 612 * 792, "with its pixels");
     assert.equal(detail.style.visibility, "");
-    assert.ok(!copied(again.base, again.detail, again.spare), "nothing is copied");
+    assert.ok(!copied(...canvasesOf(again.host)), "nothing is copied");
     assert.equal(renderer.keptPixels, 0);
     assert.equal(renderer.stats.kept, 1);
     assert.equal(renderer.pageSharpness(0, whole, 1), 1);
@@ -96,11 +92,13 @@ describe("Renderer kept canvases", () => {
     const { doc, renders } = await controlledDocument();
     const renderer = new Renderer(doc, { maxKeptPixels: 4_000_000 });
     t.after(() => renderer.dispose());
-    const { host, detail } = mount(renderer, 0);
+    const mounted = mount(renderer, 0);
+    const { host } = mounted;
     renderer.update(input(1));
     await settle();
     renders[0]?.resolve();
     await settle();
+    const detail = mounted.detail;
     renderer.detach(0);
     const again = mount(renderer, 0, host);
     assert.equal(again.detail, detail);
@@ -124,12 +122,13 @@ describe("Renderer kept canvases", () => {
     await settle();
     renderer.detach(0);
     renderer.update(input(1.5));
-    const { spare } = mount(renderer, 0);
+    const mounted = mount(renderer, 0);
     assert.equal(renderer.hasPixels(0), true);
     assert.equal(renderer.pageSharpness(0, whole, 1.5), 2 / 3);
     await settle();
     // The new detail is drawn into the spare while the kept one shows.
     assert.equal(renders.at(-1)?.request.scale, 1.5);
+    const spare = mounted.spare;
     assert.equal(renders.at(-1)?.request.canvas, spare);
   });
 
@@ -165,11 +164,12 @@ describe("Renderer kept canvases", () => {
     t.after(() => renderer.dispose());
     const details: HTMLCanvasElement[] = [];
     for (const page of [0, 1]) {
-      details.push(mount(renderer, page).detail);
+      const mounted = mount(renderer, page);
       renderer.update(input(1, page));
       await settle();
       renders.at(-1)?.resolve();
       await settle();
+      details.push(mounted.detail);
       renderer.detach(page);
     }
     // The least recently kept go once the commit's mounting pages took theirs.
@@ -185,15 +185,17 @@ describe("Renderer kept canvases", () => {
     // Room for one page's drawing.
     const renderer = new Renderer(doc, { maxKeptPixels: 600_000 });
     t.after(() => renderer.dispose());
-    const first = mount(renderer, 0).detail;
+    const firstPage = mount(renderer, 0);
     renderer.update(input(1));
     await settle();
+    const first = firstPage.detail;
     renders.at(-1)?.resolve();
     await settle();
     renderer.detach(0);
-    const second = mount(renderer, 1).detail;
+    const secondPage = mount(renderer, 1);
     renderer.update(input(1, 1));
     await settle();
+    const second = secondPage.detail;
     renders.at(-1)?.resolve();
     await settle();
     // One commit: page 2 unmounts, over the budget with page 1's, and page 1 mounts.
@@ -210,7 +212,7 @@ describe("Renderer kept canvases", () => {
     const renderer = new Renderer(doc, { maxKeptPixels: 4_000_000 });
     t.after(() => renderer.dispose());
     for (const change of [() => renderer.invalidateContent(), () => renderer.rotate(90)]) {
-      const { detail } = mount(renderer, 0);
+      const mounted = mount(renderer, 0);
       renderer.update(input(1));
       await settle();
       renders.at(-1)?.resolve();
@@ -219,6 +221,7 @@ describe("Renderer kept canvases", () => {
       assert.ok(renderer.keptPixels > 0);
       change();
       assert.equal(renderer.keptPixels, 0);
+      const detail = mounted.detail;
       assert.equal(detail.width, 0);
     }
   });
@@ -230,9 +233,10 @@ describe("Renderer kept canvases", () => {
       maxCanvasPixels: 1_200_000,
     });
     t.after(() => renderer.dispose());
-    const kept = mount(renderer, 0).detail;
+    const keptPage = mount(renderer, 0);
     renderer.update(input(1));
     await settle();
+    const kept = keptPage.detail;
     renders.at(-1)?.resolve();
     await settle();
     renderer.detach(0);
@@ -264,7 +268,7 @@ describe("Renderer kept canvases", () => {
     ] as const) {
       const { doc, renders } = await controlledDocument();
       const renderer = new Renderer(doc, maxKeptPixels === undefined ? {} : { maxKeptPixels });
-      const { detail } = mount(renderer, 0);
+      const mounted = mount(renderer, 0);
       const view = input(1);
       renderer.update({
         ...view,
@@ -282,6 +286,7 @@ describe("Renderer kept canvases", () => {
       renderer.detach(0);
       const name = `viewport ${width} by 201, maxKeptPixels ${maxKeptPixels}`;
       assert.equal(renderer.keptPixels, kept, name);
+      const detail = mounted.detail;
       assert.equal(detail.width * detail.height, kept, name);
       renderer.dispose();
     }
@@ -295,7 +300,7 @@ describe("Renderer kept canvases", () => {
       maxDetailPixels: 1_000_000,
     });
     t.after(() => renderer.dispose());
-    const { base, detail } = mount(renderer, 0);
+    const mounted = mount(renderer, 0);
     renderer.update(input(2));
     await settle();
     // The base, then the partial detail.
@@ -307,6 +312,8 @@ describe("Renderer kept canvases", () => {
       renders.some((render) => render.request.region),
       "part of the page",
     );
+    const detail = mounted.detail;
+    const base = mounted.base;
     assert.ok(base.width > 0 && detail.width > 0);
     const pixels = base.width * base.height + detail.width * detail.height;
     renderer.detach(0);
@@ -324,7 +331,7 @@ describe("Renderer kept canvases", () => {
     const { doc, renders } = await controlledDocument();
     const renderer = new Renderer(doc, { maxKeptPixels: 4_000_000 });
     t.after(() => renderer.dispose());
-    const { spare } = mount(renderer, 0);
+    const mounted = mount(renderer, 0);
     renderer.update(input(1));
     await settle();
     renders.at(-1)?.resolve();
@@ -332,6 +339,7 @@ describe("Renderer kept canvases", () => {
     // A zoom draws the new detail into the spare, which then shows.
     renderer.update(input(1.5));
     await settle();
+    const spare = mounted.spare;
     assert.equal(renders.at(-1)?.request.canvas, spare);
     renders.at(-1)?.resolve();
     await settle();
@@ -355,12 +363,13 @@ describe("Renderer kept canvases", () => {
         maxKeptPixels: 4_000_000,
         annotationSetup: { ...DEFAULT_ANNOTATION_SETUP, forms },
       });
-      const { base } = mount(renderer, 0);
+      const mounted = mount(renderer, 0);
       // Unsettled, the page draws its base alone, and builds no layers.
       renderer.update({ ...input(1), settled: false });
       await settle();
       renders.at(-1)?.resolve();
       await settle();
+      const base = mounted.base;
       const pixels = base.width * base.height;
       assert.ok(pixels > 0);
       renderer.detach(0);
@@ -373,9 +382,10 @@ describe("Renderer kept canvases", () => {
   it("keeps nothing while the viewer has no viewport, and releases kept canvases on dispose", async () => {
     const { doc, renders } = await controlledDocument();
     const renderer = new Renderer(doc, { maxKeptPixels: 4_000_000 });
-    const first = mount(renderer, 0).detail;
+    const firstPage = mount(renderer, 0);
     renderer.update(input(1));
     await settle();
+    const first = firstPage.detail;
     renders.at(-1)?.resolve();
     await settle();
     renderer.detach(0);
@@ -384,9 +394,10 @@ describe("Renderer kept canvases", () => {
     renderer.setKeeping(false);
     assert.equal(renderer.keptPixels, 0);
     assert.equal(first.width, 0, "released");
-    const second = mount(renderer, 1).detail;
+    const secondPage = mount(renderer, 1);
     renderer.update(input(1, 1));
     await settle();
+    const second = secondPage.detail;
     renders.at(-1)?.resolve();
     await settle();
     renderer.detach(1);
@@ -394,9 +405,10 @@ describe("Renderer kept canvases", () => {
     assert.equal(second.width, 0);
 
     renderer.setKeeping(true);
-    const third = mount(renderer, 0).detail;
+    const thirdPage = mount(renderer, 0);
     renderer.update(input(1));
     await settle();
+    const third = thirdPage.detail;
     renders.at(-1)?.resolve();
     await settle();
     renderer.detach(0);

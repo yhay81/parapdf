@@ -12,7 +12,9 @@
  *   pnpm --filter @parapdf/prototype exec node scripts/startup-bench.ts
  * WIDTH/HEIGHT set the viewport in CSS px (820×900). LATENCY (additional ms) and BANDWIDTH
  * (Mbit/s) use Chromium network emulation. OUTPUT selects the JSON report path.
- * Each round rotates the execution order.
+ * REACT_PDF=1 adds the react-pdf + react-window reader. The discarded warmup
+ * compares its RGBA pixels with direct pdf.js; every timed raster is checked against its hash.
+ * STARTUP_PORT selects the first preview port. Each round rotates the execution order.
  */
 import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { arch, cpus, loadavg, platform, release, tmpdir } from "node:os";
@@ -113,12 +115,18 @@ function observeStartup() {
   let nextPageMs: number | null = null;
   let nextPageSharpMs: number | null = null;
   const observer = new MutationObserver(() => {
-    const scroller = document.querySelector<HTMLElement>(".parapdf-viewport, main");
+    const reactPage = document.querySelector<HTMLElement>('.react-pdf__Page[data-page-number="1"]');
+    const scroller =
+      reactPage?.closest<HTMLElement>(".viewport") ??
+      document.querySelector<HTMLElement>(".parapdf-viewport, main");
     if (!scroller) return;
     const ms = performance.now();
     const completed = (canvas: HTMLCanvasElement) =>
-      canvas.width > 0 && canvas.height > 0 && canvas.style.visibility !== "hidden";
-    if (nextPageSharpMs === null) {
+      canvas.width > 0 &&
+      canvas.height > 0 &&
+      canvas.style.visibility !== "hidden" &&
+      (!reactPage || canvas.style.width !== "");
+    if (!reactPage && nextPageSharpMs === null) {
       const next = scroller.querySelector<HTMLElement>('[data-page="2"]');
       if (next) {
         const canvases = next.querySelectorAll<HTMLCanvasElement>(
@@ -137,7 +145,7 @@ function observeStartup() {
     }
     const visible = Array.from(
       scroller.querySelectorAll<HTMLCanvasElement>(
-        '[data-page="1"] .parapdf-canvas-wrapper > canvas, main > canvas',
+        '[data-page="1"] .parapdf-canvas-wrapper > canvas, [data-page-number="1"] .react-pdf__Page__canvas, main > canvas',
       ),
     ).filter(completed);
     if (!visible.length) return;
@@ -156,11 +164,12 @@ function observeStartup() {
     firstCanvas ??= canvas;
     if (
       canvas.width !== (scroller.clientWidth - 24) * devicePixelRatio ||
-      (scroller.localName !== "main" && canvas.style.height !== "100%")
+      (!reactPage && scroller.localName !== "main" && canvas.style.height !== "100%")
     )
       return;
     sharp ??= snapshot;
     if (
+      !reactPage &&
       nextPageSharpMs === null &&
       scroller.localName !== "main" &&
       scroller.querySelector('[data-page="1"]')?.getAttribute("aria-label") !== "Page 1 of 1"
@@ -212,7 +221,11 @@ interface Variant {
   name: string;
   url: URL;
 }
-async function sample(browser: Browser, variant: Variant, file: string) {
+interface RasterComparison {
+  reference?: string;
+  pixels?: { total: number; different: number; maxChannelDifference: number };
+}
+async function sample(browser: Browser, variant: Variant, file: string, check?: RasterComparison) {
   const context = await browser.newContext({ viewport, deviceScaleFactor: 2 });
   try {
     const page: Page = await context.newPage();
@@ -271,6 +284,44 @@ async function sample(browser: Browser, variant: Variant, file: string) {
       }
       return result;
     });
+    // Only the discarded warmup exports and compares pixels, after all timing milestones.
+    if (check && variant.name === "direct") {
+      check.reference = await page
+        .locator("main > canvas")
+        .evaluate((c: HTMLCanvasElement) => c.toDataURL());
+    }
+    if (check && variant.name === "react-pdf") {
+      if (!check.reference) throw new Error("Missing direct pdf.js reference drawing");
+      check.pixels = await page
+        .locator('[data-page-number="1"] .react-pdf__Page__canvas')
+        .evaluate(async (canvas: HTMLCanvasElement, reference) => {
+          const img = new Image();
+          img.src = reference;
+          await img.decode();
+          const { width, height } = canvas;
+          if (img.naturalWidth !== width || img.naturalHeight !== height)
+            throw new Error("Reader and reference have different raster dimensions");
+          const copy = document.createElement("canvas");
+          copy.width = width;
+          copy.height = height;
+          const ctx = copy.getContext("2d");
+          const drawing = canvas.getContext("2d");
+          if (!ctx || !drawing) throw new Error("Cannot compare first-page pixels");
+          ctx.drawImage(img, 0, 0);
+          const a = ctx.getImageData(0, 0, width, height).data;
+          const b = drawing.getImageData(0, 0, width, height).data;
+          let different = 0;
+          let maxChannelDifference = 0;
+          for (let i = 0; i < a.length; i += 4) {
+            let delta = 0;
+            for (let c = i; c < i + 4; c++)
+              delta = Math.max(delta, Math.abs((a[c] ?? 0) - (b[c] ?? 0)));
+            if (delta) different++;
+            maxChannelDifference = Math.max(maxChannelDifference, delta);
+          }
+          return { total: width * height, different, maxChannelDifference };
+        }, check.reference);
+    }
     return { ...result, idle };
   } finally {
     await context.close();
@@ -306,6 +357,9 @@ try {
   );
   symlinkSync(join(dist, "corpus"), join(reference, "corpus"), "dir");
   const variants: Variant[] = [];
+  const port = Number(process.env.STARTUP_PORT ?? 4183);
+  if (!Number.isInteger(port) || port < 4179 || port > 4187)
+    throw new Error("STARTUP_PORT must be 4179–4187");
   for (const [name, directory] of [
     ["viewer", dist],
     ...(before ? [["before", before]] : []),
@@ -317,7 +371,7 @@ try {
       logLevel: "warn",
       plugins: [crossOriginIsolation()],
       build: { outDir: directory },
-      preview: { host: "127.0.0.1", port: 4183 + variants.length, strictPort: true, open: false },
+      preview: { host: "127.0.0.1", port: port + variants.length, strictPort: true, open: false },
     });
     servers.push(server);
     const origin = server.resolvedUrls?.local[0];
@@ -327,12 +381,22 @@ try {
       url: new URL(name === "direct" ? "index.html" : "minimal.html", origin),
     });
   }
+  const viewer = variants[0];
+  if (process.env.REACT_PDF === "1" && viewer) {
+    variants.push({
+      name: "react-pdf",
+      url: new URL("compare.html?viewer=react-pdf-window&text=1&links=1", viewer.url),
+    });
+  }
   const launched = await launchBrowser(browserName);
   try {
     const loadStart = loadavg()[0];
+    const comparisons = [];
     for (const file of files) {
       let expected: string | undefined;
       let expectedFirst: string | undefined;
+      let expectedReact: string | undefined;
+      const comparison: RasterComparison = {};
       // Discard one job of each variant to warm process-level caches, then rotate the
       // order so a first-in-round effect cannot systematically favor a single variant.
       for (let round = 0; round <= runs; round++) {
@@ -340,12 +404,34 @@ try {
           ...variants.slice(round % variants.length),
           ...variants.slice(0, round % variants.length),
         ]) {
-          const result = await measureInTurn(launched, (browser) => sample(browser, variant, file));
+          const result = await measureInTurn(launched, (browser) =>
+            sample(
+              browser,
+              variant,
+              file,
+              !round && process.env.REACT_PDF === "1" ? comparison : undefined,
+            ),
+          );
           const key = `${result.sharp.width}x${result.sharp.height}:${result.sha256}`;
-          expected ??= key;
-          if (key !== expected)
-            throw new Error(`${file} ${variant.name}: raster mismatch ${key} vs ${expected}`);
-          if (variant.name !== "direct") {
+          if (variant.name === "react-pdf") {
+            expectedReact ??= key;
+            if (key !== expectedReact)
+              throw new Error(`${file}: react-pdf's raster changed between runs`);
+            if (!round) {
+              if (!comparison.pixels || (key === expected) !== (comparison.pixels.different === 0))
+                throw new Error(`${file}: pixel comparison disagrees with the raster hash`);
+              comparisons.push({ file, ...comparison.pixels, direct: expected, reactPdf: key });
+              console.log(
+                `${file}: ${comparison.pixels.different}/${comparison.pixels.total} react-pdf pixels differ from direct pdf.js`,
+              );
+              delete comparison.reference;
+            }
+          } else {
+            expected ??= key;
+            if (key !== expected)
+              throw new Error(`${file} ${variant.name}: raster mismatch ${key} vs ${expected}`);
+          }
+          if (variant.name === "viewer" || variant.name === "before") {
             const first = `${result.first.width}x${result.first.height}:${result.firstSha256}`;
             expectedFirst ??= first;
             if (first !== expectedFirst)
@@ -370,6 +456,13 @@ try {
           machine: `${platform()} ${release()} ${arch()}, ${cpus()[0]?.model}`,
           browser: launched.label,
           pdfjs: pkg.dependencies["pdfjs-dist"],
+          ...(comparisons.length
+            ? {
+                reactPdf: pkg.devDependencies["react-pdf"],
+                reactWindow: pkg.devDependencies["react-window"],
+                comparisons,
+              }
+            : {}),
           viewport,
           network,
           deviceScaleFactor: 2,

@@ -4,25 +4,19 @@ import { type AnnotationSetup, DEFAULT_ANNOTATION_SETUP } from "../src/render/do
 import type { ViewInput } from "../src/render/planner.ts";
 import { Renderer } from "../src/render/renderer.ts";
 import { computeLayout, visibleRange } from "../src/view/layout.ts";
-import { canvasesOf, FakeDocument, type FakeElement, fakeHost } from "./fake-dom.ts";
+import {
+  canvasesOf,
+  FakeDocument,
+  type FakeElement,
+  fakeHost,
+  mountDrawingPage as mount,
+} from "./fake-dom.ts";
 import { LETTER, openSession, settle } from "./fake-pdfjs.ts";
 
 /** A session of two pages, whose drawings stay pending until the test settles them. */
 async function controlledDocument() {
   const { session, drawings } = await openSession({ pages: [LETTER, LETTER] });
   return { doc: session, renders: drawings };
-}
-
-/** Mounts page `index` in a new host; returns its canvases as built. */
-function mount(renderer: Renderer, index: number) {
-  const host = fakeHost();
-  renderer.attach(index, host);
-  const [base, detail, spare] = canvasesOf(host) as [
-    HTMLCanvasElement,
-    HTMLCanvasElement,
-    HTMLCanvasElement,
-  ];
-  return { host, base, detail, spare };
 }
 
 function input(scale = 1, settled = false): ViewInput {
@@ -40,6 +34,7 @@ function input(scale = 1, settled = false): ViewInput {
       scrollerHeight: 900,
     },
     devicePixelRatio: 1,
+    moving: false,
     settled,
   };
 }
@@ -70,11 +65,7 @@ describe("Renderer page DOM", () => {
     );
     assert.equal(children[0]?.getAttribute("aria-hidden"), "true");
     const canvases = canvasesOf(host);
-    assert.equal(canvases.length, 3, "base, detail, and spare");
-    for (const canvas of canvases) {
-      assert.equal(canvas.width * canvas.height, 0, "a new canvas holds no pixels");
-      assert.equal(canvas.style.visibility, "hidden");
-    }
+    assert.equal(canvases.length, 0, "drawing surfaces wait for the first drawing");
 
     renderer.detach(0);
     assert.deepEqual(
@@ -162,7 +153,7 @@ describe("Renderer failures", () => {
       const { doc, renders } = await controlledDocument();
       const renderer = new Renderer(doc, drawingsOnly);
       t.after(() => renderer.dispose());
-      const { base, detail, spare } = mount(renderer, 0);
+      const mounted = mount(renderer, 0);
       if (initialBase) {
         renderer.update(input());
         await settle();
@@ -174,16 +165,19 @@ describe("Renderer failures", () => {
       await settle();
       renders.at(-1)?.resolve();
       await settle();
+      const detail = mounted.detail;
       assert.equal(detail.style.visibility, "");
       const before = renders.length;
 
       renderer.invalidateContent();
       await settle();
       assert.equal(renders.length, before + 1);
+      const spare = mounted.spare;
       assert.equal(renders.at(-1)?.request.canvas, spare);
       renders.at(-1)?.reject(new Error("failed replacement detail"));
       await settle();
       assert.equal(renders.length, before + 2);
+      const base = mounted.base;
       assert.equal(renders.at(-1)?.request.canvas, base);
       assert.equal(renders.at(-1)?.request.scale, 0.5);
       assert.equal(detail.style.visibility, "");
@@ -207,7 +201,7 @@ describe("Renderer failures", () => {
     const { doc, renders } = await controlledDocument();
     const renderer = new Renderer(doc, drawingsOnly);
     t.after(() => renderer.dispose());
-    const { detail } = mount(renderer, 0);
+    const mounted = mount(renderer, 0);
     const view = input(1, true);
     renderer.update(view);
     await settle();
@@ -223,6 +217,7 @@ describe("Renderer failures", () => {
     for (let frame = 0; frame < 10; frame++) renderer.update(view);
     await settle();
     assert.equal(renders.length, 3);
+    const detail = mounted.detail;
     assert.equal(detail.style.visibility, "");
     assert.equal(renderer.hasPixels(0), true);
     assert.equal(renderer.stats.failed, 2);
@@ -333,9 +328,10 @@ describe("Renderer failures", () => {
     const { doc, renders } = await controlledDocument();
     const renderer = new Renderer(doc, drawingsOnly);
     t.after(() => renderer.dispose());
-    const { base } = mount(renderer, 0);
+    const mounted = mount(renderer, 0);
     renderer.update(input());
     await settle();
+    const base = mounted.base;
     assert.ok(base.width * base.height > 0);
     renders[0]?.task.cancel();
     await settle();
@@ -352,9 +348,10 @@ describe("Renderer failures", () => {
     const { doc, renders } = await controlledDocument();
     const renderer = new Renderer(doc, drawingsOnly);
     t.after(() => renderer.dispose());
-    const { base } = mount(renderer, 0);
+    const mounted = mount(renderer, 0);
     renderer.update(input());
     await settle();
+    const base = mounted.base;
     assert.ok(base.width * base.height > 0, "drawPage sized the base canvas");
     renders[0]?.reject(new Error("broken base"));
     await settle();
@@ -392,13 +389,15 @@ describe("Renderer lifecycle", () => {
     const { session, drawings, cleaned } = await openSession({ pages: [LETTER, LETTER] });
     const controller = new AbortController();
     const renderer = new Renderer(session, { signal: controller.signal });
-    const { host, base } = mount(renderer, 0);
+    const mounted = mount(renderer, 0);
+    const { host } = mounted;
     renderer.update(input());
     await settle();
     assert.equal(drawings.length, 1);
     controller.abort();
     await settle();
     assert.equal(drawings[0]?.cancellations, 1, "the drawing in progress is cancelled");
+    const base = mounted.base;
     assert.equal(base.width, 0, "the page's canvases are given back");
     assert.equal((host as unknown as FakeElement).children.length, 0, "and its DOM");
     assert.deepEqual(cleaned, [0], "and pdf.js's parsing results of it");
@@ -506,7 +505,7 @@ describe("Renderer drawings for others", () => {
     const { doc, renders } = await controlledDocument();
     const renderer = new Renderer(doc, drawingsOnly);
     t.after(() => renderer.dispose());
-    const { detail } = mount(renderer, 0);
+    const mounted = mount(renderer, 0);
     const copy = (canvas = sized(300, 388), rotation: 0 | 90 = 0) =>
       renderer.copyPage(0, canvas as unknown as HTMLCanvasElement, rotation);
     renderer.update(input(1, true));
@@ -516,6 +515,7 @@ describe("Renderer drawings for others", () => {
     await settle();
     const thumbnail = sized(300, 388);
     assert.equal(copy(thumbnail), true);
+    const detail = mounted.detail;
     assert.deepEqual(thumbnail.copied, [detail]);
     assert.equal(copy(sized(613, 793)), false, "larger than the drawing");
     assert.equal(copy(sized(300, 388), 90), false, "drawn at another turn");
@@ -622,6 +622,7 @@ describe("Renderer drawings for others", () => {
         scrollerHeight: 700,
       },
       devicePixelRatio: 1,
+      moving: false,
       settled: true,
     });
 
@@ -795,6 +796,7 @@ describe("Renderer drawings for others", () => {
         scrollerHeight: 900,
       },
       devicePixelRatio: 1,
+      moving: false,
       settled: true,
     });
     await settle();
@@ -848,7 +850,7 @@ describe("Renderer view changes", () => {
       onPainted: (index, layer) => painted.push(`${index + 1} ${layer}`),
     });
     t.after(() => renderer.dispose());
-    const { base } = mount(renderer, 0);
+    const mounted = mount(renderer, 0);
     renderer.update(input());
     await settle();
     renders[0]?.resolve();
@@ -862,6 +864,7 @@ describe("Renderer view changes", () => {
     await settle();
     assert.equal(renders[1]?.cancellations, 1);
     assert.equal(renderer.hasPixels(0), false);
+    const base = mounted.base;
     assert.equal(base.width * base.height, 0);
     assert.equal(renders.length, 3);
     assert.equal(renders[2]?.request.rotation, 90);
@@ -881,7 +884,7 @@ describe("Renderer view changes", () => {
       maxBasePixels: 1_000_000,
     });
     t.after(() => renderer.dispose());
-    const { base, detail } = mount(renderer, 0);
+    const mounted = mount(renderer, 0);
     const at = (scale: number, top: number): ViewInput => {
       const layout = computeLayout(sizes, scale, { gap: 10 });
       const viewport = {
@@ -893,11 +896,21 @@ describe("Renderer view changes", () => {
         scrollerHeight: 900,
       };
       const { first, last } = visibleRange(layout, viewport);
-      return { layout, first, last, focus: first, viewport, devicePixelRatio: 1, settled: true };
+      return {
+        layout,
+        first,
+        last,
+        focus: first,
+        viewport,
+        devicePixelRatio: 1,
+        moving: false,
+        settled: true,
+      };
     };
     // At 1.5 the page draws its detail first, without a base.
     renderer.update(at(1.5, 0));
     await settle();
+    const detail = mounted.detail;
     assert.deepEqual(
       renders.map(({ request }) => [request.canvas, request.scale]),
       [[detail, 1.5]],
@@ -908,6 +921,7 @@ describe("Renderer view changes", () => {
     renderer.update(at(3, 1800));
     await settle();
     assert.equal(renders.length, 2);
+    const base = mounted.base;
     assert.equal(renders[1]?.request.canvas, base);
     assert.ok(detail.width > 0 && detail.style.visibility !== "hidden", "the detail still shows");
     renders[1]?.resolve();
@@ -922,18 +936,20 @@ describe("Renderer view changes", () => {
     const { doc, renders } = await controlledDocument();
     const renderer = new Renderer(doc, drawingsOnly);
     t.after(() => renderer.dispose());
-    const { detail, spare } = mount(renderer, 0);
+    const mounted = mount(renderer, 0);
     renderer.update(input(1, true));
     await settle();
     renders[0]?.resolve();
     await settle();
     renderer.invalidateDrawings();
     await settle();
+    const spare = mounted.spare;
     assert.equal(renders[1]?.request.canvas, spare, "into the spare, the old one showing");
     renderer.invalidateDrawings();
     await settle();
     assert.equal(renders[1]?.cancellations, 1);
     assert.equal(renders.length, 3);
+    const detail = mounted.detail;
     assert.equal(detail.style.visibility, "");
     renders[2]?.resolve();
     await settle();

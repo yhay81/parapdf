@@ -2440,6 +2440,7 @@ export class ViewerController implements Viewer {
       viewport,
       devicePixelRatio: window.devicePixelRatio || 1,
       settled,
+      moving: !quiet && motion.at > 0,
     });
     if (quiet && !this.#gestures.zooming()) {
       this.#shown?.session?.notifyIdle();

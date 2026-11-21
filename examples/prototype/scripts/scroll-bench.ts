@@ -19,7 +19,8 @@
  * (Mbit/s, Chromium only), DIST (another build of the demo to measure), BEFORE (a build of the
  * demo from before a change, whose twin of every variant is measured in turn with it, job by
  * job), BEFORE_LABEL (its name in the report), QUERY (more demo parameters, such as
- * forms=1&scripts=1), and OUTPUT (the browser name).
+ * forms=1&scripts=1), and OUTPUT (the browser name). REFERENCE names an unchanged comparator
+ * to run once per round with BEFORE. This rotates the order each round.
  *
  * VARIANTS=react-pdf and react-pdf-window, named only, measure the same
  * document shown with react-pdf instead (compare.html): a <Page> for every
@@ -60,6 +61,7 @@ interface Variant {
 
 const beforeDist = process.env.BEFORE;
 const beforeLabel = process.env.BEFORE_LABEL ?? "another build";
+const reference = process.env.REFERENCE;
 const focusViewport = process.env.FOCUS === "1";
 
 const engineVariants = [
@@ -147,13 +149,15 @@ const measured: Variant[] = engineVariants.flatMap((variant) =>
     ),
   ),
 );
-// With BEFORE, each variant's twin on that build follows it.
-const variants: Variant[] = beforeDist
-  ? measured.flatMap((variant) => [
-      variant,
-      { ...variant, name: `${variant.name}, before`, before: true },
-    ])
-  : measured;
+// An unchanged reference reader needs one job per round even with two ParaPDF builds.
+if (reference && (!beforeDist || !measured.some((variant) => variant.name === reference))) {
+  throw new Error("REFERENCE must name a measured variant and requires BEFORE");
+}
+const variants: Variant[] = measured.flatMap((variant) =>
+  beforeDist && variant.name !== reference
+    ? [variant, { ...variant, name: `${variant.name}, before`, before: true }]
+    : [variant],
+);
 const files = (process.env.FILES ?? "synthetic-text-1000.pdf,bill-hr815.pdf").split(",");
 const speeds = (process.env.SPEEDS ?? "900,3600").split(",").map(Number);
 const runs = Number(process.env.RUNS ?? "2");
@@ -264,7 +268,8 @@ try {
     for (const speed of speeds) {
       // The variants of one run follow each other, so they meet the same machine.
       for (let run = 0; run < runs; run++) {
-        for (const variant of variants) {
+        const offset = reference ? run % variants.length : 0;
+        for (const variant of [...variants.slice(offset), ...variants.slice(0, offset)]) {
           const job = { variant: variant.name, file, speed, run };
           const url = variant.before ? beforeUrl : baseUrl;
           // Waits its turn with other Playwright browsers, and stops without
@@ -427,6 +432,7 @@ const environment = {
   loadAverage: { start: loadAtStart, end: loadavg()[0] ?? 0 },
   turnTaking: { ...turnTaking },
   before: beforeDist ? beforeLabel : undefined,
+  reference,
   versions,
   // Medians of the per-job idle baselines from calibrate.html.
   idle: {
@@ -462,6 +468,7 @@ const fmt = (value: number, digits = 0) => (Number.isFinite(value) ? value.toFix
 // The settings this run was given, so the report says how to repeat it.
 const reproduceEnv = [
   "VARIANTS",
+  "REFERENCE",
   "QUERY",
   "TEXT",
   "LINKS",
@@ -492,7 +499,7 @@ const markdown = [
   `- Run at: ${environment.runAt}`,
   `- Machine: ${environment.os}, ${environment.cpu}; ${environment.browser} (Playwright build, ${environment.headless ? "headless" : "headed"}); power: ${power.source === "ac" && !power.lowPowerMode ? "AC" : `**${power.source}${power.lowPowerMode ? ", Low Power Mode" : ""}; not comparable with AC runs**`}; one-minute load average ${environment.loadAverage.start.toFixed(1)} at the start, ${environment.loadAverage.end.toFixed(1)} at the end; ${turnTakingSummary()}`,
   `- Idle baseline (calibrate.html, median of jobs): 4 ms timer late by ${fmt(environment.idle.timerLagP50Ms, 1)} ms (median) / ${fmt(environment.idle.timerLagP95Ms, 1)} ms (p95); animation frames every ${fmt(environment.idle.frameIntervalMs, 1)} ms.`,
-  `- Method: 1280×900 viewport at devicePixelRatio 2, ${zoomText}, ${scrollModes.join(" or ")} scroll mode, ${durationMs} ms of scrolling at a constant speed in CSS pixels per second after the first page is painted, sideways in horizontal mode and downward otherwise, median of ${runs} runs.${beforeDist ? ` Variants named "before" ran on ${beforeLabel}, each in turn with its twin, job by job.` : ""}${throttled ? ` Network: ${latencyMs} ms latency, ${bandwidthMbps > 0 ? `${bandwidthMbps} Mbit/s` : "unlimited bandwidth"} (DevTools protocol).` : ""}`,
+  `- Method: 1280×900 viewport at devicePixelRatio 2, ${zoomText}, ${scrollModes.join(" or ")} scroll mode, ${durationMs} ms of scrolling at a constant speed in CSS pixels per second after the first page is painted, sideways in horizontal mode and downward otherwise, median of ${runs} runs.${beforeDist ? ` Variants named "before" ran on ${beforeLabel}, each in turn with its twin, job by job.` : ""}${reference ? ` The unchanged ${reference} ran once per round, with rotating order.` : ""}${throttled ? ` Network: ${latencyMs} ms latency, ${bandwidthMbps > 0 ? `${bandwidthMbps} Mbit/s` : "unlimited bandwidth"} (DevTools protocol).` : ""}`,
   ...(focusViewport
     ? [
         "- The viewport takes focus before scrolling, exercising page focus as the current page changes.",

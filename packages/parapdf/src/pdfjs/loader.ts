@@ -31,8 +31,7 @@ export interface PdfjsBuild {
  * How ParaPDF loads pdf.js. Everything is optional: by default it loads the
  * pdfjs-dist it depends on, and pdf.js's worker and the files it loads on
  * demand (CMaps, standard fonts, image decoders, an ICC profile) come from
- * the copies in the package, which bundlers emit with the application's
- * assets.
+ * ParaPDF and its pinned dependency. Bundlers emit them with the application's assets.
  */
 export interface PdfjsConfig {
   /**
@@ -42,7 +41,7 @@ export interface PdfjsConfig {
    */
   build?: PdfjsBuild;
   /**
-   * Base URL of a copy of the package's `pdfjs/` directory (a trailing slash
+   * Base URL of the directory written by `parapdf-copy-assets` (a trailing slash
    * is added when omitted), for bundlers that do not emit files referenced
    * with `new URL(…, import.meta.url)`, such as esbuild, Bun, and Parcel. The
    * worker is then `${assetBase}pdf.worker.js`.

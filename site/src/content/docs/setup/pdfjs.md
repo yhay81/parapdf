@@ -18,7 +18,7 @@ configurePdfjs({ documentOptions: { withCredentials: true } });
 
 | Option | |
 |---|---|
-| `assetBase` | Base URL of a copy of `node_modules/parapdf/pdfjs/` (with or without a trailing slash; relative paths resolve against `document.baseURI`), for bundlers that do not emit the files themselves (see [Bundlers](/setup/bundlers/)). |
+| `assetBase` | Public URL of the directory written by `parapdf-copy-assets` (with or without a trailing slash; relative paths resolve against `document.baseURI`), for bundlers that do not emit the files themselves (see [Bundlers](/setup/bundlers/)). |
 | `imageResourcesPath` | Base URL of pdf.js's annotation icons, which comments without an appearance of their own show (with or without a trailing slash). By default they are the icons the package ships, or `${assetBase}/web/images/` with `assetBase`. |
 | `workerSrc` | URL of pdf.js's worker script, when it is not `${assetBase}pdf.worker.js`. |
 | `build` | `legacyBuild` from `parapdf/legacy`: pdf.js's legacy build for older browsers, with its worker and files from the package like the modern build's. |

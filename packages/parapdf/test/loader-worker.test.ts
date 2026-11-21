@@ -21,6 +21,6 @@ it("shows the annotation icons the package ships with a worker of the applicatio
   assert.equal(module.GlobalWorkerOptions.workerSrc, "/workers/pdf.worker.js");
   const icons = Object.entries(pdfjs.iconUrls ?? {});
   assert.ok(icons.length > 0);
-  for (const [name, url] of icons) assert.ok(url.endsWith(`/pdfjs/web/images/${name}`), url);
+  for (const [name, url] of icons) assert.ok(url.endsWith(`/pdfjs-dist/web/images/${name}`), url);
   assert.ok(pdfjs.scriptingUrls().module.endsWith("/pdfjs/quickjs.js"));
 });
