@@ -63,7 +63,7 @@ ParaPDF had the lower median in 9 of the twelve conditions.
 
 </details>
 
-Canvas storage includes drawings kept for unmounted pages. Each cell gives median MiB after scrolling and median React commits during motion.
+Canvas storage includes drawings kept for unmounted pages. Each cell gives median MiB after scrolling and median React commits during motion. Across the 18 fast trials on the 1,000-page text, ParaPDF made 11 React commits per trial and react-pdf made 43–48. Both readers had zero trials with blank frames.
 
 | Browser | PDF | CSS px/s | Before | ParaPDF | react-pdf |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -137,14 +137,14 @@ On the bill, a Chromium diagnostic isolated the difference in the small graphic 
 
 ## Package size
 
-The same clean-install and Japanese first-page checks used in decision 0056 were repeated on the final packed build. Preparing neighboring text added 740 bytes to the installed package and 37 gzip bytes to the first-page code. Both readers still used the same pdfjs-dist and native canvas dependency.
+The clean-install and Japanese first-page checks used in decision 0056 were repeated on the packed 0.11.0 release. All readers used pdfjs-dist 6.5.438 and the same native canvas dependency. Compared with an npm install of 0.10.0 on each target, 0.11.0 saved 3,623,429 bytes (3.46 MiB).
 
 | Bytes | ParaPDF | react-pdf + react-window | Single-page react-pdf |
 | --- | ---: | ---: | ---: |
-| macOS arm64 npm install | 80,442,160 | 80,602,859 | 80,175,275 |
-| Linux x64 glibc npm target | 87,051,803 | 87,212,502 | — |
-| Windows x64 npm target | 91,483,467 | 91,644,166 | — |
-| First-page code, gzip | 635,324 | 649,744 | 643,929 |
+| macOS arm64 npm install | 80,442,178 | 80,602,859 | 80,175,275 |
+| Linux x64 glibc npm target | 87,051,821 | 87,212,502 | — |
+| Windows x64 npm target | 91,483,485 | 91,644,166 | — |
+| First-page code, gzip | 635,323 | 649,744 | 643,929 |
 
 Canvas memory is measured in the browser. These install counts sum regular files under `node_modules` on macOS, using npm target flags for Linux and Windows. The browser code includes the application, pdf.js, worker and CSS needed for a selectable Japanese page. [Package contents and method](0056-share-installed-pdfjs-assets.md)
 

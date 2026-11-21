@@ -642,7 +642,7 @@ describe("DocumentSession", () => {
     });
     await assert.rejects(
       DocumentSession.open(loader, { url: "/a.pdf" }, new AbortController()),
-      /pdf\.js's worker did not load from \/pdf\.worker\.js/,
+      /pdf\.js's worker did not load from \/pdf\.worker\.js.*parapdf-copy-assets.*assetBase/,
     );
   });
 

@@ -423,7 +423,7 @@ export class DocumentSession {
         throw new Error(
           `pdf.js's worker did not load from ${loaded.workerLocation}. Bundlers that do not emit files ` +
             "referenced with new URL(…, import.meta.url), such as esbuild, Bun, and Parcel, " +
-            "need configurePdfjs({ assetBase }) and a copy of parapdf/pdfjs/: see the README.",
+            "need assets from parapdf-copy-assets and their public URL in configurePdfjs({ assetBase }).",
           { cause: error },
         );
       }

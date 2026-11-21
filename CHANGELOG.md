@@ -4,15 +4,13 @@ Changes to the `parapdf` package. It follows
 [Semantic Versioning](https://semver.org/); until 1.0, a minor release may
 change the API.
 
-## Unreleased
+## 0.11.0 — 2026-11-21
 
-- Scrolling within a page no longer schedules idle checks once its text and
-  annotations are ready. Untagged pages use one fewer canvas element. Tagged
-  pages still expose the PDF's structure to assistive technology.
-- Drawing surfaces are allocated when a page needs them. During slow scrolling,
-  the viewer prioritizes visible content and prepares drawings and selectable
-  text on the immediately adjacent pages.
-- The npm installation shares fonts, character maps, decoders and icons with its pinned pdfjs-dist dependency.
+At 3,600 CSS px/s on the 110-page bill, ParaPDF recorded 86–92% less
+main-thread delay than react-pdf with react-window across Chromium, WebKit
+and Firefox. At the same speed on the 1,000-page text, canvas storage was
+111.1 MiB for ParaPDF and 249.3 MiB for react-pdf.
+[Reader comparison](https://parapdf.yhay81.com/about/performance/)
 
 ### Breaking changes
 
@@ -20,6 +18,17 @@ change the API.
   the copy of `node_modules/parapdf/pdfjs/` with
   `npm exec -- parapdf-copy-assets public/pdfjs` in their build. The command
   writes the same static layout. Vite, webpack, Rsbuild and Next.js handle assets automatically.
+
+### Features and improvements
+
+- Scrolling within a page no longer schedules idle checks once its text and
+  annotations are ready. Untagged pages use one fewer canvas element. Tagged
+  pages still expose the PDF's structure to assistive technology.
+- Drawing surfaces are allocated when a page needs them. During slow scrolling,
+  the viewer prioritizes visible content and prepares drawings and selectable
+  text on the immediately adjacent pages.
+- The npm installation shares fonts, character maps, decoders and icons with
+  its pinned pdfjs-dist dependency, saving 3.46 MiB per installation.
 
 ## 0.10.0 — 2026-11-20
 

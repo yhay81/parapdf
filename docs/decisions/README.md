@@ -62,6 +62,9 @@ it. A new choice gets a new record, numbered next.
 | [0053](0053-page-hosts-and-display-preloading.md) | Page host ownership and display preloading | adopted |
 | [0054](0054-first-visible-drawing.md) | Draw visible pages first and prepare one neighboring preview on open | adopted |
 | [0055](0055-finished-dom-layers.md) | Stop scanning finished layers and allocate the structure canvas only on tagged pages | adopted |
+| [0056](0056-share-installed-pdfjs-assets.md) | Share the assets in the installed pdfjs-dist and export them for static hosting | adopted |
+| [0057](0057-reading-speed-scrolls.md) | Prioritize visible content and defer distant drawings during reading-speed scrolling | adopted |
+| [0058](0058-prepare-neighboring-text.md) | Prepare selectable text on adjacent pages during reading-speed scrolling | adopted |
 
 ## Template
 

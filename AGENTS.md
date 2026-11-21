@@ -29,9 +29,9 @@ that matters for performance or direction gets a decision record.
   core display API; do not use or copy the viewer components of
   `pdfjs-dist/web/`; do not fork or patch pdf.js, and propose upstream
   changes instead. Code ported from pdf.js's viewer keeps its Apache-2.0
-  attribution in `NOTICE.md`. The package depends on one exact pdfjs-dist
-  and ships its worker and the files it loads on demand, so applications
-  configure nothing.
+  attribution in `NOTICE.md`. The package ships a worker for one exact
+  pdfjs-dist and resolves its on-demand files from that dependency, so
+  applications configure nothing.
 - No compatibility (decision 0002). Change APIs, options, state, and
   behavior whenever that makes ParaPDF faster or simpler; add no
   deprecations, aliases, or shims. The functional checks are the behavioral

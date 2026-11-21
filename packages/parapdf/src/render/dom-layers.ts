@@ -151,7 +151,7 @@ export class DomLayers {
   #input: ViewInput | undefined;
   #running = false;
   #scheduled = false;
-  /** The last scan found every mounted layer built and every visible layer up to date. */
+  /** All layers eligible at the current scroll position, speed and zoom are ready. */
   #complete = false;
   /** Callers waiting for a page's annotation editor layer: true once built, false if never. */
   readonly #editorWaiters = new Map<number, Set<(built: boolean) => void>>();
