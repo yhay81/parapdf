@@ -1,101 +1,105 @@
 ---
 title: Performance
-description: Compare ParaPDF and react-pdf on canvas memory, rendering quality, reading features, download size, and scrolling in three browsers.
+description: Compare ParaPDF and react-pdf on reading quality, canvas memory, startup, scrolling and package size.
 head:
   - tag: style
     content: |
       .sl-markdown-content table { font-variant-numeric: tabular-nums; }
       @media (max-width: 25rem) {
         .sl-markdown-content :is(th, td) { padding-inline: 0.1875rem; }
+        .sl-markdown-content th:not(:first-child) { min-width: 4.5rem; }
       }
 ---
 
-**ParaPDF 0.10.0** and **react-pdf 11.1.0** used the same pdf.js 6.5.438. The react-pdf reader used react-window 2.5.3 to display long documents. Tests ran on an Apple M2 Pro at 2× pixel density.
+**ParaPDF** (development build after 0.10.0) and **react-pdf 11.1.0** use pdf.js 6.5.438 with selectable text and links. The long-document react-pdf reader adds react-window 2.5.3.
 
-## Reading the same PDF
+## Reading a 1,000-page PDF
 
-| Reader test | ParaPDF | react-pdf |
+| During scrolling | ParaPDF | react-pdf |
 | --- | ---: | ---: |
-| Fast scroll · canvas storage | 111.1 MiB | 249.3 MiB |
-| Fast scroll · React commits | 11 | 43–44 |
-| Fast scroll · trials with blank frames | 0/15 | 0/15 |
-| Page 10 · mounted pages | 5 | 7 |
-| Page 10 · canvas elements | 20 | 7 |
-| Page 10 · all page elements | 570 | 770 |
-| Select a word with the mouse | 3/3 browsers | 3/3 browsers |
-| Activate an embedded link with Enter | 3/3 browsers | 3/3 browsers |
-| Plain-text addresses turned into links | 3/3 | 0/3 |
+| Fast · canvas storage | 111.1 MiB | 249.3 MiB |
+| Fast · React commits per trial | 11 | 43–48 |
+| Fast · trials with blank frames | 0/18 | 0/18 |
+| Reading speed · frames below full resolution | 0/4,598 | 0/4,616 |
+| Reading speed · frames without selectable text | 0/4,598 | 0/4,616 |
 
-Scrolling and page counts use a 1,000-page document. Canvas storage includes cached drawings. Both readers drew the same 1,224 × 1,584 pixels on the link-test page in each browser. ParaPDF enabled its optional automatic links. [Fixtures and results](https://github.com/yhay81/parapdf/blob/main/examples/prototype/results/reader-comparison-0.10.0.md)
+Fast scrolling ran at 3,600 CSS px/s. Canvas storage includes cached drawings. A separate eight-second reading test at 900 CSS px/s checked the visible text layers and canvas resolution every frame.
 
-## Integrating a reader
+| At rest on page 10 | ParaPDF | react-pdf |
+| --- | ---: | ---: |
+| Mounted pages | 5 | 7 |
+| Canvas elements | 5 | 7 |
+| Page elements, including canvases | 555 | 770 |
 
-| In a React application | ParaPDF | react-pdf |
+## Scrolling
+
+Main-thread delay accumulated during four seconds of scrolling. Smaller values mean less time blocked. Each value is the median of six trials on an Apple M2 Pro at 2× pixel density.
+
+### 1,000-page text
+
+| Browser | CSS px/s | ParaPDF (ms) | react-pdf (ms) |
+| --- | ---: | ---: | ---: |
+| Chromium | 900 | **2.7** | 3.7 |
+| Chromium | 3,600 | **10.3** | 16.1 |
+| WebKit | 900 | **2.9** | 3.8 |
+| WebKit | 3,600 | 5.4 | **4.6** |
+| Firefox | 900 | **135.2** | 136.8 |
+| Firefox | 3,600 | **40.4** | 94.2 |
+
+### 110-page bill
+
+| Browser | CSS px/s | ParaPDF (ms) | react-pdf (ms) |
+| --- | ---: | ---: | ---: |
+| Chromium | 900 | **3.2** | 6.0 |
+| Chromium | 3,600 | **3.4** | 24.0 |
+| WebKit | 900 | 9.8 | **8.2** |
+| WebKit | 3,600 | **4.0** | 51.2 |
+| Firefox | 900 | 40.5 | **31.7** |
+| Firefox | 3,600 | **15.4** | 123.8 |
+
+ParaPDF recorded less main-thread delay in 9 of 12 conditions. [Individual trials](https://github.com/yhay81/parapdf/blob/main/docs/decisions/0058-prepare-neighboring-text.md#scrolling)
+
+## Opening a PDF
+
+Median time from navigation to a full-resolution first page, over six cold opens at 820 × 900.
+
+| PDF and browser | ParaPDF (ms) | react-pdf (ms) |
+| --- | ---: | ---: |
+| 1,000-page text · Chromium | **160** | 186 |
+| 1,000-page text · WebKit | **181** | 183 |
+| 1,000-page text · Firefox | **433** | 523 |
+| 110-page bill · Chromium | **157** | 187 |
+| 110-page bill · WebKit | **191** | 276 |
+| 110-page bill · Firefox | 324 | **266** |
+
+The first page of the text PDF matched pixel for pixel in all three browsers. The bill also matched in Firefox. Its first page differed on 0.03% of pixels in WebKit and 0.04% in Chromium. ParaPDF matched direct pdf.js in every run.
+
+## Download and install size
+
+| Reader | First-page code (gzip) | macOS arm64 install |
+| --- | ---: | ---: |
+| ParaPDF | 620.4 KiB | 76.71 MiB |
+| react-pdf + react-window | 634.5 KiB | 76.87 MiB |
+| Single-page react-pdf | 628.8 KiB | 76.46 MiB |
+
+| npm install target | ParaPDF | react-pdf + react-window |
+| --- | ---: | ---: |
+| Linux x64 (glibc) | 83.02 MiB | 83.17 MiB |
+| Windows x64 | 87.24 MiB | 87.40 MiB |
+
+Code includes the JavaScript, CSS and worker requested for a selectable Japanese page. Install sizes include production dependencies and the native binary for each npm target. [Package measurements](https://github.com/yhay81/parapdf/blob/main/docs/decisions/0058-prepare-neighboring-text.md#package-size)
+
+## Reading features
+
+| In the reader | ParaPDF | react-pdf |
 | --- | --- | --- |
+| Select a word with the mouse | 3/3 browsers | 3/3 browsers |
+| Activate a PDF link with Enter | 3/3 browsers | 3/3 browsers |
+| Recognize printed web and email addresses | 3/3 addresses with automatic links | 0/3 addresses |
 | Virtual scrolling | Built in | Add react-window |
-| Search across pages | Built in | App code |
-| Fill PDF forms | PdfForms | renderForms |
-| Replace the page renderer | Fixed pdf.js renderer | Custom renderer |
-| Set up the PDF worker | Automatic | Set workerSrc |
-| First page · code (gzip) | 620.2 KiB | 634.5 KiB |
-| Fresh npm install | 79.9 MiB | 76.6 MiB |
+| Find text across pages | Built in | App code |
+| Fill PDF forms | `PdfForms` | `renderForms` |
+| Customize a page | Add overlays in PDF coordinates | Replace the renderer or individual text runs |
+| Set up the PDF worker | Automatic | Set `workerSrc` |
 
-The code total includes scripts, styles and the worker loaded by a minimal Vite reader on a one-page Japanese PDF. The install includes all production dependencies on macOS arm64. [Package measurements](https://github.com/yhay81/parapdf/blob/main/examples/prototype/results/reader-comparison-0.10.0.md#install-and-download) · [react-pdf API](https://github.com/wojtekmaj/react-pdf/blob/aa36493db1568f1330f974b0acf27621d79d0cca/packages/react-pdf/README.md)
-
-## Scrolling a 1,000-page document
-
-Both viewers enabled text and links. Each cell is the median main-thread delay accumulated over a four-second scroll.
-
-| Main thread blocked (ms) | Chromium | WebKit | Firefox |
-| --- | ---: | ---: | ---: |
-| ParaPDF at 900 px/s | 10.4 | 1.5 | 22.4 |
-| react-pdf at 900 px/s | 8.6 | 3.2 | 15.5 |
-| ParaPDF at 3,600 px/s | 6.9 | 18.6 | 31.1 |
-| react-pdf at 3,600 px/s | 18.8 | 18.0 | 133.6 |
-
-[Both scroll speeds and PDFs](https://github.com/yhay81/parapdf/blob/main/examples/prototype/results/performance-0.10.0.md#scrolling)
-
-## Opening a document
-
-Time from navigation to a full-resolution first page, across nine cold opens at 820 × 900. ParaPDF matched direct pdf.js pixel for pixel.
-
-| First page (ms) | Chromium | WebKit | Firefox |
-| --- | ---: | ---: | ---: |
-| 110-page bill | 165 | 143 | 210 |
-| Same bill, direct pdf.js | 125 | 116 | 160 |
-| 1,000-page text | 175 | 169 | 258 |
-| Scanned patent | 156 | 193 | 237 |
-
-## Turning pages and zooming
-
-On the 110-page bill, we clicked Next as soon as page 1 appeared. Times are in milliseconds. Return and zoom end when the visible pages stay sharp.
-
-| Action | Chromium | WebKit | Firefox |
-| --- | ---: | ---: | ---: |
-| First drawing of page 2 | 0.9 | 3.7 | 0.8 |
-| Sharp page 2 | 13.2 | 72.9 | 11.7 |
-| Page 13 to page 1, default cache | 2.9 | 7.1 | 10.1 |
-| Same return, cache disabled | 20.3 | 37.0 | 151.4 |
-| 1.75× fit-width zoom to sharp | 6.8 | 6.5 | 51.3 |
-| Blank frames across five zooms | 0 | 0 | 0 |
-
-## Searching a large document
-
-After pdf.js extracted text from all 1,000 pages, ParaPDF built the index once and searched it for “lorem” and “dolor”.
-
-| Search time (ms) | Chromium | WebKit | Firefox |
-| --- | ---: | ---: | ---: |
-| Build the index | 139.5 | 97.4 | 196.2 |
-| Run both queries on the index | 12.6 | 6.5 | 11.3 |
-
-## Canvas and search memory (MiB)
-
-Canvas storage counts four bytes per pixel at first draw, including ParaPDF’s preview of page 2. For the two text PDFs, index storage counts source positions for one set of search options.
-
-| PDF | ParaPDF canvases | pdf.js canvas | Index positions |
-| --- | ---: | ---: | ---: |
-| 110-page bill | 15.41 | 14.50 | 0.90 |
-| 1,000-page text | 13.29 | 12.51 | 11.39 |
-| Scanned patent | 15.09 | 14.20 | — |
-
-[Playwright runs and reproduction steps](https://github.com/yhay81/parapdf/blob/main/examples/prototype/results/performance-0.10.0.md) · [Canvas memory options](/reference/options/#memory-and-rendering)
+[Fixtures and reproduction](https://github.com/yhay81/parapdf/blob/main/docs/decisions/0058-prepare-neighboring-text.md) · [react-pdf API](https://github.com/wojtekmaj/react-pdf/blob/aa36493db1568f1330f974b0acf27621d79d0cca/packages/react-pdf/README.md) · [Page turns, zoom and search in ParaPDF 0.10.0](https://github.com/yhay81/parapdf/blob/main/examples/prototype/results/performance-0.10.0.md)

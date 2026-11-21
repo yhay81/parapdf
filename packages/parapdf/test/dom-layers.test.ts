@@ -94,7 +94,7 @@ async function setup(t: TestContext, { editor = true, text = false } = {}) {
     t.mock.timers.tick(16);
     await settle();
   };
-  return { layers, stats, state, waiting, attach, idle, built: fake.layers };
+  return { session, layers, stats, state, waiting, attach, idle, built: fake.layers };
 }
 
 describe("DomLayers", () => {
@@ -152,6 +152,21 @@ describe("DomLayers", () => {
       "then the overscan page nearest the focus",
     );
     assert.equal(stats.editors, 1);
+  });
+
+  it("prepares selectable text one page beyond a reading-speed scroll", async (t) => {
+    const { session, layers, attach, idle } = await setup(t, { text: true, editor: false });
+    t.mock.method(console, "error", () => {});
+    const reads = t.mock.method(session, "page");
+    for (const index of [0, 1, 2]) attach(index);
+    layers.update({ ...view(0, 0), moving: true });
+    layers.schedule();
+    for (let period = 0; period < 4; period++) await idle();
+    assert.deepEqual([...new Set(reads.mock.calls.map((call) => call.arguments[0]))], [0, 1]);
+    layers.update(view(0, 0));
+    layers.schedule();
+    await idle();
+    assert.equal(reads.mock.calls.at(-1)?.arguments[0], 2);
   });
 
   it("builds requested editors during a slow scroll and resumes other overscan layers at rest", async (t) => {

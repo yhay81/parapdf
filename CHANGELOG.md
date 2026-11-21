@@ -10,7 +10,8 @@ change the API.
   annotations are ready. Untagged pages use one fewer canvas element. Tagged
   pages still expose the PDF's structure to assistive technology.
 - Drawing surfaces are allocated when a page needs them. During slow scrolling,
-  the viewer prioritizes visible content and nearby drawings.
+  the viewer prioritizes visible content and prepares drawings and selectable
+  text on the immediately adjacent pages.
 - The npm installation shares fonts, character maps, decoders and icons with its pinned pdfjs-dist dependency.
 
 ### Breaking changes

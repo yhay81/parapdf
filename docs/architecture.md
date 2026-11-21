@@ -306,7 +306,9 @@ the garbage collector takes with it (decision 0032).
 - `dom-layers.ts` builds DOM layers one at a time, after scrolling
   settles, in idle time, never while a visible page waits for its first
   pixels: text, then links and forms, then the annotations being edited.
-  While moving slowly, overscan layers wait unless an editor was explicitly requested.
+  While moving slowly, it finishes visible work and requested editors, then
+  prepares selectable text on the immediately adjacent pages. More distant text
+  and offscreen annotations wait until scrolling stops (decision 0058).
   Once all mounted layers are built and visible layers are current, scrolling
   over the same pages schedules no idle scan. Mounting a page, invalidating
   annotations or changing the visible range, scale or rotation wakes it.

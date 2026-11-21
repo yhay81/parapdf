@@ -399,7 +399,18 @@ export class DomLayers {
         stale.annotationRotation = rotation;
       }
       this.schedule();
-    } else this.#complete = true;
+    } else {
+      // Prepare selectable text before the next page enters a reading-speed
+      // scroll. Annotations and editors outside the viewport can still wait.
+      const neighbor =
+        input.moving &&
+        pages.find(
+          (page) =>
+            (page.index === input.first - 1 || page.index === input.last + 1) && needsText(page),
+        );
+      if (neighbor) this.#startText(neighbor, scale, rotation);
+      else this.#complete = true;
+    }
   }
 
   /**

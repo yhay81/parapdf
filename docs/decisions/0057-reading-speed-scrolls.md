@@ -1,6 +1,6 @@
 # 0057. Keep visible content ready during reading-speed scrolls
 
-- Status: adopted
+- Status: adopted for canvas allocation and raster scheduling. [Decision 0058](0058-prepare-neighboring-text.md) refines text preparation.
 - Date: 2026-11-21
 
 ## Decision

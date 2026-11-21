@@ -48,7 +48,7 @@ ParaPDF supplies the viewport, document search, form controls and automatic work
 
 ## Follow-up on the slower cases
 
-The first follow-up removed idle work on completed layers. The next measured five canvas elements on page 10, checked reading quality during motion, and repeated the twelve scrolling conditions. A separate packaging change reduced the installed size. [Completed layers](../../../docs/decisions/0055-finished-dom-layers.md) · [Scroll and reading results](../../../docs/decisions/0057-reading-speed-scrolls.md) · [Install and download sizes](../../../docs/decisions/0056-share-installed-pdfjs-assets.md)
+The follow-ups removed idle work on completed layers, measured five canvas elements on page 10, and reduced the installed size. Checking selectable text during scrolling led to a further comparison across all twelve scrolling conditions. [Completed layers](../../../docs/decisions/0055-finished-dom-layers.md) · [Canvas allocation](../../../docs/decisions/0057-reading-speed-scrolls.md) · [Package assets](../../../docs/decisions/0056-share-installed-pdfjs-assets.md) · [Final reader comparison](../../../docs/decisions/0058-prepare-neighboring-text.md)
 
 ## Reproduce
 
