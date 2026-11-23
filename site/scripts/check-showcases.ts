@@ -94,6 +94,46 @@ try {
     `${domText} | ${updatesText}`,
   );
 
+  // Overview video section on `/`
+  const introSection = page.locator("#overview-video");
+  await introSection.scrollIntoViewIfNeeded();
+  const introVideo = introSection.locator("video.intro-video-player");
+  await introVideo.waitFor();
+  const videoInfo = await introVideo.evaluate(async (video: HTMLVideoElement) => {
+    const sources = Array.from(video.querySelectorAll("source")).map((s) => s.getAttribute("src"));
+    const track = video.querySelector('track[kind="captions"]')?.getAttribute("src") ?? null;
+    const poster = video.getAttribute("poster") || video.dataset.poster || null;
+    const urls = [...sources, track, poster].filter((u): u is string => Boolean(u));
+    const statuses = await Promise.all(
+      urls.map(async (u) => ({ url: u, status: (await fetch(u, { method: "HEAD" })).status })),
+    );
+    return {
+      width: video.getAttribute("width"),
+      height: video.getAttribute("height"),
+      controls: video.controls,
+      sources,
+      track,
+      poster,
+      statuses,
+    };
+  });
+  await introSection.locator("details summary").click();
+  const transcriptOpen = await introSection
+    .locator("details")
+    .evaluate((d: HTMLDetailsElement) => d.open);
+  check(
+    "home overview video exposes 720p sources, poster, English captions, and transcript",
+    videoInfo.width === "1280" &&
+      videoInfo.height === "720" &&
+      videoInfo.controls &&
+      videoInfo.sources.length >= 2 &&
+      Boolean(videoInfo.track) &&
+      Boolean(videoInfo.poster) &&
+      videoInfo.statuses.every((s) => s.status === 200) &&
+      transcriptOpen,
+    videoInfo.statuses.map((s) => `${s.url}:${s.status}`).join(", "),
+  );
+
   // 2. `/why-react/` comparison table + all interactive showcases
   await page.goto(`${origin}/why-react/`);
   const tableHead = page.locator(".comparison-table thead");

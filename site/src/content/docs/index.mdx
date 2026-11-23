@@ -6,31 +6,52 @@ head:
     content: ParaPDF, a fast PDF viewer for React
 template: splash
 hero:
-  tagline: Put pdf.js directly in your React tree instead of an iframe. Mount React components on pages in PDF points, share state with forms and selections, and scroll 1,000 pages with zero per-frame React commits.
+  tagline: Put pdf.js directly in your React tree instead of an iframe. Mount React components on pages in PDF points, sync live form state, and scroll 1,000 pages with zero per-frame React commits.
   actions:
     - text: Get started
       link: /getting-started/
       icon: right-arrow
+    - text: Open live demo
+      link: /demo/
+      variant: secondary
     - text: Why not an iframe?
       link: /why-react/
-      variant: secondary
-    - text: Open the demo
-      link: /demo/
-      variant: minimal
-    - text: GitHub
-      link: https://github.com/yhay81/parapdf
-      icon: github
       variant: minimal
 ---
 
-import { Card, CardGrid } from "@astrojs/starlight/components";
+import HomeSections from "../../components/HomeSections.astro";
 import { HeroViewer } from "../../components/showcases.tsx";
 
-<HeroViewer client:visible />
+<HomeSections section="metrics" />
 
-```bash
-npm install parapdf
-```
+<div class="home-section-head not-content">
+  <h2>Try it live — no iframe</h2>
+  <p>
+    Every tab below runs the real ParaPDF viewer in your browser: on-page React portals, live
+    Form 1040 sync, shared multi-pane sessions, and a 1,000-page document.
+  </p>
+</div>
+
+<HeroViewer client:idle />
+
+<div class="home-quickstart">
+  <div class="home-quickstart-copy not-content">
+    <h2>Start with two components</h2>
+    <p>
+      ParaPDF ships pdf.js, its worker, and the fonts, CMaps, and decoders a document loads on
+      demand. Modern bundlers emit them automatically with zero manual asset copying.
+    </p>
+    <ul class="home-bundler-list" role="list">
+      <li>Vite</li>
+      <li>webpack</li>
+      <li>Rsbuild</li>
+      <li>Next.js</li>
+    </ul>
+    <p class="home-quickstart-link">
+      Using another bundler? <a href="/setup/bundlers/">See static asset setup →</a>
+    </p>
+  </div>
+  <div class="home-quickstart-code">
 
 ```tsx
 import { PdfDocument, PdfViewer } from "parapdf";
@@ -44,35 +65,26 @@ export function App() {
 }
 ```
 
-ParaPDF ships pdf.js, its worker, and the files a document can load on demand.
-Vite, webpack, Rsbuild, and Next.js emit those files with your application.
-For other bundlers, serve a static copy. [Bundler setup](/setup/bundlers/)
+  </div>
+</div>
 
-<CardGrid>
-  <Card title="Your React UI, right on the page" icon="puzzle">
-    Portal highlights, citations, review cards, and validation badges onto
-    pages in PDF points with `PdfPageRect`. They follow zoom and rotation
-    through CSS layout alone, without clipping at an `iframe` border or lagging
-    behind `postMessage`.
-  </Card>
-  <Card title="React stays out of the hot path" icon="rocket">
-    The viewer mounts pages and draws their canvases directly. A page counter
-    updates when the current page changes. Scrolling within that page needs no
-    React update from the counter.
-  </Card>
-  <Card title="One document, many views & lifetimes" icon="open-book">
-    Several panes can read different pages of one open document. Keep
-    `PdfDocument` mounted while toggling its default `PdfViewer` to restore
-    position, zoom, search, and edits when the viewport returns.
-  </Card>
-  <Card title="Choose your reading tools" icon="pencil">
-    Text selection and PDF links work by default. Add whole-document search,
-    form filling, annotation editing, or printing when your application needs them.
-  </Card>
-</CardGrid>
+<div class="home-section-head not-content">
+  <h2>Built for real document apps</h2>
+  <p>
+    Keep your own React design system, state management, and routing—while ParaPDF handles
+    virtualized rendering, caching, and pdf.js layers underneath.
+  </p>
+</div>
 
-ParaPDF is at 0.x: its API may change in any minor release until 1.0. See
-[Why React, not an iframe](/why-react/) for side-by-side interactive examples,
-the [changelog](https://github.com/yhay81/parapdf/blob/main/CHANGELOG.md) for
-releases, and [Performance](/about/performance/) for the measurements behind
-the design, losses included.
+<HomeSections section="features" />
+
+<div class="home-status-note not-content">
+  <p>
+    <strong>Status: 0.x.</strong> ParaPDF’s API may change in any minor release until 1.0.
+  </p>
+  <p class="home-status-links">
+    <a href="/why-react/">React vs iframe comparison</a>
+    <a href="/about/performance/">Benchmarks (losses included)</a>
+    <a href="https://github.com/yhay81/parapdf/blob/main/CHANGELOG.md">Changelog</a>
+  </p>
+</div>

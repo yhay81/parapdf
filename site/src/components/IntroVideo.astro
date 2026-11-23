@@ -1,0 +1,149 @@
+---
+/**
+ * Accessible, responsive 720p 30fps overview video for ParaPDF.
+ *
+ * - Above the fold (`eager={true}`): omits `loading` so poster & metadata load immediately for LCP.
+ * - Below the fold (`eager={false}`): uses native `loading="lazy"` + IntersectionObserver fallback.
+ * - Native `<video controls>` with explicit 1280×720 dimensions, WebM + MP4 sources,
+ *   synchronized English WebVTT captions, and verbatim `<details>` transcript.
+ */
+interface Props {
+  id?: string;
+  eager?: boolean;
+  compact?: boolean;
+}
+
+const { id = "overview-video", eager = false, compact = false } = Astro.props;
+const captionId = `${id}-caption`;
+const transcriptId = `${id}-transcript`;
+const lazyAttr = eager ? {} : ({ loading: "lazy" } as Record<string, string>);
+---
+
+<section
+  class:list={["intro-video", "not-content", { "intro-video-compact": compact }]}
+  id={id}
+>
+  <div class="intro-video-head">
+    {compact ? (
+      <span class="intro-video-label">
+        <span class="intro-video-dot" aria-hidden="true"></span>
+        32-second overview
+      </span>
+    ) : (
+      <h2>ParaPDF in 30 seconds</h2>
+    )}
+    <p class="intro-video-meta">720p · 30 fps · English captions</p>
+  </div>
+
+  <figure class="intro-video-figure">
+    <div class="intro-video-frame">
+      <video
+        class="intro-video-player"
+        controls
+        playsinline
+        preload="metadata"
+        width="1280"
+        height="720"
+        poster="/media/parapdf-intro-poster.jpg"
+        aria-labelledby={captionId}
+        aria-details={transcriptId}
+        {...lazyAttr}
+      >
+        <source src="/media/parapdf-intro.webm" type="video/webm" />
+        <source src="/media/parapdf-intro.mp4" type="video/mp4" />
+        <track
+          src="/media/parapdf-intro-en.vtt"
+          kind="captions"
+          srclang="en"
+          label="English"
+        />
+        <p>
+          Your browser cannot play embedded video.{" "}
+          <a href="/media/parapdf-intro.mp4">Download the 720p MP4 overview</a>.
+        </p>
+      </video>
+    </div>
+
+    <figcaption id={captionId} class:list={["intro-video-caption", { "sr-only": compact }]}>
+      <span>
+        On-page React overlays in PDF points, two-way Form 1040 sync, shared multi-viewport
+        sessions, and 1,000-page virtualized performance.
+      </span>
+      {!compact && (
+        <span class="intro-video-links">
+          <a href="/demo/">Open live demo</a>
+          <a href="/about/performance/">Benchmarks</a>
+        </span>
+      )}
+    </figcaption>
+  </figure>
+
+  <details id={transcriptId} class="intro-video-transcript">
+    <summary>Read transcript</summary>
+    <div class="intro-video-transcript-body">
+      <p>
+        <em>[Ambient electronic music begins.]</em> Stop trapping PDFs inside an iframe. Meet
+        ParaPDF — built for React.
+      </p>
+      <p>
+        Portal real React components right onto pages in PDF points. Zoom or rotate, and they stay
+        locked, with zero lag.
+      </p>
+      <p>
+        Sync fillable PDF forms directly with React state, and drive split viewports from a single
+        worker.
+      </p>
+      <p>
+        React stays out of the frame loop. <em>[Crisp page-flip sound.]</em> Flip through a
+        thousand pages with 55% less canvas memory, and zero blank frames.
+      </p>
+      <p>
+        Two components. Zero worker setup. Open source, and ready today. Try ParaPDF.{" "}
+        <em>[Warm harmonic chime fades.]</em>
+      </p>
+    </div>
+  </details>
+</section>
+
+<script>
+  // Fallback for browsers without native HTMLMediaElement loading="lazy" (Firefox, Safari).
+  // Only targets below-the-fold videos that explicitly carry loading="lazy".
+  if (!Object.hasOwn(HTMLMediaElement.prototype, "loading") && "IntersectionObserver" in window) {
+    const lazyVideos = document.querySelectorAll<HTMLVideoElement>(
+      'video.intro-video-player[loading="lazy"]',
+    );
+    if (lazyVideos.length > 0) {
+      const observer = new IntersectionObserver(
+        (entries, obs) => {
+          for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+            const video = entry.target as HTMLVideoElement;
+            if (video.dataset.poster) {
+              video.poster = video.dataset.poster;
+              delete video.dataset.poster;
+            }
+            if (video.dataset.preload) {
+              video.preload = video.dataset.preload;
+              delete video.dataset.preload;
+            }
+            video.load();
+            obs.unobserve(video);
+          }
+        },
+        { rootMargin: "240px 0px" },
+      );
+
+      for (const video of lazyVideos) {
+        if (video.hasAttribute("poster")) {
+          video.dataset.poster = video.getAttribute("poster") ?? "";
+          video.removeAttribute("poster");
+        }
+        if (video.hasAttribute("preload") && video.getAttribute("preload") !== "none") {
+          video.dataset.preload = video.getAttribute("preload") ?? "metadata";
+        }
+        video.preload = "none";
+        observer.observe(video);
+      }
+    }
+  }
+</script>

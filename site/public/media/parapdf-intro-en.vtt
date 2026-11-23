@@ -1,0 +1,37 @@
+WEBVTT
+
+00:00:00.000 --> 00:00:02.748
+[Ambient electronic music] Stop trapping PDFs inside an iframe.
+
+00:00:03.044 --> 00:00:05.283
+Meet ParaPDF — built for React.
+
+00:00:05.345 --> 00:00:08.787
+Portal real React components right onto pages in PDF points.
+
+00:00:09.021 --> 00:00:12.131
+Zoom or rotate, and they stay locked, with zero lag.
+
+00:00:12.365 --> 00:00:15.127
+Sync fillable PDF forms directly with React state,
+
+00:00:15.220 --> 00:00:17.851
+and drive split viewports from a single worker.
+
+00:00:17.989 --> 00:00:19.896
+React stays out of the frame loop.
+
+00:00:20.077 --> 00:00:23.436
+[Crisp page-flip sound] Flip through a thousand pages with 55% less canvas memory,
+
+00:00:23.485 --> 00:00:24.932
+and zero blank frames.
+
+00:00:25.264 --> 00:00:27.638
+Two components. Zero worker setup.
+
+00:00:27.990 --> 00:00:29.949
+Open source, and ready today.
+
+00:00:30.217 --> 00:00:32.224
+Try ParaPDF. [Warm harmonic chime fades]

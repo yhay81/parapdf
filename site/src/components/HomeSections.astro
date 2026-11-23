@@ -1,0 +1,121 @@
+---
+/**
+ * Editorial home-page sections: measured performance proof strip and cohesive
+ * ParaPDF-branded feature cards matching the midnight-indigo visual language.
+ */
+interface Props {
+  section: "metrics" | "features";
+}
+
+const { section } = Astro.props;
+
+const METRICS = [
+  {
+    value: "−55%",
+    label: "Canvas memory",
+    detail: "111.1 vs 249.3 MiB · 1,000 pages",
+  },
+  {
+    value: "11",
+    label: "React commits",
+    detail: "vs 43–48 in react-pdf + react-window",
+  },
+  {
+    value: "0 / 18",
+    label: "Blank frames",
+    detail: "4,598 / 4,598 reading frames full res",
+  },
+  {
+    value: "Zero",
+    label: "Worker setup",
+    detail: "Vite, webpack, Rsbuild, and Next.js",
+  },
+] as const;
+
+const FEATURES = [
+  {
+    title: "Your React UI, right on the page",
+    body: "Portal highlights, citations, review cards, and validation badges onto pages in PDF points with PdfPageRect. They follow zoom and rotation through CSS layout alone, without clipping at an iframe border or lagging behind postMessage.",
+    href: "/why-react/",
+    linkLabel: "See React vs iframe",
+    icon: "portal",
+  },
+  {
+    title: "React stays out of the hot path",
+    body: "The viewer mounts pages and draws their canvases directly. A page counter updates when the current page changes, while scrolling within that page commits zero React updates.",
+    href: "/about/how-it-works/",
+    linkLabel: "How rendering works",
+    icon: "bolt",
+  },
+  {
+    title: "One document, many views & lifetimes",
+    body: "Several panes and thumbnail rails share one open PdfDocument and worker. Keep PdfDocument mounted while toggling its PdfViewer to restore position, zoom, search, and edits on remount.",
+    href: "/guides/controls/",
+    linkLabel: "Controls and lifetimes",
+    icon: "split",
+  },
+  {
+    title: "Modular document features",
+    body: "Text selection and PDF links work by default. Add whole-document search, two-way AcroForm filling, annotation editing, layers, or printing—each module loads only when your app uses it.",
+    href: "/guides/forms/",
+    linkLabel: "Explore guides",
+    icon: "layers",
+  },
+] as const;
+---
+
+{section === "metrics" ? (
+  <div class="home-metrics not-content">
+    <dl class="home-metrics-grid">
+      {METRICS.map((item) => (
+        <div class="home-metric">
+          <dt>{item.label}</dt>
+          <dd class="home-metric-value">{item.value}</dd>
+          <dd class="home-metric-detail">{item.detail}</dd>
+        </div>
+      ))}
+    </dl>
+    <p class="home-metrics-foot">
+      Measured in ParaPDF 0.11 across Chromium, WebKit, and Firefox.{" "}
+      <a href="/about/performance/">Read full benchmarks, trade-offs included →</a>
+    </p>
+  </div>
+) : (
+  <div class="home-features not-content">
+    {FEATURES.map((feat) => (
+      <article class="home-feature-card">
+        <div class="home-feature-icon" aria-hidden="true">
+          {feat.icon === "portal" && (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="3" />
+              <rect x="8" y="8" width="8" height="8" rx="1.5" />
+            </svg>
+          )}
+          {feat.icon === "bolt" && (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+            </svg>
+          )}
+          {feat.icon === "split" && (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4" width="18" height="16" rx="2.5" />
+              <line x1="12" y1="4" x2="12" y2="20" />
+            </svg>
+          )}
+          {feat.icon === "layers" && (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="12 2 2 7 12 12 22 7 12 2" />
+              <polyline points="2 12 12 17 22 12" />
+              <polyline points="2 17 12 22 22 17" />
+            </svg>
+          )}
+        </div>
+        <h3>{feat.title}</h3>
+        <p>{feat.body}</p>
+        <a class="home-feature-link" href={feat.href}>
+          {feat.linkLabel} <span aria-hidden="true">→</span>
+        </a>
+      </article>
+    ))}
+  </div>
+)}

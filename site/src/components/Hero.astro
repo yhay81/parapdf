@@ -1,0 +1,159 @@
+---
+import { LinkButton } from "@astrojs/starlight/components";
+/**
+ * Custom Starlight Hero override for the ParaPDF splash home page.
+ * Pairs a crisp, high-contrast pitch and copyable install command on the left
+ * with the 32-second 720p 30fps overview video spotlight on the right.
+ */
+import DefaultHero from "@astrojs/starlight/components/Hero.astro";
+import IntroVideo from "./IntroVideo.astro";
+
+const { entry, id } = Astro.locals.starlightRoute;
+const { data } = entry;
+const isHome = id === "" || id === "index";
+const { title = data.title, tagline, actions = [] } = data.hero || {};
+---
+
+{isHome ? (
+  <div class="para-hero not-content">
+    <div class="para-hero-copy">
+      <p class="para-hero-eyebrow">
+        <span class="para-hero-badge">React 19</span>
+        <span>Built on pdf.js · Apache-2.0</span>
+      </p>
+
+      <h1 id="_top" data-page-title class="para-hero-title">
+        <span class="para-hero-brand">{title}</span>
+        <span class="para-hero-sub">Huge PDFs. Your React UI.</span>
+      </h1>
+
+      {tagline && <p class="para-hero-tagline">{tagline}</p>}
+
+      {actions.length > 0 && (
+        <div class="para-hero-actions">
+          {actions.map(({ attrs: { class: className, ...attrs } = {}, icon, link: href, text, variant }) => (
+            <LinkButton {href} {variant} icon={icon?.name} class:list={[className]} {...attrs}>
+              {text}
+              {icon?.html && <Fragment set:html={icon.html} />}
+            </LinkButton>
+          ))}
+        </div>
+      )}
+
+      <div class="para-hero-install">
+        <span class="para-hero-prompt" aria-hidden="true">$</span>
+        <code id="hero-install-cmd">npm install parapdf</code>
+        <span class="para-copy-wrap">
+          <button
+            type="button"
+            class="para-copy-btn"
+            aria-label="Copy npm install command"
+            {...({ command: "--copy", commandfor: "hero-install-cmd" } as Record<string, string>)}
+          >
+            <svg
+              class="para-copy-icon para-copy-icon-copy"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="9" y="9" width="13" height="13" rx="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
+            <svg
+              class="para-copy-icon para-copy-icon-check"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.4"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          </button>
+          <span class="para-copy-tip" role="status"></span>
+        </span>
+      </div>
+    </div>
+
+    <div class="para-hero-media">
+      <IntroVideo id="overview-video" eager={true} compact={true} />
+    </div>
+  </div>
+) : (
+  <DefaultHero />
+)}
+
+<script>
+  const timers = new WeakMap<HTMLButtonElement, number>();
+  let lastMessage = "";
+
+  function report(button: HTMLButtonElement, ok: boolean) {
+    const tip = button.nextElementSibling as HTMLElement | null;
+    const prev = timers.get(button);
+    if (prev !== undefined) window.clearTimeout(prev);
+    button.removeAttribute("data-copied");
+    button.removeAttribute("data-failed");
+    let message = ok ? "Copied" : "Copy failed";
+    if (message === lastMessage) message += "\u00A0";
+    lastMessage = message;
+    if (tip) tip.textContent = "";
+    void button.offsetWidth;
+    button.setAttribute(ok ? "data-copied" : "data-failed", "");
+    requestAnimationFrame(() => {
+      if (tip) tip.textContent = message;
+    });
+    timers.set(
+      button,
+      window.setTimeout(() => {
+        button.removeAttribute("data-copied");
+        button.removeAttribute("data-failed");
+        if (tip) tip.textContent = "";
+      }, 2000),
+    );
+  }
+
+  async function copyFrom(button: HTMLButtonElement, target: HTMLElement) {
+    const text = target.innerText.trim();
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      report(button, true);
+    } catch {
+      report(button, false);
+    }
+  }
+
+  // Use native Invoker Commands when supported; otherwise register one click fallback.
+  if ("CommandEvent" in window) {
+    document.addEventListener(
+      "command",
+      (event: Event) => {
+        const cmd = event as Event & { command?: string; source?: Element | null };
+        if (cmd.command !== "--copy") return;
+        if (!(cmd.source instanceof HTMLButtonElement)) return;
+        if (!(event.target instanceof HTMLElement)) return;
+        void copyFrom(cmd.source, event.target);
+      },
+      true,
+    );
+  } else {
+    document.addEventListener("click", (event) => {
+      const origin = event.target instanceof Element ? event.target : null;
+      const button = origin?.closest<HTMLButtonElement>('button[command="--copy"]');
+      if (!button) return;
+      const targetId = button.getAttribute("commandfor");
+      const target = targetId ? document.getElementById(targetId) : null;
+      if (target) void copyFrom(button, target);
+    });
+  }
+</script>

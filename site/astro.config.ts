@@ -46,6 +46,13 @@ export default defineConfig({
       title: "ParaPDF",
       description: "A fast PDF viewer for React, built on pdf.js.",
       favicon: "/favicon.svg",
+      logo: {
+        src: "./src/assets/logo.svg",
+        alt: "",
+      },
+      components: {
+        Hero: "./src/components/Hero.astro",
+      },
       social: [{ icon: "github", label: "GitHub", href: "https://github.com/yhay81/parapdf" }],
       editLink: { baseUrl: "https://github.com/yhay81/parapdf/edit/main/site/" },
       customCss: ["./src/styles/docs.css"],
