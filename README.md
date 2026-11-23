@@ -61,7 +61,7 @@ react-window to do that, so both viewers mount only a window of pages.
 ParaPDF needs more than a limit on mounted pages: huge PDFs also need
 control over which pages draw first, how much canvas memory they hold,
 and what happens when the reader zooms or returns to a page. For example,
-[react-pdf 11.0.0 releases a page's canvas when it unmounts](https://github.com/wojtekmaj/react-pdf/blob/v11.0.0/packages/react-pdf/src/Page/Canvas.tsx),
+[react-pdf 11.1.0 releases a page's canvas when it unmounts](https://github.com/wojtekmaj/react-pdf/blob/aa36493db1568f1330f974b0acf27621d79d0cca/packages/react-pdf/src/Page/Canvas.tsx),
 so remounting draws it again. Adding a shared canvas cache and drawing
 policy would require more viewer infrastructure around those components.
 
@@ -87,33 +87,49 @@ ParaPDF provides that infrastructure on top of the same pdf.js engine:
 
 ## Performance, with the trade-offs
 
-In a **1,000-page** comparison of ParaPDF **0.9.0** with
-**react-pdf + react-window**, ParaPDF made **about 42% fewer React commits**
-and held **about 55% less estimated canvas memory** at the sampling point.
+In a **1,000-page** comparison of ParaPDF **0.11.0** with
+**react-pdf + react-window**, ParaPDF made **about 74% fewer React commits**
+and held **about 55% less estimated canvas storage** at the sampling point.
 
-Both viewers virtualized pages. Conditions: 3,600 CSS px/s for four seconds
-from the beginning of the document, five runs, medians, Chromium
-158.0.8127.18 on an Apple M2 Pro, 1280×900 at devicePixelRatio 2,
-November 16, 2026. The comparison used react-pdf 11.0.0 and react-window 2.5.3.
+Both viewers virtualized pages and used the same **pdf.js 6.5.438** with text
+selection and PDF links enabled (`react-pdf` 11.1.0, `react-window` 2.5.3,
+React 19.3.1). Scrolling ran at 3,600 CSS px/s for four seconds from the
+beginning of the document at 1280×900; cold opening ran separately at 820×900.
+Values are medians of six rotating rounds in Chromium 159.0.8154.6 on an Apple
+M2 Pro at devicePixelRatio 2, November 21, 2026.
 
 | Measurement | ParaPDF | react-pdf + react-window |
 | --- | ---: | ---: |
-| First paint | 162 ms | 180 ms |
-| React commits during the scroll | 25 | 43 |
-| Estimated canvas memory at the sample | 111 MiB | 249 MiB |
-| Main-thread blocked time during the scroll | 51 ms | 17 ms |
+| Cold open to full-resolution page 1 (820×900) | 160 ms | 186 ms |
+| React commits during the scroll | 11 | 43 |
+| Estimated canvas storage at the sample | 111.1 MiB | 249.3 MiB |
+| Main-thread blocked time during the scroll | 10.3 ms | 16.1 ms |
 
-**ParaPDF blocked the main thread longer in this condition.** Across all
-12 document/speed/browser conditions, it committed React less often and
-held fewer canvas pixels at the sample, while blocked time varied.
+Across all 12 document/speed/browser conditions (1,000-page text and 110-page
+bill at 900 and 3,600 CSS px/s in Chromium, WebKit, and Firefox), ParaPDF
+committed React fewer times, held less canvas storage at the sample, and had
+a lower median main-thread delay in **9 of the 12 conditions**—including
+86–92% less delay on the 110-page bill at 3,600 CSS px/s across all three
+browsers. **react-pdf had less main-thread delay in 3 of the 12 conditions**:
+WebKit on the 1,000-page text at 3,600 CSS px/s (5.4 vs 4.6 ms), WebKit on
+the 110-page bill at 900 CSS px/s (9.8 vs 8.2 ms), and Firefox on the
+110-page bill at 900 CSS px/s (46.9 vs 39.1 ms in the lower-load repeat).
+Under heavier system load, Firefox cold opens of the 110-page bill also
+favored react-pdf (324 vs 266 ms; 202 vs 231 ms in the lower-load repeat).
 
-First paint can be a low-resolution base. Canvas memory counts pixels,
-including retained canvases, after scrolling and visible blanks have filled;
-it does not wait for full refinement and is not total browser memory.
-Scroll-time blocking excludes work deferred until scrolling stops.
-The stacks use different pdf.js versions (6.5.438 and 6.3.289).
-[All three browsers, individual runs, limitations, and reproduction steps](examples/prototype/results/compare-react-pdf-20261116.md)
-are recorded with the exact source commit. Playwright WebKit is not Safari.
+Both viewers recorded zero trials with blank frames during fast scrolling
+(0/18) and kept full resolution and selectable text on every sampled frame at
+reading speed (900 CSS px/s: 0/4,598 frames missing in ParaPDF, 0/4,616 in
+react-pdf). Canvas storage counts pixels at four bytes each, including
+retained canvases, after scrolling and visible blanks have filled; it does
+not wait for full refinement and is not total browser memory. Scroll-time
+blocking excludes work deferred until scrolling stops. See the
+[performance tables](https://parapdf.yhay81.com/about/performance/) for all
+three browsers, reading quality, and install sizes, and
+[decision 0058](docs/decisions/0058-prepare-neighboring-text.md) for
+individual runs, limitations, and reproduction steps (plus
+[0.10.0 measurements](examples/prototype/results/performance-0.10.0.md) for
+page turns, zoom, and search). Playwright WebKit is not Safari.
 
 ## Help shape it
 
